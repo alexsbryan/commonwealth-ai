@@ -117,10 +117,10 @@ def supports(est, c):
     return any(a and s in rates and math.log(rates[s][0] / rates[s][1]) > 0.0 for s, a in c.items())
 
 
-def zone(est, comps):
-    """weigh() with no bar: the index linked, or None."""
+def weighed(est, comps, bar=None):
+    """weigh(): ("Link", index), ("NoLink", None) or, under a declared bar, ("Unsettled", None)."""
     if not comps:
-        return None
+        return "NoLink", None
     prior = est[0]
     plo = math.log(prior / (1.0 - prior))
     score = [evidence(est, c) + plo for c in comps]
@@ -130,96 +130,145 @@ def zone(est, comps):
     post = [math.exp(s - top) / total for s in score]
     none = math.exp(-top) / total
     if not any(raised):
-        return None
+        return "NoLink", None
     best = max(range(len(post)), key=lambda i: (post[i], -i))
     p = post[best]
-    if raised[best] and p > none + 1e-12 and all(i == best or q + 1e-12 < p for i, q in enumerate(post)):
-        return best
-    return None
+    strict = raised[best] and p > none + 1e-12 and all(i == best or q + 1e-12 < p for i, q in enumerate(post))
+    if bar is None:
+        return ("Link", best) if strict else ("NoLink", None)
+    if p >= bar and strict:
+        return "Link", best
+    return ("NoLink", None) if none >= bar else ("Unsettled", None)
+
+
+def zone(est, comps, bar=None):
+    """The index linked, or None."""
+    return weighed(est, comps, bar)[1]
 
 
 def key(c):
     return tuple(sorted(c.items()))
 
 
-def replay(leg):
-    system = P.W.LEGS[leg][0]
-    docs = P.documents(leg, system)
-    part = P.particulars(system, docs)
-    events = []
-    for raw in open(P.RUN / leg / "resolve.err.log", errors="replace"):
+def events(lines):
+    """The trace's weighing events in order: weighed, decided, resolved, fitted."""
+    for raw in lines:
         line = ANSI.sub("", raw)
         if m := WEIGHED.search(line):
-            events.append(("weighed", m[1], m[2], json.loads(m[3]), json.loads(m[4]),
-                           int(m[6]) if m[5] == "Link" else None))
+            yield ("weighed", m[1], m[2], json.loads(m[3]), json.loads(m[4]), (m[5], int(m[6]) if m[5] == "Link" else None))
         elif m := DECIDED.search(line):
-            events.append(("decided", m[1], m[2], m[3], json.loads('"' + m[4] + '"')))
+            yield ("decided", m[1], m[2], m[3], json.loads('"' + m[4] + '"'))
         elif m := RESOLVED.search(line):
-            events.append(("resolved", m[1]))
+            yield ("resolved", m[1])
         elif m := FITTED.search(line):
-            events.append(("fitted", int(m[1]), float(m[2]), {s: (float(a), float(b)) for s, a, b in SOURCE.findall(m[3])}))
+            yield ("fitted", int(m[1]), float(m[2]), {s: (float(a), float(b)) for s, a, b in SOURCE.findall(m[3])})
+
+
+def bars(run):
+    """statement -> its type's declared identity bar (None where the type declares none), from the run's recipe and
+    recorded decisions."""
+    import glob  # noqa: PLC0415
+    import tomllib  # noqa: PLC0415
+    recipe = tomllib.loads(pathlib.Path(glob.glob(str(run / "data/recipes/*/recipe.toml"))[0]).read_text())
+    bar = {t["name"]: t.get("identity_bar") for t in recipe["enrichment"]["ontology"]["types"]}
+    return {o["statement"]: bar.get(r.get("type")) for r in map(json.loads, open(run / "recorded/resolve_decisions.jsonl"))
+            for o in r["outcomes"]}
+
+
+def run_arms(evs, arms, bar_of):
+    """EM refit and zones per arm over the logged events, first order. arms: {name: f(statement, alternatives,
+    comparisons, record documents) -> comparisons}. Gates G1/G2 read the logged comparisons. -> (gates, decisions,
+    finals): decisions in decided order, (statement, logged decision, record, {arm: linked alternative or None});
+    finals, each type's last estimate per arm beside the last statement weighed under it."""
     rec_docs = collections.defaultdict(set)
-    rec_parts = collections.defaultdict(set)  # record -> gold particulars of the statements it holds so far
-    arms = {"before": collections.Counter(), "after": collections.Counter()}
-    est = {"before": fit({}), "after": fit({})}
-    seen = {"before": [], "after": []}
-    patterns = {"before": collections.Counter(), "after": collections.Counter()}
-    g1 = [0, 0]  # fits reproduced, fits
-    g2 = [0, 0]  # zones reproduced, weighed statements
-    links = {"before": {}, "after": {}}
-    for ev in events:
+    finals, last = [], None
+    est = {a: fit({}) for a in arms}
+    seen = {a: [] for a in arms}
+    patterns = {a: collections.Counter() for a in arms}
+    logged_est, logged_seen, logged_patterns = fit({}), [], collections.Counter()
+    g1, g2 = [0, 0], [0, 0]  # reproduced, total
+    links = {a: {} for a in arms}
+    decisions = []
+    for ev in evs:
         if ev[0] == "weighed":
             _, doc, stmt, alts, comps, logged = ev
-            sdoc = P.handle(stmt)[0]
-            got = zone(est["before"], comps)
+            bar, last = bar_of.get(stmt), stmt
+            got = weighed(logged_est, comps, bar)
             g2[1] += 1
             g2[0] += got == logged
-            fixed = [{k: v for k, v in c.items() if not (k.startswith("document_") and sdoc in rec_docs[r])}
-                     for c, r in zip(comps, alts)]
-            for arm, cs in (("before", comps), ("after", fixed)):
-                z = zone(est[arm], cs)
+            logged_seen += [c for c in comps if c]
+            for arm, f in arms.items():
+                cs = f(stmt, alts, comps, rec_docs)
+                z = zone(est[arm], cs, bar)
                 links[arm][stmt] = alts[z] if z is not None else None
                 seen[arm] += [c for c in cs if c]
         elif ev[0] == "decided":
             _, doc, stmt, decision, record = ev
-            ps = part(*P.handle(stmt))
-            for arm in arms:
-                linked = links[arm].pop(stmt, None)
-                if linked is None:
-                    continue
-                c = arms[arm]
-                c["links"] += 1
-                if not ps:
-                    c["unjudged"] += 1
-                elif ps & rec_parts[linked]:
-                    c["right"] += 1
-                else:
-                    c["wrong"] += 1
-                arms[arm].setdefault("_right", set())
-                if ps and ps & rec_parts[linked]:
-                    arms[arm]["_right"].add(stmt)
-                elif ps:
-                    arms[arm].setdefault("_wrong", set())
-                    arms[arm]["_wrong"].add(stmt)
+            decisions.append((stmt, decision, record, {a: links[a].pop(stmt, None) for a in arms}))
             rec_docs[record].add(P.handle(stmt)[0])
-            rec_parts[record] |= ps
         elif ev[0] == "fitted":
             _, pairs, prior, logged = ev
             if pairs == 0:  # a new type's resolver starts from no pairs
+                if last is not None:
+                    finals.append((last, dict(est)))
                 for arm in arms:
                     patterns[arm], seen[arm], est[arm] = collections.Counter(), [], fit({})
+                logged_patterns, logged_seen, logged_est = collections.Counter(), [], fit({})
             else:  # resolve_records.rs: the document's pairs are added and the estimate refit, then logged
                 for arm in arms:
                     for c in seen[arm]:
                         patterns[arm][key(c)] += 1
                     est[arm] = fit(patterns[arm])
                     seen[arm] = []
-            mine = est["before"]
+                for c in logged_seen:
+                    logged_patterns[key(c)] += 1
+                logged_est, logged_seen = fit(logged_patterns), []
             g1[1] += 1
-            g1[0] += all(s in mine[1] and abs(mine[1][s][0] - m) < 1e-6 and abs(mine[1][s][1] - u) < 1e-6
-                         for s, (m, u) in logged.items()) and abs(mine[0] - prior) < 1e-6
-    out = {"G1_fits_reproduced": g1, "G2_zones_reproduced": g2,
-           "G1_passed": g1[0] == g1[1], "G2_passed": g2[1] > 0 and g2[0] >= 0.99 * g2[1]}
+            g1[0] += all(s in logged_est[1] and abs(logged_est[1][s][0] - m) < 1e-6 and abs(logged_est[1][s][1] - u) < 1e-6
+                         for s, (m, u) in logged.items()) and abs(logged_est[0] - prior) < 1e-6
+    if last is not None:
+        finals.append((last, dict(est)))
+    gates = {"G1_fits_reproduced": g1, "G2_zones_reproduced": g2,
+             "G1_passed": g1[0] == g1[1], "G2_passed": g2[1] > 0 and g2[0] >= 0.99 * g2[1]}
+    return gates, decisions, finals
+
+
+def correction_c(stmt, alts, comps, rec_docs):
+    """Amendment 2: a document-field source does not speak on a pair whose statement's document the alternative
+    record already holds."""
+    sdoc = P.handle(stmt)[0]
+    return [{k: v for k, v in c.items() if not (k.startswith("document_") and sdoc in rec_docs[r])}
+            for c, r in zip(comps, alts)]
+
+
+def replay(leg):
+    system = P.W.LEGS[leg][0]
+    docs = P.documents(leg, system)
+    part = P.particulars(system, docs)
+    out, decisions, _ = run_arms(events(open(P.RUN / leg / "resolve.err.log", errors="replace")),
+                              {"before": lambda s, a, comps, r: comps, "after": correction_c}, bars(P.RUN / leg))
+    rec_parts = collections.defaultdict(set)  # record -> gold particulars of the statements it holds so far
+    arms = {"before": collections.Counter(), "after": collections.Counter()}
+    for stmt, _, record, linked_by in decisions:
+        ps = part(*P.handle(stmt))
+        for arm, linked in linked_by.items():
+            if linked is None:
+                continue
+            c = arms[arm]
+            c["links"] += 1
+            if not ps:
+                c["unjudged"] += 1
+            elif ps & rec_parts[linked]:
+                c["right"] += 1
+            else:
+                c["wrong"] += 1
+            arms[arm].setdefault("_right", set())
+            if ps and ps & rec_parts[linked]:
+                arms[arm]["_right"].add(stmt)
+            elif ps:
+                arms[arm].setdefault("_wrong", set())
+                arms[arm]["_wrong"].add(stmt)
+        rec_parts[record] |= ps
     for arm in arms:
         c = arms[arm]
         out[arm] = {k: c[k] for k in ("links", "right", "wrong", "unjudged")}

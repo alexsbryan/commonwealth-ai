@@ -239,20 +239,20 @@
    328
   ],
   "G2_zones_reproduced": [
-   331,
+   332,
    332
   ],
   "G1_passed": true,
   "G2_passed": true,
   "before": {
-   "links": 281,
-   "right": 252,
+   "links": 280,
+   "right": 251,
    "wrong": 10,
    "unjudged": 19
   },
   "after": {
-   "links": 281,
-   "right": 252,
+   "links": 280,
+   "right": 251,
    "wrong": 10,
    "unjudged": 19
   },

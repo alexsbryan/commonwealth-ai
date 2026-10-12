@@ -238,10 +238,9 @@ def score_leg(leg, emb):
 ADDRESS = re.compile(r"[\w.+'-]+@([\w-]+(?:\.[\w-]+)+)")
 
 
-def company_section(leg, emb):
-    """Per Ward message in one gold deal: is the counterparty C offered by the message's header records (F), by a
-    Mention pick (M), and by name or embedding against the company records open before it (N, E)?"""
-    import email.utils  # noqa: PLC0415
+def gold_companies():
+    """Ward's gold, its companies, the declared `ours` set (enron.com), and the scorer's rule over written text.
+    -> (gold, companies, forms, ours, resolves(text) -> gold ids, partly(words, gold id))."""
     S = LW.S
     g = S.load_gold(S.WARD / "gold")
     comp = {c["id"]: c for c in g["companies"]}
@@ -256,6 +255,22 @@ def company_section(leg, emb):
         core = S.name_core(text)
         return hit | {cid for cid, f in forms.items() if core and core in f}
 
+    def partly(w, cid):
+        """Diagnostic added after the strict count was read: the mention's words share a token with C's written forms
+        or a domain stem (the link step's reach, not the scorer's rule)."""
+        toks = set(S.name_core(w).split())
+        stems = {x.split(".")[0].lower() for x in comp[cid].get("domains") or []}
+        return bool(toks & (set(" ".join(forms[cid]).split()) | stems))
+
+    return g, comp, forms, ours, resolves, partly
+
+
+def company_section(leg, emb):
+    """Per Ward message in one gold deal: is the counterparty C offered by the message's header records (F), by a
+    Mention pick (M), and by name or embedding against the company records open before it (N, E)?"""
+    import email.utils  # noqa: PLC0415
+    S = LW.S
+    g, comp, forms, ours, resolves, partly = gold_companies()
     docs = documents(leg, "ward")
     of = collections.defaultdict(set)
     for dl in g["deals"]:
@@ -288,13 +303,6 @@ def company_section(leg, emb):
     for raw in open(RUN / leg / "extract.err.log", errors="replace"):
         if (m := re.search(r'document_read/[a-z_]+: [^=]*document="?([^" ]+)"?', LP.ANSI.sub("", raw))):
             read.add(m[1])
-
-    def partly(w, cid):
-        """Diagnostic added after the strict count was read: the mention's words share a token with C's written forms
-        or a domain stem (the link step's reach, not the scorer's rule)."""
-        toks = set(S.name_core(w).split())
-        stems = {x.split(".")[0].lower() for x in comp[cid].get("domains") or []}
-        return bool(toks & (set(" ".join(forms[cid]).split()) | stems))
 
     a = collections.Counter()
     open_records = {}  # record name -> gold companies it resolves to (header domains and earlier mention names)
