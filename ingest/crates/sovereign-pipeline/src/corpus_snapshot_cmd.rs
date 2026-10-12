@@ -1304,7 +1304,7 @@ async fn fetch_hf_archive_attempt(url: &str, part: &Path) -> std::result::Result
     }
     // Private/gated HF datasets require a bearer token. Same env-var
     // convention used by the model-download path
-    // (sovereign-inference/src/setup_planner.rs).
+    // (sovereign-compute/src/setup_planner.rs).
     if let Ok(tok) = std::env::var("HF_TOKEN") {
         if !tok.is_empty() {
             req = req.bearer_auth(tok);

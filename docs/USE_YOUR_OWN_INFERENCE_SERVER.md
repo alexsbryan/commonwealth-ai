@@ -256,10 +256,10 @@ and registering it at startup, in a build of the daemon you control — Rust can
 load one from a shared library safely. The walkthrough is a runnable file:
 
 ```sh
-cargo run -p sovereign-inference --example custom_engine
+cargo run -p sovereign-compute --example custom_engine
 ```
 
-[`serve/crates/sovereign-inference/examples/custom_engine.rs`](../serve/crates/sovereign-inference/examples/custom_engine.rs)
+[`serve/crates/sovereign-compute/examples/custom_engine.rs`](../serve/crates/sovereign-compute/examples/custom_engine.rs)
 is the template — a working engine, the config that selects it, and the
 conformance check you run before trusting it. That check is worth using: it
 catches the mistakes that otherwise surface much later as a truncated answer or

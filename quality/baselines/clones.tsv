@@ -316,7 +316,7 @@
 24	svrn/crates/sovereign-daemon/src/state.rs <-> svrn/crates/sovereign-daemon/src/state/store.rs
 28	clients/desktop/src-tauri/src/commands/config_setup.rs <-> clients/desktop/src-tauri/src/state/config.rs
 16	clients/desktop/src-tauri/src/commands/corpus_install.rs <-> clients/desktop/src-tauri/src/recipe_commands.rs
-18	clients/desktop/src-tauri/src/commands/hardware.rs <-> serve/crates/sovereign-inference/src/setup_planner.rs
+18	clients/desktop/src-tauri/src/commands/hardware.rs <-> serve/crates/sovereign-compute/src/setup_planner.rs
 18	clients/desktop/src-tauri/src/import_commands.rs <-> clients/desktop/src-tauri/src/recipe_commands.rs
 33	ingest/crates/sovereign-enrichment-build/src/atlas_configuration.rs <-> ingest/crates/sovereign-enrichment-build/src/atlas_gaps.rs <-> ingest/crates/sovereign-enrichment-build/src/atlas_tensions.rs
 18	ingest/crates/sovereign-enrichment-build/src/atlas_gaps.rs <-> ingest/crates/sovereign-enrichment-build/src/atlas_tensions.rs

@@ -5,6 +5,7 @@
 //! answers them: `serve` mounts [`bundle`], and the daemon forwards to serve
 //! (pb-serve-distributes).
 
+use crate::setup_planner;
 use axum::extract::Query;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -14,7 +15,6 @@ use host_kit::shell::RouteBundle;
 use serde::Deserialize;
 use sovereign_contracts::daemon_wire::{HardwareProfile, ProfileName, SlotConfig};
 use sovereign_inference::hardware;
-use sovereign_inference::setup_planner;
 
 /// The three reads as `serve`'s named bundle, at the paths the daemon serves
 /// them on.
