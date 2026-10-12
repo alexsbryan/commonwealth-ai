@@ -105,11 +105,6 @@ use tracing::{debug, error, info, warn};
 /// entrypoint (`child_main`).
 pub const HANDSHAKE_PREFIX: &str = "SOVEREIGN_COMPUTE_LISTENING ";
 
-/// Grace period after a graceful-terminate SIGTERM before the supervisor
-/// escalates to SIGKILL. A stateless compute child that honours SIGTERM
-/// (via `fast_exit_skip_destructors`) exits well within this.
-const TERMINATE_GRACE: Duration = Duration::from_secs(3);
-
 /// How the supervisor learns the child's health URL.
 #[derive(Debug, Clone)]
 pub enum HealthTarget {
@@ -190,6 +185,36 @@ pub struct SupervisorConfig {
     /// in between — before auto-restart stops and `Failed` is published.
     pub crash_loop_max: u32,
     pub stderr_ring_lines: usize,
+    /// How long `terminate()` waits after SIGTERM before SIGKILL. The
+    /// signal goes to the child's whole process group, so a child that
+    /// tears down children of its own (llama-server's router stops one
+    /// process per model) needs longer than a single process does.
+    pub terminate_grace: Duration,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Signal {
+    Term,
+    Kill,
+}
+
+/// Signal the process group a child leads (`process_group(0)` at spawn makes
+/// its pgid its pid). ESRCH, an empty group, is the common case after a
+/// clean exit and is not an error.
+fn signal_group(pid: u32, signal: Signal) {
+    #[cfg(unix)]
+    if pid != 0 {
+        let sig = match signal {
+            Signal::Term => libc::SIGTERM,
+            Signal::Kill => libc::SIGKILL,
+        };
+        // SAFETY: kill(2) on a negative pid signals that process group; a
+        // stale group yields ESRCH.
+        let delivered = unsafe { libc::kill(-(pid as libc::pid_t), sig) } == 0;
+        tracing::debug!(pid, ?signal, delivered, "supervisor: signalled the child's process group");
+    }
+    #[cfg(not(unix))]
+    let _ = (pid, signal);
 }
 
 /// State the supervisor publishes. Serialised tag is `kind`, so the
@@ -335,7 +360,7 @@ pub struct Supervisor {
     reconnect_tx: mpsc::UnboundedSender<()>,
     reconnect_rx: AsyncMutex<Option<mpsc::UnboundedReceiver<()>>>,
     /// Graceful-shutdown signal: SIGTERM the child, wait up to
-    /// [`TERMINATE_GRACE`], SIGKILL if it hasn't exited, then leave the
+    /// [`SupervisorConfig::terminate_grace`], SIGKILL if it hasn't exited, then leave the
     /// run loop for good (NOT counted as a crash). The daemon's
     /// compute-child manager calls `terminate()` to stop a replica.
     terminate_tx: mpsc::UnboundedSender<()>,
@@ -484,7 +509,7 @@ impl Supervisor {
 
     /// Graceful stop: the run loop SIGTERMs the child (letting a compute
     /// child `fast_exit_skip_destructors` past the ggml teardown SIGABRT),
-    /// waits up to [`TERMINATE_GRACE`], SIGKILLs if needed, then exits the
+    /// waits up to [`SupervisorConfig::terminate_grace`], SIGKILLs if needed, then exits the
     /// loop for good — NOT counted as a crash. Await the `run()` join
     /// handle to know the child is gone. Returns `false` if the loop
     /// already exited. Distinct from `request_reconnect()`, which restarts.
@@ -581,6 +606,7 @@ impl Supervisor {
             let health_url = match self.resolve_health_url(port_rx, pid, &mut child).await {
                 Some(url) => url,
                 None => {
+                    signal_group(pid, Signal::Kill);
                     let outcome = ExitOutcome::WaitError("child did not announce its port".into());
                     let crash_log = self.persist_crash_log(pid, &outcome).await;
                     // A generation that never announced a port never
@@ -617,6 +643,9 @@ impl Supervisor {
                     &mut terminate_rx,
                 )
                 .await;
+            // The leader is gone however it went; anything it forked must
+            // not outlive the generation and hold its port or memory.
+            signal_group(pid, Signal::Kill);
             let crash_log = self.persist_crash_log(pid, &outcome).await;
 
             last_cost = cost;
@@ -760,6 +789,28 @@ impl Supervisor {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
+        // The child leads its own process group, so whatever it forks can
+        // be signalled with it (`signal_group`), and it is told to die with
+        // its parent here rather than trusted to ask for that itself: a
+        // child we did not write (llama-server) never does.
+        #[cfg(unix)]
+        cmd.process_group(0);
+        #[cfg(target_os = "linux")]
+        {
+            // SAFETY: the closure runs between fork and exec and calls only
+            // async-signal-safe functions (prctl, getppid, _exit).
+            let parent = unsafe { libc::getpid() };
+            unsafe {
+                cmd.pre_exec(move || {
+                    libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM);
+                    // The parent may have died before prctl took effect.
+                    if libc::getppid() != parent {
+                        libc::_exit(1);
+                    }
+                    Ok(())
+                });
+            }
+        }
         if let Some(wd) = &self.config.working_dir {
             cmd.current_dir(wd);
         }
@@ -877,16 +928,9 @@ impl Supervisor {
     /// Graceful terminate: best-effort SIGTERM (so a compute child can
     /// `fast_exit_skip_destructors`), then SIGKILL if it overruns the
     /// grace. Reaps the child so no zombie remains.
-    async fn graceful_kill(child: &mut Child, pid: u32) {
-        #[cfg(unix)]
-        if pid != 0 {
-            // SAFETY: kill(2) with a valid pid + signal is defined; a
-            // stale pid just yields ESRCH, which we ignore.
-            unsafe {
-                libc::kill(pid as libc::pid_t, libc::SIGTERM);
-            }
-        }
-        match tokio::time::timeout(TERMINATE_GRACE, child.wait()).await {
+    async fn graceful_kill(child: &mut Child, pid: u32, grace: Duration) {
+        signal_group(pid, Signal::Term);
+        match tokio::time::timeout(grace, child.wait()).await {
             Ok(_) => info!(pid, "supervisor: child exited gracefully after SIGTERM"),
             Err(_) => {
                 warn!(
@@ -938,7 +982,7 @@ impl Supervisor {
                 }
                 _ = terminate_rx.recv() => {
                     info!(pid, "supervisor: graceful terminate requested");
-                    Self::graceful_kill(child, pid).await;
+                    Self::graceful_kill(child, pid, self.config.terminate_grace).await;
                     return (ExitOutcome::Terminated, cost(first_healthy));
                 }
                 msg = reconnect_rx.recv() => {
@@ -1203,6 +1247,7 @@ mod tests {
             healthy_reset_after: Duration::from_secs(60),
             crash_loop_max: 3,
             stderr_ring_lines: 64,
+            terminate_grace: Duration::from_secs(3),
         }
     }
 
@@ -2046,5 +2091,74 @@ mod tests {
             )),
             "terminate() must not trigger restart/failed, got {tail:?}"
         );
+    }
+
+    /// Alive and not a zombie: an orphan waits to be reaped by init.
+    fn process_alive(pid: i32) -> bool {
+        std::fs::read_to_string(format!("/proc/{pid}/stat"))
+            .map(|stat| {
+                let state = stat.rsplit(')').next().unwrap_or("").trim_start();
+                !state.starts_with('Z')
+            })
+            .unwrap_or(false)
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn terminate_takes_down_what_the_child_forked() {
+        let _timing = supervisor_timing_lock();
+        let dir = TempDir::new().unwrap();
+        let (port, _server) = spawn_health_server().await;
+        // The grandchild ignores SIGTERM (an ignored disposition survives
+        // exec), as a model process mid-teardown might; only the group
+        // SIGKILL that ends every generation can reach it.
+        let gc = dir.path().join("grandchild.pid");
+        let script = write_script(
+            &dir,
+            "child.sh",
+            &format!(
+                "#!/bin/sh\n(trap '' TERM; exec sleep 300) &\necho $! > {}\nwhile :; do sleep 1; done\n",
+                gc.display()
+            ),
+        );
+        let mut config = base_config(
+            script,
+            dir.path().join("crashes"),
+            format!("http://127.0.0.1:{port}/v1/models"),
+        );
+        config.terminate_grace = Duration::from_secs(1);
+        let supervisor = Arc::new(Supervisor::new(config));
+        let mut states = supervisor.subscribe();
+        let run_handle = {
+            let sup = Arc::clone(&supervisor);
+            tokio::spawn(async move { sup.run().await })
+        };
+        let mut healthy = false;
+        for _ in 0..40 {
+            if let Ok(Ok(SupervisorState::Healthy { .. })) =
+                tokio::time::timeout(Duration::from_millis(150), states.recv()).await
+            {
+                healthy = true;
+                break;
+            }
+        }
+        assert!(healthy, "child never became healthy");
+        let grandchild: i32 = std::fs::read_to_string(&gc).unwrap().trim().parse().unwrap();
+        assert!(process_alive(grandchild), "grandchild {grandchild} not running");
+
+        assert!(supervisor.terminate());
+        tokio::time::timeout(Duration::from_secs(5), run_handle)
+            .await
+            .expect("run loop did not exit after terminate()")
+            .unwrap();
+        let mut gone = false;
+        for _ in 0..20 {
+            if !process_alive(grandchild) {
+                gone = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        assert!(gone, "grandchild {grandchild} outlived the terminated child");
     }
 }

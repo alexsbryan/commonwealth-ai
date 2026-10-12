@@ -5607,7 +5607,11 @@ latency window, `Unresponsive` after 3 failures), a `FaultDetector` and a
 
 Multi-process supervision on the path that IS live is
 `sovereign-compute/src/supervisor.rs` — `SupervisorState`, `graceful_kill`
-(SIGTERM, grace, SIGKILL) and health polling. It has NO departure countdown and
+(SIGTERM, `SupervisorConfig::terminate_grace`, SIGKILL) and health polling.
+Each child leads its own process group and gets `PR_SET_PDEATHSIG` from the
+supervisor's `pre_exec`, not from its own code; terminate signals the group,
+and every generation ends with a group SIGKILL, so nothing a child forked
+outlives it (`terminate_takes_down_what_the_child_forked`). It has NO departure countdown and
 NO fault detector, so those two parts of FE-139 are unimplemented rather than
 implemented-elsewhere; `quality/conformance-specs.toml` FE-139 carries the
 statement and the requirement is write-work again.
