@@ -95,10 +95,10 @@ impl Runtime {
                 ))
             })?;
         // Agent-loop-only addendum. The skill.toml prompt is shared
-        // with non-loop callers; the `done` virtual tool is a
-        // handler-side concept (we intercept it, never dispatch),
-        // so the instruction lives here next to the inject_done_variant
-        // schema augmentation rather than in the canonical prompt.
+        // with non-loop callers; the `done` tool is a handler-side
+        // concept (we intercept it, never dispatch), so the instruction
+        // lives here next to `done_tool_schema` rather than in the
+        // canonical prompt.
         let system_prompt = format!(
             "{base_prompt}\n\n\
              ──── Termination ──────────────────────────────────────────\n\
@@ -131,39 +131,10 @@ impl Runtime {
         // delegate worker loop — see `crate::tool_loop`).
         let tool_schemas = tool_schemas_for(tool_descriptors);
 
-        // Lark alternation grammar for the per-iteration completion.
-        // Built once outside the loop — the schema is stable for the
-        // turn since the catalog doesn't change mid-turn.
-        //
-        // Why: pre-llguidance runs (2026-05-23 smoke) had the model
-        // looping on `recipe_write_structured` calls because each
-        // attempt emitted JSON whose TOML conversion was malformed —
-        // 4-6 iterations of "write malformed → write again" with no
-        // recipe_validate ever firing. Grammar-constrained sampling
-        // closes the malformation class structurally: every
-        // `<tool_call>` body is a JSON object that satisfies one of
-        // the per-tool schemas, so `recipe_write_structured` receives
-        // a recipe object that round-trips to valid TOML on the
-        // first try. The grammar also carries a `plain_text` branch
-        // so the model can still emit a partner-facing summary when
-        // no tool call is appropriate.
-        //
-        // Pattern lifted from sovereign-agent-bench's proven path
-        // (`SOVEREIGN_ALTERNATION_GRAMMAR=1` route in
-        // `sovereign-serving-host::inference_adapter`); we replicate the
-        // schema builder + Lark string locally because sovereign-core
-        // can't take a sovereign-inference dep (cycle).
-        let envelope_schema = build_envelope_schema(&tool_schemas).map(inject_done_variant);
-        let lark_grammar_string = envelope_schema.as_ref().map(|schema| {
-            let schema_json = serde_json::to_string(schema).unwrap_or_default();
-            build_tool_alternation_grammar(&schema_json)
-        });
-
         tracing::info!(
             conversation_id,
             tools = tool_schemas.len(),
-            grammar_enabled = lark_grammar_string.is_some(),
-            grammar_chars = lark_grammar_string.as_ref().map(|s| s.len()).unwrap_or(0),
+            tool_choice = "auto",
             "recipe_author_loop: dispatch begin"
         );
 
@@ -177,7 +148,6 @@ impl Runtime {
         let msg_id_owned = message_id.clone();
         let prior_messages: Vec<Message> = context.conversation.messages.clone();
         let message_owned = message.to_string();
-        let lark_grammar_for_loop = lark_grammar_string;
         // What this skill authors, for partner-facing copy. The loop is shared
         // by both authoring modes, so the noun has to follow `skill_id` rather
         // than being hard-coded to "Recipe".
@@ -210,40 +180,14 @@ impl Runtime {
             //     records what actually landed on disk, so a surface can
             //     show the difference instead of trusting the prose. The
             //     check is deliberately NOT "0 tool calls means failure":
-            //     the alternation grammar carries a legitimate plain-text
-            //     exit branch, so a tool-free turn is often a perfectly
-            //     correct clarifying question.
+            //     `auto` lets the model answer without a call, so a
+            //     tool-free turn is often a perfectly correct clarifying
+            //     question.
             let mut last_artifact_path: Option<String> = None;
             let mut last_validation_summary: Option<String> = None;
 
             for iter in 0..MAX_TOOL_ITERATIONS {
-                // Tool-choice flips to "required" when the alternation
-                // grammar carries an envelope schema: the grammar
-                // itself permits a plain-text exit branch, so the
-                // sampler never gets stuck in a forced-tool-call loop,
-                // and the daemon's adapter path treats "required" as
-                // the signal to install schema-aware constraints
-                // (consistent with the agent-bench convention).
-                let tool_choice_value = if lark_grammar_for_loop.is_some() {
-                    serde_json::json!("required")
-                } else {
-                    serde_json::json!("auto")
-                };
-                // SLOT_POLICY §3 Passthrough: recipe-author agentic tool
-                // loop. Tools present → must serve on the primary slot
-                // (Fast has no tools template); Passthrough shadow =
-                // Speed::Slow, unchanged.
-                let mut request = Workload::Passthrough
-                    .request(transcript.clone())
-                    .with_system(&system_prompt);
-                request.max_tokens = Some(ITERATION_MAX_TOKENS);
-                request.temperature = Some(0.0);
-                request.think_budget = Some(0);
-                request.tools = Some(tool_schemas.clone());
-                request.tool_choice = Some(tool_choice_value);
-                request.enable_thinking = Some(false);
-                request.sampling_mode = Some(SamplingMode::Instruct);
-                request.lark_grammar = lark_grammar_for_loop.clone();
+                let request = iteration_request(&transcript, &system_prompt, &tool_schemas);
 
                 let response = match inference.complete(&request).await {
                     Ok(r) => r,
@@ -289,13 +233,11 @@ impl Runtime {
 
                 let mut done_signal = false;
                 for call in &tool_calls {
-                    // `done` is a virtual tool — never dispatched. Pull
+                    // `done` is in the tool list but never dispatched. Pull
                     // the partner-facing `reason` out as the final
                     // assistant text and short-circuit the loop. This
-                    // is the model's structured termination signal,
-                    // installed via `inject_done_variant` on the
-                    // envelope schema so llguidance lets the model
-                    // pick it whenever no more tool work is needed.
+                    // is the model's structured termination signal
+                    // (`done_tool_schema`).
                     if call.name == "done" {
                         let reason = call
                             .arguments
@@ -308,7 +250,7 @@ impl Runtime {
                             conversation_id = %conv_id_owned,
                             iteration = iter,
                             reason_chars = reason.len(),
-                            "recipe_author_loop: done virtual tool"
+                            "recipe_author_loop: done tool"
                         );
                         final_text = if reason.is_empty() {
                             visible_text.clone()
@@ -613,200 +555,86 @@ fn render_transcript(prior: &[Message], current_partner_message: &str) -> String
     out
 }
 
-/// Build a JSON-Schema envelope describing the per-tool oneOf
-/// shape llguidance constrains the sampler against. Mirrors
-/// `sovereign_serving_host::inference_adapter::tool_envelope_schema_for`,
-/// replicated here because sovereign-core can't depend on
-/// sovereign-mesh (cycle).
-///
-/// Returns `None` when there are no tools OR when any tool's
-/// parameters schema isn't an object (the JSON-Schema compiler
-/// requires that for property nesting). Better to install no
-/// constraint than a partial one — the loop falls back to
-/// unconstrained sampling and the existing parser's leniency.
-fn build_envelope_schema(tools: &[ToolSchema]) -> Option<serde_json::Value> {
-    if tools.is_empty() {
-        return None;
-    }
-    let mut variants: Vec<serde_json::Value> = Vec::with_capacity(tools.len());
-    for t in tools {
-        if !t.parameters.is_object() {
-            return None;
-        }
-        let mut props = serde_json::Map::new();
-        props.insert(
-            "name".to_string(),
-            serde_json::json!({ "type": "string", "enum": [&t.name] }),
-        );
-        props.insert("arguments".to_string(), t.parameters.clone());
-        variants.push(serde_json::json!({
-            "type": "object",
-            "properties": props,
-            "required": ["name", "arguments"],
-            "additionalProperties": false,
-        }));
-    }
-    Some(serde_json::json!({ "oneOf": variants }))
+/// One iteration's completion request. `auto` and no grammar (P B2,
+/// decided 2026-10-10), with `done` appended to the tool list: the model
+/// calls a tool, calls `done`, or answers in prose; the last two end the loop.
+fn iteration_request(
+    transcript: &str,
+    system_prompt: &str,
+    tool_schemas: &[ToolSchema],
+) -> CompletionRequest {
+    // SLOT_POLICY §3 Passthrough: recipe-author agentic tool
+    // loop. Tools present → must serve on the primary slot
+    // (Fast has no tools template); Passthrough shadow =
+    // Speed::Slow, unchanged.
+    let mut request = Workload::Passthrough
+        .request(transcript.to_string())
+        .with_system(system_prompt);
+    request.max_tokens = Some(ITERATION_MAX_TOKENS);
+    request.temperature = Some(0.0);
+    request.think_budget = Some(0);
+    let mut tools = tool_schemas.to_vec();
+    tools.push(done_tool_schema());
+    request.tools = Some(tools);
+    request.tool_choice = Some(serde_json::json!("auto"));
+    request.enable_thinking = Some(false);
+    request.sampling_mode = Some(SamplingMode::Instruct);
+    request
 }
 
-/// Append a virtual `done` tool variant to the envelope schema so the
-/// model has a structured way to say "I'm finished — here's why."
+/// The `done` tool the termination addendum orders the model to call.
 /// The handler intercepts `name == "done"` and treats `arguments.reason`
-/// as the partner-facing final text instead of dispatching to a real
-/// tool. Pattern mirrored from `sovereign-serving-host::inference_adapter::
-/// inject_done_tool` (the agent-bench / pi alternation-grammar
-/// adoption — same convention).
-fn inject_done_variant(mut envelope: serde_json::Value) -> serde_json::Value {
-    let done_variant = serde_json::json!({
-        "type": "object",
-        "properties": {
-            "name": {"type": "string", "enum": ["done"]},
-            "arguments": {
-                "type": "object",
-                "properties": {
-                    "reason": {
-                        "type": "string",
-                        "description":
-                            "One- to three-sentence summary of what \
-                             you accomplished and what remains open. \
-                             The partner sees this verbatim as your \
-                             reply."
-                    },
+/// as the partner-facing final text instead of dispatching it.
+fn done_tool_schema() -> ToolSchema {
+    ToolSchema {
+        name: "done".into(),
+        description: Some(
+            "End this turn. Call it when the partner's ask is addressed or \
+             you need their answer before continuing."
+                .into(),
+        ),
+        parameters: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "description":
+                        "One- to three-sentence summary of what \
+                         you accomplished and what remains open. \
+                         The partner sees this verbatim as your \
+                         reply."
                 },
-                "required": ["reason"],
-                "additionalProperties": false,
             },
-        },
-        "required": ["name", "arguments"],
-        "additionalProperties": false,
-    });
-    if let Some(variants) = envelope.get_mut("oneOf").and_then(|v| v.as_array_mut()) {
-        variants.push(done_variant);
-    } else if let Some(variants) = envelope.get_mut("anyOf").and_then(|v| v.as_array_mut()) {
-        variants.push(done_variant);
+            "required": ["reason"],
+            "additionalProperties": false,
+        }),
     }
-    envelope
-}
-
-/// Lark alternation grammar `start: think_block? body` where body
-/// is either a `<tool_call>{...}</tool_call>` envelope or plain
-/// text. Lifted verbatim from
-/// `sovereign_inference::llguidance_constraint::build_tool_alternation_grammar`
-/// — replicated here for the same dep-cycle reason.
-///
-/// The literal `<tool_call>` / `</tool_call>` markers in the grammar
-/// agree with the Qwen chat template's tool-call wrapper, so the
-/// embedded path's marker-stop and llguidance's grammar end-condition
-/// land on the same boundary. The `plain_text` branch's first-byte
-/// guard (`[^{<]`) prevents the model from ambiguously starting a
-/// tool envelope it can't finish.
-fn build_tool_alternation_grammar(envelope_schema_json: &str) -> String {
-    format!(
-        "start: think_block? body\n\
-         think_block: /<think>([^<]|<[^\\/])*<\\/think>\\s*/\n\
-         body: tool_envelope | plain_text\n\
-         tool_envelope: \"<tool_call>\" /\\s*/ %json {envelope_schema_json} /\\s*<\\/tool_call>/\n\
-         plain_text: /[^{{<](.|\\n)*|<[^t](.|\\n)*|<t[^ho](.|\\n)*|<th[^i](.|\\n)*|<tho(.|\\n)*|<to[^o](.|\\n)*|<too[^l](.|\\n)*|<tool[^_](.|\\n)*|<tool_[^c](.|\\n)*/\n"
-    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// P B2: `done` is a real tool in the list, and the request sends
+    /// `auto` with no grammar, so the server's own tool-call path serves it.
     #[test]
-    fn envelope_schema_is_none_for_empty_tools() {
-        assert!(build_envelope_schema(&[]).is_none());
-    }
-
-    #[test]
-    fn envelope_schema_skips_when_parameters_not_object() {
+    fn iteration_request_sends_auto_no_grammar_with_done_listed() {
         let tools = vec![ToolSchema {
-            name: "broken".into(),
+            name: "recipe_validate".into(),
             description: None,
-            parameters: serde_json::json!("not an object"),
+            parameters: serde_json::json!({"type": "object"}),
         }];
-        assert!(build_envelope_schema(&tools).is_none());
-    }
-
-    #[test]
-    fn envelope_schema_emits_one_of_per_tool() {
-        let tools = vec![
-            ToolSchema {
-                name: "recipe_read".into(),
-                description: None,
-                parameters: serde_json::json!({"type": "object", "properties": {"path": {"type": "string"}}}),
-            },
-            ToolSchema {
-                name: "recipe_validate".into(),
-                description: None,
-                parameters: serde_json::json!({"type": "object", "properties": {"path": {"type": "string"}}}),
-            },
-        ];
-        let schema = build_envelope_schema(&tools).expect("schema built");
-        let variants = schema["oneOf"].as_array().expect("oneOf array");
-        assert_eq!(variants.len(), 2);
-        // Each variant pins `name` to a single tool id.
-        let names: Vec<&str> = variants
+        let request = iteration_request("[Partner]: hi\n\n[Agent]:", "sys", &tools);
+        assert_eq!(request.tool_choice, Some(serde_json::json!("auto")));
+        assert!(request.lark_grammar.is_none());
+        let listed = request.tools.expect("tools listed");
+        assert_eq!(listed.len(), 2, "the caller's tool plus done");
+        let done = listed
             .iter()
-            .filter_map(|v| v["properties"]["name"]["enum"][0].as_str())
-            .collect();
-        assert_eq!(names, vec!["recipe_read", "recipe_validate"]);
-    }
-
-    #[test]
-    fn inject_done_appends_done_variant_to_one_of() {
-        let envelope = serde_json::json!({
-            "oneOf": [
-                {"type": "object", "properties": {"name": {"const": "recipe_read"}}}
-            ]
-        });
-        let injected = inject_done_variant(envelope);
-        let variants = injected["oneOf"].as_array().expect("oneOf array");
-        assert_eq!(variants.len(), 2);
-        let done = &variants[1];
-        assert_eq!(done["properties"]["name"]["enum"][0], "done");
-        assert!(done["properties"]["arguments"]["properties"]["reason"].is_object());
-        assert_eq!(done["properties"]["arguments"]["required"][0], "reason");
-    }
-
-    #[test]
-    fn inject_done_appends_to_any_of_when_present() {
-        let envelope = serde_json::json!({
-            "anyOf": [{"type": "object"}]
-        });
-        let injected = inject_done_variant(envelope);
-        let variants = injected["anyOf"].as_array().expect("anyOf array");
-        assert_eq!(variants.len(), 2);
-        assert_eq!(variants[1]["properties"]["name"]["enum"][0], "done");
-    }
-
-    #[test]
-    fn inject_done_noop_when_neither_one_of_nor_any_of() {
-        // Defensive: if the envelope shape doesn't carry an alternation,
-        // we leave it alone rather than synthesising a new structure
-        // that the upstream caller didn't ask for. The handler then
-        // operates without a done-tool escape, falling back to the
-        // plain_text branch + iteration cap.
-        let envelope = serde_json::json!({"type": "object"});
-        let injected = inject_done_variant(envelope.clone());
-        assert_eq!(injected, envelope);
-    }
-
-    #[test]
-    fn alternation_grammar_wraps_schema_with_tool_call_markers() {
-        let schema = r#"{"type":"object"}"#;
-        let grammar = build_tool_alternation_grammar(schema);
-        // Top-level alternation.
-        assert!(grammar.contains("body: tool_envelope | plain_text"));
-        // Literal <tool_call> opener on the envelope branch.
-        assert!(grammar.contains("\"<tool_call>\""));
-        // Closing marker uses Lark regex escape `<\/tool_call>` (the
-        // forward-slash escape keeps Lark's parser happy inside the
-        // /…/ regex literal).
-        assert!(grammar.contains(r"<\/tool_call>"));
-        // %json embedded with the schema body.
-        assert!(grammar.contains(r#"%json {"type":"object"}"#));
+            .find(|t| t.name == "done")
+            .expect("done listed");
+        assert_eq!(done.parameters["required"][0], "reason");
+        assert!(done.parameters["properties"]["reason"].is_object());
     }
 
     /// The loop is shared by recipe- and workflow-authoring, so artifact
