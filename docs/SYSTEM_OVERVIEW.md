@@ -1082,6 +1082,17 @@ finish reads as `stop`, since the adapter derives `tool_calls` from the text
 for every engine. A streamed request asks for usage (`stream_options`), and a
 stream that fails, by an error chunk or the transport, ends in
 `Finish{Error}`.
+The request is written in the spelling `[engine] grammar` names
+(`oicp-client/src/chat_wire.rs`). To a llama-server (`llguidance`) an
+`assistant_prefix` goes as a trailing assistant message the server
+continues, and the prefix is cut from the front of the answer as the engine
+leaves it out; a named `tool_choice`, which that server reads as `auto`, is
+refused. To every host, a templated request carries the `enable_thinking` the
+engine renders it with (`CompletionRequest::templated_thinking`, off unless
+asked), a positive think budget also goes as `reasoning_budget_tokens`, and a
+schema goes out closed by the same `additionalProperties` default the engine
+compiles it with (`sovereign_contracts::structured_output`), which leaves an
+object that declares no properties open.
 
 **Residency is a policy.** `embedded/idle_slot.rs` is the one idleness decider.
 It exists because the daemon is a MESH NODE and must stay available to peers

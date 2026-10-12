@@ -3987,7 +3987,10 @@ had no key that could say otherwise.
     and that route is remembered per provider. With no label in the top 20,
     the answer is empty, which reads as no answer.
   - **Zero think budget** (`chat_wire::write_thinking`). It also writes
-    `enable_thinking: false` unless the caller set the flag.
+    `enable_thinking: false` unless the caller set the flag. Since
+    2026-10-11 every templated request carries the flag the engine renders
+    it with (`chat_wire::template_thinking`), and a positive budget also
+    goes as llama-server's `reasoning_budget_tokens`.
   - **Slot aliases** (`outbound::Hosted::alias_target`, through
     `venue::resolution_alias_keys`). A hosted engine sends `primary`/`fast`
     as the model ids it holds.
