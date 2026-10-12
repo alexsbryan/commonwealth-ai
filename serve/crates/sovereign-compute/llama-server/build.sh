@@ -142,7 +142,9 @@ case $backend in
   metal) flags="-DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON $mac -DGGML_CPU_ARM_ARCH=armv8-a" ;;
   cpu) flags="-DGGML_METAL=OFF $mac -DGGML_SSE42=ON -DGGML_AVX=OFF -DGGML_AVX2=OFF -DGGML_AVX_VNNI=OFF
     -DGGML_FMA=OFF -DGGML_F16C=OFF -DGGML_BMI2=OFF -DGGML_AVX512=OFF" ;;
-  rocm) flags="-DGGML_HIP=ON -DGGML_NATIVE=OFF${GPU_TARGETS:+ -DGPU_TARGETS=$GPU_TARGETS}" ;;
+  # No PIE, as serve/container/Containerfile links the daemon: ggml-hip's
+  # static archive carries R_X86_64_32 relocations a PIE link rejects.
+  rocm) flags="-DGGML_HIP=ON -DGGML_NATIVE=OFF -DCMAKE_EXE_LINKER_FLAGS=-no-pie${GPU_TARGETS:+ -DGPU_TARGETS=$GPU_TARGETS}" ;;
   # NCCL off as Containerfile.cuda sets it for the embedded engine: with it on,
   # ggml_cuda_init's ncclCommInitAll fails on pod hosts whose driver and NCCL
   # disagree, and a single-GPU pod has no use for it.
