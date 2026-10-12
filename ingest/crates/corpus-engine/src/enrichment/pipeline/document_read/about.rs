@@ -48,6 +48,9 @@ pub(super) enum Count {
     NotAbout,
     One,
     Several,
+    /// The count question was refused: not "about none". Its particulars are
+    /// pointed at as for several, until none or one already found is chosen.
+    Unjudged,
 }
 
 /// One particular a document is about: where it is first named or described,
@@ -79,6 +82,10 @@ pub(super) fn local_ref(line: usize, words: &str) -> String {
 pub(super) struct About {
     pub(super) count: Count,
     pub(super) particulars: Vec<Particular>,
+    /// Whether pointing stopped where the document said it did: false when it
+    /// reached [`MAX_PARTICULARS`] with none chosen yet, or was refused, so
+    /// the document may be about particulars no statement can be put on.
+    pub(super) complete: bool,
 }
 
 /// One document being asked what it is about.
@@ -239,16 +246,17 @@ pub(super) async fn about(d: &Doc<'_>, types: &[&OntologyTypeDecl], calls: &mut 
                 count
             }
             Err(refusal) => {
-                debug!(document = d.document, of = %of.name, ?refusal, "document_read/about: count refused");
-                Count::NotAbout
+                debug!(document = d.document, of = %of.name, ?refusal, "document_read/about: count refused; unjudged, its particulars pointed at as for several");
+                Count::Unjudged
             }
         };
         let most = match count {
             Count::NotAbout => 0,
             Count::One => 1,
-            Count::Several => MAX_PARTICULARS,
+            Count::Several | Count::Unjudged => MAX_PARTICULARS,
         };
         let mut particulars: Vec<Particular> = Vec::new();
+        let mut complete = true;
         while particulars.len() < most {
             match next(d, of, &particulars, calls).await {
                 Ok(Some(p)) if particulars.iter().any(|f| f.span == p.span) => {
@@ -261,13 +269,22 @@ pub(super) async fn about(d: &Doc<'_>, types: &[&OntologyTypeDecl], calls: &mut 
                 }
                 Ok(None) => break,
                 Err(refusal) => {
-                    debug!(document = d.document, of = %of.name, %refusal, "document_read/about: pointing refused");
+                    debug!(document = d.document, of = %of.name, %refusal, "document_read/about: pointing refused; the particulars found are incomplete");
+                    complete = false;
                     break;
                 }
             }
         }
-        debug!(document = d.document, of = %of.name, ?count, particulars = particulars.len(), "document_read/about: document");
-        out.push(About { count, particulars });
+        if most == MAX_PARTICULARS && particulars.len() == most {
+            debug!(document = d.document, of = %of.name, most, "document_read/about: pointing stopped at its bound with none chosen yet; the particulars found are incomplete");
+            complete = false;
+        }
+        debug!(document = d.document, of = %of.name, ?count, particulars = particulars.len(), complete, "document_read/about: document");
+        out.push(About {
+            count,
+            particulars,
+            complete,
+        });
     }
     out
 }
@@ -330,8 +347,9 @@ async fn next(
 
 /// Which particular of `about` each statement (its words and lines) is
 /// about: the one, when the document is about one; asked, when it is about
-/// several; none, when it is about none or none was pointed at. A statement
-/// asked whose answer is "none of them" or refused is about none.
+/// several or its count was refused; none, when it is about none or none was
+/// pointed at. A statement asked whose answer is "none of them" or refused is
+/// about none.
 pub(super) async fn assign(
     d: &Doc<'_>,
     of: &OntologyTypeDecl,
@@ -342,7 +360,7 @@ pub(super) async fn assign(
     match (about.count, about.particulars.len()) {
         (_, 0) | (Count::NotAbout, _) => return vec![None; statements.len()],
         (Count::One, _) => return vec![Some(0); statements.len()],
-        (Count::Several, _) => {}
+        (Count::Several | Count::Unjudged, _) => {}
     }
     let labels: Vec<&str> = LABELS[..about.particulars.len()]
         .iter()
@@ -409,8 +427,17 @@ pub(super) async fn particular_of(
         if of_type.is_empty() {
             continue;
         }
-        if about.count == Count::NotAbout {
-            debug!(document = d.document, of = %of.name, statements = of_type.len(), "document_read/about: not about one, yet statements of it were located; each stays its own");
+        match (about.count, about.complete) {
+            (Count::NotAbout, _) => {
+                debug!(document = d.document, of = %of.name, statements = of_type.len(), "document_read/about: not about one, yet statements of it were located; each stays its own");
+            }
+            (Count::Unjudged, _) => {
+                debug!(document = d.document, of = %of.name, statements = of_type.len(), particulars = about.particulars.len(), "document_read/about: the count was unjudged; each statement is asked which particular pointed at it is about");
+            }
+            (_, false) => {
+                debug!(document = d.document, of = %of.name, statements = of_type.len(), particulars = about.particulars.len(), "document_read/about: the particulars found are incomplete; a statement about none of them stays its own");
+            }
+            _ => {}
         }
         let statements: Vec<(&str, (usize, usize))> =
             of_type.iter().map(|&s| (said[s].1, said[s].2)).collect();

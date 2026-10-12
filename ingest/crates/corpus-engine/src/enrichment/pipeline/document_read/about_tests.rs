@@ -364,3 +364,77 @@ fn the_count_reads_about_over_yes_against_no_then_one_against_several() {
         "a tie is not about"
     );
 }
+
+const DEALS: &str = "Deal one with Acme.\nDeal two with Brill.\nDeal three with Cato.\nDeal four with Dax.\nDeal five with Emo.\nDeal six with Fenn.\nDeal seven with Gale.";
+
+/// About's questions answered by what they ask: the count as `count` gives it
+/// (`None` refuses it: a distribution that leaves labels out), the next
+/// particular's line as `line(k)` gives it with `k` already found, every word
+/// question with its first word.
+fn about_oracle(count: Option<&'static str>, line: fn(usize) -> &'static str) -> InferenceFn {
+    let f: InferenceFn = std::sync::Arc::new(move |prompt: &ChatPrompt, _| {
+        let labels: Vec<String> = prompt.response_schema.as_ref().unwrap()["enum"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|l| l.as_str().unwrap().to_string())
+            .collect();
+        let labels: Vec<&str> = labels.iter().map(String::as_str).collect();
+        let u = &prompt.user;
+        let answer = if u.contains("Is the document about a particular") {
+            count.map_or_else(|| json!({ "A": 1.0 }), |c| pick(&labels, c))
+        } else if u.contains("first named or described?") {
+            pick(&labels, line(u.matches("\n- line ").count()))
+        } else {
+            pick(&labels, "A")
+        };
+        Box::pin(async move { Ok(answer.to_string()) })
+    });
+    crate::enrichment::atlas::resolve_records::one_by_one(f)
+}
+
+async fn about_deals(infer: &InferenceFn) -> (About, u32) {
+    let p = policies();
+    let of = p.shape.types.iter().find(|t| t.name == "case").unwrap();
+    let lines = super::super::passes::lines(DEALS);
+    let view = super::super::passes::numbered(DEALS, &lines);
+    let d = Doc {
+        infer,
+        facts: "",
+        document: "doc-1",
+        body: DEALS,
+        lines: &lines,
+        view: &view,
+    };
+    let mut calls = 0;
+    let mut abouts = about(&d, &[of], &mut calls).await;
+    (abouts.remove(0), calls)
+}
+
+/// A refused count is not "about none": the document's particulars are still
+/// pointed at, as for several, until none is chosen.
+#[tokio::test]
+async fn a_refused_count_is_unjudged_and_its_particulars_are_still_pointed_at() {
+    let infer = about_oracle(None, |k| if k == 0 { "B" } else { "0" });
+    let (about, _) = about_deals(&infer).await;
+    assert_eq!(about.count, Count::Unjudged);
+    let lines: Vec<usize> = about.particulars.iter().map(|p| p.line).collect();
+    assert_eq!(lines, [2], "pointed at line 2, then none: {about:?}");
+    assert!(about.complete, "it stopped where the document said it did");
+}
+
+/// Pointing that reaches its bound with no "none" chosen says the particulars
+/// found are incomplete; one that stops at "none" says they are complete.
+#[tokio::test]
+async fn pointing_stopped_by_its_bound_is_incomplete_and_stopped_by_none_is_complete() {
+    const AT: [&str; 7] = ["A", "B", "C", "D", "E", "F", "G"];
+    let infer = about_oracle(Some("B"), |k| AT[k]);
+    let (about, _) = about_deals(&infer).await;
+    assert_eq!(about.count, Count::Several);
+    assert_eq!(about.particulars.len(), MAX_PARTICULARS);
+    assert!(!about.complete, "a sixth and seventh deal were never asked for");
+    let infer = about_oracle(Some("B"), |k| if k < 2 { AT[k] } else { "0" });
+    let (about, _) = about_deals(&infer).await;
+    assert_eq!(about.particulars.len(), 2);
+    assert!(about.complete);
+}
