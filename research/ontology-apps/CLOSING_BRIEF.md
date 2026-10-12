@@ -3,7 +3,7 @@
 Written for a reader who has not seen this work, at the close of the campaign. It says what we set out to build,
 how, what eight days produced (2026-10-03 to 2026-10-10), what the final run shows, why the campaign closes with
 its objective not met, and the questions we would put to a reviewer. It keeps the shape of the 2026-10-07 brief
-(`REVIEW_BRIEF_2026-10-07.md`); the 2026-10-10 status brief (`REVIEW_BRIEF.md`) describes the design in more
+(`REVIEW_BRIEF_2026-10-07.md`); the 2026-10-10 status brief (`REVIEW_BRIEF_2026-10-10.md`) describes the design in more
 detail. Numbers come from the final run (`runs/converge-s2`, local to this host; its readings are committed under
 `converge-s2/` and `blind-author/converge-s2/`), its frozen baseline
 (`~/.svrnmesh/bench-corpora/baseline-fullreader-20261010`), the measurement rows in
@@ -263,5 +263,5 @@ ladders, measurement rows and the two closing readings, `ward_residual.py` and `
 itself, with its run log and every leg's replay, is `runs/converge-s2`, local); `blind-author/converge-s2/` (author
 agreement and the incident reading); `ladder.py` and `bars.py` (the instruments), `ward/score.py` and `support/score.py` (the scorers);
 `svrn/docs/specs/ONTOLOGY_METHOD.md` and `ONTOLOGY_PRIMITIVES.md` (the method);
-`quality/campaigns/closed/ontology-layer.toml` (the bars and the closeout); `REVIEW_BRIEF.md` (the 2026-10-10
+`quality/campaigns/closed/ontology-layer.toml` (the bars and the closeout); `REVIEW_BRIEF_2026-10-10.md` (the 2026-10-10
 status) and `REVIEW_BRIEF_2026-10-07.md`.
