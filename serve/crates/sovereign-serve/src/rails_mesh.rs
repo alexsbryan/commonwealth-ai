@@ -665,7 +665,9 @@ pub async fn join(
     // The GPU probe, once at startup, before the registrations read it.
     match tokio::task::spawn_blocking(sovereign_inference::gpu_probe::observe).await {
         Ok(seen) => info!(target: TARGET, vram_gb = ?seen.total_vram_gb(), "GPU probe published"),
-        Err(e) => tracing::error!(target: TARGET, error = %e, "the GPU probe panicked; GPU memory reads as unknown"),
+        Err(e) => {
+            tracing::error!(target: TARGET, error = %e, "the GPU probe panicked; GPU memory reads as unknown")
+        }
     }
     spawn_registrations(rails_base, listen, member_addr);
 }
