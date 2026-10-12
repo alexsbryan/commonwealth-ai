@@ -1020,131 +1020,19 @@ fn plan_distribution(model_path: &Path, n_ctx: u32) -> Option<DistributionPlan> 
             tracing::debug!(model = %key.0, "plan_distribution: reusing cached shard plan (stable worker set)");
             cached.clone()
         } else {
-            // Weight by advertised free VRAM (host RAM for a CPU-backed worker),
-            // quantized to coarse buckets. Derived from the SAME `device_memory`
-            // snapshot the fit gate judges against — re-reading here would let
-            // the split be apportioned from one reading and checked against
-            // another, so a device could be handed a share it is then refused
-            // for, with neither number visible as wrong.
-            //
-            // Apportion against EFFECTIVE capacity: what remains after each
-            // device's projected compute scratch and (pro-rata) KV share.
-            // Without this, the split fills devices to their raw capacity and
-            // the corrected fit gate below then refuses the very plan we just
-            // computed — the fix would have turned "dies at first inference"
-            // into "refuses to load". The KV share is apportioned by capacity
-            // fraction as a first-order stand-in for the block fraction it
-            // becomes; on a 1–2 GiB context total the circularity is not worth
-            // an iteration loop.
-            let total_capacity: u64 = device_vram_bytes.iter().sum();
-            let effective = |i: usize, &b: &u64| -> u64 {
-                let Some(o) = overheads.as_ref() else {
-                    return b;
-                };
-                let ctx_share = if total_capacity == 0 {
-                    0
-                } else {
-                    (o.context_total_bytes as u128 * b as u128 / total_capacity as u128) as u64
-                };
-                let host_extra = if i + 1 == device_vram_bytes.len() {
-                    o.compute_host_bytes
-                } else {
-                    0
-                };
-                b.saturating_sub(o.compute_accel_bytes + host_extra + ctx_share)
-            };
-            let weights: Vec<f32> = device_vram_bytes
-                .iter()
-                .enumerate()
-                .map(|(i, b)| quantize_vram(effective(i, b)) as f32)
-                .collect();
-            // Byte-mass-aware split: overlay the model's REAL per-block byte mass
-            // so a non-uniform (MoE / hybrid) model apportions by BYTES, not block
-            // count — a count split can hand a small node a heavy contiguous run
-            // and OOM it. `mass` was read above; on a header-read failure it is
-            // `None` and we fall back to the count split rather than wedge.
-            //
-            // Byte-mass apportionment is safe on hybrid (recurrent) models too,
-            // PROVIDED the load also pins `tensor_split` to the plan (see
-            // `DistributionPlan::tensor_split`). An earlier hybrid→count-based
-            // forcing here was H3 of the 2026-07-27 crash hunt and was
-            // FALSIFIED: count-based produced the identical 8/24 cut and the
-            // identical abort, because llama.cpp's per-layer device map follows
-            // tensor_split (default: advertised free VRAM over n_layer+1 units),
-            // not our overrides — WHICH apportionment rule we use never decided
-            // anything.
-            let block_bytes: &[u64] = mass.as_ref().map_or(&[], |m| m.block_bytes.as_slice());
-            let head_bytes = mass.as_ref().map_or(0, |m| m.head_bytes);
-            if mass.as_ref().is_some_and(|m| m.recurrent) {
-                tracing::debug!(
-                    model = %key.0,
-                    "plan_distribution: hybrid/recurrent model (ssm_* blocks) — \
-                     byte-mass split, dev_layer pinned via tensor_split"
-                );
-            }
-            let byte_aware = !block_bytes.is_empty();
-            // Diagnostic override: `SOVEREIGN_RPC_BLOCK_SPLIT=11,21` pins the
-            // per-device block counts (device order: RPC workers first, then
-            // local), bypassing the VRAM-derived apportionment. The computed
-            // split's cut points follow advertised VRAM, so without this there
-            // is no way to AIM the device boundary at a chosen layer — which is
-            // what separates "the distributed-decode fault follows a boundary
-            // that lands on a Gated DeltaNet layer" from "any RPC boundary
-            // faults". A malformed or non-tiling value is REFUSED (warned, then
-            // ignored) rather than repaired: a run that silently used a
-            // different split than the operator asked for would make the
-            // experiment's result meaningless.
-            let explicit = pinned_block_split_raw().and_then(|raw| {
-                match parse_block_split(&raw, n_layer, weights.len()) {
-                    Some(counts) => plan_shards_explicit(n_layer, &weights, &counts),
-                    None => {
-                        tracing::warn!(
-                            raw = %raw,
-                            n_layer,
-                            devices = weights.len(),
-                            "SOVEREIGN_RPC_BLOCK_SPLIT ignored — must be one count per device, \
-                             summing to n_layer; falling back to the computed split"
-                        );
-                        None
-                    }
-                }
-            });
-            let computed = match explicit {
-                Some(plan) => {
-                    tracing::warn!(
-                        blocks = ?plan.iter().map(|s| s.blocks).collect::<Vec<_>>(),
-                        "SOVEREIGN_RPC_BLOCK_SPLIT active — placement is PINNED by env, \
-                         NOT derived from VRAM (diagnostic mode)"
-                    );
-                    plan
-                }
-                None => plan_shards_weighted(n_layer, &weights, block_bytes, head_bytes),
-            };
-
-            // Glassbox: log the resulting per-device byte balance so an operator
-            // can see WHY each node got its range — and spot a residual overflow a
-            // contiguous split can't avoid on a very skewed model. Same
-            // `shard_fits` the gate below judges on, at headroom 1.0, so the log
-            // and the refusal can never describe different numbers.
-            if let Some(m) = mass.as_ref() {
-                let total_mass = m.block_bytes.iter().sum::<u64>() + m.head_bytes;
-                if let Some(fits) =
-                    shard_fits(&computed, &device_vram_bytes, m, 1.0, overheads.as_ref())
-                {
-                    for f in &fits {
-                        tracing::info!(
-                            device = f.device_index,
-                            blocks = ?computed.get(f.device_index).and_then(|s| s.blocks),
-                            held_gb = f.held_bytes as f64 / 1.073_741_824e9,
-                            overhead_gb = f.overhead_bytes as f64 / 1.073_741_824e9,
-                            capacity_gb = f.capacity_bytes as f64 / 1.073_741_824e9,
-                            share_pct = if total_mass > 0 { 100.0 * f.held_bytes as f64 / total_mass as f64 } else { 0.0 },
-                            vram_weight = weights[f.device_index],
-                            "plan_distribution: byte-mass shard"
-                        );
-                    }
-                }
-            }
+            // The capacities come from the SAME `device_memory` snapshot the
+            // fit gate judges against — re-reading here would let the split be
+            // apportioned from one reading and checked against another.
+            let byte_aware = mass.as_ref().is_some_and(|m| !m.block_bytes.is_empty());
+            let pinned = pinned_block_split_raw();
+            let computed = plan_byte_aware_split(
+                &key.0,
+                n_layer,
+                &device_vram_bytes,
+                overheads.as_ref(),
+                mass.as_ref(),
+                pinned.as_deref(),
+            );
             tracing::info!(model = %key.0, devices = devs.len(), byte_aware, "plan_distribution: computed new shard plan");
             cache.insert(key.clone(), computed.clone());
             computed

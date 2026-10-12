@@ -20,6 +20,9 @@ use std::fs;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
+mod split;
+pub use split::*;
+
 /// Tensors at or below this size are sent inline (never hashed/cached) by
 /// llama.cpp RPC — mirror `HASH_THRESHOLD` in `ggml-rpc.cpp`.
 const HASH_THRESHOLD: u64 = 10 * 1024 * 1024;
