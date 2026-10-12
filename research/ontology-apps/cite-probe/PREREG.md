@@ -61,3 +61,41 @@ stage_update items become (document, stage_update, value), each with its own gol
 baseline at that grain, recomputed from the trace (its ranking is value-blind, by p(stage_update)): 24 of 32, .750,
 chance .215. Bar 1 for Ward reads: U at least 24 of 32. The 26 (document, kind) items stay reported, U counting a
 hit when any of the item's values hits, which is Locate's rule.
+
+## Part 2 (M2, 2026-10-12, before any chat call): citing an act by one forced choice over sentence units
+
+Question. Part 1 found embeddings cannot rank an act's sentence (Ward 22 of 32, uv 11 of 30). Given the act's value,
+can the model, in one forced choice over the document's sentence units, cite a gold unit at least as often as the
+reader's own Locate output does today (a gold line located as its kind), with one to three calls per item instead of
+one per asked line? The value is gold, so this isolates citation from the act question (S2); M3 joins them.
+
+Items. Part 1's act items: Ward (document, stage_update, value) 32 and commitment 5; uv (document, case_state, state)
+125. Informative: more than three candidate units (Ward 36 of 37, uv 33 of 125).
+
+Baselines (from the logged legs, scratchpad top1_baseline.py, before this section). Reader output, a gold line
+located as its kind: Ward stage_update 14 of 32 (.438), commitment 5 of 5; uv 88 of 125 (.704), informative 20 of
+33 (.606). Locate's top-1 by p(kind), ties uniform: Ward 12.5 of 32, uv 103.6 of 125, informative 15.6 of 33.
+Chance for one unit: Ward .086, uv informative .113.
+
+The question. The declared facts (prefill.rs, as Locate shows them), then the document as its sentence units in
+order, one per line, the candidates marked [A] to [Y] (at most 25 per page, in document order) and the rest
+(quoted passages) shown unmarked, then the fact, then "which marked sentence shows it, or 0". The fact is written
+from the recipe's own words only: "a <subject type> this document is about has <field> '<value>': <the value's
+segment of the field description>"; a kind with no closed field states its description. Temperature 0, thinking off,
+labels A-Y and 0. Documents with more than 25 candidates are asked page by page; when two or more pages point to a
+unit, one final question marks only the pages' picks. A hit is a cited unit touching a gold line of the item.
+
+Wordings. W1 and W2 differ in the system prompt and the question sentence only (W2 a paraphrase); the facts, the
+document, the marks and the fact are byte-identical. The wording floor per system is |W1 - W2| on the bar's
+measure; a gain over the baseline counts only beyond it.
+
+Gate. 20 items re-asked under W1 outside the cache: the cited unit equals the first answer's on at least 19.
+
+Bars, fixed now.
+1. W1 and W2 both at or above the reader-output baseline beyond the floor: Ward stage_update at least 14 of 32,
+   uv at least 88 of 125, uv informative at least 20 of 33.
+2. Calls per item at most 3 on average per wording, reported with the per-line Locate calls it would replace.
+Reported, no bar: agreement between W1 and W2 on the cited unit, and the hit rate where they agree and where they
+differ; the share answered 0; the mean lines a cited unit covers (against one line for Locate).
+Pass: act-kind citation in M3 is this question, and per-line Locate retires for act kinds. Miss: not tuned; misses
+are classed (cited a neighbour of the gold unit; cited 0; cited a far unit) and the next tool chosen by class.
