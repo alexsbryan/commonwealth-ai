@@ -8,7 +8,9 @@
 //! `mesh up` brings cw-rails up). Each named binary must be in BOTH release
 //! lists — `clients/landing/install.sh`'s `BINS` and `scripts/release-cli-local.sh`'s
 //! `BINS` — and its owning package in the latter's `PKGS`, or a release
-//! install answers the verb with "cannot find sibling binary".
+//! install answers the verb with "cannot find sibling binary". The shipped
+//! llama-server's binaries and manifest must be in the three tarball lists
+//! too, or a `kind = "llama-server"` daemon refuses to start.
 //!
 //! A monorepo-wide census (it reads three crates' sources and two shell
 //! scripts), so it lives here in xtask, in no package: in sovereign-cli it
@@ -96,6 +98,27 @@ fn exec_closure(root: &Path) -> BTreeSet<String> {
         );
     }
     found
+}
+
+/// The shipped llama-server's files: the binaries `PIN.toml` names and the
+/// manifest the daemon verifies beside them (`build_pin::MANIFEST`). The
+/// daemon finds the server beside its own executable, not by
+/// `locate_sibling`, so the exec closure does not see it.
+fn server_files(root: &Path) -> BTreeSet<String> {
+    let dir = root.join("serve/crates/sovereign-compute");
+    let mut files: BTreeSet<String> =
+        shell_list(&dir.join("llama-server/PIN.toml"), "binaries = [", ']')
+            .iter()
+            .map(|w| w.trim_matches(|c| c == '"' || c == ',').to_string())
+            .collect();
+    let src = std::fs::read_to_string(dir.join("src/llama_router/build_pin.rs")).unwrap();
+    let decl = "pub const MANIFEST: &str = \"";
+    let at = src
+        .find(decl)
+        .expect("build_pin.rs declares no MANIFEST; teach release_bins.rs the new form")
+        + decl.len();
+    files.insert(src[at..][..src[at..].find('"').unwrap()].to_string());
+    files
 }
 
 /// The words of the shell list assigned on the line starting `prefix`,
@@ -258,6 +281,17 @@ fn release_lists_carry_every_exec_d_binary() {
             missing.push(format!(
                 "{bin}: its package {package} is not built by cli-release.yml"
             ));
+        }
+    }
+    for file in server_files(&root) {
+        if !install.contains(&file) {
+            missing.push(format!("{file}: not in clients/landing/install.sh BINS"));
+        }
+        if !release_bins.contains(&file) {
+            missing.push(format!("{file}: not in scripts/release-cli-local.sh BINS"));
+        }
+        if !ci_bins.contains(&file) {
+            missing.push(format!("{file}: not packaged by cli-release.yml"));
         }
     }
     assert!(

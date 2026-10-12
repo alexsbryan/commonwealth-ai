@@ -23,7 +23,7 @@
 # plain --release.
 #
 # Usage:
-#   scripts/dev-release.sh                 # the 4 CLI siblings + dev-tools
+#   scripts/dev-release.sh                 # the 4 CLI siblings + dev-tools, then llama-server
 #   scripts/dev-release.sh -p sovereign-server   # any explicit cargo args
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -33,8 +33,12 @@ export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
 export CARGO_PROFILE_RELEASE_INCREMENTAL=true
 
 if [ "$#" -gt 0 ]; then
-  exec cargo build --release "$@"
+  cargo build --release "$@"
+else
+  cargo build --release --features sovereign-cli/dev-tools \
+    -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-dev -p sovereign-cli-llm
 fi
 
-exec cargo build --release --features sovereign-cli/dev-tools \
-  -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-dev -p sovereign-cli-llm
+# The pinned llama-server and its manifest, beside the daemon it serves;
+# incremental, so a pin that did not change costs seconds.
+exec sh serve/crates/sovereign-compute/llama-server/build.sh --install-dir target/release

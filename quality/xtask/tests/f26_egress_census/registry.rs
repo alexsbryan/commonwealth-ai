@@ -412,7 +412,9 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // (`/internal/guest/grant` and friends). LocalDaemon, same reason as the
     // turn-client rows above.
     ("clients/desktop/src-tauri/src/guest_room_commands.rs", Class::LocalDaemon, 1),
-    ("clients/desktop/src-tauri/src/commands/reading.rs", Class::LocalDaemon, 1),
+    // 1 -> 2 (c4a0b8f61): the quotation lookup reads this host's daemon's
+    // capabilities and reading routes from `base_url`, as the first does.
+    ("clients/desktop/src-tauri/src/commands/reading.rs", Class::LocalDaemon, 2),
     // state.rs ROW REMOVED 2026-09-11 (ef4a3a06f, svt-3a): B4's identity probe
     // read /status.process.pid on a run-lock refusal; the app takes no run
     // lock now — it never hosts a daemon — so the site is gone with it.
@@ -593,6 +595,10 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     ("bench/crates/sovereign-cli-bench/src/bench_cmd/uap.rs", Class::LocalDaemon, 1),
     ("bench/crates/sovereign-cli-bench/src/bench_cmd/model_resolve.rs", Class::LocalDaemon, 1),
     ("bench/crates/sovereign-cli-bench/src/bench_cmd/desktop_bridge.rs", Class::LocalDaemon, 1),
+    // The engine-conformance battery replays calls through a scratch daemon's
+    // /internal/engine/replay and a llama-server it started on 127.0.0.1.
+    ("bench/crates/sovereign-cli-bench/src/bench_cmd/engine_conformance/run.rs", Class::LocalDaemon, 1),
+    ("bench/crates/sovereign-cli-bench/src/bench_cmd/engine_conformance/server.rs", Class::LocalDaemon, 1),
     ("ingest/crates/sovereign-pipeline/src/bench_atlas.rs", Class::LocalDaemon, 1),
     ("ingest/crates/sovereign-pipeline/src/alignment_cmd.rs", Class::LocalDaemon, 1),
 

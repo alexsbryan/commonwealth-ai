@@ -287,6 +287,16 @@ jobs:
             --features sovereign-cli/code-intel \
             $(printf -- '-p %s ' "${PKGS[@]}")
 
+      # The pinned llama-server, ggml-rpc-server and their manifest, beside
+      # the daemon; build.sh picks the backend from the runner (Metal on
+      # arm64, CPU on the Intel Mac, Vulkan on Linux).
+      - name: Build llama-server
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh serve/crates/sovereign-compute/llama-server/build.sh \
+            --install-dir "target/${{ matrix.platform.target }}/release"
+
       - name: Package tarball
         shell: bash
         run: |

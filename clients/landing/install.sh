@@ -30,7 +30,7 @@ set -eu
 # a cli-v* release exists on commonwealth-ai.
 REPO="${SVRNMESH_REPO:-alexsbryan/commonwealth-ai}"
 SHELF_REPO="${SVRNMESH_FALLBACK_REPO-alexsbryan/svrnmesh-releases}"
-BINS="sovereign-cli sovereign-cli-daemon sovereign-cli-llm sovereign-cli-dev sovereign-cli-mesh sovereign-cli-bench sovereign-stock sovereign-cli-llm-stock sovereign-serve svrn-ingest sovereign-pod-worker cw-rails"
+BINS="sovereign-cli sovereign-cli-daemon sovereign-cli-llm sovereign-cli-dev sovereign-cli-mesh sovereign-cli-bench sovereign-stock sovereign-cli-llm-stock sovereign-serve svrn-ingest sovereign-pod-worker cw-rails llama-server ggml-rpc-server llama-server.manifest.toml"
 INSTALL_DIR="${SVRNMESH_INSTALL_DIR:-${SOVEREIGN_INSTALL_DIR:-$HOME/.local/bin}}"
 
 say() { printf '  %s\n' "$1"; }
