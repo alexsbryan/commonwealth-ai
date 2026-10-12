@@ -1115,8 +1115,10 @@ The request is written in the spelling `[engine] grammar` names
 (`oicp-client/src/chat_wire.rs`). To a llama-server (`llguidance`) an
 `assistant_prefix` goes as a trailing assistant message the server
 continues, and the prefix is cut from the front of the answer as the engine
-leaves it out; a named `tool_choice`, which that server reads as `auto`, is
-refused. To every host, a templated request carries the `enable_thinking` the
+leaves it out; a named `tool_choice`, which that server reads as `auto`,
+goes as `required` with `tools` narrowed to the named one, and a reply to a
+`required` request that calls no offered tool is asked once more, then
+failed naming the miss (`call_check.rs`, non-streaming). To every host, a templated request carries the `enable_thinking` the
 engine renders it with (`CompletionRequest::templated_thinking`, off unless
 asked), a positive think budget also goes as `reasoning_budget_tokens`, and a
 schema goes out closed by the same `additionalProperties` default the engine
