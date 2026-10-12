@@ -106,3 +106,17 @@ ec's act pass (in build) cites by one forced choice over the document's lines. A
 asked lines as the marked candidates (Locate's own set, paged by 25), everything else identical, W1 and W2. Bars 1-2
 apply to L as to the unit arm; the two are compared on the same items, a difference read only beyond the larger of
 their wording floors. A hit for L is a cited gold line.
+
+## Amendment 3 (2026-10-12, after M2 was read, before any no-none question is asked): citation without none
+
+M2's misses are one class: the answer is 0 (Ward 26-30 of 32, uv 83-92 of 125), 61 of them on one-sentence uv
+documents whose only sentence is the act. The act's presence is decided upstream (S2); the citation only points.
+
+- Arm N: M2's unit arm with one change, the 0 label and its clause removed from the system prompt and the question
+  (W1N, W2N); labels A-Y only. A document with one candidate is cited by code with no call. Paging as in M2; the
+  final question runs whenever two or more pages were asked.
+- Bars: M2's bar 1 and 2 unchanged (Ward stage at least 14 of 32, uv at least 88 of 125, uv informative at least 20
+  of 33, beyond the floor |W1N - W2N|; at most 3 calls per item).
+- Prediction, from M2's diagnostic (renormalised with 0 set aside), written so the read is honest: Ward about 13 of
+  32 (at the bar), uv overall about 98-100 (passes), uv informative about 11-12 (misses; 29 of its 33 items are
+  'reported' on an issue body, gold quoting one of the sentences that describe the problem, counted and listed).
