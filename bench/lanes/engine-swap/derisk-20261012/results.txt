@@ -1,0 +1,37 @@
+Engine-swap de-risk spikes, 2026-10-12. Bars: svrn-docs ENGINE_SWAP_PLAN.md
+"De-risk spikes" (a3033d2), set before the R and D data; F1/F2 were probed
+before their bars were written. Pin 035e22731 + alias patch; host RuggedFox
+(Radeon 8060S, Vulkan). Scripts take a scratch output dir as $1.
+
+F. FIM (fim-probe.sh, fim-probe2.sh; shipped target/debug/llama-server)
+F1 passed  Qwen3.5-0.8B and Mellum2-12B: tokenize(add_special=true) starts
+           with the prefix marker (no BOS); markers are single special tokens.
+F2 passed  every family stop token forced by logit_bias ends generation
+           (stop_type eos) with content ''; with preserved_tokens it renders.
+           Qwen: <|file_sep|> 248065, <|fim_pad|> 248063, <|repo_name|> 248064,
+           <|endoftext|> 248044. Mellum: <|endoftext|> 0, <|im_end|> 28, <fim_pad> 11.
+           Sample: "def add(a, b):" -> '\n    return a + b\n', eos.
+F3 never-ran  needs the edit slot on the router (fim_eval.py, 60 cases).
+
+R. Rerank (gather-rerank-pairs.py, rerank-spike.sh, rerank-compare.py;
+   qwen3-reranker-0.6b-q8_0: embedded RerankSlot vs llama-server --reranking -np 1)
+R1 passed  Spearman over 320 pairs 0.9903 (bar 0.95); per query 0.946-0.990
+R2 passed  mean top-10 overlap 9.125 (bar 9); per query 8,9,8,8,10,10,10,9
+R3 passed  admission (margin > 0) agreement 0.9812 (bar 0.95)
+R4 tracked embedded 9.0s, llama-server 18.6s for 320 pairs; median |margin
+           diff| 0.29; no saturated P. Detail: rerank-result.json.
+
+D. Distribution, loopback only (build-rpc-spike.sh, dist-spike.sh, dist-ot.sh;
+   Qwen3.5-9B-UD-MTP-Q6_K_XL, ggml-rpc-server -c on 127.0.0.1:50152)
+            load    decode tok/s (128 tokens, 3 runs)
+single      3.3s    25.31 25.46 25.51
+rpc -ts 1,1 cold   7.4s    25.13 25.22 25.26   (98 tensors, 3.2 GB to the cache)
+rpc -ts 1,1 warm   6.3s    25.16 25.21 25.37   (0 tensors written: cache hits)
+rpc -ot blk 0-15   5.9s    25.35 25.38 25.03   (0 tensors written)
+D1 passed  both splits load and decode on a hybrid (Gated DeltaNet) model.
+           The -ot buffer name is "RPC0[127.0.0.1:50152]".
+D2 passed  99% of single-device decode over loopback.
+D3 failed  warm load 1.18x faster (bar 2x). The cache served the load (no
+           new tensors written), but loopback has almost no transfer for it
+           to save; the bar was framed for a network link.
+D4 never-ran  needs a second machine online (mesh: 1 of 8 online).
