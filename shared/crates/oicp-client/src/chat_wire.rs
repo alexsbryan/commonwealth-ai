@@ -192,25 +192,46 @@ pub fn write_constraints(
     Ok(())
 }
 
-/// Refuse a `tool_choice` on `body` that `host` would loosen. llama-server
-/// reads `tool_choice` as a string (LS server-common.cpp:1138): an object,
-/// a named function, fails that read, is logged as the wrong type and
-/// becomes "auto" (server-common.h:40-52), so the model may answer in text
-/// or call another tool. Refused rather than sent to be loosened
-/// (`decode.tool-choice-named`). Call it once `tool_choice` is final.
-pub(crate) fn check_tool_choice(body: &Value, host: GrammarSupport) -> Result<()> {
+/// Send a named `tool_choice` on `body` as `required` with `tools` narrowed
+/// to the named one, where `host` would loosen it. llama-server reads
+/// `tool_choice` as a string (LS server-common.cpp:1138): an object fails
+/// that read and becomes "auto" (server-common.h:40-52). `required` over a
+/// one-tool list is the same constraint in the spelling it reads; the reply
+/// is checked for the call (`call_check`). A name the list does not offer is
+/// refused (`decode.tool-choice-named`). Call it once `tool_choice` is final.
+pub(crate) fn narrow_tool_choice(body: &mut Value, host: GrammarSupport) -> Result<()> {
     let Some(named) = body.get("tool_choice").filter(|tc| tc.is_object()) else {
         return Ok(());
     };
     if host == GrammarSupport::Sovereign {
         return Ok(());
     }
-    tracing::warn!(target: "oicp_client", tool_choice = %named, "check_tool_choice: refused");
-    Err(Error::InvalidInput(format!(
-        "this host reads tool_choice as \"auto\", \"none\" or \"required\" and \
-         would answer the named choice {named} as \"auto\". It is refused rather \
-         than sent to be loosened."
-    )))
+    let named = named.clone();
+    let name = named.pointer("/function/name").and_then(Value::as_str);
+    let tools = body.get("tools").and_then(Value::as_array);
+    let kept: Vec<Value> = tools
+        .into_iter()
+        .flatten()
+        .filter(|t| name.is_some() && t.pointer("/function/name").and_then(Value::as_str) == name)
+        .cloned()
+        .collect();
+    if kept.is_empty() {
+        tracing::warn!(target: "oicp_client", tool_choice = %named, "narrow_tool_choice: refused");
+        return Err(Error::InvalidInput(format!(
+            "tool_choice names {named}, which is not among the tools offered, so it \
+             cannot be sent as \"required\" over that one tool. It is refused rather \
+             than sent to be loosened to \"auto\"."
+        )));
+    }
+    tracing::debug!(
+        target: "oicp_client",
+        tool = name.unwrap_or_default(),
+        offered = tools.map_or(0, Vec::len),
+        "narrow_tool_choice: a named choice sent as \"required\" over that one tool"
+    );
+    body["tools"] = Value::Array(kept);
+    body["tool_choice"] = json!("required");
+    Ok(())
 }
 
 /// Write `schema` onto `body` in `mode`'s spelling, named after the schema's

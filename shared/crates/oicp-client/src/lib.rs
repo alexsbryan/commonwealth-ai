@@ -799,7 +799,7 @@ impl RemoteApiProvider {
             body["sampling_mode"] = serde_json::json!(mode);
         }
         chat_wire::write_assistant_prefix(&mut body, request, self.grammar);
-        chat_wire::check_tool_choice(&body, self.grammar)?;
+        chat_wire::narrow_tool_choice(&mut body, self.grammar)?;
         if let Some(prefix) = &request.cmd_prefix {
             body["cmd_prefix"] = serde_json::json!(prefix);
         }
@@ -1015,7 +1015,10 @@ impl InferenceProvider for RemoteApiProvider {
             }
         }
         let (response, mode) = self.send_chat(&admitted, &url, request).await?;
-        let mut chat_response = response_wire::read_chat(response).await?;
+        let first = response_wire::read_chat(response).await?;
+        let (mut chat_response, mode) = self
+            .check_required_call(&admitted, &url, request, mode, first)
+            .await?;
         if let (Some(prefix), Some(choice)) = (
             chat_wire::prefix_as_message(request, self.grammar),
             chat_response.choices.first_mut(),
@@ -1394,6 +1397,7 @@ pub struct SplitInferenceProvider {
     hosted: Option<outbound::Hosted>,
 }
 
+mod call_check;
 mod chat_wire;
 mod forced_choice;
 mod outbound;
