@@ -22,7 +22,7 @@ use kernel_types::Sha256Hash;
 use oicp_types::verify::{Checkability, VerifyResponse, VerifyTier, VerifyVerdict, UNCALIBRATED};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities};
-use sovereign_daemon::routes_oicp_verify::VerifyJudge;
+use sovereign_daemon::routes_oicp_verify::{VerifyJudge, CHECKER_PASSAGES};
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::AppState;
 use tower::ServiceExt;
@@ -222,7 +222,7 @@ async fn the_checker_maps_its_judges_support_and_names_its_model() {
     let r = reply(&body);
     assert_eq!(
         r.verifier,
-        "verify/1 checker/chunk-support tau=0.5 model=tide-table-judge"
+        "verify/1 checker/chunk-support tau=0.5 passages=3 model=tide-table-judge"
     );
     let [c] = r.claims.as_slice() else {
         panic!("{body}")
@@ -257,6 +257,31 @@ async fn the_checker_maps_its_judges_support_and_names_its_model() {
         !c.evidence.is_empty(),
         "the judged passages are named: {body}"
     );
+}
+
+/// The checker reads its passages one at a time, so how many it judges is
+/// the tier's latency. A claim whose words reach a passage of every document
+/// has more lexical candidates than the cap, and none of the best three
+/// supports it (the tide-table one ranks below them), so nothing exits early:
+/// the judge reads exactly the cap, and each is named.
+#[tokio::test]
+async fn the_checker_judges_no_more_passages_than_its_cap() {
+    let (_tmp, state) = fixture_state().await;
+    let (status, body) = verify_on(
+        client_router(state).layer(axum::Extension(VerifyJudge(Arc::new(TideTableJudge)))),
+        serde_json::json!({
+            "unit": "In 2019 the river, the archive, the gauges and the gulls were surveyed.",
+            "tier": "checker",
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let r = reply(&body);
+    let [c] = r.claims.as_slice() else {
+        panic!("{body}")
+    };
+    assert_eq!(c.evidence.len(), CHECKER_PASSAGES, "{body}");
+    assert_eq!(c.verdict, VerifyVerdict::Unsupported, "{body}");
 }
 
 /// Every way of not judging is said by name: a listener with no judge, a

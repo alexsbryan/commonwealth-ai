@@ -103,7 +103,7 @@ VerifyVerdict = {"kind": "supported" | "contradicted" | "unsupported" | "abstain
 |---|---|---|
 | `class/no-specifics` | any | a claim carrying no number, date or name is `not_checkable` |
 | `fast/value-presence` | fast | each specific of the claim is looked for in the passages lexical search returns for the claim and for the specific; one found in none is `unsupported`, named in `specifics_absent`; otherwise `abstained`, because presence is not support |
-| `checker/chunk-support` | checker | the in-turn gate's per-claim register judges each passage; support at or above 0.5 on any is `supported`, otherwise `unsupported`. The register says support or not, so this rung never says `contradicted` |
+| `checker/chunk-support` | checker | the in-turn gate's per-claim register judges each of the claim's best three lexical candidates in turn (the reference host's `CHECKER_PASSAGES`, named in `verifier` as `passages=3`); support at or above 0.5 on any is `supported`, otherwise `unsupported`. The register says support or not, so this rung never says `contradicted` |
 
 The reference host serves `fast` wherever `verify` is mounted, and `checker`
 only on the listener that holds its daemon's inference; elsewhere `checker`

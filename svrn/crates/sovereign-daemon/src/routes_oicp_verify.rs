@@ -43,7 +43,7 @@ use sovereign_core::runtime::{
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::Speed;
-use sovereign_tools::summary_verify::{EARLY_EXIT_SUPPORT, MEMBER_CAP, SUPPORTED_TAU};
+use sovereign_tools::summary_verify::{EARLY_EXIT_SUPPORT, SUPPORTED_TAU};
 
 use crate::oicp_evidence::{
     absence_reason, open_for_reading, readable_corpora, record_for, requested_corpora,
@@ -58,6 +58,12 @@ pub const VERIFY_ENDPOINT: &str = "/oicp/v1/verify";
 pub const TIERS: [VerifyTier; 2] = [VerifyTier::Fast, VerifyTier::Checker];
 /// Lexical candidates read per query per corpus.
 const CANDIDATES_K: usize = 8;
+/// Passages the checker judges per claim, best lexical candidates first. The
+/// judge reads them one at a time, so this is the tier's latency: at the
+/// gate's `MEMBER_CAP` (12, so all 8 candidates) X1's draft took 4.0-8.5 s a
+/// claim warm (n=4, 2026-10-12), over the S6 order's 5 s line; operator chose
+/// 3 the same day. With several corpora the first corpus's candidates fill it.
+pub const CHECKER_PASSAGES: usize = 3;
 /// The rung names on the wire: a change to what a rung does changes its name.
 const RUNG_CLASS: &str = "class/no-specifics";
 const RUNG_FAST: &str = "fast/value-presence";
@@ -188,13 +194,13 @@ pub async fn verify(
 }
 
 /// Who judged: the route, its rung for the tier, and for the checker the
-/// threshold and the model its slot names (`model_id_for(Slow)`, the slot the
-/// judge workload prefers; routing may serve it elsewhere, which this does not
-/// see).
+/// threshold, the passages it judges and the model its slot names
+/// (`model_id_for(Slow)`, the slot the judge workload prefers; routing may
+/// serve it elsewhere, which this does not see).
 fn verifier_identity(tier: VerifyTier, inference: Option<&dyn InferenceProvider>) -> String {
     match tier {
         VerifyTier::Checker => format!(
-            "verify/1 {RUNG_CHECKER} tau={SUPPORTED_TAU} model={}",
+            "verify/1 {RUNG_CHECKER} tau={SUPPORTED_TAU} passages={CHECKER_PASSAGES} model={}",
             inference.map_or_else(|| "none".to_string(), |i| i.model_id_for(Speed::Slow))
         ),
         _ => format!("verify/1 {RUNG_FAST}"),
@@ -336,7 +342,7 @@ async fn judge_claim(
                 Ok(p) => p,
                 Err(e) => return Judged::could_not(checkable, RUNG_CHECKER, e),
             };
-            shown.truncate(MEMBER_CAP);
+            shown.truncate(CHECKER_PASSAGES);
             judge_with_checker(claim, shown, inference).await
         }
         VerifyTier::Judge => Judged::could_not(checkable, RUNG_CLASS, reasons::TIER_NOT_OFFERED),
