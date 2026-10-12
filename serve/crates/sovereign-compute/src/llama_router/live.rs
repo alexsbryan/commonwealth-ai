@@ -7,7 +7,7 @@
 //! process: the supervisor gives every child `PR_SET_PDEATHSIG` and kills
 //! its process group, which holds the router's one process per model.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -15,6 +15,7 @@ use serde_json::{json, Value};
 use sovereign_contracts::oicp::ComputeChildStatus;
 use sovereign_contracts::setup_config::SetupConfig;
 
+use super::build_pin::{self, BuildPin};
 use super::RouterPreset;
 use crate::supervisor::{HealthTarget, Supervisor, SupervisorConfig, SupervisorState};
 
@@ -92,6 +93,27 @@ pub fn resolve_binary(config: &SetupConfig) -> Result<(PathBuf, BinarySource), S
     }
 }
 
+/// A shipped binary must be the build this daemon was compiled against
+/// ([`build_pin::verify`]); an override is the operator's dev build and is
+/// run as it is, which `/status` says.
+fn check_build(binary: &Path, source: &BinarySource) -> Result<(), String> {
+    match source {
+        BinarySource::Shipped => {
+            let pin = BuildPin::compiled()?;
+            build_pin::verify(binary, &pin)?;
+            tracing::info!(target: "llama_router", %pin, "llama-server build verified against the compiled pin");
+        }
+        BinarySource::Override => {
+            tracing::info!(
+                target: "llama_router",
+                binary = %binary.display(),
+                "llama-server build not checked: [engine] server_binary overrides the shipped one"
+            );
+        }
+    }
+    Ok(())
+}
+
 fn free_port() -> Result<u16, String> {
     // Bound and released: another process could take it before the router
     // binds, and the router would then fail to start and be restarted.
@@ -109,6 +131,7 @@ impl LiveRouter {
         let runtime = tokio::runtime::Handle::try_current()
             .map_err(|_| "the llama-server router is started from a tokio runtime".to_string())?;
         let (binary, source) = resolve_binary(config)?;
+        check_build(&binary, &source)?;
         let dir = config.data.dir.join("llama-server");
         std::fs::create_dir_all(&dir).map_err(|e| format!("creating {}: {e}", dir.display()))?;
         let preset_path = dir.join("router.ini");
@@ -333,8 +356,8 @@ impl LiveRouter {
             .clone();
         let (lifecycle, reason) = lifecycle_of(&state);
         let source = match self.source {
-            BinarySource::Shipped => "shipped",
-            BinarySource::Override => "override",
+            BinarySource::Shipped => "shipped, build verified",
+            BinarySource::Override => "override, build unchecked",
         };
         let mut out = vec![ComputeChildStatus {
             name: SERVER_BINARY.into(),

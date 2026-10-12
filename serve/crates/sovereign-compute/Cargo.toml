@@ -21,6 +21,8 @@ license.workspace = true
 sovereign-contracts = { workspace = true }
 # The supervisor stamps health and crash-log times from the tier-0 clock decider.
 sovereign-time = { workspace = true }
+# Reads llama-server/PIN.toml and the manifest beside the shipped router.
+toml = { workspace = true }
 # The server shell the child serves through (phase-b pb-shell); `task`: the
 # discovery loop and the self-manifest refresh run under the kit's supervisor.
 host-kit = { workspace = true, features = ["shell", "jobs", "task"] }

@@ -17,7 +17,7 @@
 #
 # R is the same daemon with [engine] kind = "remote". It reaches
 # engine_proxy.py on :18300, which forwards to one llama-server router on
-# :18301, built by build-llama-server.sh --llguidance.
+# :18301, built by serve/crates/sovereign-compute/llama-server/build.sh --vanilla --llguidance.
 set -eu
 repo=$(cd "$(dirname "$0")/../../.." && pwd)
 out=$repo/target/engine-swap

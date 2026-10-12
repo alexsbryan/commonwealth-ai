@@ -5,7 +5,7 @@
 # into target/e2eswe-slice/. The task CONTENT is never committed (CC BY-NC 4.0,
 # benchmarking-only): this script is the only path it enters the tree through,
 # and every byte it lays down is checked against the committed manifest.json.
-# Conventions follow bench/lanes/agent-coding/arms/build-llama-server.sh:
+# Conventions follow serve/crates/sovereign-compute/llama-server/build.sh:
 # pinned commit, codeload tarball, idempotent, provenance record with sha256.
 #
 #   ./fetch.sh            # from this directory

@@ -10,7 +10,7 @@
 # The commit is the one vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT names (a pull
 # request head, see the comments there): the conformance battery compares the
 # embedded engine with this server, so both run the same kernels until the
-# embedded engine is deleted. A test holds the two equal.
+# embedded engine is deleted. build.sh refuses while the two differ.
 
 llama_cpp_commit = "035e22731a7fd70b9854b3a2d64ec68e9b1a45d3"
 llguidance = true

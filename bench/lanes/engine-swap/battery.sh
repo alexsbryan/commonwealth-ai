@@ -8,7 +8,7 @@
 # Targets, each one pass of the resident daemon on a swapped config:
 #   embedded       the config as it stands ([engine] kind = "llama")
 #   llama-server   [engine] kind = "remote" against one llama-server router on
-#                  :18301, built by build-llama-server.sh --llguidance
+#                  :18301, built by serve/crates/sovereign-compute/llama-server/build.sh --vanilla --llguidance
 #   llama-server-matched
 #                  the same with no MTP drafting, the configuration the
 #                  compute row compares: a drafted token gets no

@@ -1033,6 +1033,13 @@ a supervised child), warms every preset model until `GET /models` reports
 `loaded`, and re-wraps it on every reload, refusing one whose preset differs;
 `llama_router::provider::RouterProvider` reports it and each model under
 `compute_children` and the node's weights as `OwnWeights`.
+The binary is `llama-server` beside the daemon's executable, built by
+`serve/crates/sovereign-compute/llama-server/build.sh` from `PIN.toml` there
+(llama.cpp commit, llguidance, each patch by sha256), which writes
+`llama-server.manifest.toml` beside it. The daemon compiles the pin in and
+refuses a shipped binary whose manifest disagrees
+(`llama_router::build_pin::verify`); `[engine] server_binary` overrides the
+binary and skips the check, and `/status` says which ran.
 `BuiltEngine.llama` is `None` for every non-llama engine, and the VRAM
 preflight is llama's own question, skipped for engines holding no weights.
 The contracts are executable: `engine_conformance::{check_sync, check_serving}`.

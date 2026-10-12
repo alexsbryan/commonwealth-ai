@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
+pub mod build_pin;
 pub mod live;
 pub mod provider;
 use sovereign_contracts::engine_config::{EmbedInputs, EngineKind, EngineSection, GrammarSupport};

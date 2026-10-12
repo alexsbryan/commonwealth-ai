@@ -24,8 +24,9 @@ pi and opencode get their provider config per run (pi through its own
 `~/.pi` and `~/.config/opencode` are never read. `--agent-base-url`
 defaults to `--judge-base-url`; runners with a built-in URL refuse it.
 
-`arms/` holds the daemon-vs-llama-server A/B: `build-llama-server.sh`
-(arm A, at the daemon's vendored llama.cpp commit), `serve-arm.sh`
+`arms/` holds the daemon-vs-llama-server A/B: arm A is built by
+`serve/crates/sovereign-compute/llama-server/build.sh --vanilla` (unpatched, at the pinned llama.cpp
+commit), then `serve-arm.sh`
 (arm A, B or C on one port) and `tap.py` (the one recorder every arm's
 traffic passes through).
 

@@ -1,6 +1,6 @@
 The recurrent-state leak experiment (lesson 9535ad01), against llama.cpp
 035e227. Apply from the source root with `patch -p1`, build as
-build-llama-server.sh does, run with LLAMA_LEAK_CLEAR set.
+serve/crates/sovereign-compute/llama-server/build.sh --vanilla does, run with LLAMA_LEAK_CLEAR set.
 
 LLAMA_LEAK_CLEAR=1     llama_memory_clear(data = true) whenever a slot starts
                        from position 0: drift 0.0 nats (probes.py leak), A/A

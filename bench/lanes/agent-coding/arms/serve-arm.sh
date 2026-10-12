@@ -43,7 +43,7 @@ mkdir -p "$out"
 case $arm in
   A|A0)
     bin=$repo/target/llama-server-vanilla/build/bin/llama-server
-    [ -x "$bin" ] || { echo "serve-arm: no $bin (bench/lanes/agent-coding/arms/build-llama-server.sh)" >&2; exit 2; }
+    [ -x "$bin" ] || { echo "serve-arm: no $bin (serve/crates/sovereign-compute/llama-server/build.sh --vanilla)" >&2; exit 2; }
     reasoning=auto
     [ "$arm" = A0 ] && reasoning=off
     "$bin" -m "$gguf" -c "$ctx" -ngl 99 --parallel 1 \
