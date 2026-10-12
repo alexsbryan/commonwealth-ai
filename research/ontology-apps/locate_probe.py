@@ -419,7 +419,7 @@ def join():
 
 # ---------------------------------------------------------------- calls (cached by their whole request)
 def post(req):
-    path = OUT / "calls" / (hashlib.sha256(json.dumps(req, sort_keys=True).encode()).hexdigest() + ".json")
+    path = OUT / "waves" / (hashlib.sha256(json.dumps(req, sort_keys=True).encode()).hexdigest() + ".json")
     if path.exists():
         return json.loads(path.read_text())
     r = urllib.request.Request(CHAT, json.dumps(req).encode(), {"Content-Type": "application/json"})
@@ -473,17 +473,66 @@ def questions(system, pop, arm, x):
     raise SystemExit(f"unknown arm {arm}")
 
 
+def cache_path(req):
+    return OUT / "calls" / (hashlib.sha256(json.dumps(req, sort_keys=True).encode()).hexdigest() + ".json")
+
+
+WAVE_MAX = 64  # resolve_records/wave.rs WAVE_MAX_QUESTIONS
+
+
+def wave_body(system, users, labels_each):
+    """One wave over questions differing only in their user turn (resolve_records/wave.rs compose): the common byte
+    prefix is the prompt, each question's rest a branch with its own labels."""
+    prefix = min(len(u) for u in users)
+    for u in users[1:]:
+        prefix = min(prefix, next((i for i, (a, b) in enumerate(zip(users[0], u)) if a != b), min(len(users[0]), len(u))))
+    branches = [{"suffix": u[prefix:], "choice": {"type": "string", "enum": l, "x_forced_choice": True}} for u, l in zip(users, labels_each)]
+    req = body(system, users[0][:prefix], ["A"])
+    req["response_format"]["json_schema"]["schema"] = {"x_forced_choice_wave": branches}
+    return req
+
+
 def run(arms):
+    """Each document's questions under one arm go as waves (one per system prompt, at most WAVE_MAX branches); every
+    branch's answer is written under its single question's cache key, marked `via: wave`, so scoring reads one cache."""
     pop = json.loads((OUT / "join.json").read_text())
     for arm in arms:
         for system, p in pop.items():
-            t0, n, failed = time.time(), 0, 0
+            t0, n, refused, waves = time.time(), 0, 0, 0
+            by_doc = collections.defaultdict(list)
             for x in p["items"]:
-                for _, sysp, user, labels, _ in questions(system, p, arm, x):
-                    rec = post(body(sysp, user, labels))
-                    n += 1
-                    failed += answer(rec, labels) is None
-            print(f"arm {arm} {system}: {n} questions, {failed} without a distribution, {time.time() - t0:.0f}s", flush=True)
+                by_doc[x["doc"]].extend(questions(system, p, arm, x))
+            for doc, qs in by_doc.items():
+                todo = [q for q in qs if not cache_path(body(q[1], q[2], q[3])).exists()]
+                groups = collections.defaultdict(list)
+                for q in todo:
+                    groups[q[1]].append(q)
+                for sysp, group in groups.items():
+                    for i in range(0, len(group), WAVE_MAX):
+                        chunk = group[i:i + WAVE_MAX]
+                        single = len(chunk) == 1  # a lone question goes as itself, not as an empty-suffix wave
+                        rec = post(body(chunk[0][1], chunk[0][2], chunk[0][3]) if single else wave_body(sysp, [q[2] for q in chunk], [q[3] for q in chunk]))
+                        waves += not single
+                        content = ((((rec.get("response") or {}).get("choices") or [{}])[0].get("message") or {}).get("content")) or ""
+                        try:
+                            answers = json.loads(content)
+                        except json.JSONDecodeError:
+                            answers = None
+                        if single:
+                            answers = [answers]
+                        for j, q in enumerate(chunk):
+                            a = answers[j] if isinstance(answers, list) and j < len(answers) else None
+                            out = {"via": "single" if single else "wave", "wave_wall_s": rec.get("wall_s"), "branches": len(chunk)}
+                            if isinstance(a, dict) and "x_refused" not in a:
+                                out["response"] = {"choices": [{"message": {"content": json.dumps(a)}}]}
+                            else:
+                                out["error"] = f"refused or missing: {json.dumps(a)[:200] if a is not None else rec.get('error')}"
+                                refused += 1
+                            path = cache_path(body(q[1], q[2], q[3]))
+                            path.parent.mkdir(parents=True, exist_ok=True)
+                            path.write_text(json.dumps(out))
+                            n += 1
+            print(f"arm {arm} {system}: {n} questions in {waves} waves, {refused} refused or missing, {time.time() - t0:.0f}s", flush=True)
 
 
 # ---------------------------------------------------------------- scoring (cache only)
@@ -494,7 +543,7 @@ def outcome(system, p, arm, x):
         return None
     got = []
     for key, sysp, user, labels, meaning in qs:
-        path = OUT / "calls" / (hashlib.sha256(json.dumps(body(sysp, user, labels), sort_keys=True).encode()).hexdigest() + ".json")
+        path = cache_path(body(sysp, user, labels))
         if not path.exists():
             return None
         d = answer(json.loads(path.read_text()), labels)
