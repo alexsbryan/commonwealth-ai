@@ -20,8 +20,8 @@
 #             stream, last_role, forced_choice, schema_bare_object,
 #             tool_choice_named, fault, label (a synthetic case's); values are set | unset | >0 |
 #             =<json> | !=<json> | a plain string (cases.py applies them). A table
-#             matches a fault or raw-prompt case only if it names `fault` or
-#             `shape`. A row with no
+#             matches a fault, raw-prompt or named-tool_choice case only if it
+#             names `fault`, `shape` or `tool_choice_named`. A row with no
 #             `when` has no cases until its scenario exists.
 #   predict   pass | fail:silent | fail:refused | fail:differs
 #   basis     read | measured | unverified

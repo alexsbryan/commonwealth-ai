@@ -15,7 +15,8 @@ interchangeable for the battery. `coverage` exits 1 when a row that has a
 A predicate is a list of tables, any one matching. Keys are request fields
 or the derived keys below; values are `set`, `unset`, `>0`, `=<json>`,
 `!=<json>`, or a plain string meaning equal to it. A table matches a
-fault-injected case or a raw prompt only if it names `fault` or `shape`.
+fault-injected case, a raw prompt or a named tool_choice only if it names
+`fault`, `shape` or `tool_choice_named`.
 """
 import argparse
 import hashlib
@@ -88,9 +89,10 @@ def holds(cond, value):
 
 
 # Special cases are opted into by name: a table that does not mention these
-# keys does not match a fault-injected case or a raw (FIM) prompt, so a FIM
-# refusal or an injected error is never counted against an unrelated row.
-IMPLICIT = {"fault": "unset", "shape": "!=raw"}
+# keys does not match a fault-injected case, a raw (FIM) prompt or a named
+# tool_choice, so a FIM refusal, an injected error or the client's decided
+# refusal of a named choice is never counted against an unrelated row.
+IMPLICIT = {"fault": "unset", "shape": "!=raw", "tool_choice_named": "=false"}
 
 
 def matches(when, case):
