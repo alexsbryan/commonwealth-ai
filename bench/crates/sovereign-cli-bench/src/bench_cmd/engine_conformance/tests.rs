@@ -695,3 +695,43 @@ fn every_mutation_is_caught_and_an_a_a_pair_gives_the_reference_a_subject() {
     let none = vec![case("a", "embedded", "count", Some(5))];
     assert_eq!(mutate::run(&inventory, &none)[0].verdict, "no-subject");
 }
+
+#[test]
+fn a_mutation_subject_is_a_pair_whose_prompts_agree() {
+    use super::mutate;
+    let inventory = Inventory {
+        rows: vec![row("tools", vec![Check::ToolCalls], Prediction::Pass)],
+    };
+    let tool = |target: &str, prompt: Vec<i64>| CaseRecord {
+        rows: vec!["tools".into()],
+        facets: Facets {
+            prompt_ids: Some(prompt),
+            output: Some(Output {
+                tool_calls: vec![ToolCall {
+                    name: "read_file".into(),
+                    arguments: json!({}),
+                }],
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+        ..rec(target, Facets::default())
+    };
+    // Equal tool calls under different prompts pass, but a tool call added
+    // there is excused upstream: the cell can never fail, so it is no subject.
+    let cross = vec![tool("embedded", vec![1, 2]), tool("llama-server", vec![1, 3])];
+    let m = &mutate::run(&inventory, &cross)[0];
+    assert_eq!(m.verdict, "no-subject", "{m:?}");
+    assert!(m.detail.contains("1 cell(s) passed"), "{m:?}");
+
+    // A second run of the target renders the same prompt, so it is judged
+    // against that run and the mutation is caught.
+    let mut aa = cross;
+    aa.push(tool("llama-server", vec![1, 3]));
+    let m = &mutate::run(&inventory, &aa)[0];
+    assert_eq!(
+        (m.verdict, m.reference.as_deref()),
+        ("caught", Some("llama-server")),
+        "{m:?}"
+    );
+}

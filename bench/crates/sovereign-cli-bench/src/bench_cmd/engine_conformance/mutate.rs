@@ -26,6 +26,9 @@ pub struct Mutation {
     pub check: String,
     /// The case whose passing cell was mutated, when there was one.
     pub case: Option<String>,
+    /// The target the mutated cell was judged against: the row's reference,
+    /// or the subject's own A/A partner.
+    pub reference: Option<String>,
     /// `caught`, `missed`, or `no-subject` when no cell passed to mutate.
     pub verdict: &'static str,
     /// The mutation, and what the check said of it.
@@ -41,23 +44,43 @@ pub fn run(inventory: &Inventory, records: &[CaseRecord]) -> Vec<Mutation> {
             if matches!(check, Check::Scenario { .. }) {
                 continue;
             }
+            // A passing pair whose prompts or generations differ is a pass the
+            // check cannot turn into a failure: the difference a mutation adds
+            // is excused upstream. Such a pair is counted, not used.
+            let mut unisolated = 0usize;
             let subject = records
                 .iter()
                 .filter(|t| t.rows.iter().any(|id| *id == row.id) && t.outcome == Outcome::Ok)
                 .find_map(|t| {
-                    let r = reference_for(row, t, records);
-                    if !check.target_only() && r.is_none() {
-                        return None;
+                    if check.target_only() {
+                        let r = reference_for(row, t, records);
+                        return (check.judge(r, t) == CellVerdict::Passed).then_some((r, t));
                     }
-                    (check.judge(r, t) == CellVerdict::Passed).then_some((r, t))
+                    candidates(row, t, records)
+                        .find(|r| {
+                            let passed = check.judge(Some(r), t) == CellVerdict::Passed;
+                            let isolated = passed && check.isolated(r, t);
+                            unisolated += usize::from(passed && !isolated);
+                            isolated
+                        })
+                        .map(|r| (Some(r), t))
                 });
             let Some((r, t)) = subject else {
+                let detail = if unisolated > 0 {
+                    format!(
+                        "{unisolated} cell(s) passed, none on a pair whose prompts and \
+                         generations agree, so none could fail"
+                    )
+                } else {
+                    "no cell passed on these records to mutate".into()
+                };
                 out.push(Mutation {
                     row: row.id.clone(),
                     check: format!("{check:?}"),
                     case: None,
+                    reference: None,
                     verdict: "no-subject",
-                    detail: "no cell passed on these records to mutate".into(),
+                    detail,
                 });
                 continue;
             };
@@ -68,11 +91,13 @@ pub fn run(inventory: &Inventory, records: &[CaseRecord]) -> Vec<Mutation> {
                 CellVerdict::Passed => ("missed", "still passed".to_string()),
                 CellVerdict::CouldNotJudge(why) => ("missed", format!("could not judge: {why}")),
             };
-            tracing::debug!(target: "engine_conformance", row = %row.id, ?check, case = %t.case_id, verdict, %what, "mutation");
+            let reference = r.map(|r| r.target.clone());
+            tracing::debug!(target: "engine_conformance", row = %row.id, ?check, case = %t.case_id, ?reference, verdict, %what, "mutation");
             out.push(Mutation {
                 row: row.id.clone(),
                 check: format!("{check:?}"),
                 case: Some(t.case_id.clone()),
+                reference,
                 verdict,
                 detail: format!("{what}: {said}"),
             });
@@ -99,6 +124,21 @@ fn reference_for<'a>(
     records
         .iter()
         .find(|r| r.case_id == t.case_id && r.target == reference && !std::ptr::eq(*r, t))
+}
+
+/// The records `t` can be judged against for a mutation, in order: the row's
+/// reference, then another run of `t`'s own target. The second has the same
+/// prompts wherever the engine renders deterministically, so it stays a pair
+/// a projection check judges alone when the cross-engine prompts differ.
+fn candidates<'a>(
+    row: &super::inventory::Row,
+    t: &'a CaseRecord,
+    records: &'a [CaseRecord],
+) -> impl Iterator<Item = &'a CaseRecord> {
+    let partner = records
+        .iter()
+        .find(|r| r.case_id == t.case_id && r.target == t.target && !std::ptr::eq(*r, t));
+    reference_for(row, t, records).into_iter().chain(partner)
 }
 
 /// A copy of `t` with the facet `check` reads perturbed, and what was done.

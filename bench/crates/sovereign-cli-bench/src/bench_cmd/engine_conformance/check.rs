@@ -179,6 +179,13 @@ impl Check {
         )
     }
 
+    /// Whether a difference on this pair would be judged by this check rather
+    /// than excused as upstream. On any other pair the check can pass or
+    /// abstain but never fail, so a mutation there proves nothing.
+    pub fn isolated(&self, r: &CaseRecord, t: &CaseRecord) -> bool {
+        self.upstream_difference(r, t).is_none()
+    }
+
     /// Judge one case. `reference` is `None` for a target-only check.
     pub fn judge(&self, reference: Option<&CaseRecord>, target: &CaseRecord) -> CellVerdict {
         if let Check::Scenario { what } = self {
