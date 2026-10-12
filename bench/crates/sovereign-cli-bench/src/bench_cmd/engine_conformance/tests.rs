@@ -719,7 +719,10 @@ fn a_mutation_subject_is_a_pair_whose_prompts_agree() {
     };
     // Equal tool calls under different prompts pass, but a tool call added
     // there is excused upstream: the cell can never fail, so it is no subject.
-    let cross = vec![tool("embedded", vec![1, 2]), tool("llama-server", vec![1, 3])];
+    let cross = vec![
+        tool("embedded", vec![1, 2]),
+        tool("llama-server", vec![1, 3]),
+    ];
     let m = &mutate::run(&inventory, &cross)[0];
     assert_eq!(m.verdict, "no-subject", "{m:?}");
     assert!(m.detail.contains("1 cell(s) passed"), "{m:?}");
