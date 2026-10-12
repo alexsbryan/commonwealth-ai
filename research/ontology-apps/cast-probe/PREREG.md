@@ -38,3 +38,20 @@ Bars, fixed now.
    .80. Both are read per leg, so the slice that is built (proposers, decider, or both) is the one the leg shows.
 Reported, no bar: R1, novelty, the weigher-override share, per type. One run each, so a difference of one or two
 units is inside run-to-run churn (measured 2026-10-08 at about 10 items each way on Ward's stage).
+
+## Amendment 1 (2026-10-12, after the RESOLVE-type section was scored, before this one is computed): company mentions
+
+The party slice (ec, in build) makes a body-only company mention resolve to or open a company record. Its link step
+needs Ward's recall before bars are set. Units: a Ward message (ours and blind runs/about legs) in exactly one gold
+deal whose counterparty is a gold company C. A record resolves to C by the scorer's one rule (`ward/score.py`
+company_resolver: a shared domain, else equal written forms under name_core), imported, never restated.
+- F field-named (ec): the company records the message's own from/to/cc domains name. Hit: one is C.
+- M mentioned: some Mention pick in the message names C (its words resolve to C by the same rule).
+- N, E link step, for units whose message has a mention naming C and some earlier message (RESOLVE's order, else
+  date) already offers a record of C: a simulated cast of company records open before the message (each header
+  domain one record, each earlier mention's name_core one record), ranked by name token share (N) and by the
+  production embedder (E) against the mention's words; recall at 1, 3, 10.
+- F or M: the message offers C by either path (the slice's candidate ceiling at Pick).
+- Exclusion: mentions resolving to a company of the declared `ours` set: the share F offers that company's header
+  record for (so the mention lands on it and is dropped).
+No bar here: the slice's bars are ec's, set on these numbers.
