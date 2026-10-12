@@ -4758,3 +4758,56 @@ range (7cca80c67), not added.
   commonwealth-ai-partition-local. The 590 s timeout killed it at 5632
   chunks. `code dry-report` and `code converge` now refuse ("none of them was
   built from this repo"); `symbols` still answers from scip_graph.db.
+
+# engine-swap — review findings
+
+## REVIEW-audit-es-auto-1 (2026-10-12, range 254efb9f5..62d8efb55, since the queue started)
+
+| # | principle | path:line | fixed in | finding |
+|---|---|---|---|---|
+| 1 | 8 | shared/crates/sovereign-contracts/src/gguf_meta.rs:61, :106 | 5fe000e47 | `read_architecture` and `read_u32_by_suffix` each re-checked magic, version and the kv-count cap; one `open_kv_section` now does it |
+| 2 | 5, 12 | quality/ARCH_LAYERS.toml:1574; distributions/crates/sovereign-stock/Cargo.toml:79 | fb24b65c6 | es-t2 (f7ff14fd1) gave stock a dev dep on sovereign-inference with no face; boundary-gate red from then to here. Test-only face with empty items, as the three beside it |
+| 3 | 8 | distributions/crates/sovereign-stock/tests/executor_native_e2e.rs:171; llama_server_router_e2e.rs:43 | not fixed | `struct Killed(Child)` is now 11 copies across 11 test binaries (one added in range). Each tests/*.rs is its own crate; one home needs a shared test-support module, a cross-crate decision |
+| 4 | 8 | distributions/crates/sovereign-stock/tests/executor_native_e2e.rs:193; llama_server_router_e2e.rs:54 | not fixed | executor_native_e2e takes its port by bind-and-drop; `reserved_port` beside it parks the port in TIME_WAIT for exactly that race (note 3f7d5a40) |
+| 5 | 11, 12 | shared/crates/sovereign-contracts/src/traits.rs:586; svrn/crates/sovereign-daemon/src/routes_internal/engine_replay.rs:150 | not fixed | `InferenceProvider::count_tokens_exact` has no production caller; only the engine-replay route and the router e2e reach it. Plan A1 named it; a reader is owed or the count is inventory |
+| 6 | 6 | serve/crates/sovereign-serve/src/rails_mesh.rs:480 | not fixed | `registrations_for` collapses an unknown VRAM (`Err`) to "no GPU entry" for the http origin with no event at that site; the renew path logs it at debug, the probe warned at startup |
+| 7 | 5 | quality/xtask/tests/f26_egress_census/registry_tail.rs:192; serve/crates/sovereign-compute/src/llama_router/live.rs:367 | 5905e9803 | live.rs was unregistered at the base (2 sites); es-r1 added `/tokenize` as a third. All loopback to the router: LocalDaemon, 3 |
+| 8 | 3 | quality/conformance/sovereign-inference.toml:52 | 5905e9803 | FE-77's cited line went stale after es-m1's deletions (3035 → 2994); regenerated |
+| 9 | 8 | serve/crates/sovereign-inference/src/gpu_probe.rs:117, :136 | 05694aac9 | es-m2 read `SystemTime::now()` by hand (and twice in its tests); clock-gate blocked the push. Now `sovereign_time::system_now()` |
+| 10 | 5 | serve/crates/sovereign-serve/tests/chat_round_trip.rs:257 | not fixed | red since 96921a3a8 (before the queue): `enable_thinking: sent None, engine got Some(Bool(false))`. es-m2 filed it |
+| 11 | 5 | quality/xtask/tests/f26_egress_census/registry.rs:415; bench/crates/sovereign-cli-bench/src/bench_cmd/engine_conformance/run.rs:35, server.rs:39 | not fixed | three census problems from before the queue: reading.rs registry 1 vs census 2; the bench's two engine_conformance clients unregistered. Each needs its owner to say where it sends |
+| 12 | 5 | quality/xtask/src/boundary_gate/tests.rs:29 | not fixed | `live_map_declares_packages_and_leaves` reads `docs/internal/FIVE_PROGRAMS.md`, which this worktree does not have (docs/internal is the svrn-docs symlink, absent here). The same test in the main tree has it |
+
+Gates at the end: TESTALL 14517 pass, 4 fail before the fixes (#8 fixed;
+#10, #11, #12 remain, all from before the queue or the environment).
+PREPUSH exit=0 after 05694aac9. Advisory lanes red as before: size-gate
+82 keys (79 at pc-auto-2), clone-gate +39 (from before the queue, see below),
+deletion-manifest, hakari-verify; concept-gate and domains-census-self-test
+could-not-judge.
+
+Instruments, as run:
+
+- **per-unit net lines** (`git log --no-merges --numstat`, src = non-test `.rs`/`.sh`, inline `#[cfg(test)]` counted as src):
+  m1-delete-dead-modules src -2294 test -450 · m2-gpu-probe src +207 test +134 ·
+  m3-move-agnostic src 0 (374/374 moved) · p1-build-modes src +56 test +18 ·
+  r1-host-truth src +245 test +103 · t1-call-check src +136 test +124 ·
+  t2-executor-native src +71 test +222 · t3-recipe-author-native src -172.
+  Range total src -1751, test +151.
+- **dry-report: could-not-judge.** All eleven crate dirs refuse: no corpus was
+  built from this worktree, and `--corpus-id commonwealth-ai` finds no
+  `chunks.lance` (the index pc-auto-2 above records as removed). Substitution,
+  named: clone-gate at HEAD 13815 lines / 399 families; at the base 254efb9f5
+  (the range's 64 `.rs` paths restored in place, then reverted) 13895 / 403.
+  The range lowered clones by 80 lines; the gate's +39 over its 13776
+  baseline predates the queue.
+- **converge noun: could-not-judge** for the same reason (0 definitions for
+  every name, including ones this tree defines). Substitution: `git grep` for
+  each new noun's definition. `GpuDevice`, `GpuObservation` (gpu_probe.rs) and
+  `LookupCapital` (executor_native_e2e.rs) are defined once; `Killed` is #3.
+- **workers' own `finding:` lines** (11 in the range's commit bodies, none in
+  this file before): the stale doc cites of deleted modules (conformance-specs
+  IN-3 → hybrid.rs; DEFAULTS_LEDGER / TOPOLOGY → smoketest; WORKFLOW_SUBSTRATE,
+  routing-field-guide, inference.md → selector) are ARCH 3 debts from
+  es-m1 (b3edacd4b); the streaming paths sending `required` unchecked
+  (oicp-client `complete_stream_with_finish`) is es-t1's; gpu_probe ignoring
+  `[engine] server_binary` is es-m2's. Left to the director, as filed there.
