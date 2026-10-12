@@ -55,3 +55,31 @@ company_resolver: a shared domain, else equal written forms under name_core), im
 - Exclusion: mentions resolving to a company of the declared `ours` set: the share F offers that company's header
   record for (so the mention lands on it and is dropped).
 No bar here: the slice's bars are ec's, set on these numbers.
+
+## Amendment 2 (2026-10-12, before any replay is computed): the estimator's document-field fit
+
+Reading after the cast section was scored (no model; cast_probe.py vetoes): on GVC every right model pick RESOLVE
+did not link is across articles, and the source disagreeing on it is `document_date` in 17 of 17 (ours) and 17 of
+19 (blind). The fitted rates say a match shares its document's date 95% (ours) and 87% (blind) of the time, so a
+different date outweighs the model's agreement. EM fits every statement-alternative pair, and a pair whose
+statement's document is already one of the record's documents agrees on every document field by construction.
+
+Correction C, one change: a source whose value is a document field (RESOLVE's `document_*` sources: date, id,
+thread) does not speak on a pair whose statement's document is already one of the alternative record's documents.
+Such a pair leaves that source out of the fit and out of its evidence. Nothing else changes.
+
+Replay, first order, no model: each statement's alternatives and comparisons as the trace logged them (`atlas/resolve:
+the sources weighed`), the record's documents as RESOLVE's own decisions built them; EM refitted after each document
+on the pairs so far, ported line for line from `resolve_records/estimate.rs`; zones from `weigh.rs` (no bar: the
+most probable of the alternatives and none, an alternative linking only if some source agreed with it).
+- G1: the port reproduces every logged fit before C (each source's m and u within 1e-6).
+- G2: the port reproduces the logged zone of at least 99% of weighed statements before C.
+A failed gate makes the leg could-not-judge.
+
+Measures per leg, before and after C: links made, each right (the alternative record holds an earlier unit of one
+of the statement's gold particulars), wrong (it holds none, the statement having a gold particular), or unjudged
+(no gold particular); R3 as the cast section reads it.
+Bars, fixed now: C goes to build when on both GVC legs right links gained are at least 10 and at least twice the
+wrong links gained, and on every Ward and uv leg right links lost are at most 2 and wrong links gained at most 2.
+First order: later candidates and records would differ after a changed decision; the build's end-to-end leg is the
+test of record.
