@@ -124,9 +124,17 @@ author's greeting repeat in the same words and each is read, and who wrote a lin
 passage an author sends twice is read where it first appears. Each class is counted and traced, and the
 classes hold no word of any format (`document_read/line_classes.rs`). The rest is asked a
 fixed plan of small closed questions generated from the contract — a pure function of it, unchanged by
-renaming: **Locate** each declared claim kind (line sets or none; each kind shown with its closed-valued fields' declared
+renaming: **Locate** each declared claim kind no protocol rule names (line sets or none; each kind shown with its closed-valued fields' declared
 values and descriptions, the words a line states it in; the system prompt mentions values only when a kind
-shows some), **Mention** each entity type a read
+shows some), **Act** each kind a protocol rule names whose subject RESOLVE decides, asked of the whole document and
+never of a line (on the lines that carry a stage the model answered "none" at .84-.99, REVIEW_BRIEF §4.2): per
+particular About found, named by its line and words when it found more than one, and once otherwise, so About never
+gates it; each field the kind's rules qualify on (`when`) is one forced choice over its values in two wordings off
+one wave under a system prompt naming the type and field, a disagreement held with no statement; an agreed value is
+cited by one forced choice among the document's sentence units that touch asked lines (a paragraph's lines joined
+and cut after a stop before whitespace; labels A-Y and no "none", since presence is decided; one candidate cited by
+code), and the statement is the lines that sentence touches (`act.rs`, `locate.rs`; built 2026-10-12, cite-probe M2
+and its no-none amendment), **Mention** each entity type a read
 reference field targets and no exhaustive source covers (a table source is exhaustive; a metadata source names
 only who took part, so it is not), one choice per asked line then pointed at, a proposal and never a record
 (`mention.rs`), then per statement, each question opening with the declared facts and the whole document
@@ -145,7 +153,7 @@ word and none reached its person, 2026-10-11), and **Point** at each open-valued
 "not stated" when no start is chosen; the value is read out of the words by the declared family, a quantity as
 the one number they write in digits (refused when they hold none or several), a time as ISO 8601 when code reads
 a date and as written otherwise (`point.rs`). A
-statement is one kind and at most three verified lines. **About** asks, per document and per subject type RESOLVE
+located statement is one kind and at most three verified lines. **About** asks, per document and per subject type RESOLVE
 decides, whether the document is about none, one or more than one particular of it (the type's description and
 criterion shown), points at where each is first named or described (a line, then its words; at most five), and with
 more than one asks each statement of the type which it is about (`about.rs`); a statement's local reference names
@@ -167,11 +175,11 @@ the daemon, a replay, or gold, so every question is an oracle at its own boundar
 and a replay with no daemon reproduces the run's records, C5). One reader, chosen
 by the declaration (every claim kind readable, or the general extractor; a mix refuses): passes, every pass built
 (Locate and Choose 2026-10-09; prefill, line classes, Mention, Pick and Point 2026-10-10, order
-ontology-layer-15); the one-shot reader was deleted on 2026-10-09 with no comparison run (operator: no build step gated on a
+ontology-layer-15; About and Act 2026-10-12); the one-shot reader was deleted on 2026-10-09 with no comparison run (operator: no build step gated on a
 test made up for it). Why: every one-shot read
 failed the same way — the local model asked to find, label, name and cite at once (stage ~43%, party
 .24-.44, terse one-shot abstaining on half its documents; crm-proof loops 7-10c). `recipe validate` names each attribute's filler (a
-source, a derivation, Choose, Point or Pick from the reader's own plan with Pick's candidates, RESOLVE for a
+source, a derivation, Act, Choose, Point or Pick from the reader's own plan with Pick's candidates, RESOLVE for a
 subject) and warns on what nothing fills (a type no read claim kind is about, a closed set wider than one
 forced choice, a reference to a type only a table holds) and on any fold, protocol or identity key keyed on it (`validate_layer.rs::fill_analysis`; blind round 2's protocol folds keyed on `step_id`
 and `decision_ref` never folded, silently).

@@ -413,13 +413,6 @@ pub(super) async fn particular_of(
             out[s] = p.map(|p| (t, p));
         }
     }
-    for (t, (of, about)) in types.iter().zip(abouts).enumerate() {
-        for (p, named) in about.particulars.iter().enumerate() {
-            if !out.contains(&Some((t, p))) {
-                debug!(document = d.document, of = %of.name, particular = %named.local_ref(), "document_read/about: a particular no located statement is about; it reaches RESOLVE on its own");
-            }
-        }
-    }
     out
 }
 
@@ -459,23 +452,25 @@ pub(super) async fn identities(
     out
 }
 
-/// The particulars no statement is about (`particular_of`), each with its
-/// identifying fields: what the document is about although no line of it
-/// states a claim kind of it. Each cites the whole line that first names it,
-/// as every reading cites whole lines; its words stay in its reference.
+/// The particulars no statement is about (`stated`: what each located
+/// statement and each act is about), each with its identifying fields: what
+/// the document is about although it states no claim kind of it. Each cites
+/// the whole line that first names it, as every reading cites whole lines;
+/// its words stay in its reference.
 pub(super) fn unstated(
     d: &Doc<'_>,
     types: &[&OntologyTypeDecl],
     abouts: &[About],
-    particular_of: &[Option<(usize, usize)>],
+    stated: &[Option<(usize, usize)>],
     mut identities: BTreeMap<(usize, usize), BTreeMap<String, DocumentReadField>>,
 ) -> Vec<DocumentReadParticular> {
     let mut out = Vec::new();
     for (t, (of, about)) in types.iter().zip(abouts).enumerate() {
         for (p, named) in about.particulars.iter().enumerate() {
-            if particular_of.contains(&Some((t, p))) {
+            if stated.contains(&Some((t, p))) {
                 continue;
             }
+            debug!(document = d.document, of = %of.name, particular = %named.local_ref(), "document_read/about: a particular no statement is about; it reaches RESOLVE on its own");
             let Some(subject_fields) = identities.remove(&(t, p)) else {
                 continue;
             };

@@ -130,7 +130,7 @@ fn every_field_a_pass_asks_is_named_with_its_pass_and_the_rest_is_warned() {
     let mv = note("move");
     for filled in [
         "subject `item` ← RESOLVE",
-        "step ← Choose on move",
+        "step ← Act on move",
         "move_id ← Point on move",
         "at ← Point on move",
         "holder ← Pick on move (candidates: `party`'s source records, Mention)",

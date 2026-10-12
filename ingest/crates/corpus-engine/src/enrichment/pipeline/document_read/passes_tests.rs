@@ -2,6 +2,7 @@ use serde_json::{json, Value};
 
 use super::super::tests::{input_chapter, policies, row, scripted};
 use super::*;
+use crate::enrichment::pipeline::document_read::locate::locate_system;
 use crate::enrichment::pipeline::document_read::DocumentReadField;
 
 /// The reader over `chapter`, its line classes indexed over the chapter alone.

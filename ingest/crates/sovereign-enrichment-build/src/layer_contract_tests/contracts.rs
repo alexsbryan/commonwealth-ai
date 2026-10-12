@@ -74,6 +74,8 @@ async fn c1_questions_ask_only_what_declared_structure_leaves_open() {
                         | "document_passes_point"
                         | "document_passes_pick"
                         | "document_passes_about"
+                        | "document_passes_act"
+                        | "document_passes_cite"
                         | "resolve_select"
                 ),
                 "{shape}: a question the plan does not generate: `{phase}`"
@@ -87,7 +89,8 @@ async fn c1_questions_ask_only_what_declared_structure_leaves_open() {
             }
         }
         assert!(
-            kinds.contains_key("document_passes_locate"),
+            kinds.contains_key("document_passes_locate")
+                || kinds.contains_key("document_passes_act"),
             "{shape}: {kinds:?}"
         );
     }
@@ -493,7 +496,7 @@ async fn a_line_written_in_two_documents_is_two_occurrences() {
         for (line, docs) in &repeated {
             for doc in docs {
                 assert!(
-                    super::reader::locates(&run).iter().any(|p| {
+                    super::reader::line_questions(&run).iter().any(|p| {
                         super::reader::in_doc(p, doc)
                             && folded(super::reader::asked_line(p)) == folded(line)
                     }),

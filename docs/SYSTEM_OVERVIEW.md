@@ -640,9 +640,16 @@ question the pipeline asks about a type is a method on the resolved
   holds in order, or its line under a mark it lacks there), is never asked;
   a line that only repeats another's words is (`line_classes.rs`, indexed
   once per run over every chapter's documents and part of the section cache
-  key). Locate asks every remaining
-  numbered line which declared claim kind it states, and Mention which entity
-  type a read reference targets it names, pointing at the words (`mention.rs`;
+  key). Locate (`locate.rs`) asks every remaining
+  numbered line which declared claim kind it states, among the kinds no
+  protocol rule names; a kind a rule names, about a type RESOLVE decides, is an
+  act (`act.rs`, `KindPlan::keys`): after About, each field the rules qualify
+  on is asked of the whole document per particular in two wordings off one
+  wave (a disagreement held, no statement), and an agreed value is cited by one
+  forced choice among the sentence units touching asked lines, with no "none"
+  label (one candidate is cited by code); the statement is the lines that
+  sentence touches, its key `Supported` by `reader_act`. Mention asks each
+  remaining line which entity type a read reference targets it names, pointing at the words (`mention.rs`;
   no type a table source holds); each of the two asks a document's lines as one
   forced-choice wave (`decision_wave`, below), since no line's question needs
   another's answer. About (`about.rs`) asks, per document and per subject type

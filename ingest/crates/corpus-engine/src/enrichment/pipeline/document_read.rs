@@ -7,10 +7,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 mod about;
+mod act;
 mod ask;
 mod cache;
 mod folded;
 mod line_classes;
+mod locate;
 mod mention;
 mod passes;
 mod pick;

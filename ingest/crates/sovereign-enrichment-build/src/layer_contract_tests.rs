@@ -9,8 +9,12 @@
 //!
 //! The oracle reads only what a question shows and never a type or attribute
 //! name: Locate takes the first claim kind for a line of six words or more and
-//! "none" otherwise; Choose takes the first value; RESOLVE's choice takes the
-//! first candidate when one is shown. So a contract that fails is the code's.
+//! "none" otherwise; an act takes its first value when the document shows such
+//! a line and "none" otherwise, in both wordings; a citation takes the last
+//! marked sentence of six words or more, or the first marked when none has
+//! six (a citation offers no "none"); Choose takes the first value;
+//! RESOLVE's choice takes the first candidate when one is shown. So a contract
+//! that fails is the code's.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -190,6 +194,36 @@ fn oracle(asked: Arc<Mutex<Vec<ChatPrompt>>>, choose: Choose) -> InferenceFn {
                             labels.len() - 1
                         }
                     }
+                    // An act question sees the whole document, and the oracle
+                    // no line class: a line under a quote mark is the one kind
+                    // the fixtures carry, so it is read as carried.
+                    "document_passes_act" => {
+                        let view = prompt
+                            .user
+                            .split_once("<<<\n")
+                            .and_then(|(_, rest)| rest.split_once("\n>>>"))
+                            .map_or("", |(view, _)| view);
+                        let shows = view
+                            .lines()
+                            .filter_map(|l| l.split_once(' ').map(|(_, text)| text))
+                            .any(|t| t.split_whitespace().count() >= 6 && !t.starts_with('>'));
+                        if shows {
+                            0
+                        } else {
+                            labels.len() - 1
+                        }
+                    }
+                    // The last such sentence, so a sentence two documents
+                    // both write is the one each cites
+                    // (`a_line_written_in_two_documents_is_two_occurrences`).
+                    "document_passes_cite" => prompt
+                        .user
+                        .lines()
+                        .filter_map(|l| l.strip_prefix('[').and_then(|r| r.split_once("] ")))
+                        .filter(|(_, text)| text.split_whitespace().count() >= 6)
+                        .filter_map(|(label, _)| labels.iter().position(|l| l == label))
+                        .last()
+                        .unwrap_or(0),
                     "document_passes_choose" if choose == Choose::Spread => {
                         spread_pick(prompt, labels.len())
                     }

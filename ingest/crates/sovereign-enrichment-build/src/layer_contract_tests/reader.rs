@@ -43,19 +43,36 @@ pub(super) fn locates(run: &Run) -> Vec<&ChatPrompt> {
         .collect()
 }
 
+/// The questions of `run` that ask about one line (Locate's and Mention's,
+/// both naming it as `asked_line` reads): where a fixture whose every kind is
+/// an act shows which lines are asked at all.
+pub(super) fn line_questions(run: &Run) -> Vec<&ChatPrompt> {
+    run.prompts
+        .iter()
+        .filter(|p| {
+            matches!(
+                p.phase_id.as_deref(),
+                Some("document_passes_locate" | "document_passes_mention")
+            )
+        })
+        .collect()
+}
+
 /// Whether `prompt` is about the document whose declared id is `id`.
 pub(super) fn in_doc(prompt: &ChatPrompt, id: &str) -> bool {
     prompt.user.contains(&format!("\nid: {id}\n"))
 }
 
 /// Line classes: the mail fixture's reply carries a line of the message it
-/// answers under a mark, and it is never sent to Locate there, while it is
-/// asked in the message it comes from. The greeting its author opens two
-/// messages with is asked in both: repetition alone is no evidence.
+/// answers under a mark, and it is never asked there (mail's one claim kind is
+/// an act, so the line questions are Mention's), while it is asked in the
+/// message it comes from. The greeting its author opens two messages with is
+/// asked in both: repetition alone is no evidence. No citation marks the
+/// carried line.
 #[tokio::test]
-async fn a_quoted_line_is_never_located_and_a_repeated_one_is() {
+async fn a_quoted_line_is_never_asked_and_a_repeated_one_is() {
     let run = run(&Fixture::load("mail")).await;
-    let locate = locates(&run);
+    let locate = line_questions(&run);
     let quoted = "The offer stands for thirty days; tell us if you would like to go ahead.";
     assert!(
         locate
@@ -63,6 +80,19 @@ async fn a_quoted_line_is_never_located_and_a_repeated_one_is() {
             .any(|p| in_doc(p, "q2@alderpine.example") && asked_line(p) == quoted),
         "the quoted line is asked where it was written"
     );
+    let cites: Vec<&ChatPrompt> = run
+        .prompts
+        .iter()
+        .filter(|p| p.phase_id.as_deref() == Some("document_passes_cite"))
+        .collect();
+    assert!(cites.iter().any(|p| in_doc(p, "q3@birchhall.example")));
+    for p in cites.iter().filter(|p| in_doc(p, "q3@birchhall.example")) {
+        assert!(
+            p.user.contains(&format!("\n> {quoted}\n")),
+            "the carried line is shown, unmarked: {}",
+            p.user
+        );
+    }
     for p in &locate {
         let line = asked_line(p);
         assert!(
@@ -152,9 +182,9 @@ async fn every_pass_is_asked_and_still_asked_under_rename() {
     for (name, f) in [("mail", mail), ("mail renamed", renamed)] {
         let asked = phases(&run(&f).await);
         for phase in [
-            "document_passes_locate",
+            "document_passes_act",
+            "document_passes_cite",
             "document_passes_mention",
-            "document_passes_choose",
             "document_passes_point",
             "document_passes_pick",
         ] {
@@ -166,10 +196,16 @@ async fn every_pass_is_asked_and_still_asked_under_rename() {
     }
     for shape in ["issues", "news"] {
         let asked = phases(&run(&Fixture::load(shape)).await);
-        assert!(
-            asked.contains("document_passes_point"),
-            "{shape}: {asked:?}"
-        );
+        for phase in [
+            "document_passes_locate",
+            "document_passes_choose",
+            "document_passes_point",
+        ] {
+            assert!(
+                asked.contains(phase),
+                "{shape}: `{phase}` never asked: {asked:?}"
+            );
+        }
     }
 }
 
@@ -182,7 +218,22 @@ async fn every_pass_is_asked_and_still_asked_under_rename() {
 /// field only by a declared fold.
 #[tokio::test]
 async fn a_read_subject_field_stays_on_its_statement_cited() {
-    let f = Fixture::load("mail");
+    // An act gives one statement per order per document, and the oracle never
+    // joins documents (on five messages its choice's weight is estimated at
+    // 0, so `weigh` sees nothing raised): a kind no rule names, about orders,
+    // is located line by line and puts more statements on the order an act's
+    // document is about.
+    let mut f = Fixture::load("mail");
+    let act = "[[enrichment.ontology.types]]\nname = \"order_update\"";
+    assert!(f.recipe.contains(act));
+    f.recipe = f.recipe.replace(
+        act,
+        &format!(
+            "[[enrichment.ontology.types]]\nname = \"order_note\"\nkind = \"claim\"\n\
+             description = \"anything said about an order\"\nforce = \"assertive\"\n\
+             subject = \"order\"\n\n{act}"
+        ),
+    );
     let run = run(&f).await;
     let atoms = run.atoms();
     let folded = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -197,10 +248,13 @@ async fn a_read_subject_field_stays_on_its_statement_cited() {
         })
         .collect();
     let mut statements_of: BTreeMap<&str, usize> = BTreeMap::new();
-    for c in atoms
-        .iter()
-        .filter(|a| a["atom_type"] == "Claim" && a["data"]["claim_kind"] == "order_update")
-    {
+    for c in atoms.iter().filter(|a| {
+        a["atom_type"] == "Claim"
+            && matches!(
+                a["data"]["claim_kind"].as_str(),
+                Some("order_update" | "order_note")
+            )
+    }) {
         let reading = &c["data"]["attributes"]["__document_read_subject_fields"]["piece"];
         assert!(
             reading.is_object(),
@@ -442,10 +496,10 @@ async fn a_document_no_line_of_which_states_a_claim_kind_is_a_member_of_what_it_
     thanks.insert(content.clone(), Value::String(body));
     let run = run(&f).await;
     assert!(
-        !locates(&run)
+        !line_questions(&run)
             .iter()
             .any(|p| in_doc(p, "q5@alderpine.example") && asked_line(p).ends_with(quoted)),
-        "the quoted line is never located"
+        "the quoted line is never asked"
     );
     let atoms = run.atoms();
     let orders: BTreeSet<&str> = atoms
