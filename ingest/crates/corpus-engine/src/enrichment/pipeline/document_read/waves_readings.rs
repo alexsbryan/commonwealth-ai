@@ -156,6 +156,15 @@ impl<'a> Field<'a> {
                     }
                 }
             }
+            (Reading1::Lines, FieldPlan::Point(attr)) if d.asked.is_empty() => {
+                debug!(document = d.document, item = %self.item, field = %attr.name, "document_read/waves: no asked line to point at");
+                self.read = vec![(
+                    attr.name.clone(),
+                    unknown("not asked: every line of the document is carried from an earlier one"),
+                )];
+                self.state = Reading1::Done;
+                Vec::new()
+            }
             (Reading1::Lines, FieldPlan::Point(attr)) => {
                 let family = family_words(&attr.family);
                 d.line_windows(
