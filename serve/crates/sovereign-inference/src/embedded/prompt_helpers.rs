@@ -590,7 +590,7 @@ fn format_prompt_inner(
             &template,
             &system_with_thinking,
             &request.prompt,
-            request.enable_thinking.unwrap_or(false),
+            request.templated_thinking(),
         ) {
             Ok(rendered) => return Ok(rendered),
             Err(e) => {
@@ -604,7 +604,7 @@ fn format_prompt_inner(
             }
         }
     }
-    if request.enable_thinking.unwrap_or(false) {
+    if request.templated_thinking() {
         tracing::warn!(
             model_id = %model_id,
             "request.enable_thinking=true requested, but the llama-cpp-4 binding \

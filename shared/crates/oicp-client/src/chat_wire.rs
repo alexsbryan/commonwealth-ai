@@ -235,24 +235,27 @@ pub(crate) fn write_structured_output(
 }
 
 /// Put every spelling of "think this much" on the body that some
-/// OpenAI-compatible host reads. There are three, and a host reads ONE of
-/// them; the other two are unknown fields it drops on the floor:
+/// OpenAI-compatible host reads. There are four, and a host reads the ones
+/// it knows; the rest are unknown fields it drops on the floor:
 ///
 /// - `think_budget`: the Commonwealth daemon's native field
 ///   (`resolve_think_budget`). `0` makes the daemon inject `/no_think` for
 ///   SystemPromptToken families (Qwen3 / Qwen3.5 / SmolLM3).
 /// - `thinking: {type: disabled|enabled}`: DeepSeek V3.1+ / V4.
+/// - `reasoning_budget_tokens`: llama-server's per-request budget for an
+///   open think block (LS server-common.cpp:1360-1371, which also reads
+///   `thinking_budget_tokens`), written for a positive budget. The block is
+///   closed at that many tokens (`decode.think-budget-positive`).
 /// - `chat_template_kwargs: {enable_thinking: bool}`: llama-server, vLLM and
 ///   SGLang hand the map to the Jinja chat template, and the Qwen3 templates
-///   read exactly this key. It is the ONLY one of the three a bare
-///   llama-server understands. It is written from `enable_thinking`, and as
-///   `false` for a zero budget when the caller set nothing: a zero budget
-///   means no thinking on every host, while a positive budget says nothing
-///   to a template that ships thinking off. A zero reasoning budget alone
-///   still lets the template open a think block (bench/lanes/engine-swap,
-///   2026-10-09: seven routing paraphrases flipped without this).
+///   read exactly this key. It is the ONLY switch a bare llama-server
+///   understands. It is written from `enable_thinking` ([`template_thinking`]
+///   says which), and as `false` for a zero budget when that is unset: a
+///   zero budget means no thinking on every host. A zero reasoning budget
+///   alone still lets the template open a think block (bench/lanes/
+///   engine-swap, 2026-10-09: seven routing paraphrases flipped without this).
 ///
-/// The third was missing on enrich's path until 2026-09-08, and the
+/// The kwarg was missing on enrich's path until 2026-09-08, and the
 /// bare-endpoint acceptance (`svrn/crates/corpus-mcp/acceptance.sh`, a
 /// Qwen3.6-35B behind a plain llama-server) paid for it on every phase: all
 /// 20 wessex-hoard chapters failed Phase 1 as `think_truncated`, phases 3 and
@@ -268,12 +271,28 @@ pub(crate) fn write_thinking(
         body["thinking"] = if tb == 0 {
             json!({"type": "disabled"})
         } else {
+            body["reasoning_budget_tokens"] = json!(tb);
             json!({"type": "enabled", "budget_tokens": tb})
         };
     }
     let enable = enable_thinking.or((think_budget == Some(0)).then_some(false));
     if let Some(enable) = enable {
         body["chat_template_kwargs"] = json!({ "enable_thinking": enable });
+    }
+}
+
+/// The `enable_thinking` `request` is rendered with, as the engine renders
+/// it. A conversation goes to the model's own template, which decides when
+/// the caller did not (thinking on for a thinking template, on both sides:
+/// `prompt.conversation`). Any other shape is rendered with
+/// [`CompletionRequest::templated_thinking`], off unless asked for, and the
+/// host is told so: llama-server would otherwise open thinking for a
+/// thinking template (LS server-context.cpp:1377-1381), where the engine has
+/// it closed (`prompt.templated-thinking-default`).
+pub(crate) fn template_thinking(request: &CompletionRequest) -> Option<bool> {
+    match request.prompt_shape {
+        Some(PromptShape::Conversation { .. }) => request.enable_thinking,
+        _ => Some(request.templated_thinking()),
     }
 }
 

@@ -722,7 +722,11 @@ impl RemoteApiProvider {
         // budget the runtime's `think_budget: Some(0)` (FastFocused synthesis,
         // gap check, router) died at this boundary and every fast-slot answer
         // was truncated raw deliberation (2026-06-10 fabrication burn-down).
-        chat_wire::write_thinking(&mut body, request.think_budget, request.enable_thinking);
+        chat_wire::write_thinking(
+            &mut body,
+            request.think_budget,
+            chat_wire::template_thinking(request),
+        );
 
         // Commonwealth extension: forward the caller-directed
         // stable-prefix declaration (bytes of the user prompt shared

@@ -87,6 +87,7 @@ impl RemoteApiProvider {
                 "tool_choice",
                 "think_budget",
                 "thinking",
+                "reasoning_budget_tokens",
             ] {
                 obj.remove(key);
             }

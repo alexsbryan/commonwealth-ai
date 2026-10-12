@@ -448,7 +448,8 @@ async fn a_hosted_engine_sends_model_ids_not_slot_aliases() {
 }
 
 /// A zero think budget also tells the template: `enable_thinking: false`,
-/// unless the caller set it. A positive budget says nothing to the template.
+/// unless the caller set it. A positive budget leaves the template where the
+/// engine renders it: closed for a templated request.
 #[tokio::test]
 async fn a_zero_think_budget_switches_the_template_off() {
     let (url, _, bodies) = vendor().await;
@@ -456,7 +457,7 @@ async fn a_zero_think_budget_switches_the_template_off() {
     for (budget, enable, want) in [
         (Some(0), None, Some(false)),
         (Some(0), Some(true), Some(true)),
-        (Some(512), None, None),
+        (Some(512), None, Some(false)),
     ] {
         let req = CompletionRequest {
             prompt: "hi".into(),

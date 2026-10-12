@@ -27,7 +27,8 @@ fn a_zero_budget_is_spelled_for_llama_server_too() {
     );
 }
 
-/// A positive budget opts in where a host has a budget notion and says
+/// A positive budget opts in where a host has a budget notion. With no
+/// `enable_thinking` (a conversation's, [`template_thinking`]) it says
 /// nothing to the chat template: the template's default stands.
 #[test]
 fn a_positive_budget_leaves_the_template_default_alone() {
@@ -477,4 +478,46 @@ fn an_llguidance_host_continues_the_assistant_prefix_as_a_trailing_message() {
         2,
         "an empty prefix continues nothing: {empty}"
     );
+}
+
+/// THE FAILING INPUT for prompt.templated-thinking-default: synthesis
+/// (think_budget 512, enable_thinking unset) went to llama-server with no
+/// kwarg, and a thinking template opened the think block the engine renders
+/// closed. A conversation keeps its template's own default, on both sides.
+#[test]
+fn a_templated_request_goes_out_with_the_engines_thinking_default() {
+    let kwarg = |req: &CompletionRequest| {
+        llguidance()
+            .build_request(req)
+            .unwrap()
+            .pointer("/chat_template_kwargs/enable_thinking")
+            .cloned()
+    };
+    let mut req = named_request();
+    assert_eq!(kwarg(&req), Some(json!(false)), "nothing set");
+    req.think_budget = Some(512);
+    assert_eq!(kwarg(&req), Some(json!(false)), "a positive budget");
+    req.enable_thinking = Some(true);
+    assert_eq!(kwarg(&req), Some(json!(true)), "asked for");
+    req.enable_thinking = None;
+    req.prompt_shape = Some(PromptShape::Conversation {
+        messages: vec![json!({"role": "user", "content": "p"})],
+    });
+    assert_eq!(kwarg(&req), None, "a conversation: the template decides");
+}
+
+/// THE FAILING INPUT for decode.think-budget-positive: the budget went out
+/// as `think_budget` and `thinking`, neither of which llama-server reads on
+/// chat completions, so an open think block ran past it. llama-server reads
+/// `reasoning_budget_tokens` (LS server-common.cpp:1360-1371).
+#[test]
+fn a_positive_budget_reaches_llama_server_as_reasoning_budget_tokens() {
+    let mut req = named_request();
+    req.enable_thinking = Some(true);
+    req.think_budget = Some(512);
+    let body = llguidance().build_request(&req).unwrap();
+    assert_eq!(body["reasoning_budget_tokens"], json!(512), "{body}");
+    req.think_budget = Some(0);
+    let body = llguidance().build_request(&req).unwrap();
+    assert!(body.get("reasoning_budget_tokens").is_none(), "{body}");
 }

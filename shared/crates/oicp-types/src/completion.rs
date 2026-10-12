@@ -499,6 +499,13 @@ impl CompletionRequest {
         }
     }
 
+    /// Whether a `Templated` render opens thinking: `enable_thinking`, off
+    /// when unset (the field's default above). The engine renders with it
+    /// and a remote client sends it, so the two agree.
+    pub fn templated_thinking(&self) -> bool {
+        self.enable_thinking.unwrap_or(false)
+    }
+
     /// Attach a system message.
     pub fn with_system(mut self, system: &str) -> Self {
         self.system_message = Some(system.to_string());
