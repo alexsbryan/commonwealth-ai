@@ -36,7 +36,7 @@ fn halo_reads_124_gb() {
         binary: PathBuf::new(),
         devices: parse(HALO),
     };
-    assert_eq!(seen.total_vram_gb(), Some(124));
+    assert_eq!(seen.total_vram_gb(), Ok(Some(124)));
     assert_eq!(seen.first_gpu().unwrap().unwrap().name, "Vulkan0");
 }
 
@@ -45,7 +45,7 @@ fn a_missing_binary_reads_as_unknown_not_zero() {
     let seen = probe(Path::new("/nonexistent/llama-server"));
     assert!(seen.devices.is_err(), "{:?}", seen.devices);
     assert!(seen.first_gpu().is_err());
-    assert_eq!(seen.total_vram_gb(), None);
+    assert!(seen.total_vram_gb().is_err(), "unknown, not 0 GB");
 }
 
 #[test]
@@ -56,12 +56,12 @@ fn no_gpu_reads_as_none_not_zero() {
         devices: Ok(vec![]),
     };
     assert_eq!(seen.first_gpu(), Ok(None));
-    assert_eq!(seen.total_vram_gb(), None);
+    assert_eq!(seen.total_vram_gb(), Ok(None));
 }
 
 /// The golden pin (P dec 5): on this host the shipped server's reading equals
 /// the one the vendored ggml gave `hardware::detect_gpu` (first non-CPU
-/// device with memory) and `local_gpu_total_vram_gb` (non-CPU totals, whole
+/// device with memory) and the mesh's VRAM figure read (non-CPU totals, whole
 /// GB). The server prints whole MiB, so bytes compare at that grain.
 #[test]
 fn shipped_server_reading_equals_the_ggml_one() {
@@ -92,7 +92,7 @@ fn shipped_server_reading_equals_the_ggml_one() {
 
     let ggml_total: u64 = ggml.iter().map(|d| d.memory_total).sum();
     let ggml_gb = (ggml_total > 0).then_some((ggml_total / (1024 * MIB)) as u32);
-    assert_eq!(seen.total_vram_gb(), ggml_gb);
+    assert_eq!(seen.total_vram_gb(), Ok(ggml_gb));
     eprintln!(
         "golden: probe {:?} GB, first {:?}; ggml {ggml_gb:?} GB",
         seen.total_vram_gb(),

@@ -53,17 +53,11 @@ impl GpuObservation {
     }
 
     /// Total device memory of the local GPUs in whole GB, the figure the mesh
-    /// advertises. `None` when there is no GPU or the probe failed; the
-    /// failure is traced where it was read.
-    pub fn total_vram_gb(&self) -> Option<u32> {
-        let total: u64 = self
-            .devices
-            .as_ref()
-            .ok()?
-            .iter()
-            .map(|d| d.total_bytes)
-            .sum();
-        (total > 0).then_some((total / (1024 * MIB)) as u32)
+    /// advertises. `Ok(None)` is a host with no GPU; `Err` is unknown.
+    pub fn total_vram_gb(&self) -> Result<Option<u32>, &str> {
+        let devices = self.devices.as_ref().map_err(String::as_str)?;
+        let total: u64 = devices.iter().map(|d| d.total_bytes).sum();
+        Ok((total > 0).then_some((total / (1024 * MIB)) as u32))
     }
 }
 
