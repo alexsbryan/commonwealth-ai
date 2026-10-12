@@ -61,8 +61,8 @@ fn use_aliases_are_rejected() {
 fn real_function_bodies_are_kept() {
     // A genuine body never opens with `use` — signatures and attributes do.
     assert!(!is_use_alias(&body(&[
-        "fn now_secs() -> u64 {",
-        "    SystemTime::now()",
+        "fn home() -> PathBuf {",
+        "    PathBuf::from(\"/\")",
         "}"
     ])));
     assert!(!is_use_alias(&body(&[
