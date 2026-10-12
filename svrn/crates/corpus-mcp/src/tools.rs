@@ -44,9 +44,10 @@ use corpus_index::types::{EmbedFn, ScoredChunk};
 use serde_json::{json, Value};
 use understanding_vocab::atoms::AtomEnvelope;
 use understanding_vocab::ontology::AtlasOntologyFile;
-use understanding_vocab::read::read_atlas_atoms;
 
 use crate::host::HostProfile;
+
+mod records;
 
 /// The kit's, since corpus-mcp serves through its dispatcher (phase-b pb-mcp).
 pub use host_kit::mcp::ToolOutcome;
@@ -593,79 +594,11 @@ impl Server {
         self.indexes_dir.join(corpus).join("atlas")
     }
 
-    fn atlas_path(&self, corpus: &str, file: &str) -> PathBuf {
-        self.atlas_dir(corpus).join(file)
-    }
-
     fn atoms_lookup(&self, args: &Value) -> ToolOutcome {
         let Some(corpus) = args["corpus"].as_str() else {
             return refuse("atoms_lookup needs `corpus`");
         };
-        let path = self.atlas_path(corpus, "atoms.json");
-        let missing = format!(
-            "no atlas at {} — this corpus's enrichment was not built or pulled on this machine",
-            path.display()
-        );
-        let file = match read_atlas_atoms(&self.atlas_dir(corpus)) {
-            Ok(f) => f,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return refuse(&missing),
-            Err(e) => return refuse(&e.to_string()),
-        };
-        let needle = args["query"].as_str().map(str::to_lowercase);
-        let kind = args["kind"].as_str().map(str::to_lowercase);
-        let limit = args["limit"].as_u64().map(|l| l as usize).unwrap_or(20);
-
-        let total = file.atoms().len();
-        let matched: Vec<&AtomEnvelope> = file
-            .atoms()
-            .iter()
-            .filter(|a| kind.as_deref().is_none_or(|k| a.atom_type().label() == k))
-            .filter(|a| {
-                needle.as_deref().is_none_or(|q| {
-                    a.display_name(None).to_lowercase().contains(q)
-                        || atom_text(a).to_lowercase().contains(q)
-                })
-            })
-            .take(limit)
-            .collect();
-        let rows: Vec<Value> = matched
-            .iter()
-            .map(|a| {
-                json!({
-                    "id": a.id(),
-                    "kind": a.atom_type().label(),
-                    "name": a.display_name(Some(120)),
-                    "text": truncate(atom_text(a), 400),
-                    "evidence_chunks": a.evidence().iter().map(|c| c.chunk_id.clone()).collect::<Vec<_>>(),
-                })
-            })
-            .collect();
-        let text = if matched.is_empty() {
-            format!(
-                "No atoms matched in `{corpus}` ({total} atoms in {}).",
-                path.display()
-            )
-        } else {
-            let mut t = format!(
-                "{} of {total} atoms in `{corpus}` (schema {}):\n",
-                matched.len(),
-                file.schema_version
-            );
-            for a in &matched {
-                t.push_str(&format!(
-                    "- [{}] {} — {} ({})\n",
-                    a.atom_type().label(),
-                    a.display_name(Some(120)),
-                    truncate(atom_text(a), 200),
-                    a.id().as_str()
-                ));
-            }
-            t
-        };
-        ToolOutcome::answer(
-            text.trim_end(),
-            Some(json!({ "corpus": corpus, "total_atoms": total, "atoms": rows })),
-        )
+        records::lookup(corpus, &self.atlas_dir(corpus), args)
     }
 
     fn corpus_ontology(&self, args: &Value) -> ToolOutcome {
