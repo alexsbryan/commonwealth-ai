@@ -11215,6 +11215,12 @@ lines = 154
 note = ""
 
 [[module]]
+path = "serve/crates/sovereign-compute/src/setup_planner.rs"
+context = "unknown"
+lines = 717
+note = ""
+
+[[module]]
 path = "serve/crates/sovereign-compute/src/supervisor.rs"
 context = "serving"
 lines = 2050
@@ -13792,12 +13798,6 @@ note = ""
 path = "serve/crates/sovereign-inference/src/rpc_worker_main.rs"
 context = "unknown"
 lines = 363
-note = ""
-
-[[module]]
-path = "serve/crates/sovereign-inference/src/setup_planner.rs"
-context = "unknown"
-lines = 717
 note = ""
 
 [[module]]

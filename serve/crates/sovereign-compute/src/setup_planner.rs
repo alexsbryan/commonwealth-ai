@@ -15,8 +15,8 @@ use futures::StreamExt as _;
 use sovereign_contracts::daemon_wire::SlotConfig;
 use sovereign_contracts::models_manifest::DEFAULT_MANIFEST;
 
-use crate::hardware::ProfileName;
-use crate::{validate_gguf, GgufExpectation};
+use sovereign_contracts::daemon_wire::ProfileName;
+use sovereign_contracts::gguf_validator::{validate_gguf, GgufExpectation};
 
 // ─── Catalog ──────────────────────────────────────────────────────
 
