@@ -34,6 +34,10 @@ REFERENCE = {"it", "this", "that", "these", "those", "they", "them", "which", "w
 LOCATE_SYSTEM = (READER / "passes_locate_prompt.md").read_text()
 LOCATE_SHOWS_VALUES = ", followed by the values its fields can take"  # passes.rs:55
 FACTS_HEADER = "Declared facts of this document:\n"  # prefill.rs
+P_SYSTEM = ("Read one line of the document and tell which of the declared kinds of claim it states, if it states one."
+            "\n\nThe user message holds the document with numbered lines, then one of those lines and the declared kinds "
+            "of claim, each under a letter with its meaning{values}. Reply with the letter of the kind the line states or "
+            "clearly implies, or 0 if it states none of them.")  # C's system prompt paraphrased (PREREG amendment 2)
 V_SYSTEM = ("You read one line of a document and say which declared kind of claim it states, if any, and with which "
             "value.\n\nThe user message gives the document with its lines numbered, then one of its lines and the "
             "declared kinds of claim with what each means; a kind with a closed field has one letter per value, a kind "
@@ -231,6 +235,13 @@ def q_control(view, n, text, kinds):
     u += f"{NONE} none of them\nAnswer with its letter."
     system = LOCATE_SYSTEM.replace("{values}", LOCATE_SHOWS_VALUES if any(k["fields"] for k in kinds) else "")
     return system, u, labels + [NONE], {l: (k["name"], None) for k, l in zip(kinds, labels)}
+
+
+def q_paraphrase(view, n, text, kinds):
+    """C reworded, its meaning, labels and the recipe's words kept: the wording floor (PREREG amendment 2)."""
+    system, u, labels, meaning = q_control(view, n, text, kinds)
+    u = u.replace(f"Which kind of claim does line {n} state?\n", f"Which of the declared kinds of claim is stated on line {n}?\n", 1)
+    return P_SYSTEM.replace("{values}", LOCATE_SHOWS_VALUES if any(k["fields"] for k in kinds) else ""), u, labels, meaning
 
 
 def q_values(view, n, text, kinds):
@@ -448,6 +459,8 @@ def questions(system, pop, arm, x):
         return []
     if arm == "C":
         return [("C",) + q_control(view, x["line"], x["text"], kinds)]
+    if arm == "P":
+        return [("P",) + q_paraphrase(view, x["line"], x["text"], kinds)]
     if arm == "V":
         return [("V",) + q_values(view, x["line"], x["text"], kinds)] if any(k["fields"] for k in kinds) else []
     if arm == "Y":
@@ -488,7 +501,7 @@ def outcome(system, p, arm, x):
         if d is None:
             return None
         got.append((key, d, meaning))
-    if arm in ("C", "V"):
+    if arm in ("C", "P", "V"):
         _, d, meaning = got[0]
         mass = collections.Counter()
         for l, pr in d.items():
@@ -527,7 +540,7 @@ def score():
         gate = {"judged": judged, "of": len(items), "argmax_agree": round(agree / judged, 3) if judged else None,
                 "mean_abs_dp_none": round(dp / judged, 4) if judged else None}
         gate["passed"] = bool(judged == len(items) and gate["argmax_agree"] >= 0.95 and gate["mean_abs_dp_none"] <= 0.05)
-        for arm in ("C", "V", "Y", "T"):
+        for arm in ("C", "P", "V", "Y", "T"):
             outs = [(x, outcome(system, p, arm, x)) for x in items]
             if all(o is None for _, o in outs):
                 continue

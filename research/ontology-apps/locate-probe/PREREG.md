@@ -62,3 +62,14 @@ so the others lose PLACE. By the recipe's own criterion an identity-necessary cl
 - Bars. On the 183 multi-type lines: mean per-line recall of gold types at least 0.60 (one value per statement caps
   it at 1/|types|: mean 0.472 on these lines, measured before any call) and mean per-line precision at least 0.70.
   On the probe's unmarked GVC lines: lines with any yes at most C's flagged rate plus 5 points.
+
+## Amendment 2 (2026-10-12 14:06Z, before any arm was asked): arm P, the wording floor
+
+ec measured (25 Ward messages, one change at a time) that this model flips confident answers on wording that
+should not matter: a generic system prompt took right answers 18 -> 8. The C gate catches re-ask drift, not that.
+
+- P: C's question reworded without changing what it asks: the system prompt and the question sentence paraphrased;
+  the labels, the declared kinds' words, the facts and the document unchanged.
+- The wording floor per system: |metric(P) - metric(C)| on each bar's measure, and the lines whose argmax differs.
+- Reading every arm: bars 1 and 2 count an arm's gain over C only beyond the floor (the arm's measure minus C's must
+  exceed |P - C| on that measure). An arm whose gain sits inside the floor is read as no gain, whatever its sign.
