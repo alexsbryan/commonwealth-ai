@@ -186,9 +186,8 @@ async fn read_document(
         );
     }
     let facts = prefill::facts(document, policies);
-    let texts: Vec<&str> = lines.iter().map(|l| &raw[l.start..l.end]).collect();
     let mut asked_mask = vec![true; lines.len()];
-    for (i, carried) in classes.classes(&id, &texts).into_iter().enumerate() {
+    for (i, carried) in classes.classes(&id, &raw, &lines).into_iter().enumerate() {
         if let Some(carried) = carried {
             debug!(document = %id, line = lines[i].n, class = carried.class.label(), from = carried.from, "document_read/waves: line not asked");
             asked_mask[i] = false;

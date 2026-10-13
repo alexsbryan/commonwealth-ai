@@ -22,4 +22,11 @@ impl Resolver {
         }
         r
     }
+
+    /// What the seeded record `id` is shown as (`Record::shown`).
+    pub fn show(&mut self, id: &str, lines: Vec<String>) {
+        if let Some(&r) = self.position.get(id) {
+            self.records[r].shown = lines;
+        }
+    }
 }

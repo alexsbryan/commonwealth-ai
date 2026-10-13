@@ -1,0 +1,1 @@
+{"target_type": "company", "relations": [{"relation": "order.client", "other_type": "order"}]}

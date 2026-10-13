@@ -202,6 +202,7 @@ impl Build {
             &Default::default(),
             policies,
             CORPUS,
+            None,
             Answerer::Proposed,
             &mut sink,
         )

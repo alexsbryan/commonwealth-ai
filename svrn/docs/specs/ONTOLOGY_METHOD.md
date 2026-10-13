@@ -125,7 +125,10 @@ mark the line was not written under there (its text compared from first to last 
 alone shows nothing (amended 2026-10-10 on the outside review, note 2347f4c6): a tracker's act and an
 author's greeting repeat in the same words and each is read, and who wrote a line suppresses nothing, so a
 passage an author sends twice is read where it first appears. Each class is counted and traced, and the
-classes hold no word of any format (`document_read/line_classes.rs`). The rest is asked a
+classes hold no word of any format (`document_read/line_classes.rs`). Nor is a line before the extractor's
+`body_start` (a header block, whose facts are declared) or inside a segment the extractor marks as an embedded
+message (what it says is that message's, dated and authored by its own header): the format knowledge stays in
+the extractor that writes those offsets into the document's metadata (amended 2026-10-12, delivery slice 1). The rest is asked a
 fixed plan of small closed questions generated from the contract — a pure function of it, unchanged by
 renaming: **Locate** each declared claim kind no protocol rule names (line sets or none; each kind shown with its closed-valued fields' declared
 values and descriptions, the words a line states it in; the system prompt mentions values only when a kind

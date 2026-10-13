@@ -644,7 +644,16 @@ question the pipeline asks about a type is a method on the resolved
   holds in order, or its line under a mark it lacks there), is never asked;
   a line that only repeats another's words is (`line_classes.rs`, indexed
   once per run over every chapter's documents and part of the section cache
-  key). Locate (`locate.rs`) asks every remaining
+  key). Two more classes come from what the extractor wrote, never from the
+  words: a header line before the document's `body_start` and a line inside
+  one of its `segments`, an embedded reply or forward
+  (`extractors/email_segments.rs`). Both are offsets into the canonical text
+  the reader reads: `SourceDocument::raw_body` prefers the text store's text
+  (`corpus_io::document_texts`, attached by `SectionDocuments::with_texts`),
+  so no chunk title or overlap is read; a document the store cannot give is
+  read from its chunks with those two classes not applied, and the trace says
+  so. A pointed span is trimmed to its first and last letter or digit
+  (`point::trimmed`). Locate (`locate.rs`) asks every remaining
   numbered line which declared claim kind it states, among the kinds no
   protocol rule names; a kind a rule names, about a type RESOLVE decides, is an
   act (`act.rs`, `KindPlan::keys`): after About, each field the rules qualify
@@ -743,10 +752,17 @@ question the pipeline asks about a type is a method on the resolved
   answerer the fields alone are weighed and link where they reach
   `identity_bar`; otherwise ONE grammar-constrained call per document, given the type's
   `identity_criterion`, the candidates the proposers offered
-  (`resolve_records/propose.rs`: the records of the document's declared
-  thread, `change.document.thread`, then TF-IDF over documents already
-  resolved; each candidate shown with its `Reason`s, its statement and
-  document counts, the values declared structure gave it, and up to four of
+  (`resolve_records/propose.rs`: the records the document's fields name,
+  the records of its declared thread, `change.document.thread`, the `k`
+  records nearest each statement by the run's embedder (`Nearest`: a
+  statement's words and surroundings against each seeded record's card and
+  each opened record's opening statement, `resolution_records/nearest.rs`;
+  `k` a cost knob), then TF-IDF over documents already resolved; each
+  candidate shown with its `Reason`s, its statement and document counts, what
+  it is as written (a seeded record's identity values, name and the records
+  whose refs point at it, `mentions::card`) and the values its statements
+  were read with, never its folded comparison keys or its documents' stamps,
+  and up to four of
   its statements' cited lines from other documents (`passage::lines_of`: a
   span widened to its whole line, or the reader's lines as they stand on the
   folded default-path text), one line each marked

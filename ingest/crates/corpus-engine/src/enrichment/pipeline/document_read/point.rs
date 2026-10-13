@@ -143,7 +143,33 @@ pub(super) async fn point_span(
         debug!(document = p.document, item = p.item, phase = p.phase, best, prob, dist = %render(&dist), "document_read/point: end");
         start + best
     };
-    Ok(Some(all[start].start..all[end].end))
+    Ok(Some(trimmed(text, all[start].start..all[end].end)))
+}
+
+/// `span` of `text` from its first to its last letter or digit, as a line is
+/// compared (`line_classes::line_key`), keeping a closing bracket or quote
+/// whose opener it holds: a pointed span is whole words, and a word carries
+/// the punctuation after it ("Trust," "April."), which is no part of what it
+/// names. A span with no letter or digit is returned as it is.
+pub(super) fn trimmed(text: &str, span: Range<usize>) -> Range<usize> {
+    let s = &text[span.clone()];
+    let Some(first) = s.find(char::is_alphanumeric) else {
+        return span;
+    };
+    let mut end = s
+        .char_indices()
+        .rev()
+        .find(|(_, c)| c.is_alphanumeric())
+        .map_or(s.len(), |(i, c)| i + c.len_utf8());
+    for (close, open) in [(')', '('), (']', '['), ('"', '"'), ('\u{201d}', '\u{201c}')] {
+        let held = &s[first..end];
+        let opened = held.matches(open).count();
+        let closed = if open == close { 0 } else { held.matches(close).count() };
+        if s[end..].starts_with(close) && opened > closed && (open != close || opened % 2 == 1) {
+            end += close.len_utf8();
+        }
+    }
+    span.start + first..span.start + end
 }
 
 /// How a family's value is named in the question.

@@ -562,12 +562,12 @@ fn with_company_criterion() -> Fixture {
 #[tokio::test]
 async fn a_company_named_in_prose_binds_to_its_header_record_and_is_the_orders_client() {
     const PARTIES: &[(&str, &str, &str)] = &[
-        ("company", "Birch Hall", "web_domain: birchhall example"),
-        ("company", "Quay Market", "web_domain: quaymarket example"),
+        ("company", "Birch Hall", "web_domain: birchhall.example"),
+        ("company", "Quay Market", "web_domain: quaymarket.example"),
         (
             "company",
             "Alder and Pine Workshop",
-            "web_domain: alderpine example",
+            "web_domain: alderpine.example",
         ),
         ("order", "oak chairs", "oak chairs"),
         ("order", "walnut", "walnut"),
@@ -699,4 +699,67 @@ async fn a_company_named_in_prose_binds_to_its_header_record_and_is_the_orders_c
             "our own side is served: {line}"
         );
     }
+}
+
+/// A company first named in a message whose headers name only our own side
+/// binds to the record another message's header seeded (the delivery
+/// journey's second case: on Ward, five Enron-internal messages name Tucson
+/// Electric Power before any message from tucsonelectric.com, and the first
+/// opened a record of its own that every later mention followed). Tom's note
+/// to Mia, sent before Rosa writes, names Birch Hall; with a model that
+/// answers RESOLVE right, its mention is the birchhall.example record and no
+/// company record is opened.
+#[tokio::test]
+async fn a_company_first_named_where_no_header_names_it_binds_to_its_seeded_record() {
+    const PARTIES: &[(&str, &str, &str)] = &[
+        ("company", "Birch Hall", "web_domain: birchhall.example"),
+        ("company", "Quay Market", "web_domain: quaymarket.example"),
+        ("company", "Alder and Pine Workshop", "web_domain: alderpine.example"),
+        ("order", "oak chairs", "oak chairs"),
+        ("order", "walnut", "walnut"),
+    ];
+    let mut f = with_company_criterion();
+    let note = json!({"id": "n0@alderpine.example", "thread_id": "n0@alderpine.example",
+        "from": "Tom Avery <tom.avery@alderpine.example>",
+        "to": "Mia Holt <mia.holt@alderpine.example>",
+        "date": "Sun, 01 Mar 2026 18:00:00 -0800", "subject": "Reading room chairs",
+        "body": "Mia,\n\nBirch Hall may ask us for oak chairs for their reading room this spring.\n\
+                 Please check how much seasoned oak we still have in the shed.\n\nTom"});
+    f.documents.push(note.as_object().unwrap().clone());
+    let run = run_knowing(&f, PARTIES).await;
+    let atoms = run.atoms();
+    let birch = atoms
+        .iter()
+        .find(|a| {
+            a["data"]["entity_type"] == "company"
+                && a["data"]["attributes"]["web_domain"] == "birchhall.example"
+        })
+        .and_then(|a| a["data"]["id"].as_str())
+        .expect("a header seeds birchhall.example");
+    let in_note: Vec<&Value> = atoms
+        .iter()
+        .filter(|a| a["data"]["attributes"]["document_id"] == "n0@alderpine.example")
+        .filter(|a| {
+            a["data"]["attributes"]["__document_read_words"]
+                .as_str()
+                .is_some_and(|w| w.contains("Birch Hall"))
+        })
+        .collect();
+    assert_eq!(in_note.len(), 1, "the note names Birch Hall once: {in_note:?}");
+    let asked: Vec<Value> = run
+        .lines(DECISIONS_FILE)
+        .into_iter()
+        .filter(|d| d["type"] == "company" && d["document"] == "n0@alderpine.example")
+        .collect();
+    assert_eq!(
+        in_note[0]["data"]["subject"].as_str(),
+        Some(birch),
+        "the note's Birch Hall is not birchhall.example's record; RESOLVE: {asked:?}"
+    );
+    let opened: Vec<&Value> = atoms
+        .iter()
+        .filter(|a| a["data"]["entity_type"] == "company")
+        .filter(|a| a["data"]["attributes"]["web_domain"].is_null())
+        .collect();
+    assert!(opened.is_empty(), "a mention opened a company: {opened:?}");
 }

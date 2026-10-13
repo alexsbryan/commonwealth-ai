@@ -168,6 +168,12 @@ pub struct Record {
     pub supplied: BTreeMap<String, BTreeSet<String>>,
     /// One entry per folded statement; later calls are shown these.
     pub evidence: Vec<Evidence>,
+    /// What a record seeded before any statement reached it is, as written:
+    /// its source's name and identity values and the records whose refs
+    /// point at it (`resolution_records::mentions::seed`). Shown to the
+    /// model; never compared (`keys` are).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub shown: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -342,6 +348,10 @@ pub enum Reason {
     /// A field of this document names the record: one a metadata source read
     /// from it (`resolution_sources`), offered to the document's mentions.
     NamedInField { field: String },
+    /// Cosine, by the run's embedder, between a statement of this document
+    /// (its words and the lines they lie on) and what the record is shown as
+    /// (`propose::Nearest`).
+    Nearest { similarity: f32 },
 }
 
 /// A record a proposer offered, with every reason it was offered for.
@@ -358,7 +368,19 @@ impl Proposal {
             .iter()
             .filter_map(|r| match r {
                 Reason::SimilarDocument { similarity } => Some(*similarity),
-                Reason::SameThread | Reason::NamedInField { .. } => None,
+                Reason::SameThread | Reason::NamedInField { .. } | Reason::Nearest { .. } => None,
+            })
+            .fold(0.0, f32::max)
+    }
+
+    /// The statement-to-record cosine it was offered at; 0 when `Nearest`
+    /// did not offer it.
+    pub fn nearness(&self) -> f32 {
+        self.reasons
+            .iter()
+            .filter_map(|r| match r {
+                Reason::Nearest { similarity } => Some(*similarity),
+                _ => None,
             })
             .fold(0.0, f32::max)
     }
@@ -926,6 +948,7 @@ impl Resolver {
             fields: BTreeMap::new(),
             supplied: BTreeMap::new(),
             evidence: Vec::new(),
+            shown: Vec::new(),
         });
         self.records.len() - 1
     }

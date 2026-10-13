@@ -126,7 +126,7 @@ fn knowing(asked: Arc<Mutex<Vec<ChatPrompt>>>) -> crate::InferenceFn {
                     .and_then(|(_, rest)| rest.split_once("]]"))
                     .map_or("", |(words, _)| words);
                 let marks: &[&str] = match words {
-                    "PG&E" => &["domain: pge com"],
+                    "PG&E" => &["domain: pge.com"],
                     "Tucson Electric" => &["no declared value", "Tucson Electric"],
                     _ => &[],
                 };
@@ -214,6 +214,7 @@ async fn a_mention_is_decided_against_the_records_its_message_names() {
             &projection.participants,
             &p,
             "c",
+            None,
             Answerer::Select(&infer),
             &mut |_, _| {},
         )

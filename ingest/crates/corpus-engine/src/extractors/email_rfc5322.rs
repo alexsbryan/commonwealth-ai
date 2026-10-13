@@ -247,7 +247,7 @@ impl EmailIterator {
             "email_rfc5322: parsed"
         );
 
-        let metadata = serde_json::json!({
+        let mut metadata = serde_json::json!({
             "doc_type": "email",
             "message_id": message_id,
             "thread_id": thread_id,
@@ -285,13 +285,33 @@ impl EmailIterator {
         let from_id = combine_identity(from.as_deref(), x_from.as_deref());
         let to_id = combine_identity(to.as_deref(), x_to.as_deref());
         let cc_id = combine_identity(cc.as_deref(), x_cc.as_deref());
-        let content_with_headers = build_header_preamble(
+        let preamble = build_header_preamble(
             from_id.as_deref(),
             to_id.as_deref(),
             cc_id.as_deref(),
             date.as_deref(),
             subject.as_deref(),
-        ) + &body;
+        );
+        // Where the author's own text begins in the stored text, and the
+        // messages the body embeds, in the same offsets: the reader never
+        // asks the preamble (its facts are declared) nor an embedded message
+        // as this one's (`email_segments`).
+        let body_start = preamble.len();
+        let segments: Vec<serde_json::Value> = super::email_segments::embedded_segments(&body)
+            .into_iter()
+            .map(|s| {
+                serde_json::json!({
+                    "start": s.start + body_start,
+                    "end": s.end + body_start,
+                    "header_end": s.header_end + body_start,
+                    "kind": s.kind,
+                })
+            })
+            .collect();
+        tracing::debug!(message_id = %message_id, body_start, segments = segments.len(), "email_rfc5322: body located");
+        metadata["body_start"] = serde_json::json!(body_start);
+        metadata["segments"] = serde_json::Value::Array(segments);
+        let content_with_headers = preamble + &body;
         Ok(Some(ExtractedDoc {
             title,
             content: content_with_headers,

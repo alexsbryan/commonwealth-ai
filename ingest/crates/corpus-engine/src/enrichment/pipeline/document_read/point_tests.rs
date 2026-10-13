@@ -159,7 +159,8 @@ async fn a_pointed_quantity_is_its_number_cited_by_its_words_and_unmeasured() {
         by: None,
     };
     let none = BTreeMap::new();
-    // Start at "2,400", end at "dollars." (the second of the two words left).
+    // Start at "2,400", end at "dollars." (the second of the two words left);
+    // the evidence is the span trimmed of the period the word carries.
     let (infer, seen) = scripted(vec![
         dist(&["A", "B", "C", "D", "E", NONE], "D"),
         dist(&["A", "B"], "B"),
@@ -170,7 +171,7 @@ async fn a_pointed_quantity_is_its_number_cited_by_its_words_and_unmeasured() {
         read,
         DocumentReadField::Supported {
             value: json!(2400.0),
-            evidence: "2,400 dollars.".into(),
+            evidence: "2,400 dollars".into(),
             by: Some(SourcePrecision::new("reader_point", Precision::Unmeasured)),
         }
     );
@@ -187,4 +188,21 @@ async fn a_pointed_quantity_is_its_number_cited_by_its_words_and_unmeasured() {
         matches!(&read, DocumentReadField::Unknown { reason } if reason.starts_with("refused: the words \"Our price\" hold no number")),
         "{read:?}"
     );
+}
+
+/// A pointed span runs from its first to its last letter or digit: the comma
+/// or period a word carries is no part of what it names, and a bracket closes
+/// only what the span opened.
+#[test]
+fn a_span_is_trimmed_to_what_it_names() {
+    let at = |text: &str| -> String {
+        let span = super::trimmed(text, 0..text.len());
+        text[span].to_string()
+    };
+    assert_eq!(at("Birch Hall Trust,"), "Birch Hall Trust");
+    assert_eq!(at("the end of April."), "the end of April");
+    assert_eq!(at("(Birch Hall)"), "Birch Hall");
+    assert_eq!(at("Birch Hall (Elm Row),"), "Birch Hall (Elm Row)");
+    assert_eq!(at("\"Birch Hall\""), "Birch Hall");
+    assert_eq!(at("--"), "--");
 }

@@ -22,7 +22,7 @@ use corpus_engine::enrichment::atlas::{
 use corpus_engine::enrichment::ontology::{OntologyPolicies, SourceDecl};
 use corpus_engine::enrichment::pipeline::document_read::DocumentReadStatus;
 use corpus_engine::enrichment::pipeline::{PhaseFailure, SectionExtraction};
-use corpus_engine::InferenceFn;
+use corpus_engine::{EmbedFn, InferenceFn};
 
 use super::config::EnrichConfig;
 
@@ -119,6 +119,7 @@ pub(crate) fn from_documents(
 /// documents every statement is unplaced and recorded; the Phase-1 atoms of a
 /// decided type are retired either way. Each step's decisions land beside the
 /// atlas.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn apply(
     mut atoms: BuildAtoms<'_>,
     inputs: &DocumentInputs,
@@ -126,6 +127,7 @@ pub(crate) async fn apply(
     policies: &OntologyPolicies,
     corpus_id: &str,
     infer: &InferenceFn,
+    embed: &EmbedFn,
     atlas_dir: &Path,
 ) -> Result<Vec<PhaseFailure>, String> {
     let mut failures = Vec::new();
@@ -169,6 +171,7 @@ pub(crate) async fn apply(
             &inputs.participants,
             policies,
             corpus_id,
+            Some(embed),
             Answerer::Select(infer),
             &mut |ty: &str, r: &DocumentResolution| decisions.typed_line(ty, r),
         )

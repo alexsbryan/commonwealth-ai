@@ -27,6 +27,12 @@ use super::atoms::Claim;
 use crate::enrichment::ontology::{metadata_date, DocumentFieldsDecl, DocumentStamp};
 use crate::enrichment::pipeline::types::{PhaseFailure, PhaseFailureKind, PipelinePhase};
 
+/// Each document's canonical text, the string its chunks were cut from as the
+/// corpus's text store holds it, keyed by the document's key
+/// (`source_doc_id`). A document absent from it is read from its chunks, and
+/// whoever built the map named why.
+pub type DocumentTexts = BTreeMap<String, String>;
+
 /// One source document as a section holds it.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SourceDocument {
@@ -44,14 +50,24 @@ pub struct SourceDocument {
     texts: Vec<String>,
     /// Original chunk bodies, retained for accountable reading.
     raw_texts: Vec<String>,
+    /// The document's canonical text (`DocumentTexts`), when the corpus's
+    /// text store gave it: the one string its chunks were cut from, so it
+    /// holds no chunk title and no overlap read twice, and an extractor's
+    /// offsets into it (`body_start`, `segments`) are exact.
+    #[serde(default)]
+    text: Option<String>,
 }
 
 impl SourceDocument {
-    /// The text RESOLVE reads: the chunk texts as folded here, joined by one
-    /// space, so the byte span of a folded anchor is a span of it. Chunks
-    /// that overlap repeat their overlap.
+    /// The text RESOLVE reads, whitespace-folded so the byte span of a folded
+    /// anchor is a span of it: the canonical text when the store gave it,
+    /// else the chunk texts joined by one space (chunks that overlap then
+    /// repeat their overlap).
     pub(super) fn body(&self) -> String {
-        self.texts.join(" ")
+        match &self.text {
+            Some(text) => fold_ws(text),
+            None => self.texts.join(" "),
+        }
     }
 
     pub fn key(&self) -> &str {
@@ -74,9 +90,21 @@ impl SourceDocument {
         &self.fields
     }
 
-    /// Unnormalised source chunks in their manifest order.
+    /// The text the reader reads: the canonical text when the store gave it,
+    /// else the unnormalised chunks in manifest order joined by a blank line,
+    /// each headed by its title and overlapping its neighbour as the index
+    /// cut it (the substitution was named where the texts were read).
     pub fn raw_body(&self) -> String {
-        self.raw_texts.join("\n\n")
+        match &self.text {
+            Some(text) => text.clone(),
+            None => self.raw_texts.join("\n\n"),
+        }
+    }
+
+    /// The canonical text, when the store gave it: what an extractor's
+    /// offsets index.
+    pub fn stored_text(&self) -> Option<&str> {
+        self.text.as_deref()
     }
 }
 
@@ -155,12 +183,34 @@ impl SectionDocuments {
                         url: url.map(str::to_string),
                         texts: vec![text],
                         raw_texts: vec![row.content.clone()],
+                        text: None,
                     }),
                 }
             }
             by_section.insert(section_id.to_string(), docs);
         }
         Self { by_section, order }
+    }
+
+    /// Give each document the canonical text `texts` holds for its key. A
+    /// document it lacks keeps reading its chunks; the reader of the store
+    /// named why.
+    pub fn with_texts(mut self, texts: &DocumentTexts) -> Self {
+        let (mut given, mut from_chunks) = (0usize, 0usize);
+        for d in self.by_section.values_mut().flatten() {
+            match texts.get(&d.key) {
+                Some(text) => {
+                    d.text = Some(text.clone());
+                    given += 1;
+                }
+                None => {
+                    from_chunks += 1;
+                    debug!(document = %d.key, "atlas/resolution documents: no canonical text; read from its chunks");
+                }
+            }
+        }
+        info!(given, from_chunks, "atlas/resolution documents: canonical texts attached");
+        self
     }
 
     /// How many documents, across every section.

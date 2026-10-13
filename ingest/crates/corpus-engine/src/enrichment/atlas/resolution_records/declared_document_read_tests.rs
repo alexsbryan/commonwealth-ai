@@ -175,6 +175,7 @@ async fn state_free_membership_resolves_and_survives_the_production_atlas_writer
             &Default::default(),
             &policies,
             "cases",
+            None,
             Answerer::Proposed,
             &mut on_document,
         )
@@ -395,6 +396,7 @@ async fn run_open_writer_case(
             &Default::default(),
             &policies,
             "same-anchor",
+            None,
             Answerer::Model(&infer),
             &mut on_document,
         )
@@ -629,6 +631,7 @@ async fn resolve_local_subjects(
         &Default::default(),
         &policies,
         "local-subjects",
+        None,
         Answerer::Proposed,
         &mut on_document,
     )

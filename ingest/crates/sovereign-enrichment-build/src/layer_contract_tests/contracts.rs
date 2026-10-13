@@ -594,6 +594,7 @@ pub(super) fn renamed(f: &Fixture) -> (Fixture, BTreeMap<String, String>) {
         Fixture {
             recipe: head + &recipe,
             documents: f.documents.clone(),
+            ingested: f.ingested.clone(),
         },
         names,
     )

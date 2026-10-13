@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use corpus_engine::enrichment::asker::{answering, Asker};
-use corpus_engine::enrichment::atlas::SectionDocuments;
+use corpus_engine::enrichment::atlas::{DocumentTexts, SectionDocuments};
 use corpus_engine::enrichment::ontology::OntologyPolicies;
 use corpus_engine::enrichment::pipeline::{
     ChapterSelection, ChatPrompt, CustomAtlasSpec, PhaseCache, PhaseRunner, RunOutputWriter,
@@ -40,6 +40,8 @@ use super::corpus_io::{build_manifest_from_corpus_rows, hydrate_corpus_chapters_
 mod contracts;
 #[path = "layer_contract_tests/identity.rs"]
 mod identity;
+#[path = "layer_contract_tests/mailraw.rs"]
+mod mailraw;
 #[path = "layer_contract_tests/protocol.rs"]
 mod protocol;
 #[path = "layer_contract_tests/reader.rs"]
@@ -56,6 +58,16 @@ fn fixture_dir(shape: &str) -> PathBuf {
 struct Fixture {
     recipe: String,
     documents: Vec<Map<String, Value>>,
+    /// A fixture of raw files (`Fixture::ingest`): what the engine's own
+    /// ingest of its recipe wrote. `documents` is then empty.
+    ingested: Option<Ingested>,
+}
+
+/// The rows and stored texts an ingest wrote, read back as a build reads them.
+#[derive(Clone)]
+struct Ingested {
+    rows: Vec<EnrichmentChunkRow>,
+    texts: DocumentTexts,
 }
 
 impl Fixture {
@@ -68,7 +80,52 @@ impl Fixture {
             .filter(|l| !l.trim().is_empty())
             .map(|l| serde_json::from_str(l).unwrap())
             .collect();
-        Self { recipe, documents }
+        Self {
+            recipe,
+            documents,
+            ingested: None,
+        }
+    }
+
+    /// A fixture of raw files: its recipe ingested by `CorpusEngine::ingest`
+    /// (the recipe's extractor, filters, chunker and text store) into a
+    /// scratch index, its acquire path read relative to its own directory as
+    /// `corpus install` reads it, and the rows and texts read back through
+    /// the build's own readers.
+    async fn ingest(shape: &str) -> Self {
+        let dir = fixture_dir(shape);
+        let recipe = std::fs::read_to_string(dir.join("recipe.toml")).unwrap();
+        let relative = recipe
+            .lines()
+            .find(|l| l.trim_start().starts_with("path = "))
+            .and_then(|l| l.split('"').nth(1))
+            .expect("the fixture's [acquire] names a path");
+        let absolute = recipe.replacen(
+            &format!("path = \"{relative}\""),
+            &format!("path = \"{}\"", dir.join(relative).display()),
+            1,
+        );
+        let parsed = Recipe::from_toml(&absolute).unwrap();
+        let corpus_id = parsed.corpus.id.clone();
+        let scratch = tempfile::tempdir().unwrap();
+        let engine = corpus_engine::CorpusEngine::new(
+            scratch.path().join("recipes"),
+            scratch.path().join("indexes"),
+            embedder(),
+        )
+        .with_embedding_model("fixture");
+        engine
+            .ingest(&corpus_engine::CorpusSpec::Inline(Box::new(parsed)), None)
+            .await
+            .unwrap();
+        let index = engine.open_index_for_corpus(&corpus_id).await.unwrap();
+        let rows = index.all_chunks_full().await.unwrap();
+        let texts = super::corpus_io::document_texts(&index).await.unwrap();
+        Self {
+            recipe,
+            documents: Vec::new(),
+            ingested: Some(Ingested { rows, texts }),
+        }
     }
 
     fn spec(&self) -> CustomAtlasSpec {
@@ -87,6 +144,9 @@ impl Fixture {
     /// metadata, `id` the source document id. One chunk per document (each
     /// body is under the chunker's cap); ids in document order.
     fn rows(&self) -> Vec<EnrichmentChunkRow> {
+        if let Some(ingested) = &self.ingested {
+            return ingested.rows.clone();
+        }
         let (content, title) = self.fields();
         self.documents
             .iter()
@@ -430,14 +490,20 @@ async fn run_as(
     let rows = fixture.rows();
     let manifest =
         build_manifest_from_corpus_rows(corpus_id, rows.clone(), None, None, 1, None).unwrap();
-    let chapters = hydrate_corpus_chapters_from_rows(&manifest, &rows);
+    let texts = fixture
+        .ingested
+        .as_ref()
+        .map(|i| i.texts.clone())
+        .unwrap_or_default();
+    let chapters = hydrate_corpus_chapters_from_rows(&manifest, &rows, &texts);
     let documents = SectionDocuments::from_chunk_rows(
         manifest
             .chapters
             .iter()
             .map(|c| (c.id.as_str(), c.chunk_ids.as_slice())),
         &rows,
-    );
+    )
+    .with_texts(&texts);
 
     let asked = Arc::new(Mutex::new(Vec::new()));
     let (embed, chat) = answering(

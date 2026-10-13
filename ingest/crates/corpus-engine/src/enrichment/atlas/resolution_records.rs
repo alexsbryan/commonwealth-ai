@@ -46,11 +46,14 @@ use crate::enrichment::pipeline::document_read::{
     LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE,
 };
 use crate::enrichment::pipeline::types::{PhaseFailure, PhaseFailureKind};
+use crate::EmbedFn;
 
 #[path = "resolution_records/local_subjects.rs"]
 mod local_subjects;
 #[path = "resolution_records/mentions.rs"]
 mod mentions;
+#[path = "resolution_records/nearest.rs"]
+mod nearest;
 #[path = "resolution_records/retire.rs"]
 mod retire;
 use local_subjects::{Assigned, Spot};
@@ -202,13 +205,18 @@ struct Placed<'d> {
 
 /// Decide the identity of every type RESOLVE decides, in declaration order.
 /// `on_document` sees each document's resolution as it is made, so the caller
-/// can keep the decisions beside the atlas.
+/// can keep the decisions beside the atlas. With the run's embedder, each
+/// statement is also offered the records nearest it in meaning
+/// (`propose::Nearest`); without one, only declared structure and similar
+/// documents offer records, and the run says so.
+#[allow(clippy::too_many_arguments)]
 pub async fn resolve_declared_types(
     atoms: &mut BuildAtoms<'_>,
     documents: &SectionDocuments,
     participants: &Participants,
     policies: &OntologyPolicies,
     corpus_id: &str,
+    embed: Option<&EmbedFn>,
     answerer: Answerer<'_>,
     on_document: &mut (dyn FnMut(&str, &DocumentResolution) + Send),
 ) -> (Vec<RecordsReport>, Vec<PhaseFailure>) {
@@ -245,6 +253,7 @@ pub async fn resolve_declared_types(
             participants,
             policies,
             corpus_id,
+            embed,
             answerer,
             on_document,
             &mut failures,
@@ -271,6 +280,7 @@ async fn resolve_type(
     participants: &Participants,
     policies: &OntologyPolicies,
     corpus_id: &str,
+    embed: Option<&EmbedFn>,
     answerer: Answerer<'_>,
     on_document: &mut (dyn FnMut(&str, &DocumentResolution) + Send),
     failures: &mut Vec<PhaseFailure>,
@@ -556,6 +566,13 @@ async fn resolve_type(
     } else {
         mentions::Seeded::default()
     };
+    match embed {
+        Some(embed) => {
+            proposer = proposer
+                .with_nearest(nearest::nearest(embed, &t.name, &placed, &seeded.cards).await);
+        }
+        None => info!(r#type = %t.name, "atlas/resolve: no embedder; records are offered by declared structure and similar documents only"),
+    }
     let mut record_of: HashMap<String, String> = HashMap::new();
     let mut refused: HashMap<String, &'static str> = HashMap::new();
     let mut documents: Vec<(Document<'_>, &[Statement])> = placed

@@ -20,13 +20,9 @@ fn classes_of(
     document: &str,
     body: &str,
 ) -> Vec<Option<(LineClass, String)>> {
-    let lines: Vec<&str> = body
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty())
-        .collect();
+    let lines = super::super::passes::lines(body);
     classes
-        .classes(document, &lines)
+        .classes(document, body, &lines)
         .into_iter()
         .map(|c| c.map(|c| (c.class, c.from.to_string())))
         .collect()

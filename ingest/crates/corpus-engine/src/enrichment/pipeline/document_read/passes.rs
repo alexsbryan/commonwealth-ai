@@ -382,9 +382,8 @@ async fn read_document(
     let mut calls = 0u32;
     let mut classed: BTreeMap<LineClass, usize> = BTreeMap::new();
     let mut asked_lines = vec![true; lines.len()];
-    let texts: Vec<&str> = lines.iter().map(|l| &raw[l.start..l.end]).collect();
     let mut asking: Vec<usize> = Vec::with_capacity(lines.len());
-    for (i, (line, carried)) in lines.iter().zip(classes.classes(&id, &texts)).enumerate() {
+    for (i, (line, carried)) in lines.iter().zip(classes.classes(&id, &raw, &lines)).enumerate() {
         let text = &raw[line.start..line.end];
         if let Some(carried) = carried {
             debug!(document = %id, line = line.n, class = carried.class.label(), from = carried.from, text = %excerpt(text), "document_read/passes: line not asked");

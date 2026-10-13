@@ -126,7 +126,8 @@ pub async fn align_clusters(
     })
 }
 
-fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+/// Cosine of two vectors; 0 when either has no length.
+pub(crate) fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     let mut dot = 0.0f64;
     let mut norm_a = 0.0f64;
     let mut norm_b = 0.0f64;

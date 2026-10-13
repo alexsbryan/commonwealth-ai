@@ -416,7 +416,7 @@ pub(crate) async fn resolve_with_inputs(
         };
         let corpus = cfg.corpus_id.as_str();
         let applied = super::atlas_resolve_documents::apply(
-            atoms, &inputs, sections, &policies, corpus, infer, atlas_dir,
+            atoms, &inputs, sections, &policies, corpus, infer, embed, atlas_dir,
         );
         resolution_failures.extend(applied.await?);
 

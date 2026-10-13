@@ -533,6 +533,7 @@ fn record(id: &str, surface: &str) -> Record {
         keys: Default::default(),
         fields: Default::default(),
         supplied: Default::default(),
+        shown: vec![],
         evidence: vec![Evidence {
             document: "d0".into(),
             title: None,

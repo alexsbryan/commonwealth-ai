@@ -8,6 +8,7 @@ pub mod custom_file;
 pub mod described_asset;
 pub mod docx;
 mod email_base_subject;
+mod email_segments;
 pub mod email_rfc5322;
 pub mod gutenberg_catalog;
 pub mod html;

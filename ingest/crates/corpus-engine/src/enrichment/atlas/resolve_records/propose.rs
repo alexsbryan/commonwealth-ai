@@ -7,16 +7,20 @@ use std::collections::{BTreeMap, HashMap};
 
 use tracing::debug;
 
-use super::{Document, DocumentResolution, Proposal, Reason};
+use super::{Document, DocumentResolution, Proposal, Reason, Statement};
+use crate::enrichment::alignment::cosine_similarity;
 use crate::enrichment::ontology::DocumentStamp;
 
-/// The proposers a declaration selects, offering one list: the records of the
-/// declared thread first (when the recipe declares `change.document.thread`),
-/// then those of similar documents. A record both offer carries both reasons.
+/// The proposers a declaration selects, offering one list: the records a
+/// document's fields name, then those of its declared thread (when the recipe
+/// declares `change.document.thread`), then those nearest its statements in
+/// meaning (when the run has an embedder), then those of similar documents.
+/// A record several offer carries every reason.
 #[derive(Debug)]
 pub struct Proposers {
     named: Option<FieldNamed>,
     thread: Option<SameThread>,
+    nearest: Option<Nearest>,
     similar: SimilarDocuments,
 }
 
@@ -25,8 +29,15 @@ impl Proposers {
         Self {
             named: None,
             thread: declares_thread.then(SameThread::default),
+            nearest: None,
             similar,
         }
+    }
+
+    /// With the records nearest each statement in meaning offered too.
+    pub fn with_nearest(mut self, nearest: Nearest) -> Self {
+        self.nearest = Some(nearest);
+        self
     }
 
     /// With the records a document's fields name offered first.
@@ -35,7 +46,7 @@ impl Proposers {
         self
     }
 
-    pub fn propose(&self, doc: Document<'_>) -> Vec<Proposal> {
+    pub fn propose(&self, doc: Document<'_>, statements: &[Statement]) -> Vec<Proposal> {
         let mut out = self
             .named
             .as_ref()
@@ -44,7 +55,15 @@ impl Proposers {
             .thread
             .as_ref()
             .map_or_else(Vec::new, |t| t.propose(doc));
-        for p in thread.into_iter().chain(self.similar.propose(doc)) {
+        let nearest = self
+            .nearest
+            .as_ref()
+            .map_or_else(Vec::new, |n| n.propose(doc, statements));
+        for p in thread
+            .into_iter()
+            .chain(nearest)
+            .chain(self.similar.propose(doc))
+        {
             match out.iter_mut().find(|q| q.record == p.record) {
                 Some(q) => q.reasons.extend(p.reasons),
                 None => out.push(p),
@@ -57,6 +76,9 @@ impl Proposers {
         if let Some(t) = &mut self.thread {
             t.observe(doc, resolution);
         }
+        if let Some(n) = &mut self.nearest {
+            n.observe(resolution);
+        }
         self.similar.observe(doc, resolution);
     }
 
@@ -64,7 +86,7 @@ impl Proposers {
     pub fn describe(&self) -> String {
         let s = &self.similar;
         format!(
-            "{}{}similar_documents(neighbours {}, max_candidates {}, min_similarity {})",
+            "{}{}{}similar_documents(neighbours {}, max_candidates {}, min_similarity {})",
             if self.named.is_some() {
                 "field_named + "
             } else {
@@ -75,6 +97,9 @@ impl Proposers {
             } else {
                 ""
             },
+            self.nearest
+                .as_ref()
+                .map_or_else(String::new, |n| format!("nearest(k {}) + ", n.k)),
             s.neighbours,
             s.max_candidates,
             s.min_similarity
@@ -118,6 +143,92 @@ impl FieldNamed {
             "atlas/resolve: records the document's fields name"
         );
         out
+    }
+}
+
+/// The records nearest a document's statements in meaning: for each
+/// statement, the `k` records of its type whose card lies nearest the
+/// statement's words and lines by cosine under the run's embedder. A record
+/// is carded by what it is shown as (`Record::shown`) when seeded, else by
+/// the words of the statement that opened it. Retrieval, never a decision:
+/// `k` is a cost knob, and the one proposer that offers a record no field of
+/// the document names and no statement of its thread holds, as when a note
+/// names a company before any message from it arrives.
+#[derive(Debug, Default)]
+pub struct Nearest {
+    k: usize,
+    /// Statement id -> its vector.
+    statements: HashMap<String, Vec<f32>>,
+    /// Record id -> its card's vector, in the order the records came.
+    records: Vec<(String, Vec<f32>)>,
+}
+
+impl Nearest {
+    pub fn new(
+        k: usize,
+        statements: HashMap<String, Vec<f32>>,
+        records: Vec<(String, Vec<f32>)>,
+    ) -> Self {
+        Self {
+            k,
+            statements,
+            records,
+        }
+    }
+
+    pub fn propose(&self, doc: Document<'_>, statements: &[Statement]) -> Vec<Proposal> {
+        let mut best: HashMap<&str, f32> = HashMap::new();
+        for s in statements {
+            let Some(v) = self.statements.get(&s.id) else {
+                debug!(document = doc.id, statement = %s.id, "atlas/resolve: a statement with no vector; nearest offers it nothing");
+                continue;
+            };
+            let mut ranked: Vec<(&str, f32)> = self
+                .records
+                .iter()
+                .map(|(id, r)| (id.as_str(), cosine_similarity(v, r)))
+                .collect();
+            ranked.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(b.0)));
+            for (id, similarity) in ranked.into_iter().take(self.k) {
+                let at = best.entry(id).or_insert(similarity);
+                *at = at.max(similarity);
+            }
+        }
+        let mut out: Vec<Proposal> = best
+            .into_iter()
+            .map(|(record, similarity)| Proposal {
+                record: record.to_string(),
+                reasons: vec![Reason::Nearest { similarity }],
+            })
+            .collect();
+        out.sort_by(|a, b| {
+            b.nearness()
+                .total_cmp(&a.nearness())
+                .then(a.record.cmp(&b.record))
+        });
+        debug!(
+            document = doc.id,
+            offered = out.len(),
+            records = self.records.len(),
+            k = self.k,
+            "atlas/resolve: records nearest the document's statements"
+        );
+        out
+    }
+
+    /// A record a statement opened is carded by that statement's words.
+    pub fn observe(&mut self, resolution: &DocumentResolution) {
+        for o in &resolution.outcomes {
+            let Some(record) = o.outcome.record() else {
+                continue;
+            };
+            if record != o.statement || self.records.iter().any(|(id, _)| id == record) {
+                continue;
+            }
+            if let Some(v) = self.statements.get(record) {
+                self.records.push((record.to_string(), v.clone()));
+            }
+        }
     }
 }
 
@@ -398,7 +509,7 @@ mod tests {
             Some("9"),
             "Install fails on Windows when the path is long.",
         );
-        let got = p.propose(q);
+        let got = p.propose(q, &[]);
         assert_eq!(got[0].record, "r1", "{got:?}");
         assert_eq!(got[0].reasons[0], Reason::SameThread, "{got:?}");
         let r0 = got.iter().find(|x| x.record == "r0").expect("similar");
@@ -406,7 +517,7 @@ mod tests {
 
         let mut bare = Proposers::new(false, SimilarDocuments::new(3, 10, 0.0));
         bare.observe(b, &resolved("b", &["r1"]));
-        assert!(bare.propose(q).iter().all(|x| !x.same_thread()));
+        assert!(bare.propose(q, &[]).iter().all(|x| !x.same_thread()));
     }
 
     #[test]
@@ -455,5 +566,93 @@ mod tests {
                 stamps: &[],
             })
             .is_empty());
+    }
+
+    /// A token-bag stand-in for the run's embedder: one dimension per word of
+    /// `vocab`, so cosine ranks by the words two texts share.
+    fn bag(text: &str, vocab: &[&str]) -> Vec<f32> {
+        let words: Vec<String> = text
+            .to_lowercase()
+            .split(|c: char| !c.is_alphanumeric())
+            .map(str::to_string)
+            .collect();
+        vocab
+            .iter()
+            .map(|v| words.iter().filter(|w| w == v).count() as f32)
+            .collect()
+    }
+
+    /// The stand-in ranks as its contract says, so the ranking test below
+    /// measures the proposer and not the double.
+    #[test]
+    fn the_token_bag_double_ranks_by_shared_words() {
+        let vocab = ["linden", "court", "trust", "elm", "row"];
+        let q = bag("Linden Court Trust rang", &vocab);
+        let near = bag("name: Linden Court Trust", &vocab);
+        let far = bag("name: Elm Row", &vocab);
+        assert!(cosine_similarity(&q, &near) > cosine_similarity(&q, &far));
+        assert_eq!(cosine_similarity(&q, &far), 0.0);
+    }
+
+    /// With more records than `k`, a statement is offered its `k` nearest
+    /// records by card, nearest first, and never a record sharing nothing with
+    /// it: retrieval bounds the question, every seeded record a candidate.
+    #[test]
+    fn the_nearest_records_are_offered_when_a_type_has_more_than_k() {
+        let names = [
+            "Linden Court Trust",
+            "Elm Row Joinery",
+            "Maple Lane Mill",
+            "Hazel Yard Works",
+            "Rowan Quay Stores",
+            "Aspen Gate Supply",
+            "Cedar Hill Timber",
+            "Willow Bank Crafts",
+            "Birch Hall Trust",
+            "Alder Court Joinery",
+            "Larch Moor Sawmill",
+            "Holly Row Market",
+        ];
+        let vocab: Vec<String> = names
+            .iter()
+            .flat_map(|n| n.split_whitespace())
+            .map(str::to_lowercase)
+            .collect();
+        let vocab: Vec<&str> = vocab.iter().map(String::as_str).collect();
+        let records: Vec<(String, Vec<f32>)> = names
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (format!("c{i}"), bag(&format!("name: {n}"), &vocab)))
+            .collect();
+        let statement = Statement {
+            id: "s1".into(),
+            start: 0,
+            end: 0,
+            keys: Default::default(),
+            read: Default::default(),
+        };
+        let mut statements = HashMap::new();
+        statements.insert(
+            "s1".to_string(),
+            bag("The charity Linden Court Trust rang this afternoon.", &vocab),
+        );
+        let nearest = Nearest::new(3, statements, records);
+        let got = nearest.propose(
+            Document {
+                id: "d1",
+                title: None,
+                body: "",
+                stamps: &[],
+            },
+            &[statement],
+        );
+        let offered: Vec<&str> = got.iter().map(|p| p.record.as_str()).collect();
+        assert_eq!(offered.len(), 3, "{offered:?}");
+        assert_eq!(offered[0], "c0", "Linden Court Trust is nearest: {offered:?}");
+        assert!(
+            !offered.contains(&"c2"),
+            "a record sharing no word was offered: {offered:?}"
+        );
+        assert!(got.iter().all(|p| p.nearness() > 0.0));
     }
 }
