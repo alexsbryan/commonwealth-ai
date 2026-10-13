@@ -20,6 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::Value;
 use tracing::{debug, info};
 
+use super::outcome::write_fold;
 use super::{
     decide, fold_identity_value, DeriveStage, DerivedOutcome, DerivedReport, DerivedTally,
     DerivedValue, Graph, Node, Participants, SectionDocuments, UnresolvedReading,
@@ -65,6 +66,8 @@ struct Folded {
     excluded: BTreeSet<String>,
     unjudged: BTreeSet<String>,
     unresolved: Vec<UnresolvedReading>,
+    /// Each reading folded, cited (`write_fold`).
+    readings: Vec<Value>,
 }
 
 /// The one record of type `of` that document `doc`'s fields name and whose
@@ -178,6 +181,7 @@ pub(super) fn derive(
                 let mut excluded: BTreeSet<String> = BTreeSet::new();
                 let mut unjudged: BTreeSet<String> = BTreeSet::new();
                 let mut unresolved: Vec<UnresolvedReading> = Vec::new();
+                let mut readings: Vec<Value> = Vec::new();
                 for &j in graph.about.get(record).into_iter().flatten() {
                     let claim = &graph.claims[j];
                     let Some(carrier) = claim.attributes.get(SUBJECT_FIELDS_ATTRIBUTE) else {
@@ -197,6 +201,7 @@ pub(super) fn derive(
                         continue;
                     };
                     let doc = graph.claim_doc[j];
+                    let cited = evidence.clone();
                     let (key, value) = match of.map(|of| record_read(&graph, doc, of, &value)) {
                         None => (words(&value), value),
                         Some(Ok(i)) => {
@@ -235,6 +240,12 @@ pub(super) fn derive(
                     read.entry(key.clone())
                         .or_default()
                         .insert(doc.map(str::to_string));
+                    readings.push(serde_json::json!({
+                        "value": value,
+                        "claim": claim.id.as_str(),
+                        "document": doc,
+                        "evidence": cited,
+                    }));
                     values.insert(key, value);
                 }
                 let outcome = decide(by, &[read], &graph.clock);
@@ -254,6 +265,7 @@ pub(super) fn derive(
                     excluded,
                     unjudged,
                     unresolved,
+                    readings,
                 });
             }
         }
@@ -265,6 +277,7 @@ pub(super) fn derive(
             excluded,
             unjudged,
             unresolved,
+            readings,
         } in decided
         {
             let attributes = match atoms.entities.iter_mut().find(|e| e.id.as_str() == record) {
@@ -278,6 +291,7 @@ pub(super) fn derive(
             if let Some(value) = value {
                 attributes.insert(attr.to_string(), value);
             }
+            write_fold(attributes, attr, &outcome, Some(readings), &unresolved);
             let replaced = previous.filter(|p| attributes.get(attr) != Some(p));
             tally.atoms += 1;
             *tally.outcomes.entry(outcome.label()).or_default() += 1;

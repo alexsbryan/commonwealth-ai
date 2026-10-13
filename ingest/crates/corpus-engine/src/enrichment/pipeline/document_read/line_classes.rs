@@ -71,7 +71,8 @@ impl LineClass {
 #[derive(Debug, Default)]
 struct Layout {
     body_start: usize,
-    segments: Vec<(usize, usize)>,
+    /// Each embedded message: (start, where its own header block ends, end).
+    segments: Vec<(usize, usize, usize)>,
 }
 
 impl Layout {
@@ -110,14 +111,20 @@ impl Layout {
             else {
                 return Err("a segment without its offsets");
             };
+            // No header end stated: the segment has no header block of its own.
+            let header_end = match s.get("header_end") {
+                None => start,
+                Some(v) => at(v).ok_or("a segment's header_end is not an offset")?,
+            };
             if start >= end
                 || end > text.len()
+                || !(start..=end).contains(&header_end)
                 || !text.is_char_boundary(start)
                 || !text.is_char_boundary(end)
             {
                 return Err("a segment outside its text");
             }
-            segments.push((start, end));
+            segments.push((start, header_end, end));
         }
         Ok(Some(Self {
             body_start,
@@ -125,14 +132,15 @@ impl Layout {
         }))
     }
 
+    /// A line's class by where it starts: the document's header block or an
+    /// embedded message's is a header line; the rest of an embedded message
+    /// is embedded.
     fn class(&self, line_start: usize) -> Option<LineClass> {
-        if line_start < self.body_start {
+        let in_header = |&(s, h, _): &(usize, usize, usize)| (s..h).contains(&line_start);
+        let in_segment = |&(s, _, e): &(usize, usize, usize)| (s..e).contains(&line_start);
+        if line_start < self.body_start || self.segments.iter().any(in_header) {
             Some(LineClass::Field)
-        } else if self
-            .segments
-            .iter()
-            .any(|&(s, e)| (s..e).contains(&line_start))
-        {
+        } else if self.segments.iter().any(in_segment) {
             Some(LineClass::Embedded)
         } else {
             None

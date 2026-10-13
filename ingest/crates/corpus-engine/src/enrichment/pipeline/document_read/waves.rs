@@ -31,7 +31,7 @@ use super::about::{self, About, Count, Particular};
 use super::act::{self, Reading};
 use super::ask::opening;
 use super::folded::Folded;
-use super::line_classes::LineClasses;
+use super::line_classes::{LineClass, LineClasses};
 use super::mention::{self, Mention};
 use super::passes::{lines, mentioned, numbered, FieldPlan, Line, Plan};
 use super::waves_forms::{self as forms, Target, Who};
@@ -187,10 +187,12 @@ async fn read_document(
     }
     let facts = prefill::facts(document, policies);
     let mut asked_mask = vec![true; lines.len()];
+    let mut headers = vec![false; lines.len()];
     for (i, carried) in classes.classes(&id, &raw, &lines).into_iter().enumerate() {
         if let Some(carried) = carried {
             debug!(document = %id, line = lines[i].n, class = carried.class.label(), from = carried.from, "document_read/waves: line not asked");
             asked_mask[i] = false;
+            headers[i] = carried.class == LineClass::Field;
         }
     }
     let view = numbered(&raw, &lines);
@@ -475,6 +477,7 @@ async fn read_document(
         document: &id,
         body: &raw,
         lines: &lines,
+        headers: &headers,
         view: &view,
     };
     let mut particulars = about::unstated(

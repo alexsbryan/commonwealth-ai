@@ -210,9 +210,18 @@ async fn state_free_membership_resolves_and_survives_the_production_atlas_writer
     assert!(memberships[1].subject.is_none());
     for claim in &memberships {
         assert_eq!(
-            claim.attributes.keys().collect::<Vec<_>>(),
+            claim
+                .attributes
+                .keys()
+                .filter(|k| k.as_str() != super::RESOLVE_LINK_ATTRIBUTE)
+                .collect::<Vec<_>>(),
             [SUBJECT_FIELDS_ATTRIBUTE],
             "membership is state-free; it keeps only its subject's readings"
+        );
+        assert_eq!(
+            claim.attributes.contains_key(super::RESOLVE_LINK_ATTRIBUTE),
+            claim.subject.is_some(),
+            "a placed statement says how its subject was decided, and only a placed one"
         );
         assert_eq!(
             claim.evidence[0].source_doc_id.as_deref(),
@@ -256,10 +265,15 @@ async fn state_free_membership_resolves_and_survives_the_production_atlas_writer
         })
         .collect();
     assert_eq!(written_claims.len(), 3);
-    // The writer keeps each one's subject readings, cited.
+    // The writer keeps each one's subject readings, cited, and how a placed
+    // one's subject was decided.
     for claim in &written_claims {
         assert_eq!(
-            claim.attributes.keys().collect::<Vec<_>>(),
+            claim
+                .attributes
+                .keys()
+                .filter(|k| k.as_str() != super::RESOLVE_LINK_ATTRIBUTE)
+                .collect::<Vec<_>>(),
             [SUBJECT_FIELDS_ATTRIBUTE]
         );
         let number = &claim.attributes[SUBJECT_FIELDS_ATTRIBUTE]["number"];

@@ -95,6 +95,11 @@ pub(super) struct Doc<'a> {
     pub(super) document: &'a str,
     pub(super) body: &'a str,
     pub(super) lines: &'a [Line],
+    /// Per line, whether it is a header line (`LineClass::Field`): shown in
+    /// the view, never offered as where a particular is named, since what a
+    /// header states is declared and its records are the source's. Empty, or
+    /// shorter than `lines`, when no header line is known past its end.
+    pub(super) headers: &'a [bool],
     /// The document with its lines numbered (`passes::numbered`).
     pub(super) view: &'a str,
 }
@@ -301,7 +306,14 @@ async fn next(
     let k = found.len() + 1;
     let item = format!("{} {k}", of.name);
     let mut chosen = None;
-    for window in d.lines.chunks(LABELS.len()) {
+    let nameable: Vec<Line> = d
+        .lines
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| !d.headers.get(*i).copied().unwrap_or(false))
+        .map(|(_, l)| l.clone())
+        .collect();
+    for window in nameable.chunks(LABELS.len()) {
         let labels: Vec<&str> = LABELS[..window.len()]
             .iter()
             .copied()

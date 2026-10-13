@@ -382,6 +382,7 @@ async fn read_document(
     let mut calls = 0u32;
     let mut classed: BTreeMap<LineClass, usize> = BTreeMap::new();
     let mut asked_lines = vec![true; lines.len()];
+    let mut headers = vec![false; lines.len()];
     let mut asking: Vec<usize> = Vec::with_capacity(lines.len());
     for (i, (line, carried)) in lines
         .iter()
@@ -393,6 +394,7 @@ async fn read_document(
             debug!(document = %id, line = line.n, class = carried.class.label(), from = carried.from, text = %excerpt(text), "document_read/passes: line not asked");
             *classed.entry(carried.class).or_default() += 1;
             asked_lines[line.n - 1] = false;
+            headers[i] = carried.class == LineClass::Field;
             continue;
         }
         asking.push(i);
@@ -419,6 +421,7 @@ async fn read_document(
         document: &id,
         body: &raw,
         lines: &lines,
+        headers: &headers,
         view: &view,
     };
     let abouts = about::about(&doc, &plan.decided, &mut calls).await;

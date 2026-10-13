@@ -48,6 +48,20 @@ async fn no_question_asks_a_header_line() {
     assert!(!asked.is_empty(), "no line was asked");
     let headers: Vec<&&str> = asked.iter().filter(|l| is_header_line(l)).collect();
     assert!(headers.is_empty(), "header lines were asked: {headers:?}");
+    // Nor is one offered as where a particular is first named (About).
+    let offered: Vec<&str> = run
+        .prompts
+        .iter()
+        .filter(|p| p.user.contains("first named or described?"))
+        .flat_map(|p| p.user.lines())
+        .filter_map(|l| l.split_once(" line ").and_then(|(_, r)| r.split_once(": ")))
+        .map(|(_, text)| text)
+        .filter(|text| is_header_line(text))
+        .collect();
+    assert!(
+        offered.is_empty(),
+        "About offered header lines: {offered:?}"
+    );
 }
 
 /// A forwarded message that is not in the corpus is no statement of the

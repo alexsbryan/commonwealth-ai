@@ -404,6 +404,7 @@ async fn about_deals(infer: &InferenceFn) -> (About, u32) {
         document: "doc-1",
         body: DEALS,
         lines: &lines,
+        headers: &[],
         view: &view,
     };
     let mut calls = 0;

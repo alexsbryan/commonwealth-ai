@@ -668,7 +668,8 @@ question the pipeline asks about a type is a method on the resolved
   another's answer. About (`about.rs`) asks, per document and per subject type
   RESOLVE decides (`resolution_records::decides`), whether the document is
   about none, one or more than one, points at where each particular is first
-  named (a line, then its words; at most five), and with several asks each
+  named (a line, then its words; at most five; never a header line, of the
+  document or of an embedded message, `Doc::headers`), and with several asks each
   statement of the type which it is about; a statement's local reference is its
   particular's (`l{line}:{words}`), so `local_subjects.rs` joins one
   particular's statements, and the particular's identifying fields are read
@@ -849,12 +850,18 @@ question the pipeline asks about a type is a method on the resolved
   statement, and each claim's subject its statement's record. 3b leaves such a
   subject unresolved, and the type's atoms 3a merged from Phase-1 sketches are
   retired with every reference to them, dropped and recorded, never repointed.
-  Decisions land in `atlas/resolve_decisions.jsonl`. Around it run the declared
+  Decisions land in `atlas/resolve_decisions.jsonl`, and each placed claim keeps
+  how its subject was decided under `__resolve_link` (`resolve_link`: key,
+  chosen or opened, with the model's uncalibrated choice scores for the decided
+  record, the best other candidate and none). Around it run the declared
   derived attributes (`enrichment/atlas/resolution_derived.rs`; ONTOLOGY_PRIMITIVES
   §8): paths over `subject`, `document`, source fields (the `Participants` the
   source projection records) and refs, filtered by sets, combined by a fold from a
   closed registry; claim attributes before RESOLVE, a decided type's after, each
-  outcome typed in `atlas/derived_decisions.jsonl`. A decided type's read field
+  outcome typed in `atlas/derived_decisions.jsonl` and kept on the atom itself
+  under `__folds` (`outcome::write_fold`: every outcome, decided or not, with the
+  readings it folded, each cited by statement, document and words; a
+  non-decided outcome leaves the attribute unset, so no filter matches it). A decided type's read field
   that declares `by` is folded onto each record first, over what its statements
   read of it, by the same decider (`resolution_derived/read_fields.rs`, entity
   and event records alike); a `ref` reading counts as the record of the

@@ -34,8 +34,8 @@ use super::resolve_records::propose::{
     Proposers, SimilarDocuments, MAX_CANDIDATES, MIN_SIMILARITY, NEIGHBOURS,
 };
 use super::resolve_records::{
-    resolve_in_clock_order, Answerer, Criterion, Document, DocumentResolution, ProposalRule,
-    Resolver, Statement,
+    resolve_in_clock_order, Answerer, Choice, Criterion, Document, DocumentResolution,
+    ProposalRule, Resolver, Statement,
 };
 use crate::enrichment::ontology::{
     DocumentStamp, OntologyPolicies, OntologyTypeDecl, SourceDecl, TypeIndex, TypeKind,
@@ -577,6 +577,7 @@ async fn resolve_type(
     }
     let mut record_of: HashMap<String, String> = HashMap::new();
     let mut refused: HashMap<String, &'static str> = HashMap::new();
+    let mut links: HashMap<String, (&'static str, Option<Choice>)> = HashMap::new();
     let mut documents: Vec<(Document<'_>, &[Statement])> = placed
         .iter()
         .map(|p| {
@@ -610,6 +611,7 @@ async fn resolve_type(
                     report.settled += 1;
                 }
                 *report.outcomes.entry(o.outcome.label()).or_default() += 1;
+                links.insert(o.statement.clone(), (o.outcome.label(), o.choice.clone()));
                 match o.outcome.record() {
                     Some(rec) => {
                         refused.remove(&o.statement);
@@ -704,6 +706,18 @@ async fn resolve_type(
             .get(&id)
             .and_then(|r| atom_of.get(r.as_str()))
             .cloned();
+        match (record_of.get(&id), links.get(&id)) {
+            (Some(record), Some((how, choice))) => {
+                claim.attributes.insert(
+                    RESOLVE_LINK_ATTRIBUTE.to_string(),
+                    resolve_link(how, choice.as_ref(), record, &atom_of),
+                );
+            }
+            (Some(_), None) => {
+                debug!(statement = %id, "atlas/resolve: a placed statement with no outcome recorded; no link is written for it");
+            }
+            _ => {}
+        }
         if claim.subject.is_none() {
             let label = refused.get(&id).copied().unwrap_or("undecided");
             failures.push(failure(
@@ -717,6 +731,48 @@ async fn resolve_type(
         }
     }
     report
+}
+
+/// The claim attribute that keeps how RESOLVE decided the claim's subject
+/// (`resolve_link`). Reserved: the query grammar never offers it.
+pub const RESOLVE_LINK_ATTRIBUTE: &str = "__resolve_link";
+
+/// How a statement's subject was decided: by key, by the model's choice, or
+/// opened; and, when a forced choice was asked, the model's choice scores
+/// over what it was shown: the decided record's (none's, for a record the
+/// statement opened), the best other candidate's, and none's. They are the
+/// model's uncalibrated distribution over the candidates of that one
+/// question, kept for inspection; no code reads them as the chance a link is
+/// right.
+fn resolve_link(
+    how: &str,
+    choice: Option<&Choice>,
+    record: &str,
+    atom_of: &HashMap<&str, AtomId>,
+) -> Value {
+    let mut link = serde_json::json!({ "decided_by": how });
+    let Some(c) = choice else {
+        return link;
+    };
+    let chosen = c
+        .candidates
+        .iter()
+        .find(|(id, _)| id == record)
+        .map_or(c.none, |(_, p)| *p);
+    link["choice_score"] = serde_json::json!(chosen);
+    link["none_score"] = serde_json::json!(c.none);
+    if let Some((id, p)) = c
+        .candidates
+        .iter()
+        .filter(|(id, _)| id != record)
+        .max_by(|a, b| a.1.total_cmp(&b.1))
+    {
+        link["runner_up"] = serde_json::json!({
+            "record": atom_of.get(id.as_str()).map(|a| a.as_str()),
+            "score": p,
+        });
+    }
+    link
 }
 
 fn unplaced(

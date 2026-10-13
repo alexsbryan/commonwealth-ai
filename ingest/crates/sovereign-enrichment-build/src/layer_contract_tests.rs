@@ -46,6 +46,8 @@ mod mailraw;
 mod protocol;
 #[path = "layer_contract_tests/reader.rs"]
 mod reader;
+#[path = "layer_contract_tests/records.rs"]
+mod records;
 
 const SHAPES: [&str; 3] = ["mail", "issues", "news"];
 

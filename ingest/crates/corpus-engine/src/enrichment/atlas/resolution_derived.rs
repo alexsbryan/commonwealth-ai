@@ -42,8 +42,8 @@ mod protocol_support;
 mod read_fields;
 
 pub use outcome::{
-    DeriveStage, DerivedOutcome, DerivedProtocolAudit, DerivedReport, DerivedTally, DerivedValue,
-    UnresolvedReading,
+    protocol_readings, write_fold, DeriveStage, DerivedOutcome, DerivedProtocolAudit,
+    DerivedReport, DerivedTally, DerivedValue, UnresolvedReading, FOLDS_ATTRIBUTE,
 };
 
 /// Whether `policies` derive anything in the atlas build: a declared path or
@@ -134,6 +134,8 @@ pub fn derive_attributes(
                 };
                 attributes.insert(attr.to_string(), value);
             }
+            let readings = protocol.as_ref().map(protocol_readings);
+            write_fold(attributes, attr, &outcome, readings, &[]);
             let replaced = previous.filter(|p| attributes.get(attr) != Some(p));
             tally.atoms += 1;
             *tally.outcomes.entry(outcome.label()).or_default() += 1;

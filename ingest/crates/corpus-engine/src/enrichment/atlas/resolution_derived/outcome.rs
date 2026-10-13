@@ -5,7 +5,62 @@
 use std::collections::BTreeMap;
 
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{json, Map, Value};
+
+/// The record attribute that keeps, per folded attribute, how it was folded
+/// (`write_fold`). Reserved: the query grammar offers declared attributes
+/// only, so no query reads or filters it.
+pub const FOLDS_ATTRIBUTE: &str = "__folds";
+
+/// Keep `outcome` on the record beside `attr`, decided or not, with the
+/// readings it folded, each cited by its statement, document and words: a
+/// decided value a reader can trace to what was said, and a tie, conflict,
+/// ambiguous or pending outcome as itself while the attribute stays unset, so
+/// no filter matches a value nobody decided. `readings` is `None` for a fold
+/// that does not track them (a path fold over fields): the record then holds
+/// no `readings` at all, never an empty list that would say nothing was read.
+pub fn write_fold(
+    attributes: &mut Map<String, Value>,
+    attr: &str,
+    outcome: &DerivedOutcome,
+    readings: Option<Vec<Value>>,
+    unresolved: &[UnresolvedReading],
+) {
+    let mut fold = serde_json::to_value(outcome).expect("a derived outcome is plain data");
+    if let Some(readings) = readings {
+        fold["readings"] = Value::Array(readings);
+    }
+    if !unresolved.is_empty() {
+        fold["unresolved"] =
+            serde_json::to_value(unresolved).expect("an unresolved reading is plain data");
+    }
+    if let Value::Object(folds) = attributes
+        .entry(FOLDS_ATTRIBUTE)
+        .or_insert_with(|| Value::Object(Map::new()))
+    {
+        folds.insert(attr.to_string(), fold);
+    }
+}
+
+/// A protocol fold's readings: each claim its history reached, with the
+/// state it read, its report time, what became of it, and the passage the
+/// claim cites.
+pub fn protocol_readings(audit: &DerivedProtocolAudit) -> Vec<Value> {
+    audit
+        .history
+        .iter()
+        .map(|h| {
+            json!({
+                "value": h["state"],
+                "claim": h["claim"],
+                "document": h["document"],
+                "date": h["report_time"],
+                "disposition": h["disposition"],
+                "evidence": h["citation"][0]["passage_preview"],
+            })
+        })
+        .collect()
+}
 
 /// Which side of RESOLVE a derivation runs on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
