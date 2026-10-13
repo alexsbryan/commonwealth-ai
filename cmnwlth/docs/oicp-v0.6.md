@@ -118,12 +118,22 @@ The reference host serves `fast` wherever `verify` is mounted, and `checker`
 only on the listener that holds its daemon's inference; elsewhere `checker`
 claims are `could_not_judge: no checker`.
 
+A checker call the host's model queue refuses for its predicted wait is
+backpressure, not a verdict: the host answers the whole unit `503` with a
+`Retry-After` header and the body every shed carries (`{"error": {"message":
+"host busy: …", "type": "server_error", "code": "local_queue_full"},
+"reason": "local_queue_full", "retry_after_secs": N}`), stops judging the
+unit, and keeps nothing of it in the journal (§2.10). The client retries the
+unit after `retry_after_secs`. `checker did not answer` is kept for a checker
+that was asked and failed.
+
 ### 2.7 Named refusals and reasons (additions)
 
 | reason | status | when |
 |---|---|---|
 | `empty unit` | 400 | the unit is empty or whitespace |
 | `tier not offered` | 422 | the requested tier is not in `verify_tiers` |
+| `local_queue_full` | 503 | the checker's model queue shed a call; the body is the shed body, with `Retry-After` (§2.6) |
 | `no checker` | — | a verdict's reason: the tier needs a model this listener does not hold |
 | `checker did not answer` | — | a verdict's reason: the checker gave no verdict on any passage |
 | `no corpus read` | — | a verdict's reason: no requested corpus could be read |

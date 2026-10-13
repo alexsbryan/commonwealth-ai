@@ -21,12 +21,18 @@
 //! search's hits share); a passage that is not an exact slice says so instead
 //! of carrying a range. Every operating point is `uncalibrated` until the
 //! bench has measured a cell.
+//!
+//! A checker call the host's model queue sheds is backpressure, not a claim
+//! the checker could not judge: the unit is answered `503` with `Retry-After`
+//! and the shed body every route uses (`admission::local_queue_shed_response`),
+//! judging stops at the first shed, and nothing of the unit is journaled.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::extract::{Extension, State};
 use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use axum::Json;
 use corpus_index::index::CorpusIndex;
 use kernel_types::Sha256Hash;
@@ -40,7 +46,7 @@ use sovereign_contracts::principal::AttachedPrincipal;
 use sovereign_contracts::types::SpecificsTally;
 use sovereign_core::oicp::ShardingPrivacy;
 use sovereign_core::runtime::{
-    claim_chunk_support, sentence_ranges, sentence_specifics, value_present_in_chunks,
+    claim_chunk_support_checked, sentence_ranges, sentence_specifics, value_present_in_chunks,
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::Speed;
@@ -77,7 +83,7 @@ const RUNG_CHECKER: &str = "checker/chunk-support";
 #[derive(Clone)]
 pub struct VerifyJudge(pub Arc<dyn InferenceProvider>);
 
-type Refusal = (StatusCode, Json<ErrorBody>);
+type Refusal = Response;
 
 fn refuse(status: StatusCode, error: impl Into<String>) -> Refusal {
     (
@@ -86,6 +92,15 @@ fn refuse(status: StatusCode, error: impl Into<String>) -> Refusal {
             error: error.into(),
         }),
     )
+        .into_response()
+}
+
+/// A checker call the model queue refused before parking it
+/// (`Error::QueueShed`), with the numbers the shed response carries.
+struct Shed {
+    position: u32,
+    predicted_wait_ms: u64,
+    retry_after_secs: u64,
 }
 
 /// One passage lexical search returned.
@@ -159,13 +174,31 @@ pub async fn verify(
     let mut texts = TextCache::default();
     let context = req.effective_span_context() as usize;
     let mut claims = Vec::new();
+    let mut kept = Vec::new();
     for range in sentence_ranges(&req.unit) {
         // `range` is one of `sentence_ranges(&req.unit)`, so it is in range.
         let exact = code_point_slice(&req.unit, range.clone())
             .unwrap_or_default()
             .to_string();
         let judged_at = std::time::Instant::now();
-        let judged = judge_claim(&exact, req.tier, &open, inference.as_ref()).await;
+        let judged = match judge_claim(&exact, req.tier, &open, inference.as_ref()).await {
+            Ok(judged) => judged,
+            Err(shed) => {
+                tracing::info!(
+                    claims_judged = claims.len(),
+                    queue_position = shed.position,
+                    predicted_wait_ms = shed.predicted_wait_ms,
+                    retry_after_secs = shed.retry_after_secs,
+                    elapsed_ms = started.elapsed().as_millis() as u64,
+                    "oicp verify: checker shed, answered host busy"
+                );
+                return Err(crate::admission::local_queue_shed_response(
+                    shed.position,
+                    shed.predicted_wait_ms,
+                    shed.retry_after_secs,
+                ));
+            }
+        };
         let judged_ms = judged_at.elapsed().as_millis() as u64;
         let refs: Vec<(String, Option<u64>)> = judged
             .evidence
@@ -173,14 +206,9 @@ pub async fn verify(
             .map(|(p, _, _)| (p.corpus_id.clone(), p.chunk_id))
             .collect();
         let tally = judged.tally;
-        let mut claim = judged
+        let claim = judged
             .into_wire(range, exact, &open, &mut texts, context)
             .await;
-        if let Some(Extension(VerifyJournal(dir))) = &journal {
-            claim.episode_id = crate::routes_oicp_verify_journal::record_claim(
-                dir, &claim, &refs, tally, judged_ms,
-            );
-        }
         tracing::debug!(
             claim = %claim.exact,
             verdict = ?claim.verdict,
@@ -190,6 +218,15 @@ pub async fn verify(
             "oicp verify: claim judged"
         );
         claims.push(claim);
+        kept.push((refs, tally, judged_ms));
+    }
+    // Journaled once every claim is judged: a unit answered `503` keeps nothing.
+    if let Some(Extension(VerifyJournal(dir))) = &journal {
+        for (claim, (refs, tally, judged_ms)) in claims.iter_mut().zip(kept) {
+            claim.episode_id = crate::routes_oicp_verify_journal::record_claim(
+                dir, claim, &refs, tally, judged_ms,
+            );
+        }
     }
     tracing::info!(
         tier = req.tier.as_str(),
@@ -293,10 +330,10 @@ async fn judge_claim(
     tier: VerifyTier,
     open: &[(String, CorpusIndex)],
     inference: Option<&Arc<dyn InferenceProvider>>,
-) -> Judged {
+) -> Result<Judged, Shed> {
     let specifics = sentence_specifics(claim);
     if specifics.is_empty() {
-        return Judged {
+        return Ok(Judged {
             class: Checkability::NotCheckable,
             verdict: VerifyVerdict::Abstained,
             rung: RUNG_CLASS,
@@ -304,23 +341,27 @@ async fn judge_claim(
             specifics_absent: Vec::new(),
             evidence: Vec::new(),
             tally: None,
-        };
+        });
     }
     let checkable = Checkability::Checkable;
     if open.is_empty() {
-        return Judged::could_not(checkable, RUNG_CLASS, reasons::NO_CORPUS_READ);
+        return Ok(Judged::could_not(
+            checkable,
+            RUNG_CLASS,
+            reasons::NO_CORPUS_READ,
+        ));
     }
-    match tier {
+    Ok(match tier {
         VerifyTier::Fast => {
             let shown = match candidates(open, claim, CANDIDATES_K).await {
                 Ok(p) => p,
-                Err(e) => return Judged::could_not(checkable, RUNG_FAST, e),
+                Err(e) => return Ok(Judged::could_not(checkable, RUNG_FAST, e)),
             };
             let mut read: Vec<String> = shown.iter().map(|p| p.content.clone()).collect();
             for s in &specifics {
                 match candidates(open, &s.text, CANDIDATES_K).await {
                     Ok(p) => read.extend(p.into_iter().map(|p| p.content)),
-                    Err(e) => return Judged::could_not(checkable, RUNG_FAST, e),
+                    Err(e) => return Ok(Judged::could_not(checkable, RUNG_FAST, e)),
                 }
             }
             let absent: Vec<String> = specifics
@@ -359,11 +400,15 @@ async fn judge_claim(
         }
         VerifyTier::Checker => {
             let Some(inference) = inference else {
-                return Judged::could_not(checkable, RUNG_CHECKER, reasons::NO_CHECKER);
+                return Ok(Judged::could_not(
+                    checkable,
+                    RUNG_CHECKER,
+                    reasons::NO_CHECKER,
+                ));
             };
             let mut shown = match candidates(open, claim, CANDIDATES_K).await {
                 Ok(p) => p,
-                Err(e) => return Judged::could_not(checkable, RUNG_CHECKER, e),
+                Err(e) => return Ok(Judged::could_not(checkable, RUNG_CHECKER, e)),
             };
             shown.truncate(CHECKER_PASSAGES);
             let read: Vec<String> = shown.iter().map(|p| p.content.clone()).collect();
@@ -374,26 +419,48 @@ async fn judge_claim(
                     .filter(|s| !value_present_in_chunks(&s.text, &read))
                     .count() as u32,
             };
-            let mut judged = judge_with_checker(claim, shown, inference).await;
+            let mut judged = judge_with_checker(claim, shown, inference).await?;
             judged.tally = Some(tally);
             judged
         }
         VerifyTier::Judge => Judged::could_not(checkable, RUNG_CLASS, reasons::TIER_NOT_OFFERED),
-    }
+    })
 }
 
-/// The checker over each passage in turn, stopping at a clear support.
+/// The checker over each passage in turn, stopping at a clear support, or at
+/// a shed: the passages after it would only queue behind the refusal.
 async fn judge_with_checker(
     claim: &str,
     shown: Vec<Passage>,
     inference: &Arc<dyn InferenceProvider>,
-) -> Judged {
+) -> Result<Judged, Shed> {
     let mut evidence = Vec::new();
     let mut best: Option<f64> = None;
     let mut answered = 0usize;
     for p in shown {
-        let support =
-            claim_chunk_support(inference, &p.content, claim, ShardingPrivacy::LocalOnly).await;
+        let support = match claim_chunk_support_checked(
+            inference,
+            &p.content,
+            claim,
+            ShardingPrivacy::LocalOnly,
+        )
+        .await
+        {
+            Ok(support) => support,
+            Err(sovereign_core::error::Error::QueueShed {
+                position,
+                predicted_wait_ms,
+                retry_after_secs,
+            }) => {
+                return Err(Shed {
+                    position,
+                    predicted_wait_ms,
+                    retry_after_secs,
+                })
+            }
+            // Logged where it failed (`forced-choice pass failed`).
+            Err(_) => None,
+        };
         let verdict = match support {
             Some(s) if s >= SUPPORTED_TAU => VerifyVerdict::Supported,
             Some(_) => VerifyVerdict::Unsupported,
@@ -425,7 +492,7 @@ async fn judge_with_checker(
         best,
         "oicp verify: checker tier"
     );
-    Judged {
+    Ok(Judged {
         class: Checkability::Checkable,
         verdict,
         rung: RUNG_CHECKER,
@@ -433,7 +500,7 @@ async fn judge_with_checker(
         specifics_absent: Vec::new(),
         evidence,
         tally: None,
-    }
+    })
 }
 
 /// Text names and stored texts read once per request, each with the reason

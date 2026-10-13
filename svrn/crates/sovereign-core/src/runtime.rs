@@ -155,7 +155,7 @@ pub use grounding::extract_claim_list;
 
 /// Per-chunk support probe in the gate's exact register — the bench
 /// faithfulness lane's verdict primitive (see grounding/mod.rs docs).
-pub use grounding::claim_chunk_support;
+pub use grounding::{claim_chunk_support, claim_chunk_support_checked};
 // The judge-replay harness's seams (`svrn bench judge-replay`): the joint
 // per-claim register, its renderer, its system-turn fingerprint, and the
 // specifics scan — pure delegations to the one production implementation,

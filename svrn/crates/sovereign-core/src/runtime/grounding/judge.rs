@@ -149,6 +149,30 @@ pub async fn forced_choice_ab(
     routing: JudgeRouting<'_>,
     call: impl Into<JudgeCall>,
 ) -> Option<(f64, f64)> {
+    forced_choice_ab_checked(
+        inference,
+        system_message,
+        prompt,
+        stable_prefix_len,
+        routing,
+        call,
+    )
+    .await
+    .ok()
+    .flatten()
+}
+
+/// [`forced_choice_ab`] with the call's error kept: `Ok(None)` is a reply that
+/// did not parse. `POST /oicp/v1/verify` needs it to tell a queue shed, which
+/// it answers `503` with the retry hint, from a judge that failed.
+pub(super) async fn forced_choice_ab_checked(
+    inference: &dyn InferenceProvider,
+    system_message: &str,
+    prompt: &str,
+    stable_prefix_len: Option<usize>,
+    routing: JudgeRouting<'_>,
+    call: impl Into<JudgeCall>,
+) -> crate::error::Result<Option<(f64, f64)>> {
     let req = CompletionRequest {
         prompt: prompt.to_string(),
         stable_prefix_len,
@@ -174,17 +198,16 @@ pub async fn forced_choice_ab(
         ..Default::default()
     };
     match gate_call(inference, &req, call).await {
-        Ok(resp) => {
-            let m = oicp_types::forced_choice::parse(&resp.text)?;
-            Some((
+        Ok(resp) => Ok(oicp_types::forced_choice::parse(&resp.text).map(|m| {
+            (
                 m.get("A").copied().unwrap_or(0.0),
                 m.get("B").copied().unwrap_or(0.0),
-            ))
-        }
+            )
+        })),
         Err(e) => {
             tracing::warn!(target: "grounding_gate", error = %e, "forced-choice pass failed");
             dbg(&format!("forced-choice failed: {e}"));
-            None
+            Err(e)
         }
     }
 }
@@ -630,8 +653,22 @@ pub(super) async fn claim_chunk_support(
     claim: &str,
     posture: ShardingPrivacy,
 ) -> Option<f64> {
+    claim_chunk_support_checked(inference, passage, claim, posture)
+        .await
+        .ok()
+        .flatten()
+}
+
+/// [`claim_chunk_support`] with the call's error kept (see
+/// [`forced_choice_ab_checked`]); `Ok(None)` is a reply that did not parse.
+pub(super) async fn claim_chunk_support_checked(
+    inference: &dyn InferenceProvider,
+    passage: &str,
+    claim: &str,
+    posture: ShardingPrivacy,
+) -> crate::error::Result<Option<f64>> {
     let prompt = chunk_judge_prompt(passage, claim);
-    let (a, b) = forced_choice_ab(
+    let ab = forced_choice_ab_checked(
         inference,
         CHUNK_JUDGE_SYSTEM,
         &prompt,
@@ -640,8 +677,14 @@ pub(super) async fn claim_chunk_support(
         GateCallMechanism::ChunkJudge,
     )
     .await?;
-    let denom = a + b;
-    Some(if denom > 0.0 { a / denom } else { 0.0 })
+    Ok(ab.map(|(a, b)| {
+        let denom = a + b;
+        if denom > 0.0 {
+            a / denom
+        } else {
+            0.0
+        }
+    }))
 }
 
 /// Extract up to 4 specific, checkable factual claims from a

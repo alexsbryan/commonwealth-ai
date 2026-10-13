@@ -132,9 +132,10 @@ pub(crate) use repair::{
     verification_note, FailedClaim,
 };
 pub use replay::{
-    claim_chunk_support, extract_claim_list, replay_claim_violation_joint,
-    replay_claims_support_batched, replay_judge_system_turn, replay_render_batched_claims_prompt,
-    replay_render_claim_prompt, replay_scan_unsupported_specifics,
+    claim_chunk_support, claim_chunk_support_checked, extract_claim_list,
+    replay_claim_violation_joint, replay_claims_support_batched, replay_judge_system_turn,
+    replay_render_batched_claims_prompt, replay_render_claim_prompt,
+    replay_scan_unsupported_specifics,
 };
 // Decline detection keeps its historical `grounding::` paths: the gate
 // modules (`use super::*`), `runtime.rs`'s re-export up, and the moved tests

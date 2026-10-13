@@ -545,3 +545,112 @@ async fn a_judged_claim_is_journaled_by_reference_and_a_correction_names_it() {
         "no journal, no episode"
     );
 }
+
+/// A judge whose model queue is full: every call is shed, as the daemon's
+/// slot queue sheds past its predicted-wait bound, and each call is counted.
+struct ShedJudge(std::sync::atomic::AtomicUsize);
+
+#[async_trait::async_trait]
+impl InferenceProvider for ShedJudge {
+    async fn complete(
+        &self,
+        _r: &CompletionRequest,
+    ) -> sovereign_core::error::Result<CompletionResponse> {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Err(sovereign_core::error::Error::QueueShed {
+            position: 37,
+            predicted_wait_ms: 30_715,
+            retry_after_secs: 31,
+        })
+    }
+
+    async fn complete_stream(
+        &self,
+        _r: &CompletionRequest,
+    ) -> sovereign_core::error::Result<
+        Pin<Box<dyn Stream<Item = sovereign_core::error::Result<String>> + Send>>,
+    > {
+        unimplemented!("the judge never streams")
+    }
+
+    async fn embed(&self, _i: &str) -> sovereign_core::error::Result<Vec<f32>> {
+        unimplemented!("verify reads lexical candidates only")
+    }
+
+    fn capabilities(&self) -> ProviderCapabilities {
+        unimplemented!()
+    }
+
+    fn model_id_for(&self, _speed: sovereign_core::types::Speed) -> String {
+        "shed-judge".into()
+    }
+}
+
+/// A checker the host's queue sheds is backpressure, not a claim it could not
+/// judge: the unit is answered as every shed is, `503` with `Retry-After` and
+/// the shed body, so a client can come back. The route stops at the first
+/// shed rather than queue the unit's other passages and claims behind it, and
+/// keeps nothing in the journal for a unit it did not answer. Watched
+/// 2026-10-12: zoracite's live S6 demo got 131 of its 176 checker claims back
+/// as `checker did not answer` while the daemon logged each judge call
+/// `host busy … retry after 31s`.
+#[tokio::test]
+async fn a_checker_the_queue_sheds_answers_host_busy_with_its_retry_hint() {
+    use sovereign_daemon::routes_oicp_verify::VerifyJournal;
+
+    let (_tmp, state) = fixture_state().await;
+    let journal = tempfile::tempdir().unwrap();
+    let judge = Arc::new(ShedJudge(Default::default()));
+    let router = client_router(state)
+        .layer(axum::Extension(VerifyJudge(judge.clone())))
+        .layer(axum::Extension(VerifyJournal(journal.path().to_path_buf())));
+    let mut req = Request::post("/oicp/v1/verify")
+        .header("host", "127.0.0.1:9741")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            serde_json::json!({
+                "unit": "Okafor surveyed 14 agreements on the shared gauges. \
+                         The harbour master blamed the tide tables on Tuesday.",
+                "tier": "checker",
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let addr: SocketAddr = "127.0.0.1:55004".parse().unwrap();
+    req.extensions_mut().insert(ConnectInfo(addr));
+    let resp = router.oneshot(req).await.unwrap();
+    let status = resp.status();
+    let retry_after = resp.headers().get("retry-after").cloned();
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap_or_default();
+
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{body}");
+    assert_eq!(
+        retry_after.as_ref().map(|v| v.to_str().unwrap()),
+        Some("31")
+    );
+    assert_eq!(body["reason"], "local_queue_full", "{body}");
+    assert_eq!(body["retry_after_secs"], 31, "{body}");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .is_some_and(|m| m.starts_with("host busy")),
+        "{body}"
+    );
+    assert_eq!(
+        judge.0.load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "the route stops at the first shed"
+    );
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    let kept: Vec<_> = std::fs::read_dir(journal.path())
+        .unwrap()
+        .flatten()
+        .collect();
+    assert!(
+        kept.is_empty(),
+        "nothing journaled for an unanswered unit: {kept:?}"
+    );
+}
