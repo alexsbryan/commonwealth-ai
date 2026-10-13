@@ -18,7 +18,7 @@ id        = "ontology-layer"
 objective = "A user with a first-principles understanding of their domain and competency in the ontology syntax writes one recipe, runs the CLI's default commands, and gets typed, cited records on unlike systems: very similar records whoever wrote the recipe, with no number measured on data and no mechanism switch in it. The test systems (crm-ward mail, uv-support issues, GVC news) are instruments, and nothing is judged on one of them. Supersedes crm-proof's Ward-first ladder; crm-proof's bars stay declared as lagging checks."
 spec      = "svrn/docs/specs/ONTOLOGY_METHOD.md; svrn/docs/specs/ONTOLOGY_PRIMITIVES.md (sections 0, 4, 8); .sovereign/features/ontology-layer/campaign.md"
 declared  = "2026-10-09"
-status    = "open"
+status    = "active"
 # ── REOPENED 2026-10-11 ─────────────────────────────────────────────────────
 #
 # The closure below cited a handoff that did not authorize it: CONVERGE.md:49-59 says demonstrate the objective
