@@ -6,53 +6,83 @@ something works.
 ## Goal
 
 One recipe and the default commands turn a corpus into typed, cited records. It must work on mail and on a novel,
-and scale past 1M tokens. The yardstick is a model that reads the whole corpus at once (the "one-shot"). On five
-generated mail worlds with an answer key it gets 66 of 93 deals right. The worlds are in
-`research/ontology-apps/world/` and the scorer is `score_ward.py`.
+and scale past 1M tokens. The yardstick is a model that reads the whole corpus at once (the "one-shot"). The test
+is five generated mail worlds with an answer key (93 deals; `research/ontology-apps/world/`), scored by
+`score_ward.py`.
+
+## How we develop (operator, 2026-10-13)
+
+- **The system and the model are separate tracks.** Build the system on the fastest model that is reasonably
+  capable; today that is DeepSeek Flash. Once the system works, engineer it down to leaner models.
+- **No one-way doors against small models.**
+  - Every call's prompt and answer fit in 32k tokens, which is the local model's per-request window.
+  - No call's input grows with the size of the corpus.
+  - Nothing depends on a feature only a hosted model has.
+
+  A design that only works by eating context is out, however well it scores.
+- **The writer is not the reader.** MiMo writes the worlds, so it never reads them.
+
+## The race, 2026-10-13 (DeepSeek Flash, one run each, `runs/race/`)
+
+Four architectures were read with the same model and scored by the same scorer. On world-s4 and s1:
+
+| Design | Deals served |
+|---|---|
+| Windows | 28/33 |
+| Cast-first with the key's cast | 22/33 |
+| One-shot | 22/33 |
+| Cast-first with a built cast, notes, and rolling | Behind, or cut short when the DeepSeek balance ran out; not pursued |
+
+"Windows" reads each folder whole, up to about 24k tokens, then one call merges the records across windows.
+
+Windows against the one-shot on all five worlds, and on Ward (real mail):
+
+| | Windows | One-shot |
+|---|---|---|
+| Deals served, 5 worlds | 76/93 (82%) | 66/93 (71%) |
+| Stage updates attached, 5 worlds | 294/328 (90%) | 247/328 (75%) |
+| Ward deals served | 7/14 | 8/14 |
+| Ward updates attached | 18/35 | 13/35 |
+
+Updates attached is better with windows on all six corpora. Served is better on three worlds and one deal worse
+on two.
+
+On world-s4 with the local model, Qwen 35B-A3B with thinking off:
+
+| Run | Deals served | Time |
+|---|---|---|
+| Windows, local | 5/15 | 6 min |
+| Today's pipeline, local | 1/15 | 43 min |
+
+The local model folds a company's deals into one record (four false merges); the pipeline splits them instead.
+Thinking on is being run.
 
 ## What we could be wrong about
 
-The percentages are my estimates, not measurements. Each row says what being wrong would cost, and the cheapest
-check that would tell us.
+The percentages are my estimates, not measurements.
 
 | Belief | How sure | Cost if wrong | Cheapest check |
 |---|---|---|---|
-| The pipeline's narrow passes cap quality, not the model | ~75% (one run each, on Ward's 14 deals) | We redesign when a bigger model was the fix | world-s4: pipeline against the one-shot (running); step 4 |
-| Cast-first is the right architecture | ~40% | Weeks of cast machinery for a design that loses | Race it against three alternatives on the same world (step 2) |
-| The local model is good enough for the winning design | ~50% | Hosted legs or a bigger local model: a product and cost decision | The winner on local against hosted (step 4) |
-| Generated mail ranks designs the way real mail does | ~60% | We tune to MiMo's prose | The top two designs on Ward too; the order must agree (step 2) |
-| What wins on mail wins on a novel | ~50% | Two designs, or a redesign later | A small novella in the race before choosing (step 3) |
-| The ontology syntax can say what a novel needs (relationships, events, themes) | ~60% | A gap in the core, bigger than any architecture choice | Write the novel's recipe and run `recipe validate`, before generating anything (an hour) |
-| The winner at 50k tokens holds at 1M | ~50% for any one design | The 50k winner collapses at scale | Step 5; prefer designs whose call count grows linearly |
-| The scorer measures what a user needs | ~70% | We chase quote-matching artifacts | Hand-read 20 scored disagreements per design (step 2) |
-| The one-shot is a fair yardstick | ~80% | Low: it scores 71%, so a design can beat it | – |
+| Windows wins because of the design, not because Ward foldered his mail by counterparty | ~50% | It fails on a single inbox | Windows cut by date instead of by folder (~5 min) |
+| The merge step holds at 1M tokens once it is blocked (its input grows with the corpus today, which breaks the rule above) | ~50% | Windows doesn't scale | Merge in blocks (by counterparty, or by name similarity) on a bigger world |
+| What wins on mail wins on a novel | ~50% | Two designs, or a redesign | Saltgrass (key: `bench/lanes/chaos_monkey/corpora/SALTGRASS_FACT_LEDGER.md`) |
+| The ontology syntax can say what a novel needs | ~60% | A gap in the core | Write saltgrass's recipe and run `recipe validate` (an hour) |
+| Generated mail ranks designs as real mail does | ~65% (Ward roughly agrees) | We tune to MiMo's prose | Ward alongside every run |
+| The scorer measures what a user needs | ~70% | We chase quote-matching artifacts | Hand-read 20 disagreements per design |
+| Cast-first is the right architecture | ~25% (lost the race) | – | – |
 
 ## Steps
 
-1. **Baseline.** The pipeline on world-s4 is running.
-2. **The race on world-s4.** Four throwaway scripts, about 300 lines in all, share one model-call helper and the
-   existing scorer. DeepSeek reads first, because this step is about the architecture, not the model.
-   - **A. Cast first.** List the names in every message, group them into a cast, then read each message with the
-     cast. Run it once with the key's cast, to give its ceiling.
-   - **B. Windows, then merge.** Read each thread or folder whole, which fits easily. Then one pass merges the
-     records across windows.
-   - **C. Notes, then one read.** One short structured note per message, then one call over all the notes.
-   - **D. Rolling store.** Read the messages in date order, with the current record list in the prompt, and update
-     it.
-
-   Score each on all five worlds and on Ward. Keep the designs that come within about 15 points of the one-shot
-   and that rank the same way on Ward. If none comes close, stop and rethink before building anything.
-3. **A small novel.** First write and validate its recipe. Then generate one novella of about 20k tokens, with
-   about 10 characters, relationships that change, and an answer key. Run the survivors on it.
-4. **The local model.** Run the survivors on Qwen. The gap to DeepSeek tells us whether the local model is enough.
-5. **Scale.** Run the best one on a 1M-token world or novel series.
-6. **Product.** Build only the winner into the default commands, reusing what exists. For example, the reader
-   already has a cast list (`SeedEntities` in `cache/seed.json`), switched off for document reading at
-   `runner_support.rs:41`. Delete the race scripts.
+1. **Thinking on locally** for world-s4 (running). This is the last model-track question for now.
+2. **Windows cut by date.** Is the design doing the work, or the folders?
+3. **A bounded merge**, in blocks, so no call grows with the corpus. Then a bigger world.
+4. **Saltgrass.** Write the recipe, then run windows on it, scored against its fact ledger.
+5. **Product.** Build windows into the default commands, reusing what exists.
+6. **The model track.** Engineer the system down to the local model.
 
 ## Rules
 
-- Develop on world-s4. Call a design better only when the other four worlds agree.
+- Develop on world-s4. Call a change better only when the other four worlds agree.
 - Numbers go in commit messages.
 
 ## Deferred until something works
