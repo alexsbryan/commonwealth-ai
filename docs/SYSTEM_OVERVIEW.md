@@ -224,7 +224,8 @@ thing), [`ENRICHMENT_V2.md`](../ingest/crates/corpus-engine/ENRICHMENT_V2.md),
   as a cited table with a count line. An unset attribute sets the atom
   aside as unjudged and says so. `svrn enrich atlas-query <corpus> --typed
   '<json>'` runs one as written (`--json`: rows `{name, atom_id,
-  attributes, evidence}`). `typed_prompt::query_grammar` renders a declared
+  attributes, evidence, record}`, `record` the row `atoms_lookup` shows,
+  from the one builder `corpus_engine_atlas_reader::records::RecordView`). `typed_prompt::query_grammar` renders a declared
   ontology as the documentation and per-type JSON Schema a model writes one
   against (the query-layer probe's, byte for byte); `AtlasGraph::typed_answer`
   runs the same executor over a loaded graph.

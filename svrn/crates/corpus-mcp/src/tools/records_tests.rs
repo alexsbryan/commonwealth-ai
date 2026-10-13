@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use super::*;
-use understanding_vocab::ontology::decl::{AttrDecl, OntologyTypeDecl, TypeKind};
+use understanding_vocab::ontology::decl::{AttrDecl, AttrFamily, OntologyTypeDecl, TypeKind};
+use understanding_vocab::ontology::OntologyPolicies;
 
 fn attr(name: &str, family: AttrFamily) -> AttrDecl {
     AttrDecl {

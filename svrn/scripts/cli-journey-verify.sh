@@ -353,7 +353,11 @@ fix_value() {
   # The mail-shaped ontology-layer fixture; its acquire path is relative to
   # its own directory. {layer_corpus} is the id it declares.
   layer_recipe) printf '%s' "${SOVEREIGN_JOURNEY_LAYER_RECIPE:-}" ;;
-  layer_corpus) printf '%s' "${SOVEREIGN_JOURNEY_LAYER_CORPUS:-layer-mail}" ;;
+  layer_corpus) printf '%s' "${SOVEREIGN_JOURNEY_LAYER_CORPUS:-layer-mailraw}" ;;
+  # The journey's three typed questions sit beside the fixture's recipe.
+  layer_q1|layer_q2|layer_q3)
+    [ -n "${SOVEREIGN_JOURNEY_LAYER_RECIPE:-}" ] &&
+      printf '%s' "$(dirname "$SOVEREIGN_JOURNEY_LAYER_RECIPE")/${1#layer_}.json" ;;
   ontology_question) printf '%s' "${SOVEREIGN_JOURNEY_ONTOLOGY_QUESTION:-Which coins are in this catalogue, and what metal is each?}" ;;
   spec)   printf '%s' "${SOVEREIGN_JOURNEY_SPEC:-}" ;;
   claims) printf '%s' "${SOVEREIGN_JOURNEY_CLAIMS:-}" ;;

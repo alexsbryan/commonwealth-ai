@@ -9,95 +9,21 @@
 //! recorded ontology the attributes are shown as stored and refs are ids,
 //! and the answer says so.
 
-use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
 use corpus_engine_atlas_reader::raw::read_atlas_ontology;
-use serde_json::{json, Map, Value};
+use corpus_engine_atlas_reader::records::{
+    atom_text, declared_type, fold_line, truncate, RecordView,
+};
+use serde_json::{json, Value};
 use understanding_vocab::atoms::AtomEnvelope;
-use understanding_vocab::ontology::decl::AttrFamily;
-use understanding_vocab::ontology::{AtlasOntologyFile, OntologyPolicies};
+use understanding_vocab::ontology::AtlasOntologyFile;
 use understanding_vocab::read::read_atlas_atoms;
 
-use super::{atom_text, refuse, truncate, ToolOutcome};
+use super::{refuse, ToolOutcome};
 
-/// The records whose refs point at one record that a row lists; the rest are
-/// counted (`referenced_by_total`).
-const INBOUND_SHOWN: usize = 20;
 /// The inbound refs a row's text names.
 const INBOUND_IN_TEXT: usize = 5;
-
-/// The declared type an atom is an instance of: an entity's `entity_type`,
-/// a claim's `claim_kind`.
-fn declared_type(a: &AtomEnvelope) -> Option<&str> {
-    match a {
-        AtomEnvelope::Entity(e) => Some(e.entity_type.as_str_repr()),
-        AtomEnvelope::Claim(c) => c.claim_kind.as_deref(),
-        _ => None,
-    }
-}
-
-fn stored(a: &AtomEnvelope) -> Option<&Map<String, Value>> {
-    match a {
-        AtomEnvelope::Entity(e) => Some(&e.attributes),
-        AtomEnvelope::Claim(c) => Some(&c.attributes),
-        _ => None,
-    }
-}
-
-/// Each (attribute, record id) an atom points at: its type's declared `ref`
-/// attributes, one id or a list, and a claim's `subject`.
-fn refs_of<'a>(
-    a: &'a AtomEnvelope,
-    policies: Option<&OntologyPolicies>,
-) -> Vec<(&'a str, &'a str)> {
-    let mut out = Vec::new();
-    if let AtomEnvelope::Claim(c) = a {
-        if let Some(subject) = &c.subject {
-            out.push(("subject", subject.as_str()));
-        }
-    }
-    let (Some(decl), Some(map)) = (
-        policies
-            .zip(declared_type(a))
-            .and_then(|(p, t)| p.type_decl(t)),
-        stored(a),
-    ) else {
-        return out;
-    };
-    for attr in &decl.attributes {
-        if !matches!(attr.family, AttrFamily::Ref { .. }) {
-            continue;
-        }
-        let Some((name, value)) = map.get_key_value(attr.name.as_str()) else {
-            continue;
-        };
-        match value {
-            Value::String(id) => out.push((name.as_str(), id.as_str())),
-            Value::Array(ids) => out.extend(
-                ids.iter()
-                    .filter_map(Value::as_str)
-                    .map(|id| (name.as_str(), id)),
-            ),
-            _ => {}
-        }
-    }
-    out
-}
-
-/// One end of a ref as a row shows it; a target the atlas does not hold is
-/// marked `absent` rather than dropped.
-fn end(attribute: &str, id: &str, by_id: &HashMap<&str, &AtomEnvelope>) -> Value {
-    match by_id.get(id) {
-        Some(a) => json!({
-            "attribute": attribute,
-            "id": id,
-            "type": declared_type(a),
-            "name": a.display_name(Some(120)),
-        }),
-        None => json!({ "attribute": attribute, "id": id, "absent": true }),
-    }
-}
 
 fn shown(v: &Value) -> String {
     match v {
@@ -124,6 +50,18 @@ fn recorded_ontology(atlas_dir: &Path) -> Result<AtlasOntologyFile, String> {
     })
 }
 
+/// Whether `a` matches `needle` (lowercased): by its display name, an
+/// entity's aliases, or its text.
+fn matches(a: &AtomEnvelope, needle: &str) -> bool {
+    let aliases = match a {
+        AtomEnvelope::Entity(e) => e.aliases.as_slice(),
+        _ => &[],
+    };
+    a.display_name(None).to_lowercase().contains(needle)
+        || aliases.iter().any(|x| x.to_lowercase().contains(needle))
+        || atom_text(a).to_lowercase().contains(needle)
+}
+
 pub(super) fn lookup(corpus: &str, atlas_dir: &Path, args: &Value) -> ToolOutcome {
     let path = atlas_dir.join("atoms.json");
     let missing = format!(
@@ -137,102 +75,51 @@ pub(super) fn lookup(corpus: &str, atlas_dir: &Path, args: &Value) -> ToolOutcom
     };
     let needle = args["query"].as_str().map(str::to_lowercase);
     let kind = args["kind"].as_str().map(str::to_lowercase);
+    let declared = args["type"].as_str();
+    let ids: Option<Vec<&str>> = args["ids"]
+        .as_array()
+        .map(|a| a.iter().filter_map(Value::as_str).collect());
     let limit = args["limit"].as_u64().map(|l| l as usize).unwrap_or(20);
+    let offset = args["offset"].as_u64().map(|o| o as usize).unwrap_or(0);
 
     let total = file.atoms().len();
-    let matched: Vec<&AtomEnvelope> = file
-        .atoms()
-        .iter()
-        .filter(|a| kind.as_deref().is_none_or(|k| a.atom_type().label() == k))
-        .filter(|a| {
-            needle.as_deref().is_none_or(|q| {
-                a.display_name(None).to_lowercase().contains(q)
-                    || atom_text(a).to_lowercase().contains(q)
-            })
-        })
-        .take(limit)
-        .collect();
     let ontology = recorded_ontology(atlas_dir);
     let policies = ontology.as_ref().ok().map(|f| &f.policies);
     if let Err(why) = &ontology {
         tracing::debug!(corpus, %why, "atoms_lookup: refs are not resolved");
     }
-    let by_id: HashMap<&str, &AtomEnvelope> =
-        file.atoms().iter().map(|a| (a.id().as_str(), a)).collect();
-    let mut inbound: BTreeMap<&str, Vec<(&str, &str)>> = matched
+    let view = RecordView::new(file.atoms(), policies);
+    let matching: Vec<&AtomEnvelope> = file
+        .atoms()
         .iter()
-        .map(|a| (a.id().as_str(), Vec::new()))
-        .collect();
-    for a in file.atoms() {
-        for (attribute, target) in refs_of(a, policies) {
-            if let Some(from) = inbound.get_mut(target) {
-                from.push((attribute, a.id().as_str()));
-            }
-        }
-    }
-    let rows: Vec<Value> = matched
-        .iter()
-        .map(|a| {
-            let decl = policies.zip(declared_type(a)).and_then(|(p, t)| p.type_decl(t));
-            let (attributes, unset): (Map<String, Value>, Vec<&str>) = match (decl, stored(a)) {
-                (Some(decl), Some(map)) => {
-                    let mut held = Map::new();
-                    let mut unset = Vec::new();
-                    for attr in &decl.attributes {
-                        match map.get(&attr.name) {
-                            Some(v) => {
-                                held.insert(attr.name.clone(), v.clone());
-                            }
-                            None => unset.push(attr.name.as_str()),
-                        }
-                    }
-                    (held, unset)
-                }
-                // No declaration to read it by: as stored.
-                (None, Some(map)) => (map.clone(), Vec::new()),
-                (_, None) => (Map::new(), Vec::new()),
-            };
-            let refs: Vec<Value> = refs_of(a, policies)
-                .into_iter()
-                .map(|(attribute, id)| end(attribute, id, &by_id))
-                .collect();
-            let from = &inbound[a.id().as_str()];
-            let referenced_by: Vec<Value> = from
-                .iter()
-                .take(INBOUND_SHOWN)
-                .map(|(attribute, id)| {
-                    let mut v = end(attribute, id, &by_id);
-                    v["attribute"] = json!(by_id.get(id).and_then(|s| declared_type(s)).map_or_else(
-                        || attribute.to_string(),
-                        |t| format!("{t}.{attribute}")
-                    ));
-                    v
-                })
-                .collect();
-            json!({
-                "id": a.id(),
-                "kind": a.atom_type().label(),
-                "name": a.display_name(Some(120)),
-                "text": truncate(atom_text(a), 400),
-                "evidence_chunks": a.evidence().iter().map(|c| c.chunk_id.clone()).collect::<Vec<_>>(),
-                "type": declared_type(a),
-                "attributes": attributes,
-                "unset": unset,
-                "refs": refs,
-                "referenced_by": referenced_by,
-                "referenced_by_total": from.len(),
-            })
+        .filter(|a| {
+            ids.as_ref()
+                .is_none_or(|ids| ids.contains(&a.id().as_str()))
         })
+        .filter(|a| kind.as_deref().is_none_or(|k| a.atom_type().label() == k))
+        .filter(|a| declared.is_none_or(|t| declared_type(a) == Some(t)))
+        .filter(|a| needle.as_deref().is_none_or(|q| matches(a, q)))
         .collect();
-    let text = if matched.is_empty() {
+    let absent: Vec<&str> = ids
+        .iter()
+        .flatten()
+        .copied()
+        .filter(|id| view.atom(id).is_none())
+        .collect();
+    let found = matching.len();
+    let matched: Vec<&AtomEnvelope> = matching.into_iter().skip(offset).take(limit).collect();
+    let next_offset = (offset + matched.len() < found).then_some(offset + matched.len());
+    let rows: Vec<Value> = matched.iter().map(|a| view.row(a)).collect();
+    let mut text = if matched.is_empty() {
         format!(
             "No atoms matched in `{corpus}` ({total} atoms in {}).",
             path.display()
         )
     } else {
         let mut t = format!(
-            "{} of {total} atoms in `{corpus}` (schema {}):\n",
-            matched.len(),
+            "{}-{} of {found} matching, of {total} atoms in `{corpus}` (schema {}):\n",
+            offset + 1,
+            offset + matched.len(),
             file.schema_version
         );
         if let Err(why) = &ontology {
@@ -261,14 +148,29 @@ pub(super) fn lookup(corpus: &str, atlas_dir: &Path, args: &Value) -> ToolOutcom
                 let target = r["name"]
                     .as_str()
                     .map_or_else(|| "(not in this atlas)".to_string(), |n| truncate(n, 80));
+                let key = r["key"]
+                    .as_str()
+                    .map_or_else(String::new, |k| format!(" [{k}]"));
                 facts.push(format!(
-                    "{} → {target} ({})",
+                    "{} → {target}{key} ({})",
                     r["attribute"].as_str().unwrap(),
                     r["id"].as_str().unwrap()
                 ));
             }
             if !facts.is_empty() {
                 t.push_str(&format!("    {}\n", facts.join(" · ")));
+            }
+            if let Some(folds) = row["folds"].as_object() {
+                let lines: Vec<String> = folds.iter().map(|(attr, f)| fold_line(attr, f)).collect();
+                t.push_str(&format!("    folded: {}\n", lines.join(" · ")));
+            }
+            if let Some(how) = row["link"]["decided_by"].as_str() {
+                let score = row["link"]["choice_score"]
+                    .as_f64()
+                    .map_or_else(String::new, |s| {
+                        format!(", choice score {s:.2} (uncalibrated)")
+                    });
+                t.push_str(&format!("    subject decided by {how}{score}\n"));
             }
             let from = row["referenced_by"].as_array().unwrap();
             if !from.is_empty() {
@@ -291,13 +193,23 @@ pub(super) fn lookup(corpus: &str, atlas_dir: &Path, args: &Value) -> ToolOutcom
                 ));
             }
         }
+        if let Some(next) = next_offset {
+            t.push_str(&format!("(more: offset {next})\n"));
+        }
         t
     };
+    if !absent.is_empty() {
+        text.push_str(&format!("\nNot in this atlas: {}", absent.join(", ")));
+    }
     ToolOutcome::answer(
         text.trim_end(),
         Some(json!({
             "corpus": corpus,
             "total_atoms": total,
+            "matching": found,
+            "offset": offset,
+            "next_offset": next_offset,
+            "absent_ids": absent,
             "refs_resolved": ontology.is_ok(),
             "atoms": rows,
         })),

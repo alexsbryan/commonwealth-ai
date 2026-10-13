@@ -30,6 +30,7 @@ use corpus_engine_atlas_reader::context::{
     open_and_attach_ann_seed_table, render_call_chain_brief, seed_atom_by_meaning, AtlasGraph,
     CallDirection,
 };
+use corpus_engine_atlas_reader::records::RecordView;
 
 use super::paths;
 use crate::daemon_inference::build_inference;
@@ -207,7 +208,12 @@ pub async fn cmd_atlas_query(args: &[String]) -> i32 {
             oppositions: &oppositions,
             vocab: ontology.as_ref(),
         };
-        return print_typed(&traverse(&QueryPlan::Typed(query), view), parsed.as_json);
+        let records = RecordView::new(atoms_file.atoms(), ontology.as_ref());
+        return print_typed(
+            &traverse(&QueryPlan::Typed(query), view),
+            &records,
+            parsed.as_json,
+        );
     }
 
     let call_dir = detect_call_intent(&parsed.query, parsed.callers);
@@ -251,9 +257,16 @@ pub async fn cmd_atlas_query(args: &[String]) -> i32 {
 }
 
 /// Print a typed query's answer: the cited-table brief, or with `--json` the
-/// table's rows. A refusal or a type with no atoms exits 1 with the reason;
-/// an answer of zero rows is an answer and exits 0.
-fn print_typed(result: &corpus_engine::atlas_traversal::TraversalResult, as_json: bool) -> i32 {
+/// table's rows, each with its `record` as `atoms_lookup` shows it (one row
+/// builder, `records::RecordView`): refs with the values they are known by,
+/// every fold with its cited readings, a statement's link. A refusal or a
+/// type with no atoms exits 1 with the reason; an answer of zero rows is an
+/// answer and exits 0.
+fn print_typed(
+    result: &corpus_engine::atlas_traversal::TraversalResult,
+    records: &RecordView<'_>,
+    as_json: bool,
+) -> i32 {
     if as_json {
         let mut out = serde_json::json!({
             "hit": result.hit,
@@ -262,7 +275,19 @@ fn print_typed(result: &corpus_engine::atlas_traversal::TraversalResult, as_json
         });
         if let Some(table) = &result.table {
             out["matched"] = serde_json::json!(table.matched);
-            out["rows"] = serde_json::json!(table.rows);
+            let rows: Vec<serde_json::Value> = table
+                .rows
+                .iter()
+                .map(|r| {
+                    let mut row = serde_json::json!(r);
+                    match records.atom(&r.atom_id) {
+                        Some(atom) => row["record"] = records.row(atom),
+                        None => tracing::warn!(atom = %r.atom_id, "atlas-query: a typed row names no atom of this atlas; it has no record"),
+                    }
+                    row
+                })
+                .collect();
+            out["rows"] = serde_json::Value::Array(rows);
             out["notes"] = serde_json::json!(table.notes);
         }
         match serde_json::to_string_pretty(&out) {

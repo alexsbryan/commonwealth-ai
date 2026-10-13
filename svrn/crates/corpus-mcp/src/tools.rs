@@ -37,6 +37,7 @@ use corpus_engine_atlas_reader::inventory::AtlasInventory;
 use corpus_engine_atlas_reader::opener::open_walk_provider;
 use corpus_engine_atlas_reader::provider::AtlasProvider;
 use corpus_engine_atlas_reader::raw::read_atlas_ontology;
+use corpus_engine_atlas_reader::records::{atom_text, truncate};
 use corpus_engine_atlas_reader::summary::read_current_summary;
 use corpus_index::fs_source::FsIndexSource;
 use corpus_index::index::CorpusIndex;
@@ -232,14 +233,17 @@ impl Server {
             },
             {
                 "name": "atoms_lookup",
-                "description": "Look up atlas atoms (Entity, Claim, Event, Question, Position, …) a corpus's enrichment produced, by kind and/or name substring. Reads atlas/atoms.json; says so if the corpus has none.",
+                "description": "Look up the records a corpus's enrichment produced (atlas/atoms.json), by id, declared type, kind or name. Each row is the record under the corpus's ontology: declared attributes, refs to other records with the identity values they are known by, the records that point at it, how each attribute was folded with every reading cited (a tie or conflict shown as itself, never as a value), and for a statement how its subject was decided. Says so if the corpus has none.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "corpus": corpus_prop,
-                        "query": { "type": "string", "description": "Case-insensitive substring matched against each atom's display name and text." },
+                        "query": { "type": "string", "description": "Case-insensitive substring matched against each atom's display name, aliases and text." },
+                        "ids": { "type": "array", "items": { "type": "string" }, "description": "Atom ids to fetch exactly, as a row's refs and referenced_by name them; ids not in the atlas are listed as absent." },
+                        "type": { "type": "string", "description": "A type the corpus's ontology declares (e.g. an entity type or claim kind); only its records." },
                         "kind": { "type": "string", "description": "Atom kind label: entity, event, state, relation, claim, question, configuration, argument, position, opposition, asset." },
-                        "limit": { "type": "integer", "description": "Max atoms (default 20)." }
+                        "limit": { "type": "integer", "description": "Max atoms (default 20)." },
+                        "offset": { "type": "integer", "description": "Skip this many matching atoms (paging; the answer gives next_offset)." }
                     },
                     "required": ["corpus"]
                 }
@@ -813,29 +817,8 @@ fn tag<T: serde::Serialize>(t: T) -> String {
 
 /// The prose an atom carries, by kind. Entity/Event/Configuration describe;
 /// Claim/Question/Position state; the rest have only their name.
-fn atom_text(a: &AtomEnvelope) -> &str {
-    match a {
-        AtomEnvelope::Entity(e) => &e.description,
-        AtomEnvelope::Event(e) => &e.description,
-        AtomEnvelope::Configuration(c) => &c.description,
-        AtomEnvelope::Claim(c) => &c.content,
-        AtomEnvelope::Question(q) => &q.content,
-        AtomEnvelope::Position(p) => &p.content,
-        _ => "",
-    }
-}
-
 fn refuse(msg: &str) -> ToolOutcome {
     ToolOutcome::refusal(msg)
-}
-
-fn truncate(s: &str, max: usize) -> String {
-    let s = s.trim();
-    if s.chars().count() <= max {
-        s.to_string()
-    } else {
-        format!("{}…", s.chars().take(max).collect::<String>().trim_end())
-    }
 }
 
 #[cfg(test)]
