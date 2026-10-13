@@ -48,6 +48,7 @@ use kernel_types::CorpusId;
 
 use crate::error::Result;
 use crate::index::CorpusIndex;
+use crate::ingest_port::daemon::InstallDocuments;
 use crate::types::IndexInfo;
 
 /// The per-corpus metadata sidecar, written at the root of every index
@@ -252,6 +253,62 @@ impl Corpus {
     }
 }
 
+/// Sidecar in a corpus's canonical directory listing the documents its last
+/// install read, ready or failed (OICP v0.6 §2.9), as JSON. Written when an
+/// install returns and removed when the next attempt starts, so progress can
+/// list a corpus the daemon held before its last start (zoracite platform
+/// row PH). Absent for a corpus installed before the sidecar existed, which
+/// the install route reads again rather than answer it held with nothing to
+/// list.
+pub const INSTALL_DOCUMENTS_FILENAME: &str = "_documents.json";
+
+impl Corpus {
+    /// The install-documents sidecar inside the canonical directory.
+    pub fn install_documents_path(&self) -> PathBuf {
+        self.root().join(INSTALL_DOCUMENTS_FILENAME)
+    }
+
+    /// The documents the last install recorded, or `None` when there is no
+    /// record. A record that does not read or parse is named and read as
+    /// none.
+    pub fn install_documents(&self) -> Option<InstallDocuments> {
+        let path = self.install_documents_path();
+        let raw = match std::fs::read_to_string(&path) {
+            Ok(raw) => raw,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
+            Err(e) => {
+                tracing::warn!(path = %path.display(), error = %e, "corpus: install documents do not read, ignored");
+                return None;
+            }
+        };
+        match serde_json::from_str(&raw) {
+            Ok(documents) => Some(documents),
+            Err(e) => {
+                tracing::warn!(path = %path.display(), error = %e, "corpus: install documents do not parse, ignored");
+                None
+            }
+        }
+    }
+
+    /// Record `documents` as the last install's, by temp-and-rename. The
+    /// canonical directory must exist.
+    pub fn stamp_install_documents(&self, documents: &InstallDocuments) -> std::io::Result<()> {
+        let target = self.install_documents_path();
+        let tmp = target.with_extension("tmp");
+        std::fs::write(&tmp, serde_json::to_vec(documents)?)?;
+        std::fs::rename(&tmp, &target)
+    }
+
+    /// Remove the last install's record, as a new attempt starts. No record
+    /// is not an error.
+    pub fn clear_install_documents(&self) -> std::io::Result<()> {
+        match std::fs::remove_file(self.install_documents_path()) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
+            _ => Ok(()),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -275,6 +332,34 @@ mod tests {
         assert_eq!(Corpus::recipe_sha256_in(c.root()), Some(sha));
         std::fs::write(c.recipe_stamp_path(), "not-a-sha\n").unwrap();
         assert_eq!(Corpus::recipe_sha256_in(c.root()), None);
+    }
+
+    /// The install documents round-trip through the canonical directory, a
+    /// cleared record reads as none, clearing twice is not an error, and a
+    /// record that does not parse reads as none.
+    #[test]
+    fn install_documents_round_trip_and_a_bad_record_reads_as_none() {
+        use crate::ingest_port::daemon::{DocumentOutcome, DocumentState};
+        let tmp = tempfile::tempdir().unwrap();
+        let c = Corpus::named(tmp.path(), "notes").unwrap();
+        std::fs::create_dir_all(c.root()).unwrap();
+        assert_eq!(c.install_documents(), None, "no record yet");
+        let documents = InstallDocuments {
+            documents: vec![DocumentOutcome {
+                source: Some("scans/broken.pdf".into()),
+                state: DocumentState::Failed {
+                    reason: "no text layer".into(),
+                },
+            }],
+            unlisted: 3,
+        };
+        c.stamp_install_documents(&documents).unwrap();
+        assert_eq!(c.install_documents(), Some(documents));
+        c.clear_install_documents().unwrap();
+        assert_eq!(c.install_documents(), None);
+        c.clear_install_documents().unwrap();
+        std::fs::write(c.install_documents_path(), "not json").unwrap();
+        assert_eq!(c.install_documents(), None);
     }
 
     #[test]

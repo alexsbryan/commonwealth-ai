@@ -346,3 +346,131 @@ async fn an_install_is_listed_from_its_spawn_and_then_lists_each_document() {
     );
     assert_eq!(done.progress["notes"].documents_unlisted, None);
 }
+
+/// The double's install of a supplied recipe that reads one document and
+/// fails on another, as `an_install_is_listed_from_its_spawn_…`'s does, with
+/// no gate: a library with one unreadable file.
+fn documented_engine(indexes: std::path::PathBuf) -> IngestPortDouble {
+    use corpus_index::ingest_port::daemon::{DocumentOutcome, DocumentState};
+    let at = indexes.clone();
+    let removes = indexes.clone();
+    IngestPortDouble::new()
+        .with_index_dir(indexes)
+        .on_prepare_recipe_install(move |id, toml| {
+            let (dir, id, toml) = (at.clone(), id.to_string(), toml.to_string());
+            Ok(PreparedInstall {
+                opts_out_of_auto_enrichment: true,
+                run: Box::new(move |_progress| {
+                    Box::pin(async move {
+                        let corpus = Corpus::named(&dir, &id).expect("an id");
+                        std::fs::create_dir_all(corpus.root()).unwrap();
+                        std::fs::write(corpus.meta_path(), "{}").unwrap();
+                        corpus.stamp_recipe_sha256(&recipe_sha256(&toml)).unwrap();
+                        Ok(IngestResult {
+                            corpus_id: id,
+                            chunks_created: 1,
+                            index_size_bytes: 0,
+                            duration_secs: 0,
+                            docs_skipped: 1,
+                            documents: vec![
+                                DocumentOutcome {
+                                    source: Some("okafor2019".into()),
+                                    state: DocumentState::Ready {
+                                        text_sha256: Some(kernel_types::Sha256Hash::of_str(
+                                            "okafor",
+                                        )),
+                                    },
+                                },
+                                DocumentOutcome {
+                                    source: Some("scans/broken.pdf".into()),
+                                    state: DocumentState::Failed {
+                                        reason: "no text layer".into(),
+                                    },
+                                },
+                            ],
+                            documents_unlisted: 0,
+                        })
+                    })
+                }),
+            })
+        })
+        .on_remove_corpus_everything(move |id| {
+            let _ = std::fs::remove_dir_all(removes.join(id));
+            Ok(())
+        })
+}
+
+/// Platform row PH (zoracite orders/s6-lean-route): a held corpus's
+/// documents survive a restart. A corpus installed with one unreadable file,
+/// then a new daemon over the same indexes with nothing in memory: the same
+/// install is `spawned: false`, and progress still lists the corpus complete
+/// with the ready document and the failed one. Red against the parent, whose
+/// list lived only in the daemon's memory, so the restarted daemon listed no
+/// such corpus and §2.9 and v0.4 §5.3 rule 4 together said nothing of its
+/// documents.
+#[tokio::test]
+async fn a_held_corpus_lists_its_documents_after_a_restart() {
+    use oicp_types::{IngestDocumentState, IngestPhase};
+
+    let tmp = tempfile::tempdir().unwrap();
+    let indexes = tmp.path().to_path_buf();
+    let body = serde_json::json!({"corpus_id": "notes", "recipe_toml": RECIPE_A});
+
+    let before = state(Arc::new(documented_engine(indexes.clone())));
+    let (status, reply) = install(before.clone(), body.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert_eq!(reply["spawned"], true, "{reply}");
+    settled(&before, "notes").await;
+
+    let after = state(Arc::new(documented_engine(indexes)));
+    let (status, reply) = install(after.clone(), body).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert_eq!(reply["spawned"], false, "the corpus is held: {reply}");
+    let listed = progress(after).await;
+    let entry = listed
+        .progress
+        .get("notes")
+        .unwrap_or_else(|| panic!("a held corpus is listed after a restart: {listed:?}"));
+    assert_eq!(entry.phase, IngestPhase::Complete);
+    assert_eq!(entry.documents.len(), 2, "{entry:?}");
+    assert_eq!(entry.documents[0].source.as_deref(), Some("okafor2019"));
+    assert!(matches!(
+        entry.documents[0].state,
+        IngestDocumentState::Ready { .. }
+    ));
+    assert_eq!(
+        entry.documents[1].source.as_deref(),
+        Some("scans/broken.pdf")
+    );
+    assert!(matches!(
+        entry.documents[1].state,
+        IngestDocumentState::Failed { .. }
+    ));
+}
+
+/// A corpus stamped with the same recipe but holding no documents record (an
+/// install from before PH) is not answered `spawned: false`, which would
+/// leave its documents unknown for good: the install reads it again, and its
+/// documents are listed.
+#[tokio::test]
+async fn a_held_corpus_with_no_documents_record_is_read_again() {
+    let tmp = tempfile::tempdir().unwrap();
+    let indexes = tmp.path().to_path_buf();
+    let corpus = Corpus::named(&indexes, "notes").unwrap();
+    std::fs::create_dir_all(corpus.root()).unwrap();
+    std::fs::write(corpus.meta_path(), "{}").unwrap();
+    corpus
+        .stamp_recipe_sha256(&recipe_sha256(RECIPE_A))
+        .unwrap();
+
+    let state = state(Arc::new(documented_engine(indexes)));
+    let (status, reply) = install(
+        state.clone(),
+        serde_json::json!({"corpus_id": "notes", "recipe_toml": RECIPE_A}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert_eq!(reply["spawned"], true, "no documents record: {reply}");
+    settled(&state, "notes").await;
+    assert_eq!(progress(state).await.progress["notes"].documents.len(), 2);
+}

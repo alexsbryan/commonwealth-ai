@@ -265,9 +265,11 @@ pub async fn check_ingest_recipe_test(
 }
 
 /// `ingest.documents` (v0.6 §2.9): once the fixture's install has returned,
-/// its progress entry lists every fixture document `ready` under its own
-/// text name (the sha256 of its text), each with a source, and none
-/// `failed`, since every fixture text is readable.
+/// its progress entry lists every fixture document `ready` under its name,
+/// and none `failed`, since every fixture text is readable. On a host with
+/// `evidence:text`, each ready document's text name reads back a text that
+/// holds the document's signature. A fixture the host held before this run
+/// (its install `spawned: false`) is listed all the same.
 pub async fn check_ingest_documents(
     host: &Host,
     m: &ProviderManifest,
@@ -295,12 +297,10 @@ pub async fn check_ingest_documents(
         Err(e) => return fail(format!("progress does not decode: {e}")),
     };
     let Some(entry) = reply.progress.get(corpus) else {
-        return Check::skip(
-            id,
-            Level::Feature,
-            "could not judge: the fixture was installed before this run, so no install of it \
-             returned here",
-        );
+        return fail(format!(
+            "the fixture {corpus} is held and progress does not list it: a held corpus is \
+             listed with its documents, across the host's restarts"
+        ));
     };
     if entry.documents.is_empty() {
         return fail(format!(
@@ -308,29 +308,58 @@ pub async fn check_ingest_documents(
             entry.phase
         ));
     }
+    // A ready document's text name is the name `evidence:text` reads it by
+    // (§2.9), the host's stored text, which a host may normalize: so it is
+    // read back and judged by the document's signature, never by the sha256
+    // of the fixture's bytes.
+    let text = m
+        .knowledge
+        .as_ref()
+        .and_then(|k| k.evidence.as_ref())
+        .filter(|_| m.has_feature(features::EVIDENCE_TEXT))
+        .map(|ev| ev.text_endpoint.as_str());
+    let corpus_q = format!("?corpus={corpus}");
     for doc in &lib.documents {
-        let name = sha256_hex(doc.text.as_bytes());
-        let found = entry.documents.iter().find(|d| match &d.state {
-            oicp_types::IngestDocumentState::Ready { text_sha256 } => {
-                text_sha256.as_deref() == Some(name.as_str())
-            }
-            oicp_types::IngestDocumentState::Failed { .. } => false,
-        });
-        match found {
+        let listed = entry
+            .documents
+            .iter()
+            .find(|d| d.source.as_deref() == Some(doc.name.as_str()));
+        let sha = match listed.map(|d| &d.state) {
             None => {
                 return fail(format!(
-                    "fixture document `{}` (text {}…) is not listed ready",
-                    doc.name,
-                    &name[..12]
-                ))
-            }
-            Some(d) if d.source.as_deref().is_none_or(str::is_empty) => {
-                return fail(format!(
-                    "fixture document `{}` is listed with no source",
+                    "fixture document `{}` is not listed by its name",
                     doc.name
                 ))
             }
-            Some(_) => {}
+            Some(oicp_types::IngestDocumentState::Failed { reason }) => {
+                return fail(format!(
+                    "fixture document `{}` is listed failed: {reason}",
+                    doc.name
+                ))
+            }
+            Some(oicp_types::IngestDocumentState::Ready { text_sha256 }) => text_sha256,
+        };
+        let (Some(endpoint), Some(sha)) = (text, sha) else {
+            continue;
+        };
+        let whole = match crate::evidence_checks::read(host, endpoint, sha, &corpus_q).await {
+            Ok(w) => w,
+            Err(e) => {
+                return fail(format!(
+                    "fixture document `{}` is listed ready as {}… and its text does not read: {e}",
+                    doc.name,
+                    &sha[..12.min(sha.len())]
+                ))
+            }
+        };
+        let signature = lib.signatures.get(&doc.name).map_or("", String::as_str);
+        if !whole.text.contains(signature) {
+            return fail(format!(
+                "fixture document `{}` is listed ready as {}… and that text does not hold its \
+                 signature",
+                doc.name,
+                &sha[..12.min(sha.len())]
+            ));
         }
     }
     if let Some(d) = entry
@@ -346,7 +375,7 @@ pub async fn check_ingest_documents(
         id,
         Level::Feature,
         format!(
-            "all {} fixture documents listed ready under their text names",
+            "all {} fixture documents listed ready by name, each text name reading back its signature",
             lib.documents.len()
         ),
     )

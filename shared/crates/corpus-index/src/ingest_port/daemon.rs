@@ -52,6 +52,19 @@ pub struct IngestResult {
 /// memory and on every progress reply.
 pub const DOCUMENTS_LISTED_CAP: usize = 10_000;
 
+/// One install's documents as its ingest reported them (OICP v0.6 §2.9):
+/// what progress lists for a corpus. Kept with the corpus
+/// (`Corpus::stamp_install_documents`), so a corpus held before the daemon's
+/// last start still lists them.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InstallDocuments {
+    /// Up to [`DOCUMENTS_LISTED_CAP`], in the order read.
+    pub documents: Vec<DocumentOutcome>,
+    /// Read past the cap, counted only.
+    #[serde(default)]
+    pub unlisted: u64,
+}
+
 /// One document's outcome in an ingest, named as the recipe names it: an
 /// inline document by its name, a file by its path relative to the acquired
 /// root. A document the source yielded no text for (an empty file) is not

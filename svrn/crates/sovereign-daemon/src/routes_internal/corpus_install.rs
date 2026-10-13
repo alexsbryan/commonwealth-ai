@@ -108,9 +108,17 @@ pub async fn spawn_install(
             .as_ref()
             .and_then(|c| corpus_index::corpus::Corpus::recipe_sha256_in(c.root()));
         tracing::debug!(corpus = %corpus_id, %sha, stamped = ?stamped, "spawn_corpus_install: recipe install");
+        // Held only with its documents recorded (v0.6 §2.9): a corpus from
+        // before the record existed is read again, so progress can list it.
+        let documented = installed
+            .as_ref()
+            .is_some_and(|c| c.install_documents().is_some());
         if stamped.as_deref() == Some(sha.as_str()) {
-            release(&state, &corpus_id).await;
-            return InstallOutcome::AlreadyInstalled;
+            if documented {
+                release(&state, &corpus_id).await;
+                return InstallOutcome::AlreadyInstalled;
+            }
+            tracing::info!(corpus = %corpus_id, "spawn_corpus_install: held with no documents record, reading it again");
         }
     }
 
@@ -160,6 +168,7 @@ pub async fn spawn_install(
 
     let state_for_task = state.clone();
     let corpus_id_for_task = corpus_id.clone();
+    let documents_at = corpus_index::corpus::Corpus::named(engine.index_dir(), &corpus_id);
     tokio::spawn(async move {
         // Progress callback: latest-wins per corpus, except that a
         // terminal failure is never clobbered. See
@@ -222,19 +231,20 @@ pub async fn spawn_install(
                     documents_unlisted = info.documents_unlisted,
                     "spawn_corpus_install: ingest complete"
                 );
-                state_for_task
-                    .inner
-                    .ingest
-                    .install_documents
-                    .write()
-                    .await
-                    .insert(
-                        corpus_id_for_task.clone(),
-                        crate::state::ingest::InstallDocuments {
-                            documents: info.documents.clone(),
-                            unlisted: info.documents_unlisted,
-                        },
+                // Kept with the corpus, so a restart does not lose it (PH).
+                let documents = corpus_index::ingest_port::daemon::InstallDocuments {
+                    documents: info.documents.clone(),
+                    unlisted: info.documents_unlisted,
+                };
+                if let Some(Err(e)) = documents_at
+                    .as_ref()
+                    .map(|c| c.stamp_install_documents(&documents))
+                {
+                    tracing::warn!(
+                        corpus = %corpus_id_for_task, error = %e,
+                        "spawn_corpus_install: the documents record did not write; progress lists none for this corpus"
                     );
+                }
                 // The install returned, so it is complete, whether or not the
                 // engine's last progress callback has landed yet (that task is
                 // spawned, so it can trail this): a poller never sees a

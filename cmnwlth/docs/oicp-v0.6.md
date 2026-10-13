@@ -205,10 +205,19 @@ IngestDocument = { source: Option<String>,                 // the document's nam
   not read, so it is not listed; a client treats a library document that is
   not listed `ready` as not ready. The list is the last install's: a new
   attempt starts it again.
+- **Held.** A corpus the host holds is listed, `complete`, with its last
+  install's documents for as long as it holds it, across the host's own
+  restarts. An install answered `spawned: false` is followed by an entry
+  that says which documents are ready; v0.4 §5.3 rule 4's licence to list an
+  already-installed corpus never does not extend to a host advertising
+  `ingest:documents`.
 
 The reference host records each outcome in its ingest loop (`corpus-engine`
-`ingest_inner_with_skipset`, `IngestResult::documents`) and lists at most
-10,000 per install (`DOCUMENTS_LISTED_CAP`).
+`ingest_inner_with_skipset`, `IngestResult::documents`), lists at most
+10,000 per install (`DOCUMENTS_LISTED_CAP`), and keeps the list with the
+corpus (`_documents.json`, `corpus_index::corpus::Corpus::install_documents`).
+A corpus it held from before that record existed is read again on its next
+install rather than answered `spawned: false` with nothing to list.
 
 ### 2.10 Corrections
 

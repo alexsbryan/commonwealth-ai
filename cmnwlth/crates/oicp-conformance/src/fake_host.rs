@@ -44,6 +44,9 @@ pub struct Breaks {
     pub witness_unread: bool,
     /// ingest.documents: a returned install's entry lists no documents.
     pub omit_documents: bool,
+    /// ingest.documents: each ready document names a text the host does not
+    /// serve.
+    pub unserved_text_names: bool,
     /// knowledge.document: hits carry their record with metadata emptied.
     pub empty_metadata: bool,
     /// ingest.recipe: a recipe that does not parse is 200 `spawned: false`.
@@ -636,8 +639,13 @@ async fn progress(State(f): State<Arc<Fake>>) -> Json<Value> {
         f.texts
             .iter()
             .map(|s| {
+                let text = if f.breaks.unserved_text_names {
+                    s.name.as_str()
+                } else {
+                    s.text.as_str()
+                };
                 json!({"source": s.name, "state": "ready",
-                       "text_sha256": sha256_hex(s.text.as_bytes())})
+                       "text_sha256": sha256_hex(text.as_bytes())})
             })
             .collect()
     };

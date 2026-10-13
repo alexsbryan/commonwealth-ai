@@ -72,16 +72,19 @@ pub async fn corpus_install(
 /// set before install's reply, while the first progress entry waits on the
 /// engine's first callback, so an install with none yet is `pending` here,
 /// the union `/internal/corpus/status` already reads. Once an install has
-/// returned, its entry lists each document it read
-/// (`IngestPart::install_documents`).
+/// returned, its entry lists each document it read, from the record kept
+/// with the corpus (`Corpus::install_documents`). A corpus held from before
+/// the daemon's last start has no entry in memory; its record lists it
+/// `complete` (platform row PH), so a client polling after a `spawned:
+/// false` learns its documents rather than nothing.
 pub async fn corpus_progress(State(state): State<AppState>) -> Json<CorpusProgressResponse> {
     let active = state.inner.ingest.active_ingests.read().await.clone();
-    let documents = state.inner.ingest.install_documents.read().await;
     let snapshot = state.inner.ingest.corpus_progress.read().await;
     let mut progress: BTreeMap<String, CorpusIngestProgress> = snapshot
         .iter()
         .map(|(id, p)| (id.clone(), map_progress(p)))
         .collect();
+    drop(snapshot);
     let mut spawned_only = 0usize;
     for id in active {
         progress.entry(id).or_insert_with(|| {
@@ -95,9 +98,35 @@ pub async fn corpus_progress(State(state): State<AppState>) -> Json<CorpusProgre
             }
         });
     }
+    let index_dir = state
+        .inner
+        .node
+        .corpus_engine
+        .as_ref()
+        .map(|e| e.index_dir().to_path_buf());
+    let held = index_dir
+        .as_deref()
+        .map(|dir| held_with_documents(dir, &progress))
+        .unwrap_or_default();
+    for id in &held {
+        progress.insert(
+            id.clone(),
+            CorpusIngestProgress {
+                phase: IngestPhase::Complete,
+                fraction: Some(1.0),
+                detail: Some("held".into()),
+                documents: Vec::new(),
+                documents_unlisted: None,
+            },
+        );
+    }
     let mut listed = 0usize;
     for (id, entry) in progress.iter_mut() {
-        if let Some(d) = documents.get(id) {
+        let documents = index_dir
+            .as_deref()
+            .and_then(|dir| corpus_index::corpus::Corpus::named(dir, id))
+            .and_then(|c| c.install_documents());
+        if let Some(d) = documents {
             entry.documents = d.documents.iter().map(wire_document).collect();
             entry.documents_unlisted = (d.unlisted > 0).then_some(d.unlisted);
             listed += entry.documents.len();
@@ -106,10 +135,34 @@ pub async fn corpus_progress(State(state): State<AppState>) -> Json<CorpusProgre
     tracing::debug!(
         corpora = progress.len(),
         spawned_only,
+        held = held.len(),
         documents_listed = listed,
         "oicp corpus progress: answered"
     );
     Json(CorpusProgressResponse { progress })
+}
+
+/// The corpora under `index_dir` that keep an install-documents record and
+/// have no entry in `progress`: held from before the daemon's last start.
+fn held_with_documents(
+    index_dir: &std::path::Path,
+    progress: &BTreeMap<String, CorpusIngestProgress>,
+) -> Vec<String> {
+    let entries = match std::fs::read_dir(index_dir) {
+        Ok(entries) => entries,
+        Err(e) => {
+            tracing::warn!(dir = %index_dir.display(), error = %e, "oicp corpus progress: the index directory does not read, no held corpus listed");
+            return Vec::new();
+        }
+    };
+    entries
+        .filter_map(|e| e.ok()?.file_name().into_string().ok())
+        .filter(|id| !progress.contains_key(id))
+        .filter(|id| {
+            corpus_index::corpus::Corpus::named(index_dir, id)
+                .is_some_and(|c| c.install_documents_path().is_file())
+        })
+        .collect()
 }
 
 /// An ingest's document outcome on the wire (v0.6 §2.9).

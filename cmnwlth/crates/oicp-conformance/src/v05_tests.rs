@@ -115,6 +115,32 @@ async fn ingest_documents_is_red_against_a_late_listing_and_an_entry_with_no_doc
         &check_ingest_documents(&b.host, &b.manifest, &b.lib, &fixture).await,
         "lists no documents",
     );
+
+    let b = bench(Breaks {
+        unserved_text_names: true,
+        ..Breaks::default()
+    })
+    .await;
+    let (_, fixture) = check_ingest_recipe(&b.host, &b.manifest, &b.args, &b.lib).await;
+    red(
+        &check_ingest_documents(&b.host, &b.manifest, &b.lib, &fixture).await,
+        "its text does not read",
+    );
+}
+
+/// v0.6 §2.9 (platform row PH): a fixture the host holds is listed with its
+/// documents even when no install of it returned in this run, as after the
+/// host's restart. Red against a host that lists only this run's installs:
+/// until PH this was `could not judge`.
+#[tokio::test]
+async fn ingest_documents_is_red_against_a_held_fixture_progress_does_not_list() {
+    use crate::ingest_checks::check_ingest_documents;
+    let b = bench(Breaks::default()).await;
+    let held = FixtureState::Installed(b.lib.corpus_id.clone());
+    red(
+        &check_ingest_documents(&b.host, &b.manifest, &b.lib, &held).await,
+        "is held and progress does not list it",
+    );
 }
 
 #[tokio::test]

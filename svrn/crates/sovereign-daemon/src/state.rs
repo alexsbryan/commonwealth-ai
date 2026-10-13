@@ -853,7 +853,6 @@ impl AppState {
                 ingest: ingest::IngestPart {
                     active_ingests: RwLock::new(HashSet::new()),
                     corpus_progress: RwLock::new(HashMap::new()),
-                    install_documents: RwLock::new(HashMap::new()),
                     newsworthy_force_tick: RwLock::new(None),
                     work_queue: Arc::new(WorkQueueManager::new()),
                     grant_store: Arc::new(EphemeralGrantStore::new()),
