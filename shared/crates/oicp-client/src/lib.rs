@@ -1000,10 +1000,11 @@ impl InferenceProvider for RemoteApiProvider {
         let admitted = self.outbound(Payload::Completion)?;
         let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
         let labels = request.forced_choice_candidates();
-        if let Some(labels) = labels
-            .as_deref()
-            .filter(|_| self.forced_choice_by_logprobs_known())
-        {
+        // A vendor never answers with the map, and may refuse the schema
+        // outright, so it is asked through its logprobs from the first call.
+        if let Some(labels) = labels.as_deref().filter(|_| {
+            self.forced_choice_by_logprobs_known() || self.far_end() == FarEnd::ThirdParty
+        }) {
             if let Some(answer) = self
                 .forced_choice_by_logprobs(&url, request, labels)
                 .await?
