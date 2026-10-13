@@ -147,11 +147,12 @@ class Procs:
         return [a for a, *_ in self.spawned if a[0] != "/bin/sh"]
 
 
-def manifest_stub(worker_bin):
+def manifest_stub(worker_bin="", checks=None):
     """The queue manifest the loop reads, shaped as the loop touches it: a
     declared worker_bin, no dispatch census, no audit cadence, no freeze."""
     return mock.Mock(worker_bin=worker_bin, settings="", dispatch_requires=(),
-                     audit_every=None, scope_file="", path="ralph/next/t/queue.toml")
+                     audit_every=None, scope_file="", path="ralph/next/t/queue.toml",
+                     checks=dict(checks or {}))
 
 
 class Rig:
@@ -584,6 +585,130 @@ class SerialTests(unittest.TestCase):
         rig.tick(3)
         self.assertEqual(rig.titles().count("OPERATOR — stuck"), 1)
         self.assertIs(rig.state("HUMAN-approve"), U.HELD)
+
+
+class ClosesWhenTests(unittest.TestCase):
+    """A HUMAN- row that names a declared check (`— closes-when=<name> —`)
+    closes itself when the check passes, so the operator acts and never comes
+    back to say so. Everything else about the row is a plain HUMAN- row's."""
+
+    STATE = ("- [x] a abc1234 — depends []\n"
+             "- [ ] HUMAN-ratify — depends [a] — the operator approves — closes-when=ratified\n"
+             "- [ ] b — depends [HUMAN-ratify]\n")
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.flag = pathlib.Path(self.tmp.name) / "ratified"
+        self.runs = pathlib.Path(self.tmp.name) / "runs"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def rig(self, argv=None, state=None, **kw):
+        # The check counts its own runs, and passes once the operator has acted.
+        argv = argv or ["sh", "-c", f'echo run >> "{self.runs}"; test -f "{self.flag}"']
+        return Rig(self.tmp.name, state or self.STATE,
+                   manifest=manifest_stub(checks={"ratified": tuple(argv)}), **kw)
+
+    def ticks(self, rig, n):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            for _ in range(n):
+                rig.loop.tick()
+                rig.clock.advance(60)
+        return out.getvalue()
+
+    def runs_seen(self):
+        return len(self.runs.read_text().splitlines()) if self.runs.exists() else 0
+
+    def test_the_row_closes_with_a_done_commit_when_its_check_passes(self):
+        rig = self.rig()
+        rig.procs.sessions.append(lambda s: FOREVER)
+        self.assertIs(rig.tick(), ralph.Pool.STUCK)      # checked at once: not yet
+        self.assertEqual(self.runs_seen(), 1)
+        self.assertIs(rig.state("HUMAN-ratify"), U.HELD)
+        rig.tick()                                       # 30 s later: not due again
+        self.assertEqual(self.runs_seen(), 1)
+        self.flag.write_text("")                         # the operator acts
+        rig.tick()
+        self.assertEqual(self.runs_seen(), 2)
+        self.assertEqual(rig.row("HUMAN-ratify").status, ralph.Status.DONE)
+        self.assertEqual(git(rig.wd, "log", "-1", "--format=%s", "--", "ralph/STATE.md"),
+                         "ralph: HUMAN-ratify done (closes-when ratified passed)")
+        self.assertEqual(git(rig.wd, "status", "--porcelain", "--", "ralph/STATE.md"), "")
+        self.assertIs(rig.state("HUMAN-ratify"), U.DONE)
+        rig.tick()
+        self.assertIs(rig.state("b"), U.RUNNING)         # its dependent runs
+        self.assertNotIn("HUMAN-ratify", rig.loop.ledger.units)
+
+    def test_a_failing_check_holds_the_row_and_is_said_once(self):
+        rig = self.rig(argv=["sh", "-c", 'echo "1 law unratified"; exit 3'])
+        out = self.ticks(rig, 4)
+        self.assertEqual(rig.row("HUMAN-ratify").status, ralph.Status.PENDING)
+        self.assertIs(rig.state("HUMAN-ratify"), U.HELD)
+        self.assertEqual(rig.procs.spawned, [])
+        self.assertEqual(out.count("closes-when `ratified`"), 1, out)
+        self.assertIn("exit 3", out)
+        cw = rig.entry("HUMAN-ratify")["closes_when"]
+        self.assertEqual((cw["check"], cw["verdict"], cw["runs"]), ("ratified", "failed", 4))
+        self.assertIn("1 law unratified", cw["why"])
+        self.assertEqual(rig.entry("HUMAN-ratify").get("strikes"), 0)
+        with mock.patch.object(ralph, "ledger_for", lambda paths, label: rig.loop.ledger.path):
+            status = "\n".join(ralph.status_lines(rig.loop.paths, "t"))
+        self.assertIn("HUMAN-ratify: held — closes when `ratified` passes", status)
+        self.assertIn("failed: exit 3", status)
+        self.assertIn("stuck", rig.titles()[0].lower())
+        self.assertIn("HUMAN-ratify (closes when `ratified` passes)", rig.notes[0][1])
+
+    def test_a_check_that_cannot_run_is_said_once_and_never_closes_or_strikes(self):
+        rig = self.rig(argv=[str(pathlib.Path(self.tmp.name) / "no-such-checker")])
+        out = self.ticks(rig, 3)
+        self.assertEqual(out.count("closes-when `ratified`"), 1, out)
+        self.assertIn("never ran", out)
+        self.assertEqual(rig.row("HUMAN-ratify").status, ralph.Status.PENDING)
+        self.assertIs(rig.state("HUMAN-ratify"), U.HELD)
+        self.assertEqual(rig.entry("HUMAN-ratify").get("strikes"), 0)
+        self.assertEqual(rig.entry("HUMAN-ratify")["closes_when"]["verdict"], "never_ran")
+
+    def test_a_check_past_its_timeout_is_killed_and_judges_nothing(self):
+        rig = self.rig(argv=["sleep", "30"], closes_when_timeout_s=0.5)
+        t0 = time.monotonic()
+        out = self.ticks(rig, 2)
+        self.assertLess(time.monotonic() - t0, 10)
+        self.assertEqual(out.count("closes-when `ratified`"), 1, out)
+        self.assertIn("could not judge", out)
+        self.assertEqual(rig.row("HUMAN-ratify").status, ralph.Status.PENDING)
+        self.assertEqual(rig.entry("HUMAN-ratify")["closes_when"]["verdict"], "could_not_judge")
+
+    def test_a_check_waits_for_the_rows_dependencies(self):
+        rig = self.rig(state="- [ ] a — depends []\n"
+                             "- [ ] HUMAN-ratify — depends [a] — closes-when=ratified\n")
+        self.flag.write_text("")
+        rig.procs.sessions.append(lambda s: FOREVER)
+        rig.tick(3)
+        self.assertEqual(self.runs_seen(), 0)
+        self.assertEqual(rig.row("HUMAN-ratify").status, ralph.Status.PENDING)
+
+    def test_a_human_row_without_the_element_runs_no_check(self):
+        state = self.STATE.replace(" — closes-when=ratified", "")
+        rig = self.rig(state=state)
+        self.flag.write_text("")                         # the check would pass
+        self.ticks(rig, 3)
+        self.assertEqual(self.runs_seen(), 0)
+        self.assertEqual(rig.row("HUMAN-ratify").status, ralph.Status.PENDING)
+        self.assertIs(rig.state("HUMAN-ratify"), U.HELD)
+        self.assertEqual((rig.wd / "ralph/STATE.md").read_text(), state)
+
+    def test_a_check_the_manifest_does_not_declare_blocks_the_queue(self):
+        rig = Rig(self.tmp.name, self.STATE, manifest=manifest_stub(checks={"other": ("true",)}))
+        self.assertIs(rig.tick(), ralph.Pool.BLOCKED)
+        self.assertIn("OPERATOR — blocked: queue", rig.titles())
+        self.assertIn("closes-when `ratified` names no check", rig.notes[0][1])
+        other = pathlib.Path(self.tmp.name) / "legacy"
+        other.mkdir()
+        legacy = Rig(other, self.STATE)                  # a legacy launch: no manifest, no checks
+        self.assertIs(legacy.tick(), ralph.Pool.BLOCKED)
+        self.assertIn("declared: none", legacy.notes[0][1])
 
 
 # ---------------------------------------------------------------------------

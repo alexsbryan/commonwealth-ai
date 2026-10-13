@@ -365,12 +365,18 @@ class Row:
     lineno: int
     line: str
     review: bool = False
+    closes_when: str = ""      # a HUMAN- row's declared check: passing it closes the row
 
 
 class Queue:
-    """The queue grammar, typed. Both id-then-hash and legacy hash-then-id."""
+    """The queue grammar, typed. Both id-then-hash and legacy hash-then-id.
 
-    def __init__(self, path):
+    `checks` is the queue manifest's `[checks]` when the reader is the one
+    that acts on them (the loop): a `closes-when=<name>` naming none of them
+    is refused here, by name, as an unknown dependency is. Readers that only
+    report (status, plan) pass nothing and are not refused."""
+
+    def __init__(self, path, checks=None):
         self.path = pathlib.Path(path)
         self.rows = self._parse()
         ids = [r.id for r in self.rows]
@@ -381,6 +387,13 @@ class Queue:
             for d in r.deps:
                 if d not in by:
                     raise ValueError(f"{self.path}:{r.lineno}: unknown dependency {d!r}")
+            if r.closes_when and not r.id.startswith("HUMAN-"):
+                raise ValueError(f"{self.path}:{r.lineno}: {r.id} has closes-when, which only "
+                                 "HUMAN- rows take: a unit closes by its session's result")
+            if r.closes_when and checks is not None and r.closes_when not in checks:
+                raise ValueError(f"{self.path}:{r.lineno}: {r.id} closes-when "
+                                 f"`{r.closes_when}` names no check in the queue manifest's "
+                                 f"[checks] (declared: {', '.join(sorted(checks)) or 'none'})")
         # A cycle among open rows is rows nothing can ever make ready: refused
         # here, by name, so the loop is never left with nothing ready and
         # nothing held. A done row blocks nothing (ersilia's REVIEW-16 cycle
@@ -415,8 +428,14 @@ class Queue:
                 raise ValueError(f"{self.path}:{n}: row has no id")
             commit = next((t for t in tokens if HASH_RE.fullmatch(t)), None)
             deps = tuple(d.strip() for d in m.group("deps").split(",") if d.strip())
+            rest = m.group("rest")
+            closes = CLOSES_WHEN_RE.findall(rest)
+            if len(closes) != len(CLOSES_WHEN_ANY_RE.findall(rest)) or len(closes) > 1:
+                raise ValueError(f"{self.path}:{n}: malformed closes-when element — a HUMAN- "
+                                 "row names one declared check as `— closes-when=<check> —`")
             rows.append(Row(row_id, Status(m.group("mark")), deps, commit, n, line,
-                            review=bool(REVIEW_TAG_RE.search(m.group("rest")))))
+                            review=bool(REVIEW_TAG_RE.search(rest)),
+                            closes_when=closes[0] if closes else ""))
         return rows
 
     def by_id(self):
@@ -549,7 +568,7 @@ AUDIT_ROW_BODY = (
 # commit of the queue file (scripts/ralph-mark.sh), so this counts those after
 # the newest audit's. A queue file with no such commit (a legacy launch line, a
 # queue that never marked through the script) keeps Queue's positional count.
-MARK_SUBJECT = re.compile(r"^ralph: (\S+) done$")
+MARK_SUBJECT = re.compile(r"^ralph: (\S+) done(?: \(.*\))?$")
 
 
 def units_since_audit(paths, queue):
@@ -831,6 +850,12 @@ def probe_model(model, paths, timeout=PROBE_TIMEOUT_S):
 
 
 REVIEW_TAG_RE = re.compile(r"(?:^|—)\s*review\s*=\s*true\s*(?=—|$)")
+# A HUMAN- row's `— closes-when=<check> —`: a name from the manifest's [checks].
+# Spelled as `review=true` is, the row's other machine-read element; the
+# `read:` / `check:` elements are prose for a session. ANY catches a
+# misspelling (`closes-when: x`) that would otherwise be read as no element.
+CLOSES_WHEN_RE = re.compile(r"(?:^|—)\s*closes-when\s*=\s*([A-Za-z0-9_-]+)\s*(?=—|$)")
+CLOSES_WHEN_ANY_RE = re.compile(r"(?:^|—)\s*closes-when\b")
 
 
 def is_review(row):
@@ -1331,7 +1356,8 @@ class E(enum.Enum):
     DEPS_UNMET = "deps-unmet"            # a dependency was reopened
     HOLD = "hold"                        # parked, made a HUMAN- row, or scoped out
     UNHOLD = "unhold"                    # the operator deleted the park, or rescoped
-    ROW_CLOSED = "row-closed"            # the row reads [x]: an operator edit
+    ROW_CLOSED = "row-closed"            # the row reads [x]: an operator edit, or the
+                                         # loop's mark of a HUMAN- row its closes-when check passed
     ROW_REOPENED = "row-reopened"
     # dispatch, and what it can refuse
     DISPATCH = "dispatch"
@@ -1490,7 +1516,9 @@ WAITING_EXITS = {
     U.AWAITING: ("owned", "the run's process ends, or its budget passes and the loop kills it"),
     U.MERGING: ("owned", "the loop's merge, run when the main tree is free; the main tree's "
                          "holder is itself a RUNNING, DIRECTING or AWAITING unit"),
-    U.HELD: ("operator", "unpark (delete the parked file), rescope, or mark the row [x]"),
+    U.HELD: ("operator", "unpark (delete the parked file), rescope, or mark the row [x]; "
+                         "a HUMAN- row with closes-when is marked by the loop when its "
+                         "declared check passes, run at most once a minute"),
 }
 
 
@@ -1623,6 +1651,42 @@ def proc_spawn(argv, *, cwd, env, log_path, append=False):
                                  start_new_session=True)
     _CHILDREN[child.pid] = child
     return Proc(child.pid, proc_start(child.pid))
+
+
+def run_check(argv, *, cwd, log_path, timeout):
+    """Run a declared check to its end, in a process group of its own, its
+    output to `log_path`. (verdict, why): `passed` (exit 0), `failed` (any
+    other exit, with the log's last lines), `could_not_judge` (it did not
+    finish in `timeout`; the group is killed) or `never_ran` (it could not
+    start). The last two make no claim about what the check checks."""
+    log = pathlib.Path(log_path)
+    log.parent.mkdir(parents=True, exist_ok=True)
+    t0 = time.monotonic()
+    try:
+        with open(log, "w") as fh:
+            child = subprocess.Popen(list(argv), cwd=str(cwd), stdout=fh,
+                                     stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                     start_new_session=True)
+    except OSError as e:
+        return "never_ran", f"{argv[0]}: {e.strerror or e}"
+    try:
+        code = child.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(child.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+        child.wait()
+        return "could_not_judge", f"did not finish in {fmt_secs(timeout)}"
+    secs = time.monotonic() - t0
+    if code == 0:
+        return "passed", f"exit 0 in {secs:.0f}s"
+    try:
+        lines = [l.strip() for l in log.read_text(errors="replace").splitlines() if l.strip()]
+    except OSError:
+        lines = []
+    return "failed", f"exit {code} in {secs:.0f}s" + (": " + " / ".join(lines[-2:])[:300]
+                                                       if lines else "")
 
 
 # A background run's wrapper: the command runs in the foreground of a shell
@@ -1828,6 +1892,10 @@ MAX_STRIKES = 3
 DIRECTOR_MAX = 2                # director sessions per unit, reset when it is done or unparked
 PROBE_OK_TTL_S = 600            # a model that answered is not probed again for this long
 PROBE_RETRY_S = 300             # nor one that did not
+# A HUMAN- row's closes-when check: run at most this often (from the end of
+# its last run), and killed with everything it started past its timeout.
+CLOSES_WHEN_EVERY_S = 60
+CLOSES_WHEN_TIMEOUT_S = 300
 # The one precondition guard: how long each may fail before the operator is
 # told. Disk and the queue cannot heal without someone, so they say so at once.
 PRECONDITION_NOTIFY_AFTER = {"queue": 0, "prompt": 0, "disk": 0, "memory": 1800, "model": 1800}
@@ -1861,7 +1929,8 @@ class Loop:
                  alive=proc_alive, kill=proc_kill, clock=time.time, sleep=time.sleep,
                  tick_s=TICK_S, probe=None, jobs_share=None, disk_free_gb=None,
                  disk_floor_gb=DISK_FLOOR_GB, code_digest=None, compiles=None, committed=None,
-                 reexec=None, argv=None):
+                 reexec=None, argv=None, closes_when_every_s=CLOSES_WHEN_EVERY_S,
+                 closes_when_timeout_s=CLOSES_WHEN_TIMEOUT_S):
         self.paths = paths
         self.label = label
         self.lanes = lanes
@@ -1879,6 +1948,8 @@ class Loop:
         self.ledger = Ledger(self.state_dir / "loop.json")
         self.spawn, self.alive, self.kill = spawn, alive, kill
         self.clock, self.sleep, self.tick_s = clock, sleep, tick_s
+        self.closes_when_every_s = closes_when_every_s
+        self.closes_when_timeout_s = closes_when_timeout_s
         self.probe = probe or (lambda model: probe_model(model, paths))
         self.jobs_share = jobs_share or cargo_jobs_share
         root = pathlib.Path(lane_root) if lane_root else lane_root_for(paths.workdir)
@@ -1992,6 +2063,11 @@ class Loop:
             return self._beat(self._stop_now())
         if mode == "drain":
             return self._beat(self._drain())
+        if self._closes_when(queue):
+            queue, unreadable = self._read_queue()
+            if queue is None:
+                return self._beat(self._block("queue", unreadable))
+            self._reconcile(queue)          # the closed row readies its dependents
         if self._finish(queue):
             return self._beat(Pool.DONE)
         blocked = self._dispatch(queue)
@@ -2000,9 +2076,14 @@ class Loop:
         self._unblock()
         return self._beat(self._pool_state(queue))
 
+    def _checks(self):
+        """The manifest's [checks], as loaded at start: a closes-when row may
+        name only these (a legacy launch line has none)."""
+        return self.paths.manifest.checks if self.paths.manifest else {}
+
     def _read_queue(self):
         try:
-            return Queue(self.paths.p(self.paths.state)), ""
+            return Queue(self.paths.p(self.paths.state), checks=self._checks()), ""
         except (OSError, ValueError) as e:
             return None, f"{self.paths.state} does not parse: {e}"
 
@@ -2244,6 +2325,58 @@ class Loop:
                 self.ledger.units.pop(row.id)
                 self.ledger.save()
 
+    # -- HUMAN- rows that close themselves ----------------------------------
+
+    def _closes_when(self, queue):
+        """Run the declared check of every held HUMAN- row that names one and
+        whose dependencies are done, at most once per closes_when_every_s, in
+        the main tree; mark the row [x] when it passes. True when a row was
+        marked. A main tree a session holds is left alone: the check would read
+        a tree mid-edit and the mark would commit into it (as _merge waits).
+
+        A failing check changes nothing and is said once per streak; a check
+        that could not judge (it did not finish) or never ran (it could not
+        start) is said once per cause and never marks or strikes. `status`
+        shows the last run of each, and the ledger keeps it."""
+        if self._main_busy():
+            return False
+        checks, marked = self._checks(), False
+        for row in queue.rows:
+            if (not row.closes_when or self.static.get(row.id) is not U.HELD
+                    or row.status is Status.DONE or not queue.deps_met(row)):
+                continue
+            entry = self.ledger.unit(row.id)
+            last = entry.get("closes_when", {})
+            if (last.get("check") == row.closes_when
+                    and self.clock() - last.get("at", 0) < self.closes_when_every_s):
+                continue
+            log = self.paths.p(self.paths.log_dir) / f"closes-when-{row.id}.log"
+            verdict, why = run_check(checks[row.closes_when], cwd=self.paths.workdir,
+                                     log_path=log, timeout=self.closes_when_timeout_s)
+            said = last.get("said", "") if last.get("check") == row.closes_when else ""
+            cause = verdict if verdict in ("passed", "failed") else f"{verdict}: {why}"
+            entry["closes_when"] = {"check": row.closes_when, "at": self.clock(),
+                                    "verdict": verdict, "why": why, "log": str(log),
+                                    "runs": (last.get("runs", 0) + 1
+                                             if last.get("check") == row.closes_when else 1),
+                                    "said": cause}
+            self.ledger.save()
+            name = f"closes-when `{row.closes_when}`"
+            if verdict != "passed":
+                if cause != said:
+                    say(f"unit {row.id}: {name} {verdict.replace('_', ' ')} ({why}) — held; "
+                        f"checked again every {fmt_secs(self.closes_when_every_s)}, "
+                        f"log {log}")
+                continue
+            ok, done = self._mark_done(row.id, "", stage_only=False,
+                                       why=f"closes-when {row.closes_when} passed")
+            say(f"unit {row.id}: {name} passed ({why}) — {done}")
+            if not ok:
+                self._notify_once(f"closes-when:{row.id}", "OPERATOR — closes-when commit failed",
+                                  f"{row.id}: {done}")
+            marked = True
+        return marked
+
     # -- landing finished units ---------------------------------------------
 
     def _main_busy(self):
@@ -2310,9 +2443,10 @@ class Loop:
             say(f"unit {unit}: worktree {wt} kept for its evidence")
         self.fire(unit, E.MERGE_CLEAN, why=f"merged {branch} at {tip}")
 
-    def _mark_done(self, unit, sha, *, stage_only):
+    def _mark_done(self, unit, sha, *, stage_only, why=""):
         """Mark the row [x] with its commit and commit the queue: the subject
-        `ralph: <id> done` is what units_since_audit counts. (ok, why)."""
+        `ralph: <id> done`, with `(why)` after it when given, is what
+        units_since_audit counts. (ok, why)."""
         try:
             queue = Queue(self.paths.p(self.paths.state))
             row = queue.by_id().get(unit)
@@ -2323,7 +2457,7 @@ class Loop:
         except (OSError, ValueError) as e:
             return False, f"the [x] mark failed: {e}"
         git = self.mech.git
-        subject = f"ralph: {unit} done"
+        subject = f"ralph: {unit} done" + (f" ({why})" if why else "")
         if stage_only:
             git("add", "--", self.paths.state)
             if git("diff", "--cached", "--quiet").returncode == 0:
@@ -2581,7 +2715,9 @@ class Loop:
             pool = Pool.RUNNING           # dispatch was refused or failed this tick; next tick retries
         else:
             held = sorted(r.id for r in queue.rows if self.static.get(r.id) is U.HELD)
-            body = (f"held: {', '.join(held)}" if held else
+            closes = {r.id: f" (closes when `{r.closes_when}` passes)"
+                      for r in queue.rows if r.closes_when}
+            body = (f"held: {', '.join(h + closes.get(h, '') for h in held)}" if held else
                     f"no rows in {self.paths.state}" if not queue.rows else
                     "nothing ready and nothing held — check the dependencies")
             key = "stuck:" + ",".join(held)
@@ -3926,6 +4062,18 @@ def status_lines(paths, label, pool=False):
             yield f"  {unit}: {'parked, ' if entry.get('parked') else ''}{counters}"
     for unit in sorted(parked_ids(paths)):
         yield f"  parked {unit}: {first_line(paths.p(paths.parked) / f'{unit}.md')[:120]}"
+    for row in queue.rows:
+        if not row.closes_when or row.status is Status.DONE:
+            continue
+        last = ledger.units.get(row.id, {}).get("closes_when", {})
+        if not queue.deps_met(row):
+            seen = "not checked until its dependencies are done"
+        elif last.get("check") != row.closes_when:
+            seen = "not checked yet"
+        else:
+            seen = (f"last run {fmt_secs(now - last['at'])} ago ({last['runs']} so far): "
+                    f"{last['verdict'].replace('_', ' ')}: {last['why']}, log {last['log']}")
+        yield f"  {row.id}: held — closes when `{row.closes_when}` passes; {seen}"
 
 
 def cmd_status(args):

@@ -232,6 +232,7 @@ A unit is in one of these states:
 | merging | conflict | ready | merge strike; the lane merges the base in and resolves it |
 | any | strikes reach N | held | package with the last session's evidence; notify once |
 | held | operator unparks | ready | strikes reset |
+| held | a `HUMAN-` row's `closes-when` check passes | done | mark `[x]`, commit `ralph: <id> done (closes-when <check> passed)` |
 
 "The run's process ended" covers every way a run can stop: success, failure, a
 crash, an OOM kill or a reboot. The loop records the pid together with the
@@ -239,6 +240,23 @@ process's start time, so a pid that gets reused after a reboot is not mistaken
 for the run. With this table, the incident above becomes `awaiting → ready`
 within a minute of the cut exiting 1, and the lane's next session reads the
 refusal in the log.
+
+A `HUMAN-` row is the operator's act, and the loop cannot see most acts. Some
+leave a fact a command can check, though: an approval recorded, a file
+ratified. Such a row can name a check from its queue manifest's `[checks]` as
+one element, `— closes-when=<check> —`, spelled the way `review=true` is. While
+the row is held and its dependencies are done, the loop runs that check in the
+main tree at most once a minute, with a five-minute timeout, and only while no
+session holds the tree. Exit 0 marks the row `[x]` through the same done
+commit a unit gets, and the existing `row-closed` edge takes it to `done`, so
+the table gains no state and no event. Any other exit leaves the row held and
+is logged once per streak. A check that did not finish (`could_not_judge`) or
+could not start (`never_ran`) is logged once per cause and never marks or
+strikes anything. `status` shows each such row's last run, and the ledger
+keeps it. A row naming a check the manifest does not declare is refused when
+the queue is read, the way an unknown dependency is, so the loop blocks on
+`queue` and says why. The manifest is the one the loop started with: add the
+check, then restart it. A `HUMAN-` row without the element is held as before.
 
 A charter's director, today the supervisor's resolution session, fits in as one
 optional transition. When a charter covers the unit, `held` (by strikes) goes to
