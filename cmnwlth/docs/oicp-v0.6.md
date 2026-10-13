@@ -16,8 +16,9 @@ same for claims: **`verify`** judges a unit of text, claim by claim, against
 the stored texts a caller may read, outside any conversation, and says for
 each claim which rung decided and how far that rung is calibrated. Knowledge
 search gains a **scope** (hits from named texts only) and a **range** on every
-hit (where in its stored text it stands, §2.8), and install progress says which
-of a library's **documents** were read (§2.9).
+hit (where in its stored text it stands, §2.8), install progress says which
+of a library's **documents** were read (§2.9), and a client can **correct** a
+verify decision so the host keeps the case it got wrong (§2.10).
 
 As in v0.5, everything v0.6 adds is a serde-defaulted field, an optional
 endpoint, or a feature string, and **feature presence, not the version
@@ -34,6 +35,7 @@ string, gates behaviour**. The types are in
 | `evidence:verify` | `knowledge.evidence.verify_endpoint` judges a unit at the tiers `verify_tiers` names (§2.6) | `evidence:text`, `verify_endpoint`, a non-empty `verify_tiers` |
 | `knowledge:scoped` | knowledge search takes `documents`, the text names its hits must be cut from (§2.8) | `knowledge:document` |
 | `knowledge:range` | every knowledge-search hit carries `span`, its range of its stored text, or names why not in `span_absent` (§2.8) | `knowledge:document`, `evidence:text` |
+| `evidence:verify_corrections` | `knowledge.evidence.verify_correction_endpoint` takes a client's correction of a verify decision (§2.10) | `evidence:verify`, `verify_correction_endpoint` |
 | `ingest:documents` | install progress lists an install from its spawn, and each document it read once it has returned (§2.9) | `ingest:v1` |
 
 ```rust
@@ -208,12 +210,54 @@ The reference host records each outcome in its ingest loop (`corpus-engine`
 `ingest_inner_with_skipset`, `IngestResult::documents`) and lists at most
 10,000 per install (`DOCUMENTS_LISTED_CAP`).
 
+### 2.10 Corrections
+
+A host that keeps a journal of its verify decisions gives each decided claim
+an `episode_id` (`VerifiedClaim.episode_id`), and takes a client's word that
+one was wrong:
+
+```
+POST {verify_correction_endpoint}
+Request:  VerifyCorrection      { episode_id: String,
+                                  expected: "supported" | "contradicted" | "unsupported",
+                                  witness: Option<WitnessRef> }
+WitnessRef                      { corpus: String, text_sha256: String, start: u64, end: u64 }
+Response: VerifyCorrectionReply { recorded: bool,
+                                  witness: "verified" | "not_held" | "out_of_range" | "not_given" }
+```
+
+- **What is kept.** The host keeps the decision and the correction by
+  reference: the episode, the verdicts, the rung, the score, the evidence by
+  handle, the witness by name and range. Never the claim's words: the
+  client keeps those by the `episode_id`, and decides whether to share them.
+- **The witness is read back** before anything is kept: `verified` when a
+  corpus the caller may read holds the text and the range lies inside it,
+  `out_of_range` when it does not, `not_held` for a text the caller cannot
+  reach (one answer for both, as v0.5 §2.5's). It says the address is real,
+  not that the passage supports the claim.
+- **`recorded: false`** when the journal is switched off or full for the
+  day: a posture, not an error. A listener that keeps no journal refuses with
+  `503 no journal`; an `episode_id` that is not one the host issues is
+  `400 not an episode id`.
+- `expected` may be `contradicted`, which no rung yet decides: a correction
+  can name the case the verifier cannot.
+
+The reference host (`routes_oicp_verify_journal`) keeps both in its
+grounding journal under surface `oicp_verify` (`svrn journal grounding`),
+beside the in-turn gate's decisions: one line per decided claim, with the
+claim's specifics counted against the passages read (`specifics: {checked,
+absent}`), so a claim unsupported with every specific present (its facts in
+the sources, in no single passage) is a query over the journal. `fast`'s
+`abstained` and a `not_checkable` claim decide nothing and keep nothing.
+Only the operator listener keeps a journal.
+
 ## 6. Conformance (additions)
 
 | check | holds | red against |
 |---|---|---|
 | `evidence.verify` | the fixture's planted sentence comes back as claims whose `exact` is the unit's `[start, end)`; every verdict is one of the five; every passage's `span` dereferences to its `exact`; a tier outside `verify_tiers` is `422 tier not offered` | a passage `exact` one character off |
 | `knowledge.range` | every hit for each fixture signature carries `span` or a `span_absent` from the set, never both; each span dereferences to its `exact`; at least one hit over the fixture's plain texts is ranged | a hit `exact` one character off |
+| `evidence.verify_correction` | a decided claim of the fixture unit carries an `episode_id`; a correction whose witness is a span verify returned is `verified`, one running past its text `out_of_range`; a malformed episode is `400 not an episode id`. Writes two correction lines on a live host | a host that never reads the witness back |
 | `ingest.documents` | once the fixture's install has returned, every fixture document is listed `ready` under the sha256 of its text, each with a `source`, none `failed`; and `ingest.recipe` holds that an install answering `spawned: true` is in the next poll | an entry listing no documents; an install missing from the first poll |
 | `knowledge.scoped` | a query reaching several fixture texts, scoped to the second-ranked one, returns at least one hit and every hit from that text; a `documents` entry that is not a text name is `400` | a host that ignores `documents` |
 
@@ -221,7 +265,8 @@ The reference host records each outcome in its ingest loop (`corpus-engine`
 `verify_endpoint`, with a non-empty `verify_tiers`, and never without
 `evidence:text`; `knowledge:scoped` and `knowledge:range` never without
 `knowledge:document`, and `knowledge:range` never without `evidence:text`;
-`ingest:documents` never without `ingest:v1`.
+`ingest:documents` never without `ingest:v1`; `evidence:verify_corrections`
+iff `verify_correction_endpoint`, and never without `evidence:verify`.
 
 ## 7. Backward compatibility
 

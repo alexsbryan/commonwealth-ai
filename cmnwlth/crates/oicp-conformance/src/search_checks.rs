@@ -39,6 +39,18 @@ pub fn range_hit_failures(hits: &[KnowledgeResult]) -> Vec<String> {
     f
 }
 
+/// [`range_hit_failures`] over a search reply's raw hits, when the host
+/// advertises `knowledge:range`; nothing otherwise.
+pub fn range_failures_if_advertised(m: &ProviderManifest, hits: &[Value]) -> Vec<String> {
+    if !m.has_feature(features::KNOWLEDGE_RANGE) {
+        return Vec::new();
+    }
+    match serde_json::from_value::<Vec<KnowledgeResult>>(Value::Array(hits.to_vec())) {
+        Ok(typed) => range_hit_failures(&typed),
+        Err(e) => vec![format!("hits do not decode: {e}")],
+    }
+}
+
 async fn search_body(
     host: &Host,
     m: &ProviderManifest,

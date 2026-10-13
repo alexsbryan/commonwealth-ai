@@ -370,3 +370,178 @@ async fn the_manifest_advertises_verify_with_its_endpoint_and_tiers() {
         .iter()
         .any(|f| f == oicp_types::features::EVIDENCE_VERIFY));
 }
+
+/// POST `body` to `path` on `router` from loopback.
+async fn post_on(
+    router: axum::Router,
+    path: &str,
+    body: serde_json::Value,
+) -> (StatusCode, serde_json::Value) {
+    let mut req = Request::post(path)
+        .header("host", "127.0.0.1:9741")
+        .header("content-type", "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap();
+    let addr: SocketAddr = "127.0.0.1:55004".parse().unwrap();
+    req.extensions_mut().insert(ConnectInfo(addr));
+    let resp = router.oneshot(req).await.unwrap();
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    (status, serde_json::from_slice(&bytes).unwrap_or_default())
+}
+
+/// The journal's lines, waiting for the append the route spawned.
+async fn journal_lines(dir: &std::path::Path, at_least: usize) -> Vec<serde_json::Value> {
+    for _ in 0..100 {
+        let mut lines = Vec::new();
+        for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+            if e.file_name().to_string_lossy().starts_with("grounding-") {
+                let text = std::fs::read_to_string(e.path()).unwrap();
+                lines.extend(text.lines().map(|l| serde_json::from_str(l).unwrap()));
+            }
+        }
+        if lines.len() >= at_least {
+            return lines;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!(
+        "the journal at {} never reached {at_least} line(s)",
+        dir.display()
+    );
+}
+
+/// OICP v0.6 §2.10: a decided claim is kept in the grounding journal under
+/// `oicp_verify`, by handle and count, never by its words, and comes back
+/// with the `episode_id` a correction names it by; a correction is kept
+/// with what reading its witness back found. A router with no journal
+/// keeps nothing and refuses corrections by name.
+#[tokio::test]
+async fn a_judged_claim_is_journaled_by_reference_and_a_correction_names_it() {
+    use sovereign_daemon::routes_oicp_verify::VerifyJournal;
+
+    let (_tmp, state) = fixture_state().await;
+    let journal = tempfile::tempdir().unwrap();
+    let router = || {
+        client_router(state.clone())
+            .layer(axum::Extension(VerifyJudge(Arc::new(TideTableJudge))))
+            .layer(axum::Extension(VerifyJournal(journal.path().to_path_buf())))
+    };
+    let unit = "Okafor surveyed 14 agreements on the shared gauges.";
+    let (status, body) = post_on(
+        router(),
+        "/oicp/v1/verify",
+        serde_json::json!({"unit": unit, "tier": "checker"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let r = reply(&body);
+    let [c] = r.claims.as_slice() else {
+        panic!("{body}")
+    };
+    let episode = c
+        .episode_id
+        .clone()
+        .unwrap_or_else(|| panic!("an episode: {body}"));
+
+    let lines = journal_lines(journal.path(), 1).await;
+    let raw = std::fs::read_dir(journal.path())
+        .unwrap()
+        .flatten()
+        .map(|e| std::fs::read_to_string(e.path()).unwrap())
+        .collect::<String>();
+    assert!(
+        !raw.contains("surveyed"),
+        "no claim words in the journal: {raw}"
+    );
+    let d = &lines[0];
+    assert_eq!(d["kind"], "decision");
+    assert_eq!(d["surface"], "oicp_verify");
+    assert_eq!(d["episode_id"], episode.as_str());
+    assert_eq!(d["verdict"], "unsupported");
+    assert_eq!(d["action"], "checker/chunk-support");
+    assert_eq!(d["chunks"], c.evidence.len());
+    // "14" only: a one-word name opening the sentence is not a specific
+    // (`sentence_specifics`), and the notes say eleven, so it is absent.
+    assert_eq!(
+        d["specifics"],
+        serde_json::json!({"checked": 1, "absent": 1}),
+        "{d}"
+    );
+
+    // A witness read back: inside a held text, and off its end.
+    let span = c
+        .evidence
+        .iter()
+        .find_map(|p| p.span.clone())
+        .unwrap_or_else(|| panic!("a judged passage with a span: {body}"));
+    let witness = |end: u64| {
+        serde_json::json!({
+            "corpus": span.corpus_id,
+            "text_sha256": span.document.text_sha256,
+            "start": span.start,
+            "end": end,
+        })
+    };
+    for (end, found) in [
+        (span.end, "verified"),
+        (span.end + 1_000_000, "out_of_range"),
+    ] {
+        let (status, body) = post_on(
+            router(),
+            "/oicp/v1/verify/correction",
+            serde_json::json!({"episode_id": episode, "expected": "supported", "witness": witness(end)}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["recorded"], true, "{body}");
+        assert_eq!(body["witness"], found, "{body}");
+    }
+    let lines = journal_lines(journal.path(), 3).await;
+    let corrections: Vec<_> = lines.iter().filter(|l| l["kind"] == "correction").collect();
+    assert_eq!(corrections.len(), 2);
+    assert!(corrections
+        .iter()
+        .all(|l| l["episode_id"] == episode.as_str()));
+
+    let (status, body) = post_on(
+        router(),
+        "/oicp/v1/verify/correction",
+        serde_json::json!({"episode_id": "the third claim", "expected": "supported"}),
+    )
+    .await;
+    assert_eq!(
+        (status, &body["error"]),
+        (
+            StatusCode::BAD_REQUEST,
+            &serde_json::json!("not an episode id")
+        )
+    );
+
+    let (status, body) = post_on(
+        client_router(state.clone()),
+        "/oicp/v1/verify/correction",
+        serde_json::json!({"episode_id": episode, "expected": "supported"}),
+    )
+    .await;
+    assert_eq!(
+        (status, &body["error"]),
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            &serde_json::json!("no journal")
+        )
+    );
+    let (_, body) = post_on(
+        client_router(state.clone()).layer(axum::Extension(VerifyJudge(Arc::new(TideTableJudge)))),
+        "/oicp/v1/verify",
+        serde_json::json!({"unit": unit, "tier": "checker"}),
+    )
+    .await;
+    assert_eq!(
+        reply(&body).claims[0].episode_id,
+        None,
+        "no journal, no episode"
+    );
+}

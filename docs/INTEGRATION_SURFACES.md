@@ -71,7 +71,10 @@ searched is named with its reason. `POST /oicp/v1/verify`
 corpora at the tiers the manifest names (`fast` with no model, `checker` with
 the daemon's judge): each claim an exact range of the unit with one of five
 verdicts, the rung that decided, the passages it judged as spans, and an
-`uncalibrated` operating point. Every knowledge-search hit carries
+`uncalibrated` operating point. A decided claim carries an `episode_id`, and
+`POST /oicp/v1/verify/correction` (`evidence:verify_corrections`, §2.10) takes
+a client's correction of it, with an optional witness range the host reads
+back; both are kept by reference in the operator's grounding journal. Every knowledge-search hit carries
 `document`, its text's record with the metadata the extractor or the recipe
 declared (`knowledge:document`), local and peer-served alike, or names why
 it has none in `document_absent`. Under v0.6 §2.8 a search may name the texts

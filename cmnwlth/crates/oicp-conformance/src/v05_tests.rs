@@ -262,6 +262,22 @@ async fn knowledge_range_and_scoped_are_red_against_a_span_off_by_one_and_a_leak
 }
 
 #[tokio::test]
+async fn evidence_verify_correction_is_red_against_a_witness_never_read() {
+    use crate::verify_checks::check_evidence_verify_correction;
+    let b = bench(Breaks::default()).await;
+    green(&check_evidence_verify_correction(&b.host, &b.manifest, &b.lib, &b.fixture).await);
+    let b = bench(Breaks {
+        witness_unread: true,
+        ..Breaks::default()
+    })
+    .await;
+    red(
+        &check_evidence_verify_correction(&b.host, &b.manifest, &b.lib, &b.fixture).await,
+        "not OutOfRange",
+    );
+}
+
+#[tokio::test]
 async fn the_evidence_checks_say_why_they_could_not_judge() {
     let b = bench(Breaks::default()).await;
     let gone = FixtureState::Unavailable("ingest:recipe not advertised".into());
@@ -273,6 +289,8 @@ async fn the_evidence_checks_say_why_they_could_not_judge() {
         crate::search_checks::check_knowledge_range(&b.host, &b.manifest, &b.lib, &gone).await,
         crate::search_checks::check_knowledge_scoped(&b.host, &b.manifest, &b.lib, &gone).await,
         crate::ingest_checks::check_ingest_documents(&b.host, &b.manifest, &b.lib, &gone).await,
+        crate::verify_checks::check_evidence_verify_correction(&b.host, &b.manifest, &b.lib, &gone)
+            .await,
     ] {
         assert_eq!(c.status, CheckStatus::Skip, "{}", c.id);
         assert!(c.detail.starts_with("could not judge"), "{}", c.detail);

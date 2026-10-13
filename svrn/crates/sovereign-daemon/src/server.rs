@@ -262,6 +262,10 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
                 crate::routes_oicp_verify::VERIFY_ENDPOINT,
                 post(crate::routes_oicp_verify::verify),
             )
+            .route(
+                crate::routes_oicp_verify_journal::VERIFY_CORRECTION_ENDPOINT,
+                post(crate::routes_oicp_verify_journal::verify_correction),
+            )
             // Ollama-native /api/* compatibility shim. Pure translation over the
             // OpenAI handlers above — no new inference/routing logic. Chat +
             // generate carry the same peer-admission gate as /v1/chat/completions

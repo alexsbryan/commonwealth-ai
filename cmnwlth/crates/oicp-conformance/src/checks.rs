@@ -8,8 +8,8 @@
 //! The v0.5 checks live beside it (`ingest_checks`, `evidence_checks`,
 //! `auth_checks`) and run from [`run_all`] after these.
 
-use oicp_types::{features, KnowledgeResult, ProviderManifest};
-use serde_json::{json, Value};
+use oicp_types::{features, ProviderManifest};
+use serde_json::json;
 
 use crate::args::{self, Args};
 use crate::fixture::Library;
@@ -242,6 +242,10 @@ async fn v05_checks(host: &Host, m: &ProviderManifest, args: &Args) -> Vec<Check
             out.push(evidence_checks::check_evidence_text(host, m, &lib, &fixture).await);
             out.push(evidence_checks::check_evidence_align(host, m, &lib, &fixture).await);
             out.push(crate::verify_checks::check_evidence_verify(host, m, &lib, &fixture).await);
+            out.push(
+                crate::verify_checks::check_evidence_verify_correction(host, m, &lib, &fixture)
+                    .await,
+            );
             out.push(crate::search_checks::check_knowledge_range(host, m, &lib, &fixture).await);
             out.push(crate::search_checks::check_knowledge_scoped(host, m, &lib, &fixture).await);
         }
@@ -254,6 +258,7 @@ async fn v05_checks(host: &Host, m: &ProviderManifest, args: &Args) -> Vec<Check
                 "evidence.text",
                 "evidence.align",
                 "evidence.verify",
+                "evidence.verify_correction",
                 "knowledge.range",
                 "knowledge.scoped",
             ] {
@@ -637,14 +642,9 @@ async fn check_knowledge_search(host: &Host, m: &ProviderManifest) -> Check {
         }
     }
     // v0.6 §2.8: with knowledge:range, every hit carries its range or why not.
-    if m.has_feature(features::KNOWLEDGE_RANGE) {
-        let bad = match serde_json::from_value::<Vec<KnowledgeResult>>(Value::Array(hits.clone())) {
-            Ok(typed) => crate::search_checks::range_hit_failures(&typed),
-            Err(e) => vec![format!("hits do not decode: {e}")],
-        };
-        if !bad.is_empty() {
-            return Check::fail(id, Level::Feature, bad.join("; "));
-        }
+    let bad = crate::search_checks::range_failures_if_advertised(m, &hits);
+    if !bad.is_empty() {
+        return Check::fail(id, Level::Feature, bad.join("; "));
     }
     // `corpora_searched` vs the advertised set: the spec does NOT require
     // searched ⊆ advertised. A mesh-federated host legitimately searches

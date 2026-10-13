@@ -33,6 +33,10 @@ pub mod reasons {
     /// passage whose text or record cannot be read gives v0.5's reason
     /// instead (`texts not stored`, `text not stored`, `document unreadable`).
     pub use crate::evidence::reasons::{NOT_AN_EXACT_SLICE, PASSAGE_NAMES_NO_TEXT};
+    /// A correction's `episode_id` is not one this host issues (a UUID).
+    pub const NOT_AN_EPISODE: &str = "not an episode id";
+    /// This listener keeps no journal, so a correction has nowhere to go.
+    pub const NO_JOURNAL: &str = "no journal";
 }
 
 /// A verdict's operating point before any bench has calibrated its cell.
@@ -133,6 +137,10 @@ pub struct VerifiedClaim {
     pub score: Option<f32>,
     /// The deciding cell's operating point, or [`UNCALIBRATED`].
     pub operating_point: String,
+    /// The decision's id in the host's journal, to correct it by (v0.6
+    /// §2.10). Absent when the host keeps no journal of it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub episode_id: Option<String>,
 }
 
 /// Whether a claim is one the host checks. A claim it does not check is
@@ -183,6 +191,72 @@ pub struct JudgedPassage {
     /// The rung's score for this passage, where it has one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub score: Option<f32>,
+}
+
+/// What a client says a decision should have been. Closed, and wider than
+/// the incumbent judges' verdicts by `contradicted`: a correction may say the
+/// sources say the opposite, which no incumbent judge can yet.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum CorrectedVerdict {
+    /// The sources support the claim.
+    Supported,
+    /// The sources say otherwise.
+    Contradicted,
+    /// Nothing in the sources bears on it.
+    Unsupported,
+}
+
+/// A range of a stored text a correction points at as its witness: by
+/// name and code points, never by its words.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WitnessRef {
+    /// The corpus the witness was read from.
+    pub corpus: String,
+    /// The stored text's name (64 lowercase hex).
+    pub text_sha256: String,
+    /// First code point.
+    pub start: u64,
+    /// One past the last code point.
+    pub end: u64,
+}
+
+/// What the host found when it read the witness back, mechanically.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum WitnessCheck {
+    /// The text is held and the range lies inside it.
+    Verified,
+    /// No corpus the caller may read holds a text of that name.
+    NotHeld,
+    /// The text is held; the range is not inside it.
+    OutOfRange,
+    /// The correction named no witness.
+    NotGiven,
+}
+
+/// `POST {verify_correction_endpoint}` (v0.6 §2.10): one decision a client
+/// says was wrong, by the `episode_id` its claim came back with.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VerifyCorrection {
+    /// The claim's `episode_id`, from a [`VerifiedClaim`].
+    pub episode_id: String,
+    /// What it should have been.
+    pub expected: CorrectedVerdict,
+    /// Where in the sources the client says the answer stands; the host
+    /// reads it back before it records anything.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub witness: Option<WitnessRef>,
+}
+
+/// The reply to a correction.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VerifyCorrectionReply {
+    /// Whether the host kept it: `false` when its journal is switched off
+    /// or full for the day, a posture, never an error.
+    pub recorded: bool,
+    /// What reading the witness back found.
+    pub witness: WitnessCheck,
 }
 
 #[cfg(test)]

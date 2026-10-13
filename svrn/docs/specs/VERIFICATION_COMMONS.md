@@ -484,6 +484,13 @@ accuracy, is what the eval card certifies.)
    hard negatives; v1+ folds in-situ receipts into training as they
    accumulate, re-running the same gate every version.
 
+Status, 2026-10-12: steps 1 and 3 exist for one surface, OICP `verify`
+(`oicp-v0.6.md` §2.10). Each decided claim is kept in the grounding journal
+under `oicp_verify`, and a client's correction of it, its witness range read
+back mechanically, is kept beside it by `episode_id`. The in-turn gate's
+journal predates this (phase 0 of `VERIFIER_V0.md` §6.1); neither has the
+outcome labels, the report or the sharing yet.
+
 Coordination: envelope fields (`hw_fingerprint`, `backend`) converge with
 the in-flight capability-oracle work (peer claims on `mesh_cmd.rs`); align
 schema there before step 4.

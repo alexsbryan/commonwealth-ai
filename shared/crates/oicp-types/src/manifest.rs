@@ -63,6 +63,10 @@ pub mod features {
     /// stored texts at the tiers `verify_tiers` names; MUST co-occur with
     /// that endpoint.
     pub const EVIDENCE_VERIFY: &str = "evidence:verify";
+    /// v0.6 §2.10: `knowledge.evidence.verify_correction_endpoint` takes a
+    /// client's correction of a verify decision; requires
+    /// `evidence:verify`.
+    pub const EVIDENCE_VERIFY_CORRECTIONS: &str = "evidence:verify_corrections";
     /// v0.5 §3: knowledge-search hits carry `document`.
     pub const KNOWLEDGE_DOCUMENT: &str = "knowledge:document";
     /// v0.6 §2.8: knowledge search takes `documents`, the text names its
@@ -149,6 +153,7 @@ pub mod features {
         EVIDENCE_TEXT,
         EVIDENCE_ALIGN,
         EVIDENCE_VERIFY,
+        EVIDENCE_VERIFY_CORRECTIONS,
         KNOWLEDGE_DOCUMENT,
         KNOWLEDGE_SCOPED,
         KNOWLEDGE_RANGE,

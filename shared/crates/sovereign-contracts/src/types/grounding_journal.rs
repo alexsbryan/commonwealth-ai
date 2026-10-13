@@ -71,8 +71,69 @@ pub const GROUNDING_JOURNAL_SCHEMA: &str = "grounding-journal/v1";
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum GroundingLine {
-    /// One gate decision on one gated turn.
+    /// One gate decision on one gated turn, or one claim `POST
+    /// /oicp/v1/verify` judged (`surface: "oicp_verify"`).
     Decision(GroundingDecisionLine),
+    /// A client's correction of one decision, joined by `episode_id`
+    /// (VERIFICATION_COMMONS.md §2, D0): the case the verifier got wrong,
+    /// kept so the platform can learn it. Added 2026-10-12; a reader that
+    /// predates it skips the line as unreadable, never mis-parses it.
+    Correction(GroundingCorrectionLine),
+}
+
+pub use oicp_types::verify::{CorrectedVerdict, WitnessCheck, WitnessRef};
+
+/// One correction (see [`GroundingLine::Correction`]). Ids and closed-set
+/// tokens only, as every line here: the claim's words stay with the client
+/// that sent them.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct GroundingCorrectionLine {
+    /// See [`GROUNDING_JOURNAL_SCHEMA`].
+    pub schema: String,
+    /// RFC 3339, UTC.
+    pub ts: String,
+    /// The decision corrected.
+    pub episode_id: String,
+    /// What it should have been.
+    pub expected: CorrectedVerdict,
+    /// Where in the sources the client says the answer stands.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub witness: Option<WitnessRef>,
+    /// What reading the witness back found.
+    pub witness_check: WitnessCheck,
+}
+
+impl GroundingCorrectionLine {
+    /// A correction with the schema and time stamped, the only place they
+    /// are set.
+    pub fn new(
+        episode_id: &str,
+        expected: CorrectedVerdict,
+        witness: Option<WitnessRef>,
+        witness_check: WitnessCheck,
+    ) -> Self {
+        Self {
+            schema: GROUNDING_JOURNAL_SCHEMA.to_string(),
+            ts: chrono::Utc::now().to_rfc3339(),
+            episode_id: episode_id.to_string(),
+            expected,
+            witness,
+            witness_check,
+        }
+    }
+}
+
+/// How many of a claim's specifics (numbers, dates, names) the decision
+/// looked for, and how many no judged passage carried. `absent == 0` with
+/// `verdict: unsupported` is the mining handle for a claim whose facts are
+/// all in the sources but in no single passage, the case a judge reading
+/// passages one at a time cannot decide.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SpecificsTally {
+    /// Specifics the claim asserts.
+    pub checked: u32,
+    /// Of those, the ones no judged passage carries.
+    pub absent: u32,
 }
 
 /// What one judge said about one claim — the wire vocabulary phase 1
@@ -465,6 +526,10 @@ pub struct GroundingDecisionLine {
     /// there was nothing to explain.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub judge_failure: Option<JudgeFailure>,
+    /// The claim's specifics against the judged passages, where the
+    /// surface counts them (`oicp_verify` does). Added 2026-10-12.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub specifics: Option<SpecificsTally>,
 }
 
 impl GroundingDecisionLine {
@@ -490,6 +555,7 @@ impl GroundingDecisionLine {
             gate_ms,
             calls: Vec::new(),
             judge_failure: None,
+            specifics: None,
         }
     }
 }
@@ -509,6 +575,8 @@ pub fn append(dir: &Path, line: &GroundingLine) -> std::io::Result<bool> {
 /// rate — the honesty rules live here, not in the caller.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct GroundingStats {
+    /// Corrections recorded (VERIFICATION_COMMONS.md §2, D0).
+    pub corrections: usize,
     /// Decisions recorded.
     pub decisions: usize,
     /// Verdicts that cleared tau.
@@ -566,7 +634,13 @@ pub fn stats(lines: &[GroundingLine], unreadable: usize) -> GroundingStats {
     };
     let mut durations: Vec<u64> = Vec::new();
     for line in lines {
-        let GroundingLine::Decision(d) = line;
+        let d = match line {
+            GroundingLine::Decision(d) => d,
+            GroundingLine::Correction(_) => {
+                s.corrections += 1;
+                continue;
+            }
+        };
         s.decisions += 1;
         match d.verdict {
             GateJudgeVerdict::Supported => s.supported += 1,
@@ -593,197 +667,5 @@ pub fn stats(lines: &[GroundingLine], unreadable: usize) -> GroundingStats {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn decision(verdict: GateJudgeVerdict, audited: bool, ms: u64) -> GroundingLine {
-        let mut d = GroundingDecisionLine::new("chat", 0.55, ms);
-        d.verdict = verdict;
-        d.claim_audited = audited;
-        GroundingLine::Decision(d)
-    }
-
-    /// THE guard this module exists for: nothing content-bearing can
-    /// reach a line, because the record has nowhere to put it. Every
-    /// field a caller could conceivably route prose through is exercised
-    /// with a canary; if someone adds a free-form field, the canary
-    /// appears in the serialized line and this fails.
-    #[test]
-    fn no_content_bearing_field_can_reach_a_line() {
-        const CANARY: &str = "THE_USERS_CLAIM_TEXT_MUST_NOT_APPEAR";
-        let mut d = GroundingDecisionLine::new("chat", 0.55, 12);
-        // The closed-set token fields are the only strings a caller
-        // controls beyond ids; a hostile caller putting prose there is
-        // the thing the reviewer of that call site must catch — but the
-        // struct itself must offer no field DOCUMENTED for text.
-        d.action = Some("released".into());
-        d.evidence = vec![EvidenceRef {
-            corpus: "corpus-a".into(),
-            chunk: 41,
-        }];
-        // The per-call census is the newest place prose could have hidden:
-        // it names a mechanism and counts characters, and carries neither
-        // the prompt nor the reply.
-        d.calls = vec![GateCallRow {
-            mechanism: GateCallMechanism::SpecificsScan,
-            ms: 17_800,
-            prompt_chars: CANARY.len(),
-            out_chars: 4,
-            ok: true,
-            stable_prefix_bytes: None,
-            start_offset_ms: 12,
-        }];
-        let line = serde_json::to_string(&GroundingLine::Decision(d)).unwrap();
-        assert!(!line.contains(CANARY));
-        // The serialized field set is exactly the declared one — a new
-        // field (where content could hide) must show up here and be
-        // justified.
-        let v: serde_json::Value = serde_json::from_str(&line).unwrap();
-        let mut keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
-        keys.sort_unstable();
-        assert_eq!(
-            keys,
-            vec![
-                "action",
-                "calls",
-                "chunks",
-                "claim_audited",
-                "entity_anchored",
-                "episode_id",
-                "evidence",
-                "evidence_unresolved",
-                "gate_ms",
-                "kind",
-                "retried",
-                "schema",
-                "surface",
-                "tau",
-                "top_similarity",
-                "ts",
-                "verdict",
-                "violation_prob",
-            ]
-        );
-    }
-
-    #[test]
-    fn nothing_judged_is_none_not_zero_percent() {
-        let s = stats(&[decision(GateJudgeVerdict::CouldNotJudge, false, 5)], 0);
-        assert_eq!(s.flag_rate(), None, "0/0 must be could-not-judge, not 0%");
-        assert_eq!(s.could_not_judge, 1);
-    }
-
-    #[test]
-    fn could_not_judge_is_never_in_the_flag_rate_denominator() {
-        let lines = vec![
-            decision(GateJudgeVerdict::Supported, true, 10),
-            decision(GateJudgeVerdict::Unsupported, true, 20),
-            decision(GateJudgeVerdict::CouldNotJudge, false, 30),
-        ];
-        let s = stats(&lines, 0);
-        assert_eq!(
-            s.flag_rate(),
-            Some(0.5),
-            "2 judged, 1 flagged — the third is not a verdict"
-        );
-    }
-
-    #[test]
-    fn evidence_coverage_reports_the_mining_bound() {
-        let mut d = GroundingDecisionLine::new("chat", 0.55, 10);
-        d.chunks = 4;
-        d.evidence = vec![
-            EvidenceRef {
-                corpus: "c".into(),
-                chunk: 1,
-            },
-            EvidenceRef {
-                corpus: "c".into(),
-                chunk: 2,
-            },
-        ];
-        d.evidence_unresolved = 2;
-        let s = stats(&[GroundingLine::Decision(d)], 0);
-        assert_eq!(s.evidence_coverage(), Some(0.5));
-        let s0 = stats(&[], 0);
-        assert_eq!(s0.evidence_coverage(), None);
-    }
-
-    #[test]
-    fn a_real_append_round_trips_through_the_stream() {
-        let dir = tempfile::tempdir().unwrap();
-        assert!(append(dir.path(), &decision(GateJudgeVerdict::Supported, true, 10)).unwrap());
-        let (lines, bad) = read_all(dir.path());
-        assert_eq!(bad, 0);
-        assert_eq!(lines.len(), 1);
-        assert_eq!(stats(&lines, bad).supported, 1);
-    }
-
-    /// Every mechanism carries its own name. A duplicated label would make
-    /// two mechanisms indistinguishable in the census — which is precisely
-    /// the blindness this type was added to end (ARCH §10.6).
-    #[test]
-    fn every_gate_call_mechanism_has_a_distinct_label() {
-        use std::collections::HashSet;
-        let all = [
-            GateCallMechanism::ClaimExtraction,
-            GateCallMechanism::ValueExtraction,
-            GateCallMechanism::ClaimList,
-            GateCallMechanism::PerClaimJudge,
-            GateCallMechanism::ChunkJudge,
-            GateCallMechanism::SpecificsScan,
-            GateCallMechanism::BatchedSupport,
-            GateCallMechanism::LocatedSpanTriage,
-            GateCallMechanism::Surgery,
-            GateCallMechanism::Rewrite,
-            GateCallMechanism::Retry,
-            GateCallMechanism::ShortGuardRetry,
-            GateCallMechanism::Citation,
-            GateCallMechanism::SentenceSweep,
-            GateCallMechanism::EvidenceSufficiency,
-        ];
-        let labels: HashSet<&str> = all.iter().map(|m| m.label()).collect();
-        assert_eq!(labels.len(), all.len(), "two mechanisms share a name");
-        // The wire token and the reader's word are the same string, so a
-        // census joining on either cannot pick the wrong one.
-        for m in all {
-            let wire = serde_json::to_string(&m).unwrap();
-            assert_eq!(wire, format!("\"{}\"", m.label()));
-        }
-    }
-
-    /// A journal written before the census existed must still read: the
-    /// field defaults to empty rather than failing the whole line, because
-    /// a reader that drops old lines would silently shrink every historical
-    /// count computed over this stream.
-    #[test]
-    fn a_pre_census_line_still_parses_with_no_calls() {
-        let mut d = GroundingDecisionLine::new("chat", 0.9, 37_200);
-        d.calls = vec![GateCallRow {
-            mechanism: GateCallMechanism::PerClaimJudge,
-            ms: 1_500,
-            prompt_chars: 31_600,
-            out_chars: 30,
-            ok: true,
-            stable_prefix_bytes: Some(28_000),
-            start_offset_ms: 4_100,
-        }];
-        let mut v: serde_json::Value =
-            serde_json::from_str(&serde_json::to_string(&GroundingLine::Decision(d)).unwrap())
-                .unwrap();
-        v.as_object_mut().unwrap().remove("calls");
-        let back: GroundingLine = serde_json::from_value(v).unwrap();
-        let GroundingLine::Decision(back) = back;
-        assert!(back.calls.is_empty(), "absent census reads as no rows");
-    }
-
-    /// This stream's own switch must gate THIS stream only.
-    #[test]
-    fn this_streams_own_marker_stops_the_writes() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(dir.path()).unwrap();
-        std::fs::write(GROUNDING_STREAM.marker_in(dir.path()), "").unwrap();
-        assert!(!GROUNDING_STREAM.enabled(dir.path()));
-        assert!(!append(dir.path(), &decision(GateJudgeVerdict::Supported, true, 1)).unwrap());
-    }
-}
+#[path = "grounding_journal_tests.rs"]
+mod tests;

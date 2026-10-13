@@ -173,6 +173,12 @@ pub(crate) fn operator_listener_router(
             "operator listener: no runtime, so verify's checker tier answers `no checker`"
         ),
     }
+    // verify keeps its decisions and takes corrections in the operator's
+    // grounding journal, on this listener only, for the same reason the
+    // judge is layered here (`routes_oicp_verify_journal::VerifyJournal`).
+    router = router.layer(axum::Extension(
+        crate::routes_oicp_verify_journal::VerifyJournal(sovereign_contracts::types::journal_dir()),
+    ));
     match (mcp_mount, posture.withheld()) {
         (Some(_), Some(_)) => {
             router = router.merge(behind(crate::posture::mcp_withheld_router()));

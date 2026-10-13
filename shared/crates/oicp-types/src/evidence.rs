@@ -86,6 +86,11 @@ pub struct EvidenceEndpoints {
     /// The tiers `verify_endpoint` serves. Empty iff it is absent.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub verify_tiers: Vec<crate::verify::VerifyTier>,
+    /// `POST {verify_correction_endpoint}`, taking a
+    /// [`crate::verify::VerifyCorrection`] (v0.6 §2.10). Present iff
+    /// `evidence:verify_corrections`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verify_correction_endpoint: Option<String>,
 }
 
 /// One stored text, and where it came from.

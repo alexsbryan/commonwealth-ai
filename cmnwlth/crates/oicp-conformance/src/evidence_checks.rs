@@ -57,6 +57,16 @@ pub fn v05_feature_failures(m: &ProviderManifest) -> Vec<String> {
     if m.has_feature(features::INGEST_RECIPE) && !m.has_feature(features::INGEST_V1) {
         f.push("ingest:recipe requires ingest:v1".into());
     }
+    let corrections = m.has_feature(features::EVIDENCE_VERIFY_CORRECTIONS);
+    if corrections != evidence.is_some_and(|e| e.verify_correction_endpoint.is_some()) {
+        f.push(format!(
+            "evidence:verify_corrections ({corrections}) must co-occur with \
+             knowledge.evidence.verify_correction_endpoint"
+        ));
+    }
+    if corrections && !verify {
+        f.push("evidence:verify_corrections requires evidence:verify".into());
+    }
     if m.has_feature(features::INGEST_DOCUMENTS) && !m.has_feature(features::INGEST_V1) {
         f.push("ingest:documents requires ingest:v1".into());
     }

@@ -131,6 +131,7 @@ fn evidence_endpoints_omit_an_absent_align_endpoint() {
         align_endpoint: None,
         verify_endpoint: None,
         verify_tiers: Vec::new(),
+        verify_correction_endpoint: None,
     };
     assert_eq!(
         serde_json::to_value(&e).unwrap(),

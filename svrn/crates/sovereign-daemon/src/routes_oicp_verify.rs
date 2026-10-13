@@ -37,6 +37,7 @@ use oicp_types::verify::{
 };
 use quote_align::code_point_slice;
 use sovereign_contracts::principal::AttachedPrincipal;
+use sovereign_contracts::types::SpecificsTally;
 use sovereign_core::oicp::ShardingPrivacy;
 use sovereign_core::runtime::{
     claim_chunk_support, sentence_ranges, sentence_specifics, value_present_in_chunks,
@@ -49,6 +50,7 @@ use crate::oicp_evidence::{
     absence_reason, open_for_reading, readable_corpora, requested_corpora, span_of,
 };
 use crate::routes_internal::ErrorBody;
+pub use crate::routes_oicp_verify_journal::VerifyJournal;
 use crate::state::AppState;
 
 /// Where the route is mounted, and what the manifest advertises.
@@ -100,6 +102,7 @@ pub async fn verify(
     State(state): State<AppState>,
     principal: Option<Extension<AttachedPrincipal>>,
     judge: Option<Extension<VerifyJudge>>,
+    journal: Option<Extension<VerifyJournal>>,
     Json(req): Json<VerifyRequest>,
 ) -> Result<Json<VerifyResponse>, Refusal> {
     let started = std::time::Instant::now();
@@ -161,10 +164,23 @@ pub async fn verify(
         let exact = code_point_slice(&req.unit, range.clone())
             .unwrap_or_default()
             .to_string();
-        let claim = judge_claim(&exact, req.tier, &open, inference.as_ref()).await;
-        let claim = claim
+        let judged_at = std::time::Instant::now();
+        let judged = judge_claim(&exact, req.tier, &open, inference.as_ref()).await;
+        let judged_ms = judged_at.elapsed().as_millis() as u64;
+        let refs: Vec<(String, Option<u64>)> = judged
+            .evidence
+            .iter()
+            .map(|(p, _, _)| (p.corpus_id.clone(), p.chunk_id))
+            .collect();
+        let tally = judged.tally;
+        let mut claim = judged
             .into_wire(range, exact, &open, &mut texts, context)
             .await;
+        if let Some(Extension(VerifyJournal(dir))) = &journal {
+            claim.episode_id = crate::routes_oicp_verify_journal::record_claim(
+                dir, &claim, &refs, tally, judged_ms,
+            );
+        }
         tracing::debug!(
             claim = %claim.exact,
             verdict = ?claim.verdict,
@@ -252,6 +268,8 @@ struct Judged {
     score: Option<f32>,
     specifics_absent: Vec<String>,
     evidence: Vec<(Passage, VerifyVerdict, Option<f32>)>,
+    /// The claim's specifics against the passages read, for the journal.
+    tally: Option<SpecificsTally>,
 }
 
 impl Judged {
@@ -265,6 +283,7 @@ impl Judged {
             score: None,
             specifics_absent: Vec::new(),
             evidence: Vec::new(),
+            tally: None,
         }
     }
 }
@@ -284,6 +303,7 @@ async fn judge_claim(
             score: None,
             specifics_absent: Vec::new(),
             evidence: Vec::new(),
+            tally: None,
         };
     }
     let checkable = Checkability::Checkable;
@@ -330,6 +350,10 @@ async fn judge_claim(
                 verdict,
                 rung: RUNG_FAST,
                 score: Some(score),
+                tally: Some(SpecificsTally {
+                    checked: specifics.len() as u32,
+                    absent: absent.len() as u32,
+                }),
                 specifics_absent: absent,
             }
         }
@@ -342,7 +366,17 @@ async fn judge_claim(
                 Err(e) => return Judged::could_not(checkable, RUNG_CHECKER, e),
             };
             shown.truncate(CHECKER_PASSAGES);
-            judge_with_checker(claim, shown, inference).await
+            let read: Vec<String> = shown.iter().map(|p| p.content.clone()).collect();
+            let tally = SpecificsTally {
+                checked: specifics.len() as u32,
+                absent: specifics
+                    .iter()
+                    .filter(|s| !value_present_in_chunks(&s.text, &read))
+                    .count() as u32,
+            };
+            let mut judged = judge_with_checker(claim, shown, inference).await;
+            judged.tally = Some(tally);
+            judged
         }
         VerifyTier::Judge => Judged::could_not(checkable, RUNG_CLASS, reasons::TIER_NOT_OFFERED),
     }
@@ -398,6 +432,7 @@ async fn judge_with_checker(
         score: best.map(|b| b as f32),
         specifics_absent: Vec::new(),
         evidence,
+        tally: None,
     }
 }
 
@@ -443,6 +478,7 @@ impl Judged {
             rung: self.rung.to_string(),
             score: self.score,
             operating_point: UNCALIBRATED.to_string(),
+            episode_id: None,
         }
     }
 }

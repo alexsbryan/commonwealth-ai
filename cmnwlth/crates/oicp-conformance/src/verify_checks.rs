@@ -163,3 +163,124 @@ pub async fn check_evidence_verify(
         ),
     )
 }
+
+/// `evidence.verify_correction` (§2.10): a decided claim of the fixture
+/// unit carries an `episode_id`; a correction of it whose witness is a span
+/// verify itself returned is kept `verified`, one whose range runs past the
+/// text is `out_of_range`, and a malformed episode is 400 `not an episode
+/// id`. Against a live host this writes two correction lines into its
+/// journal, as the install checks write the fixture corpus.
+pub async fn check_evidence_verify_correction(
+    host: &Host,
+    m: &ProviderManifest,
+    lib: &Library,
+    state: &FixtureState,
+) -> Check {
+    use oicp_types::verify::{VerifyCorrectionReply, WitnessCheck};
+    let id = "evidence.verify_correction";
+    let fail = |why: String| Check::fail(id, Level::Feature, why);
+    if !m.has_feature(features::EVIDENCE_VERIFY_CORRECTIONS) {
+        return Check::skip(
+            id,
+            Level::Feature,
+            "evidence:verify_corrections not advertised",
+        );
+    }
+    let Some(ev) = m.knowledge.as_ref().and_then(|k| k.evidence.as_ref()) else {
+        return fail("evidence:verify_corrections advertised but no knowledge.evidence".into());
+    };
+    let (Some(verify), Some(correct)) = (
+        ev.verify_endpoint.clone(),
+        ev.verify_correction_endpoint.clone(),
+    ) else {
+        return fail("evidence:verify_corrections advertised without both endpoints".into());
+    };
+    let corpus = match fixture_corpus(id, state) {
+        Ok(c) => c,
+        Err(skip) => return skip,
+    };
+    let (planted, _) = lib.planted_quote();
+    let unit = format!("{} {planted}", lib.plant.sentence);
+    let mut found = None;
+    for tier in &ev.verify_tiers {
+        let r = match host
+            .post(
+                &verify,
+                &json!({"unit": unit, "corpora": [corpus], "tier": tier}),
+            )
+            .await
+        {
+            Ok(r) if r.status == 200 => r,
+            Ok(r) => return fail(format!("verify: {}", r.brief())),
+            Err(e) => return fail(e),
+        };
+        let reply: VerifyResponse = match serde_json::from_value(r.body) {
+            Ok(x) => x,
+            Err(e) => return fail(format!("the verify reply does not decode: {e}")),
+        };
+        found = reply.claims.into_iter().find_map(|c| {
+            let episode = c.episode_id.clone()?;
+            let span = c.evidence.iter().find_map(|p| p.span.clone())?;
+            Some((episode, span))
+        });
+        if found.is_some() {
+            break;
+        }
+    }
+    let Some((episode, span)) = found else {
+        return Check::skip(
+            id,
+            Level::Feature,
+            "could not judge: no decided claim of the fixture unit carried an episode and a span",
+        );
+    };
+    let correction = |end: u64| {
+        json!({"episode_id": episode, "expected": "supported", "witness": {
+            "corpus": span.corpus_id, "text_sha256": span.document.text_sha256,
+            "start": span.start, "end": end}})
+    };
+    for (end, want) in [
+        (span.end, WitnessCheck::Verified),
+        (u64::MAX / 2, WitnessCheck::OutOfRange),
+    ] {
+        let r = match host.post(&correct, &correction(end)).await {
+            Ok(r) if r.status == 200 => r,
+            Ok(r) => return fail(format!("correction: {}", r.brief())),
+            Err(e) => return fail(e),
+        };
+        let reply: VerifyCorrectionReply = match serde_json::from_value(r.body) {
+            Ok(x) => x,
+            Err(e) => return fail(format!("the correction reply does not decode: {e}")),
+        };
+        if reply.witness != want {
+            return fail(format!(
+                "a witness [{}, {end}) of a held text came back {:?}, not {want:?}",
+                span.start, reply.witness
+            ));
+        }
+    }
+    match host
+        .post(
+            &correct,
+            &json!({"episode_id": "not an episode", "expected": "supported"}),
+        )
+        .await
+    {
+        Ok(r)
+            if r.status == 400
+                && r.error() == Some(oicp_types::verify::reasons::NOT_AN_EPISODE) => {}
+        Ok(r) => {
+            return fail(format!(
+                "a malformed episode must be 400 `not an episode id`, got {}",
+                r.brief()
+            ))
+        }
+        Err(e) => return fail(e),
+    }
+    Check::pass(
+        id,
+        Level::Feature,
+        "a decided claim carries its episode; a witness span is read back verified, one past its \
+         text out of range; a malformed episode is refused",
+    )
+}

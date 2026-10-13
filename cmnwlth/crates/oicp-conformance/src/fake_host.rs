@@ -39,6 +39,9 @@ pub struct Breaks {
     pub scope_leaks: bool,
     /// ingest.recipe: an install is missing from the first poll after it.
     pub late_listing: bool,
+    /// evidence.verify_correction: a correction's witness is never read
+    /// back; every one is `verified`.
+    pub witness_unread: bool,
     /// ingest.documents: a returned install's entry lists no documents.
     pub omit_documents: bool,
     /// knowledge.document: hits carry their record with metadata emptied.
@@ -146,6 +149,7 @@ pub async fn spawn(breaks: Breaks) -> Running {
         .route("/oicp/v1/text/{sha}", get(text))
         .route("/oicp/v1/align", post(align))
         .route("/oicp/v1/verify", post(verify))
+        .route("/oicp/v1/verify/correction", post(verify_correction))
         .route("/oicp/v1/corpus/install", post(install))
         .route("/oicp/v1/corpus/progress", get(progress))
         .route("/oicp/v1/recipe/test", post(recipe_test))
@@ -266,7 +270,7 @@ async fn capabilities() -> Json<Value> {
         "models": [],
         "features": [
             "ingest:v1", "ingest:recipe_test", "ingest:recipe", "ingest:documents", "evidence:text",
-            "evidence:align", "evidence:verify", "knowledge:document", "knowledge:scoped",
+            "evidence:align", "evidence:verify", "evidence:verify_corrections", "knowledge:document", "knowledge:scoped",
             "knowledge:range", "auth:named_client"
         ],
         "knowledge": {
@@ -281,7 +285,8 @@ async fn capabilities() -> Json<Value> {
                 "text_endpoint": "/oicp/v1/text",
                 "align_endpoint": "/oicp/v1/align",
                 "verify_endpoint": "/oicp/v1/verify",
-                "verify_tiers": ["fast", "checker"]
+                "verify_tiers": ["fast", "checker"],
+                "verify_correction_endpoint": "/oicp/v1/verify/correction"
             }
         }
     }))
@@ -535,6 +540,7 @@ async fn verify(
             "start": a, "end": b, "exact": exact, "class": "checkable",
             "verdict": verdict, "evidence": evidence, "rung": "fake/verbatim",
             "operating_point": UNCALIBRATED,
+            "episode_id": format!("00000000-0000-4000-8000-{:012x}", claims.len()),
         }));
     }
     Json(json!({
@@ -543,6 +549,47 @@ async fn verify(
         "corpora": [{"corpus_id": f.corpus, "texts_digest": f.digest()}],
     }))
     .into_response()
+}
+
+/// A UUID's shape: 8-4-4-4-12 hex digits.
+fn uuid_shaped(s: &str) -> bool {
+    let groups: Vec<&str> = s.split('-').collect();
+    groups.iter().map(|g| g.len()).eq([8, 4, 4, 4, 12])
+        && groups
+            .iter()
+            .all(|g| g.chars().all(|c| c.is_ascii_hexdigit()))
+}
+
+/// The lawful correction (v0.6 §2.10): a malformed episode is 400, and the
+/// witness is read back against the fake's texts. `witness_unread` calls
+/// every witness `verified`.
+async fn verify_correction(
+    State(f): State<Arc<Fake>>,
+    Json(req): Json<oicp_types::verify::VerifyCorrection>,
+) -> Response {
+    use oicp_types::verify::{reasons as vr, WitnessCheck};
+    if !uuid_shaped(&req.episode_id) {
+        return refuse(
+            StatusCode::BAD_REQUEST,
+            json!({"error": vr::NOT_AN_EPISODE}),
+        );
+    }
+    let witness = match &req.witness {
+        None => WitnessCheck::NotGiven,
+        Some(_) if f.breaks.witness_unread => WitnessCheck::Verified,
+        Some(w) => match f
+            .texts
+            .iter()
+            .find(|s| sha256_hex(s.text.as_bytes()) == w.text_sha256)
+        {
+            None => WitnessCheck::NotHeld,
+            Some(s) if w.start <= w.end && w.end <= s.text.chars().count() as u64 => {
+                WitnessCheck::Verified
+            }
+            Some(_) => WitnessCheck::OutOfRange,
+        },
+    };
+    Json(json!({"recorded": true, "witness": witness})).into_response()
 }
 
 async fn install(State(f): State<Arc<Fake>>, Json(req): Json<Value>) -> Response {
