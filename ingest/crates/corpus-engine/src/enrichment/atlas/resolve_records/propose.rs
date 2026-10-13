@@ -634,7 +634,10 @@ mod tests {
         let mut statements = HashMap::new();
         statements.insert(
             "s1".to_string(),
-            bag("The charity Linden Court Trust rang this afternoon.", &vocab),
+            bag(
+                "The charity Linden Court Trust rang this afternoon.",
+                &vocab,
+            ),
         );
         let nearest = Nearest::new(3, statements, records);
         let got = nearest.propose(
@@ -648,7 +651,10 @@ mod tests {
         );
         let offered: Vec<&str> = got.iter().map(|p| p.record.as_str()).collect();
         assert_eq!(offered.len(), 3, "{offered:?}");
-        assert_eq!(offered[0], "c0", "Linden Court Trust is nearest: {offered:?}");
+        assert_eq!(
+            offered[0], "c0",
+            "Linden Court Trust is nearest: {offered:?}"
+        );
         assert!(
             !offered.contains(&"c2"),
             "a record sharing no word was offered: {offered:?}"

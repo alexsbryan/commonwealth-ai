@@ -209,7 +209,10 @@ impl SectionDocuments {
                 }
             }
         }
-        info!(given, from_chunks, "atlas/resolution documents: canonical texts attached");
+        info!(
+            given,
+            from_chunks, "atlas/resolution documents: canonical texts attached"
+        );
         self
     }
 

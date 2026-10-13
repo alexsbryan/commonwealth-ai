@@ -180,7 +180,10 @@ pub(super) fn reasons(proposal: &Proposal) -> String {
         why.push(format!("document similarity {:.2}", proposal.similarity()));
     }
     if proposal.nearness() > 0.0 {
-        why.push(format!("close in meaning to a statement here, {:.2}", proposal.nearness()));
+        why.push(format!(
+            "close in meaning to a statement here, {:.2}",
+            proposal.nearness()
+        ));
     }
     why.join("; ")
 }

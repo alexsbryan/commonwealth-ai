@@ -164,7 +164,11 @@ pub(super) fn trimmed(text: &str, span: Range<usize>) -> Range<usize> {
     for (close, open) in [(')', '('), (']', '['), ('"', '"'), ('\u{201d}', '\u{201c}')] {
         let held = &s[first..end];
         let opened = held.matches(open).count();
-        let closed = if open == close { 0 } else { held.matches(close).count() };
+        let closed = if open == close {
+            0
+        } else {
+            held.matches(close).count()
+        };
         if s[end..].starts_with(close) && opened > closed && (open != close || opened % 2 == 1) {
             end += close.len_utf8();
         }

@@ -139,8 +139,15 @@ fn card(
         names.dedup();
         let more = names.len().saturating_sub(POINTING_SHOWN);
         names.truncate(POINTING_SHOWN);
-        let tail = if more > 0 { format!(", and {more} more") } else { String::new() };
-        out.push(format!("{ty} whose {attr} it is: {}{tail}", names.join(", ")));
+        let tail = if more > 0 {
+            format!(", and {more} more")
+        } else {
+            String::new()
+        };
+        out.push(format!(
+            "{ty} whose {attr} it is: {}{tail}",
+            names.join(", ")
+        ));
     }
     out
 }

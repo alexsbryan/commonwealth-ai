@@ -106,21 +106,33 @@ impl Layout {
             .into_iter()
             .flatten()
         {
-            let (Some(start), Some(end)) = (s.get("start").and_then(at), s.get("end").and_then(at)) else {
+            let (Some(start), Some(end)) = (s.get("start").and_then(at), s.get("end").and_then(at))
+            else {
                 return Err("a segment without its offsets");
             };
-            if start >= end || end > text.len() || !text.is_char_boundary(start) || !text.is_char_boundary(end) {
+            if start >= end
+                || end > text.len()
+                || !text.is_char_boundary(start)
+                || !text.is_char_boundary(end)
+            {
                 return Err("a segment outside its text");
             }
             segments.push((start, end));
         }
-        Ok(Some(Self { body_start, segments }))
+        Ok(Some(Self {
+            body_start,
+            segments,
+        }))
     }
 
     fn class(&self, line_start: usize) -> Option<LineClass> {
         if line_start < self.body_start {
             Some(LineClass::Field)
-        } else if self.segments.iter().any(|&(s, e)| (s..e).contains(&line_start)) {
+        } else if self
+            .segments
+            .iter()
+            .any(|&(s, e)| (s..e).contains(&line_start))
+        {
             Some(LineClass::Embedded)
         } else {
             None
@@ -300,7 +312,9 @@ impl LineClasses {
     ) -> Vec<Option<Carried<'_>>> {
         let texts: Vec<&str> = lines.iter().map(|l| &raw[l.start..l.end]).collect();
         let mut out = self.carried(document, &texts);
-        if let (Some(layout), Some(&(me, _))) = (self.layouts.get(document), self.docs.get(document)) {
+        if let (Some(layout), Some(&(me, _))) =
+            (self.layouts.get(document), self.docs.get(document))
+        {
             for (slot, line) in out.iter_mut().zip(lines) {
                 if let Some(class) = layout.class(line.start) {
                     *slot = Some(Carried {

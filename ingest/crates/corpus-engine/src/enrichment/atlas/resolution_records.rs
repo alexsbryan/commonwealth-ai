@@ -571,7 +571,9 @@ async fn resolve_type(
             proposer = proposer
                 .with_nearest(nearest::nearest(embed, &t.name, &placed, &seeded.cards).await);
         }
-        None => info!(r#type = %t.name, "atlas/resolve: no embedder; records are offered by declared structure and similar documents only"),
+        None => {
+            info!(r#type = %t.name, "atlas/resolve: no embedder; records are offered by declared structure and similar documents only")
+        }
     }
     let mut record_of: HashMap<String, String> = HashMap::new();
     let mut refused: HashMap<String, &'static str> = HashMap::new();

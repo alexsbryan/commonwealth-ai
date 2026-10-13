@@ -714,7 +714,11 @@ async fn a_company_first_named_where_no_header_names_it_binds_to_its_seeded_reco
     const PARTIES: &[(&str, &str, &str)] = &[
         ("company", "Birch Hall", "web_domain: birchhall.example"),
         ("company", "Quay Market", "web_domain: quaymarket.example"),
-        ("company", "Alder and Pine Workshop", "web_domain: alderpine.example"),
+        (
+            "company",
+            "Alder and Pine Workshop",
+            "web_domain: alderpine.example",
+        ),
         ("order", "oak chairs", "oak chairs"),
         ("order", "walnut", "walnut"),
     ];
@@ -745,7 +749,11 @@ async fn a_company_first_named_where_no_header_names_it_binds_to_its_seeded_reco
                 .is_some_and(|w| w.contains("Birch Hall"))
         })
         .collect();
-    assert_eq!(in_note.len(), 1, "the note names Birch Hall once: {in_note:?}");
+    assert_eq!(
+        in_note.len(),
+        1,
+        "the note names Birch Hall once: {in_note:?}"
+    );
     let asked: Vec<Value> = run
         .lines(DECISIONS_FILE)
         .into_iter()

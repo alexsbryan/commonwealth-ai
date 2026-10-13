@@ -89,12 +89,13 @@ fn names_sender_or_date(line: &str) -> bool {
     if t.is_empty() {
         return false;
     }
-    let has_date = t
-        .split(|c: char| c.is_whitespace() || c == ',')
-        .any(|w| {
-            let parts: Vec<&str> = w.split('/').collect();
-            parts.len() == 3 && parts.iter().all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
-        });
+    let has_date = t.split(|c: char| c.is_whitespace() || c == ',').any(|w| {
+        let parts: Vec<&str> = w.split('/').collect();
+        parts.len() == 3
+            && parts
+                .iter()
+                .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
+    });
     has_date || t.contains('@')
 }
 
@@ -127,7 +128,12 @@ pub fn embedded_segments(body: &str) -> Vec<EmbeddedSegment> {
             let header_end = below
                 .and_then(|k| header_run(&ls, k).map(|end| ls[end - 1].1))
                 .unwrap_or(ls[i].1);
-            out.push(EmbeddedSegment { start, end: body.len(), header_end, kind });
+            out.push(EmbeddedSegment {
+                start,
+                end: body.len(),
+                header_end,
+                kind,
+            });
             break;
         }
         if let Some(end) = header_run(&ls, i) {
@@ -139,7 +145,10 @@ pub fn embedded_segments(body: &str) -> Vec<EmbeddedSegment> {
                     break;
                 }
             }
-            let kind = if ls[first..end].iter().any(|l| l.2.to_ascii_lowercase().contains("forward")) {
+            let kind = if ls[first..end]
+                .iter()
+                .any(|l| l.2.to_ascii_lowercase().contains("forward"))
+            {
                 SegmentKind::Forward
             } else {
                 SegmentKind::Reply
