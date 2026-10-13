@@ -37,6 +37,41 @@ pub struct IngestResult {
     /// Non-zero warrants inspection of the source file on the ingesting node.
     #[serde(default)]
     pub docs_skipped: u64,
+    /// Each document this run read, ready or failed, in the order read
+    /// (OICP v0.6 §2.9). Empty from a path that does not track documents.
+    #[serde(default)]
+    pub documents: Vec<DocumentOutcome>,
+    /// Documents read past [`DOCUMENTS_LISTED_CAP`], counted but not listed,
+    /// so a client knows `documents` is partial.
+    #[serde(default)]
+    pub documents_unlisted: u64,
+}
+
+/// The most documents one ingest lists. A library is far below it; a corpus
+/// of millions of records (Wikipedia) would otherwise carry them all in
+/// memory and on every progress reply.
+pub const DOCUMENTS_LISTED_CAP: usize = 10_000;
+
+/// One document's outcome in an ingest, named as the recipe names it: an
+/// inline document by its name, a file by its path relative to the acquired
+/// root. A document the source yielded no text for (an empty file) is not
+/// read, so it is not listed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DocumentOutcome {
+    /// `None` when the extractor's error named no source.
+    pub source: Option<String>,
+    pub state: DocumentState,
+}
+
+/// Ready or failed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum DocumentState {
+    /// Stored and chunked; `text_sha256` is its text's name, `None` when the
+    /// corpus keeps no texts.
+    Ready { text_sha256: Option<Sha256Hash> },
+    /// Not stored, and why.
+    Failed { reason: String },
 }
 
 /// Consolidated on-disk state for a single corpus — what

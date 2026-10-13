@@ -279,16 +279,37 @@ impl DeclaredMetadata {
         match source {
             // An inline document is stated by its acquirer, under its name.
             DocSource::Hashed { .. } => self.by_name.get(source_id).map(String::as_str),
-            DocSource::File(path) => {
-                let root = self.root.as_deref()?;
-                let rel = match path.strip_prefix(root) {
-                    Ok(rel) if rel.as_os_str().is_empty() => Path::new(path.file_name()?),
-                    Ok(rel) => rel,
-                    Err(_) => return None,
-                };
-                self.by_source.get(rel).map(String::as_str)
-            }
+            DocSource::File(path) => self.by_source.get(self.relative(path)?).map(String::as_str),
             DocSource::Record => None,
+        }
+    }
+
+    /// A document's name as the recipe names it (OICP v0.6 §2.9): a file by
+    /// its path relative to the acquired root, the rule [`Self::declared`]
+    /// keys on; any other by its source id (an inline document's name).
+    pub fn source_name(&self, source_id: &str, source: &DocSource) -> String {
+        match source {
+            DocSource::File(path) => self.name_of(&path.to_string_lossy()),
+            _ => source_id.to_string(),
+        }
+    }
+
+    /// The name of the document an extractor's error named
+    /// (`Error::ExtractionOf`): a path under the root, relative to it;
+    /// anything else, an inline document's name, as given.
+    pub fn name_of(&self, source: &str) -> String {
+        self.relative(Path::new(source))
+            .map_or_else(|| source.to_string(), |r| r.to_string_lossy().into_owned())
+    }
+
+    /// `path` relative to the acquired root; a root that is the file itself
+    /// names it by its file name.
+    fn relative<'p>(&self, path: &'p Path) -> Option<&'p Path> {
+        let root = self.root.as_deref()?;
+        match path.strip_prefix(root) {
+            Ok(rel) if rel.as_os_str().is_empty() => Some(Path::new(path.file_name()?)),
+            Ok(rel) => Some(rel),
+            Err(_) => None,
         }
     }
 }

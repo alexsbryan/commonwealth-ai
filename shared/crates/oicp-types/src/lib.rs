@@ -125,8 +125,8 @@ pub use inference_service::{
 };
 pub use ingest::{
     CorpusIngestProgress, CorpusInstallRequest, CorpusInstallResponse, CorpusProgressResponse,
-    IngestEndpoints, IngestPhase, RecipeStageReport, RecipeTestOptions, RecipeTestReport,
-    RecipeTestRequest,
+    IngestDocument, IngestDocumentState, IngestEndpoints, IngestPhase, RecipeStageReport,
+    RecipeTestOptions, RecipeTestReport, RecipeTestRequest,
 };
 pub use knowledge::{
     ChunkRange, CorpusShardInfo, KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse,

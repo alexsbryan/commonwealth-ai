@@ -30,6 +30,11 @@ pub struct IngestPart {
     /// terminal phase (`Complete`) overwrites them or an explicit
     /// cancel wipes the corpus.
     pub corpus_progress: RwLock<HashMap<String, sovereign_contracts::daemon_wire::IngestProgress>>,
+    /// Each finished install's documents, ready or failed, by corpus (OICP
+    /// v0.6 §2.9), from the engine's `IngestResult`. Written when an install
+    /// returns, cleared when the next attempt spawns; read by
+    /// `GET /oicp/v1/corpus/progress`. In memory, as `corpus_progress` is.
+    pub install_documents: RwLock<HashMap<String, InstallDocuments>>,
     /// Operator-triggered tick channel for the `wikipedia-newsworthy`
     /// freshness watcher. Installed by the embedded daemon when (and
     /// only when) the watcher spawns; `None` in tests and on daemons
@@ -80,4 +85,13 @@ pub struct IngestPart {
     /// in between). `0` is rejected by the setter — use the pause
     /// route to fully stop a corpus.
     pub ingest_throttle_milli: std::sync::atomic::AtomicU32,
+}
+
+/// One install's documents as its ingest reported them.
+#[derive(Debug, Clone, Default)]
+pub struct InstallDocuments {
+    /// Up to `DOCUMENTS_LISTED_CAP`, in the order read.
+    pub documents: Vec<corpus_index::ingest_port::daemon::DocumentOutcome>,
+    /// Read past the cap, counted only.
+    pub unlisted: u64,
 }

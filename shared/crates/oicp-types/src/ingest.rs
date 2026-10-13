@@ -95,6 +95,43 @@ pub struct CorpusIngestProgress {
     /// Human-readable detail; the error message when `phase = Failed`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
+    /// v0.6 §2.9 (`ingest:documents`): once the install has returned, each
+    /// document it read, ready or failed, in the order read. Empty before
+    /// then, and from a host that does not advertise the feature.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub documents: Vec<IngestDocument>,
+    /// Documents read but not listed, past the host's cap; `documents` is
+    /// partial when this is present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub documents_unlisted: Option<u64>,
+}
+
+/// One document of an install (v0.6 §2.9), named as its recipe names it: an
+/// inline `[[document]]` by its `name`, a file by its path relative to the
+/// acquired root.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IngestDocument {
+    /// The document's name in the recipe; absent when the host's extractor
+    /// could not say which document failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// Ready or failed.
+    #[serde(flatten)]
+    pub state: IngestDocumentState,
+}
+
+/// Whether a document of an install can be read (v0.6 §2.9).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum IngestDocumentState {
+    /// Stored: `text_sha256` names its text (`evidence:text`), absent when
+    /// the corpus keeps no texts.
+    Ready {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        text_sha256: Option<String>,
+    },
+    /// Not stored, and why.
+    Failed { reason: String },
 }
 
 /// `GET {progress_endpoint}` response (§5.2). Keyed by `corpus_id`.
@@ -194,6 +231,8 @@ mod tests {
                     phase: IngestPhase::Embedding,
                     fraction: Some(0.4),
                     detail: None,
+                    documents: Vec::new(),
+                    documents_unlisted: None,
                 },
             )]),
         };

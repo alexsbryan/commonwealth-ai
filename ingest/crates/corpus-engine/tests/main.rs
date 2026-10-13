@@ -113,6 +113,8 @@ mod composed_ingest_port_parity;
 mod corpus_read_port_parity;
 #[path = "main/daemon_port_parity.rs"]
 mod daemon_port_parity;
+#[path = "main/document_outcomes_e2e.rs"]
+mod document_outcomes_e2e;
 #[path = "main/install_lifecycle_port_parity.rs"]
 mod install_lifecycle_port_parity;
 #[path = "main/local_corpus_port_parity.rs"]

@@ -102,6 +102,23 @@ pub async fn check_ingest_recipe(
             Ok(resp) => replies.push(resp),
             Err(e) => return fail(format!("install reply does not decode: {e}: {}", r.brief())),
         }
+        // v0.6 §2.9: an install that spawned is listed on the very next poll.
+        if replies.len() == 1 && replies[0].spawned && m.has_feature(features::INGEST_DOCUMENTS) {
+            let r = match host.get(&ing.progress_endpoint).await {
+                Ok(r) => r,
+                Err(e) => return fail(e),
+            };
+            if r.body
+                .get("progress")
+                .and_then(|p| p.get(&lib.corpus_id))
+                .is_none()
+            {
+                return fail(format!(
+                    "install answered spawned=true and the next poll did not list {}",
+                    lib.corpus_id
+                ));
+            }
+        }
     }
     for r in &replies {
         if r.recipe_sha256.as_deref() != Some(want_sha.as_str()) {
@@ -245,4 +262,92 @@ pub async fn check_ingest_recipe_test(
         );
     }
     Check::pass(id, Level::Feature, format!("stages {names:?}, ok"))
+}
+
+/// `ingest.documents` (v0.6 §2.9): once the fixture's install has returned,
+/// its progress entry lists every fixture document `ready` under its own
+/// text name (the sha256 of its text), each with a source, and none
+/// `failed`, since every fixture text is readable.
+pub async fn check_ingest_documents(
+    host: &Host,
+    m: &ProviderManifest,
+    lib: &Library,
+    state: &FixtureState,
+) -> Check {
+    let id = "ingest.documents";
+    let fail = |why: String| Check::fail(id, Level::Feature, why);
+    if !m.has_feature(features::INGEST_DOCUMENTS) {
+        return Check::skip(id, Level::Feature, "ingest:documents not advertised");
+    }
+    let corpus = match crate::evidence_checks::fixture_corpus(id, state) {
+        Ok(c) => c,
+        Err(skip) => return skip,
+    };
+    let Some(ing) = m.knowledge.as_ref().and_then(|k| k.ingest.as_ref()) else {
+        return fail("ingest:documents advertised but no knowledge.ingest".into());
+    };
+    let r = match host.get(&ing.progress_endpoint).await {
+        Ok(r) => r,
+        Err(e) => return fail(e),
+    };
+    let reply: oicp_types::CorpusProgressResponse = match serde_json::from_value(r.body.clone()) {
+        Ok(p) => p,
+        Err(e) => return fail(format!("progress does not decode: {e}")),
+    };
+    let Some(entry) = reply.progress.get(corpus) else {
+        return Check::skip(
+            id,
+            Level::Feature,
+            "could not judge: the fixture was installed before this run, so no install of it \
+             returned here",
+        );
+    };
+    if entry.documents.is_empty() {
+        return fail(format!(
+            "the fixture's install returned ({:?}) and its entry lists no documents",
+            entry.phase
+        ));
+    }
+    for doc in &lib.documents {
+        let name = sha256_hex(doc.text.as_bytes());
+        let found = entry.documents.iter().find(|d| match &d.state {
+            oicp_types::IngestDocumentState::Ready { text_sha256 } => {
+                text_sha256.as_deref() == Some(name.as_str())
+            }
+            oicp_types::IngestDocumentState::Failed { .. } => false,
+        });
+        match found {
+            None => {
+                return fail(format!(
+                    "fixture document `{}` (text {}…) is not listed ready",
+                    doc.name,
+                    &name[..12]
+                ))
+            }
+            Some(d) if d.source.as_deref().is_none_or(str::is_empty) => {
+                return fail(format!(
+                    "fixture document `{}` is listed with no source",
+                    doc.name
+                ))
+            }
+            Some(_) => {}
+        }
+    }
+    if let Some(d) = entry
+        .documents
+        .iter()
+        .find(|d| matches!(d.state, oicp_types::IngestDocumentState::Failed { .. }))
+    {
+        return fail(format!(
+            "a readable fixture document is listed failed: {d:?}"
+        ));
+    }
+    Check::pass(
+        id,
+        Level::Feature,
+        format!(
+            "all {} fixture documents listed ready under their text names",
+            lib.documents.len()
+        ),
+    )
 }

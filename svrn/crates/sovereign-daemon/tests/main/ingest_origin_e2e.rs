@@ -76,6 +76,8 @@ fn an_engine() -> (
                     index_size_bytes: 0,
                     duration_secs: 0,
                     docs_skipped: 0,
+                    documents: Vec::new(),
+                    documents_unlisted: 0,
                 })
             })
         });

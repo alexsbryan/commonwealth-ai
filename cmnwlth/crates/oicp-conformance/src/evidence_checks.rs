@@ -57,6 +57,9 @@ pub fn v05_feature_failures(m: &ProviderManifest) -> Vec<String> {
     if m.has_feature(features::INGEST_RECIPE) && !m.has_feature(features::INGEST_V1) {
         f.push("ingest:recipe requires ingest:v1".into());
     }
+    if m.has_feature(features::INGEST_DOCUMENTS) && !m.has_feature(features::INGEST_V1) {
+        f.push("ingest:documents requires ingest:v1".into());
+    }
     if m.has_feature(features::KNOWLEDGE_DOCUMENT) && m.knowledge.is_none() {
         f.push("knowledge:document requires a knowledge plane".into());
     }

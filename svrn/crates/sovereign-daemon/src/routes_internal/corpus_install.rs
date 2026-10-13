@@ -203,12 +203,55 @@ pub async fn spawn_install(
 
         match result {
             Ok(info) => {
+                let failed = info
+                    .documents
+                    .iter()
+                    .filter(|d| {
+                        matches!(
+                            d.state,
+                            corpus_index::ingest_port::daemon::DocumentState::Failed { .. }
+                        )
+                    })
+                    .count();
                 tracing::info!(
                     corpus = %corpus_id_for_task,
                     chunks = info.chunks_created,
                     duration_secs = info.duration_secs,
+                    documents = info.documents.len(),
+                    documents_failed = failed,
+                    documents_unlisted = info.documents_unlisted,
                     "spawn_corpus_install: ingest complete"
                 );
+                state_for_task
+                    .inner
+                    .ingest
+                    .install_documents
+                    .write()
+                    .await
+                    .insert(
+                        corpus_id_for_task.clone(),
+                        crate::state::ingest::InstallDocuments {
+                            documents: info.documents.clone(),
+                            unlisted: info.documents_unlisted,
+                        },
+                    );
+                // The install returned, so it is complete, whether or not the
+                // engine's last progress callback has landed yet (that task is
+                // spawned, so it can trail this): a poller never sees a
+                // returned install vanish (OICP v0.6 §2.9).
+                state_for_task
+                    .inner
+                    .ingest
+                    .corpus_progress
+                    .write()
+                    .await
+                    .insert(
+                        corpus_id_for_task.clone(),
+                        sovereign_contracts::daemon_wire::IngestProgress::Complete {
+                            total_chunks: info.chunks_created,
+                            duration_secs: info.duration_secs,
+                        },
+                    );
                 // Record the ingest on the local Activity ledger — the
                 // headline "your import did real work" signal. Embedding
                 // thousands of chunks is heavy local resource use that

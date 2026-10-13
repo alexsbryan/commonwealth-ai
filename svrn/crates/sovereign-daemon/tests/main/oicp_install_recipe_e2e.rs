@@ -61,6 +61,8 @@ fn engine(indexes: std::path::PathBuf) -> IngestPortDouble {
                             index_size_bytes: 0,
                             duration_secs: 0,
                             docs_skipped: 0,
+                            documents: Vec::new(),
+                            documents_unlisted: 0,
                         })
                     })
                 }),
@@ -231,4 +233,116 @@ async fn by_id_an_unknown_corpus_is_404_and_bad_parameters_are_400() {
 
 fn state_from(engine: IngestPortDouble) -> AppState {
     state(Arc::new(engine))
+}
+
+/// GET `/oicp/v1/corpus/progress` from loopback.
+async fn progress(state: AppState) -> oicp_types::CorpusProgressResponse {
+    let mut req = Request::get("/oicp/v1/corpus/progress")
+        .header("host", "127.0.0.1:9741")
+        .body(Body::empty())
+        .unwrap();
+    req.extensions_mut().insert(ConnectInfo(
+        "127.0.0.1:55003".parse::<SocketAddr>().unwrap(),
+    ));
+    let resp = client_router(state).oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    serde_json::from_slice(&bytes).unwrap()
+}
+
+/// OICP v0.6 §2.9: the install is listed on the first poll after its 202,
+/// before the engine has reported any progress, and once it returns its
+/// entry lists each document: the ready ones by their text names, the
+/// unreadable one failed with its reason, none dropped. Red against the
+/// parent, whose progress listed only what the engine's callback had
+/// written and carried no documents.
+#[tokio::test]
+async fn an_install_is_listed_from_its_spawn_and_then_lists_each_document() {
+    use corpus_index::ingest_port::daemon::{DocumentOutcome, DocumentState};
+    use kernel_types::Sha256Hash;
+    use oicp_types::{IngestDocumentState, IngestPhase};
+
+    let tmp = tempfile::tempdir().unwrap();
+    let release = Arc::new(tokio::sync::Notify::new());
+    let gate = release.clone();
+    let at = tmp.path().to_path_buf();
+    let engine = IngestPortDouble::new()
+        .with_index_dir(tmp.path().to_path_buf())
+        .on_prepare_recipe_install(move |id, toml| {
+            let (dir, id, toml, gate) =
+                (at.clone(), id.to_string(), toml.to_string(), gate.clone());
+            Ok(PreparedInstall {
+                opts_out_of_auto_enrichment: true,
+                run: Box::new(move |_progress| {
+                    Box::pin(async move {
+                        gate.notified().await;
+                        let corpus = Corpus::named(&dir, &id).expect("an id");
+                        std::fs::create_dir_all(corpus.root()).unwrap();
+                        std::fs::write(corpus.meta_path(), "{}").unwrap();
+                        corpus.stamp_recipe_sha256(&recipe_sha256(&toml)).unwrap();
+                        Ok(IngestResult {
+                            corpus_id: id,
+                            chunks_created: 2,
+                            index_size_bytes: 0,
+                            duration_secs: 0,
+                            docs_skipped: 1,
+                            documents: vec![
+                                DocumentOutcome {
+                                    source: Some("okafor2019".into()),
+                                    state: DocumentState::Ready {
+                                        text_sha256: Some(Sha256Hash::of_str("okafor")),
+                                    },
+                                },
+                                DocumentOutcome {
+                                    source: Some("scans/broken.pdf".into()),
+                                    state: DocumentState::Failed {
+                                        reason: "custom extractor 'pdf' failed: no text layer"
+                                            .into(),
+                                    },
+                                },
+                            ],
+                            documents_unlisted: 0,
+                        })
+                    })
+                }),
+            })
+        });
+    let state = state(Arc::new(engine));
+
+    let (status, body) = install(
+        state.clone(),
+        serde_json::json!({"corpus_id": "notes", "recipe_toml": RECIPE_A}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["spawned"], true);
+    let first = progress(state.clone()).await;
+    let entry = first
+        .progress
+        .get("notes")
+        .unwrap_or_else(|| panic!("listed on the first poll after its 202: {first:?}"));
+    assert_eq!(entry.phase, IngestPhase::Pending);
+    assert!(entry.documents.is_empty(), "no documents before it returns");
+
+    release.notify_one();
+    settled(&state, "notes").await;
+    let done = progress(state.clone()).await;
+    let docs = &done.progress["notes"].documents;
+    assert_eq!(docs.len(), 2, "{done:?}");
+    assert_eq!(docs[0].source.as_deref(), Some("okafor2019"));
+    assert_eq!(
+        docs[0].state,
+        IngestDocumentState::Ready {
+            text_sha256: Some(Sha256Hash::of_str("okafor").to_hex())
+        }
+    );
+    assert_eq!(docs[1].source.as_deref(), Some("scans/broken.pdf"));
+    assert!(
+        matches!(&docs[1].state, IngestDocumentState::Failed { reason } if reason.contains("no text layer")),
+        "{:?}",
+        docs[1]
+    );
+    assert_eq!(done.progress["notes"].documents_unlisted, None);
 }

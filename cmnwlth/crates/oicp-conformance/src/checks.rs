@@ -237,6 +237,7 @@ async fn v05_checks(host: &Host, m: &ProviderManifest, args: &Args) -> Vec<Check
             let (recipe, fixture) = ingest_checks::check_ingest_recipe(host, m, args, &lib).await;
             out.push(recipe);
             out.push(ingest_checks::check_ingest_recipe_test(host, m, args, &lib).await);
+            out.push(ingest_checks::check_ingest_documents(host, m, &lib, &fixture).await);
             out.push(evidence_checks::check_knowledge_document(host, m, &lib, &fixture).await);
             out.push(evidence_checks::check_evidence_text(host, m, &lib, &fixture).await);
             out.push(evidence_checks::check_evidence_align(host, m, &lib, &fixture).await);
@@ -248,6 +249,7 @@ async fn v05_checks(host: &Host, m: &ProviderManifest, args: &Args) -> Vec<Check
             for id in [
                 "ingest.recipe",
                 "ingest.recipe_test",
+                "ingest.documents",
                 "knowledge.document",
                 "evidence.text",
                 "evidence.align",

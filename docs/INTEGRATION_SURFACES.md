@@ -48,8 +48,11 @@ v0.3 as fallback) is CC0 — implement it freely on either side. Under
 `ingest:recipe` (v0.5), `POST /oicp/v1/corpus/install` takes the recipe
 itself as `recipe_toml` and answers its `recipe_sha256`: the same recipe
 twice is `spawned: false`, a different one reingests, and a recipe that
-does not load is a 400. The host advertises `auth:named_client` too: a
-presented named credential decides, from any address.
+does not load is a 400. Under `ingest:documents` (v0.6 §2.9) progress lists
+an install from the poll right after its reply, and once it has returned,
+each document it read, `ready` under its text name or `failed` with why. The
+host advertises `auth:named_client` too: a presented named credential
+decides, from any address.
 `oicp-conformance` (a repo-root sibling of `oicp-types`) is a
 standalone certifier you
 can lift wholesale to test your own implementation. The v0.5 draft

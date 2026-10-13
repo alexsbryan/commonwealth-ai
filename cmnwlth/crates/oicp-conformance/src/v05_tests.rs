@@ -87,6 +87,36 @@ async fn ingest_recipe_is_red_against_a_200_on_a_bad_recipe() {
     assert!(matches!(fixture, FixtureState::Unavailable(_)));
 }
 
+/// v0.6 §2.9: an install is listed on the first poll after it spawned, and
+/// once it has returned every fixture document is listed ready by name.
+#[tokio::test]
+async fn ingest_documents_is_red_against_a_late_listing_and_an_entry_with_no_documents() {
+    use crate::ingest_checks::check_ingest_documents;
+    let b = bench(Breaks::default()).await;
+    let (c, fixture) = check_ingest_recipe(&b.host, &b.manifest, &b.args, &b.lib).await;
+    green(&c);
+    green(&check_ingest_documents(&b.host, &b.manifest, &b.lib, &fixture).await);
+
+    let b = bench(Breaks {
+        late_listing: true,
+        ..Breaks::default()
+    })
+    .await;
+    let (c, _) = check_ingest_recipe(&b.host, &b.manifest, &b.args, &b.lib).await;
+    red(&c, "the next poll did not list");
+
+    let b = bench(Breaks {
+        omit_documents: true,
+        ..Breaks::default()
+    })
+    .await;
+    let (_, fixture) = check_ingest_recipe(&b.host, &b.manifest, &b.args, &b.lib).await;
+    red(
+        &check_ingest_documents(&b.host, &b.manifest, &b.lib, &fixture).await,
+        "lists no documents",
+    );
+}
+
 #[tokio::test]
 async fn ingest_recipe_serves_the_fixture_from_a_dir_on_a_local_host() {
     let b = bench(Breaks::default()).await;
@@ -242,6 +272,7 @@ async fn the_evidence_checks_say_why_they_could_not_judge() {
         crate::verify_checks::check_evidence_verify(&b.host, &b.manifest, &b.lib, &gone).await,
         crate::search_checks::check_knowledge_range(&b.host, &b.manifest, &b.lib, &gone).await,
         crate::search_checks::check_knowledge_scoped(&b.host, &b.manifest, &b.lib, &gone).await,
+        crate::ingest_checks::check_ingest_documents(&b.host, &b.manifest, &b.lib, &gone).await,
     ] {
         assert_eq!(c.status, CheckStatus::Skip, "{}", c.id);
         assert!(c.detail.starts_with("could not judge"), "{}", c.detail);

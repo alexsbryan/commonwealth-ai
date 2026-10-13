@@ -258,6 +258,8 @@ impl CorpusEngine {
                 index_size_bytes: 0,
                 duration_secs: started.elapsed().as_secs(),
                 docs_skipped: 0,
+                documents: Vec::new(),
+                documents_unlisted: 0,
             });
         }
 
@@ -524,6 +526,8 @@ impl CorpusEngine {
             index_size_bytes: 0,
             duration_secs: started.elapsed().as_secs(),
             docs_skipped: 0,
+            documents: Vec::new(),
+            documents_unlisted: 0,
         })
     }
 
@@ -990,6 +994,7 @@ impl CorpusEngine {
         let mut total_chunks = index.chunk_count().await.unwrap_or(0);
         let mut docs_processed = 0u64; // successful docs in THIS run
         let mut docs_skipped = 0u64; // docs skipped due to extraction errors this run
+        let mut documents = super::document_ledger::DocumentLedger::default();
         let mut iter_pos = 0u64; // absolute position in the source iterator
 
         // Circuit-breaker: a run-ending guard against an extractor whose
@@ -1183,11 +1188,13 @@ impl CorpusEngine {
                 Err(e) => {
                     docs_skipped += 1;
                     consecutive_extraction_errors += 1;
+                    let source = documents.failed(&declared, &e);
                     tracing::warn!(
                         corpus = %recipe.corpus.id,
                         iter_pos,
                         docs_skipped,
                         consecutive_extraction_errors,
+                        source = source.as_deref().unwrap_or("(unnamed)"),
                         error = %e,
                         "skipping document due to extraction error"
                     );
@@ -1293,6 +1300,8 @@ impl CorpusEngine {
                 &doc.source,
                 doc.metadata.as_ref(),
             ))?;
+            let named = source_doc_id.as_deref().unwrap_or_default();
+            documents.ready(&declared, named, &doc.source, text_sha256);
             let chunk_texts = chunk_text(chunker.as_ref(), doc.title.as_deref(), &text);
 
             // `doc.embed_text` is honored only when the configured chunker
@@ -2043,12 +2052,15 @@ impl CorpusEngine {
             });
         }
 
+        let (documents, documents_unlisted) = documents.into_parts();
         Ok(IngestResult {
             corpus_id: recipe.corpus.id.clone(),
             chunks_created: total_chunks,
             index_size_bytes: info.index_size_bytes,
             duration_secs,
             docs_skipped,
+            documents,
+            documents_unlisted,
         })
     }
 

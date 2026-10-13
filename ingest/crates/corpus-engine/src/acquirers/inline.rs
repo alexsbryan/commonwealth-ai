@@ -86,13 +86,14 @@ impl InlineExtractor {
             return vec![Err(Error::Extraction(format!(
                 "inline document `{name}` gave the `{}` extractor nothing to read",
                 self.extractor
-            )))];
+            ))
+            .of_source(name))];
         }
         tracing::debug!(name, docs = produced.len(), %sha256, "inline extract: document read");
         produced
             .into_iter()
             .map(|r| {
-                r.map(|mut doc| {
+                r.map_err(|e| e.of_source(name)).map(|mut doc| {
                     doc.source_id = name.to_string();
                     doc.url = None;
                     doc.source = DocSource::Hashed {

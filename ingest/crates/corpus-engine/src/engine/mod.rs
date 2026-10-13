@@ -5,6 +5,7 @@
 pub mod article_stats;
 mod atlas_port;
 mod cancel;
+mod document_ledger;
 mod expand;
 mod ingest;
 mod ingest_factories;

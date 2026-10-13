@@ -17,9 +17,11 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
 
+use std::collections::BTreeMap;
+
 use oicp_types::{
     CorpusIngestProgress, CorpusInstallRequest, CorpusInstallResponse, CorpusProgressResponse,
-    IngestPhase, RecipeTestReport, RecipeTestRequest,
+    IngestDocument, IngestDocumentState, IngestPhase, RecipeTestReport, RecipeTestRequest,
 };
 
 use crate::routes_internal::{
@@ -65,13 +67,65 @@ pub async fn corpus_install(
 /// `GET /oicp/v1/corpus/progress` (§5.2). Projects the internal
 /// `corpus_id -> IngestProgress` snapshot onto the coarse protocol
 /// `CorpusIngestProgress`, so no `corpus_engine` type reaches the wire.
+///
+/// v0.6 §2.9: every install is listed from its spawn. `active_ingests` is
+/// set before install's reply, while the first progress entry waits on the
+/// engine's first callback, so an install with none yet is `pending` here,
+/// the union `/internal/corpus/status` already reads. Once an install has
+/// returned, its entry lists each document it read
+/// (`IngestPart::install_documents`).
 pub async fn corpus_progress(State(state): State<AppState>) -> Json<CorpusProgressResponse> {
+    let active = state.inner.ingest.active_ingests.read().await.clone();
+    let documents = state.inner.ingest.install_documents.read().await;
     let snapshot = state.inner.ingest.corpus_progress.read().await;
-    let progress = snapshot
+    let mut progress: BTreeMap<String, CorpusIngestProgress> = snapshot
         .iter()
         .map(|(id, p)| (id.clone(), map_progress(p)))
         .collect();
+    let mut spawned_only = 0usize;
+    for id in active {
+        progress.entry(id).or_insert_with(|| {
+            spawned_only += 1;
+            CorpusIngestProgress {
+                phase: IngestPhase::Pending,
+                fraction: None,
+                detail: Some("spawned".into()),
+                documents: Vec::new(),
+                documents_unlisted: None,
+            }
+        });
+    }
+    let mut listed = 0usize;
+    for (id, entry) in progress.iter_mut() {
+        if let Some(d) = documents.get(id) {
+            entry.documents = d.documents.iter().map(wire_document).collect();
+            entry.documents_unlisted = (d.unlisted > 0).then_some(d.unlisted);
+            listed += entry.documents.len();
+        }
+    }
+    tracing::debug!(
+        corpora = progress.len(),
+        spawned_only,
+        documents_listed = listed,
+        "oicp corpus progress: answered"
+    );
     Json(CorpusProgressResponse { progress })
+}
+
+/// An ingest's document outcome on the wire (v0.6 §2.9).
+fn wire_document(d: &corpus_index::ingest_port::daemon::DocumentOutcome) -> IngestDocument {
+    use corpus_index::ingest_port::daemon::DocumentState;
+    IngestDocument {
+        source: d.source.clone(),
+        state: match &d.state {
+            DocumentState::Ready { text_sha256 } => IngestDocumentState::Ready {
+                text_sha256: text_sha256.map(|h| h.to_hex()),
+            },
+            DocumentState::Failed { reason } => IngestDocumentState::Failed {
+                reason: reason.clone(),
+            },
+        },
+    }
 }
 
 /// `POST /oicp/v1/recipe/test` (§5.4). Dry-runs a recipe's acquire →
@@ -179,6 +233,8 @@ fn map_progress(p: &sovereign_contracts::daemon_wire::IngestProgress) -> CorpusI
         phase,
         fraction: progress_fraction(p),
         detail,
+        documents: Vec::new(),
+        documents_unlisted: None,
     }
 }
 

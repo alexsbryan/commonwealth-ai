@@ -46,6 +46,10 @@ pub mod features {
     /// The §5.4 recipe-test endpoint is mounted; MUST co-occur with
     /// `knowledge.ingest.test_endpoint`.
     pub const INGEST_RECIPE_TEST: &str = "ingest:recipe_test";
+    /// v0.6 §2.9: progress lists every install from its spawn and, once it
+    /// has returned, each document it read, ready or failed; requires
+    /// `ingest:v1`.
+    pub const INGEST_DOCUMENTS: &str = "ingest:documents";
     /// §6 fingerprints are populated on manifest models and echoed in
     /// response metadata.
     pub const MODEL_FINGERPRINT: &str = "model_fingerprint";
@@ -140,6 +144,7 @@ pub mod features {
         OICP_REQUEST_PROPERTIES,
         INGEST_V1,
         INGEST_RECIPE_TEST,
+        INGEST_DOCUMENTS,
         MODEL_FINGERPRINT,
         EVIDENCE_TEXT,
         EVIDENCE_ALIGN,

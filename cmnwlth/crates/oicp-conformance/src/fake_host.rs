@@ -37,6 +37,10 @@ pub struct Breaks {
     /// knowledge.scoped: the `documents` filter is ignored, so hits from
     /// unnamed texts come back.
     pub scope_leaks: bool,
+    /// ingest.recipe: an install is missing from the first poll after it.
+    pub late_listing: bool,
+    /// ingest.documents: a returned install's entry lists no documents.
+    pub omit_documents: bool,
     /// knowledge.document: hits carry their record with metadata emptied.
     pub empty_metadata: bool,
     /// ingest.recipe: a recipe that does not parse is 200 `spawned: false`.
@@ -73,6 +77,8 @@ struct Fake {
     corpus: String,
     texts: Vec<Stored>,
     installed: Mutex<BTreeMap<String, String>>,
+    /// Polls of progress since each corpus's last install.
+    polls: Mutex<BTreeMap<String, u32>>,
 }
 
 impl Fake {
@@ -128,6 +134,7 @@ pub async fn spawn(breaks: Breaks) -> Running {
             })
             .collect(),
         installed: Mutex::new(BTreeMap::new()),
+        polls: Mutex::new(BTreeMap::new()),
     });
     let app = Router::new()
         .route("/oicp/v1/capabilities", get(capabilities))
@@ -258,7 +265,7 @@ async fn capabilities() -> Json<Value> {
         "oicp_version": "0.4.0",
         "models": [],
         "features": [
-            "ingest:v1", "ingest:recipe_test", "ingest:recipe", "evidence:text",
+            "ingest:v1", "ingest:recipe_test", "ingest:recipe", "ingest:documents", "evidence:text",
             "evidence:align", "evidence:verify", "knowledge:document", "knowledge:scoped",
             "knowledge:range", "auth:named_client"
         ],
@@ -563,15 +570,39 @@ async fn install(State(f): State<Arc<Fake>>, Json(req): Json<Value>) -> Response
         .unwrap()
         .insert(corpus.clone(), sha.clone());
     let spawned = previous.as_deref() != Some(sha.as_str());
+    if spawned {
+        f.polls.lock().unwrap().remove(&corpus);
+    }
     Json(json!({"corpus_id": corpus, "spawned": spawned, "recipe_sha256": sha})).into_response()
 }
 
+/// The lawful progress: every install listed from its first poll, complete,
+/// with each fixture text `ready` under its name (v0.6 §2.9).
+/// `late_listing` hides an install from the first poll after it;
+/// `omit_documents` lists none.
 async fn progress(State(f): State<Arc<Fake>>) -> Json<Value> {
     let installed = f.installed.lock().unwrap();
-    let progress: BTreeMap<&String, Value> = installed
-        .keys()
-        .map(|c| (c, json!({"phase": "complete"})))
-        .collect();
+    let mut polls = f.polls.lock().unwrap();
+    let documents: Vec<Value> = if f.breaks.omit_documents {
+        Vec::new()
+    } else {
+        f.texts
+            .iter()
+            .map(|s| {
+                json!({"source": s.name, "state": "ready",
+                       "text_sha256": sha256_hex(s.text.as_bytes())})
+            })
+            .collect()
+    };
+    let mut progress: BTreeMap<&String, Value> = BTreeMap::new();
+    for c in installed.keys() {
+        let n = polls.entry(c.clone()).or_insert(0);
+        *n += 1;
+        if f.breaks.late_listing && *n == 1 {
+            continue;
+        }
+        progress.insert(c, json!({"phase": "complete", "documents": documents}));
+    }
     Json(json!({"progress": progress}))
 }
 

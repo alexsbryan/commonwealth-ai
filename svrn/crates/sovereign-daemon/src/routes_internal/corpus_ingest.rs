@@ -483,6 +483,15 @@ pub(super) fn ingest_progress_callback(
 /// `active_ingests` guard already returned), and a `Complete` entry is
 /// legitimate history until overwritten.
 pub(super) async fn clear_stale_failure(state: &AppState, corpus_id: &str) {
+    // A new attempt's documents are its own: the last install's list goes
+    // with it, so no poll mixes the two.
+    state
+        .inner
+        .ingest
+        .install_documents
+        .write()
+        .await
+        .remove(corpus_id);
     let mut progress = state.inner.ingest.corpus_progress.write().await;
     if let Some(sovereign_contracts::daemon_wire::IngestProgress::Failed { .. }) =
         progress.get(corpus_id)

@@ -174,6 +174,9 @@ async fn apply_v04_enrichment(
         feats.push(features::INGEST_RECIPE_TEST.to_string());
         // v0.5 §4: install accepts `recipe_toml` (`routes_oicp_ingest`).
         feats.push(features::INGEST_RECIPE.to_string());
+        // v0.6 §2.9: progress lists installs from their spawn and each
+        // install's documents (`routes_oicp_ingest::corpus_progress`).
+        feats.push(features::INGEST_DOCUMENTS.to_string());
         IngestEndpoints {
             install_endpoint: "/oicp/v1/corpus/install".into(),
             progress_endpoint: "/oicp/v1/corpus/progress".into(),
