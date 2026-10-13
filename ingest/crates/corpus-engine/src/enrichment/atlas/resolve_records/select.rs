@@ -680,6 +680,7 @@ pub(super) fn question(
         },
         doc.body
     ));
+    let mut offered = Vec::with_capacity(candidates.len());
     for (c, label) in candidates.iter().zip(LABELS) {
         let line = match *c {
             Candidate::Record(r, p) => describe(&records[r], &reasons(p), doc.id),
@@ -693,10 +694,12 @@ pub(super) fn question(
             }
         };
         u.push_str(&format!("{label} {line}"));
+        offered.push(format!("{label} {}", line.trim_end()));
     }
+    let shown = marked_context(doc.body, s.start, s.end);
+    debug!(document = doc.id, statement = %s.id, offered = ?offered, shown = %shown, "atlas/resolve: the records a question offers");
     u.push_str(&format!(
-        "\nStatement, its words in [[ ]]: \"…{}…\"\n\n",
-        marked_context(doc.body, s.start, s.end)
+        "\nStatement, its words in [[ ]]: \"…{shown}…\"\n\n"
     ));
     match ask {
         Ask::Reason => {
