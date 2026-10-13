@@ -2740,6 +2740,12 @@ exit = 0
 stdout_contains = "\"key\": \"birchhall.example\""
 [[journey.step]]
 run = "enrich atlas-query {layer_corpus} --typed-file {layer_q1} --json"
+note = "One order: the request, the quote, the confirmation and the new price are one piece of work for one customer. Red at c8a31329a: RESOLVE answered none (0.84) when 03's quote was offered the request's record, so 02 and 03-06 are two orders."
+[journey.step.expect]
+exit = 0
+stdout_contains = "\"matched\": 1"
+[[journey.step]]
+run = "enrich atlas-query {layer_corpus} --typed-file {layer_q1} --json"
 note = "Its stage is confirmed (05's \"please go ahead\")."
 [journey.step.expect]
 exit = 0
