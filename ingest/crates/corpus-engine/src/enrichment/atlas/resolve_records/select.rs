@@ -74,6 +74,58 @@ pub(super) fn necessary_compatible(
     left: &BTreeMap<String, BTreeSet<String>>,
     right: &BTreeMap<String, BTreeSet<String>>,
 ) -> bool {
+    values_compatible(criterion, left, right)
+        && chapters_compatible(
+            left.get(super::CHAPTER_SUBJECT_KEY),
+            right.get(super::CHAPTER_SUBJECT_KEY),
+        )
+}
+
+/// What forbids a record a question offers or a forced choice joins: a
+/// differing declared necessary value, or the record being wholly another
+/// particular of the asked statement's own window (`read_apart`). A record
+/// that holds another reference of that window AND another window's is
+/// offered, marked (`question`), and the model decides: the window reader's
+/// distinction meets another window's reading there, and as a veto it made a
+/// reader's in-window split permanent (world-s1 coyoteville-d1, 2026-10-14).
+/// Code's own joins, by key or field, keep `necessary_compatible`.
+pub(super) fn offerable(
+    criterion: &Criterion,
+    left: &BTreeMap<String, BTreeSet<String>>,
+    right: &BTreeMap<String, BTreeSet<String>>,
+) -> bool {
+    values_compatible(criterion, left, right)
+        && !read_apart(
+            left.get(super::CHAPTER_SUBJECT_KEY),
+            right.get(super::CHAPTER_SUBJECT_KEY),
+        )
+}
+
+/// The record is wholly other particulars of the statement's own window, as
+/// that window's one reading gave them: a distinction made first-hand, with
+/// the whole window in view, which no later question overturns. Measured
+/// 2026-10-14 (arm chapter-shown): asked to override it, RESOLVE joined
+/// rightly 4 times and wrongly 5 (Ward's three TEP master agreements folded
+/// into one), against 31 to 4 where the record also held another window's.
+pub(super) fn read_apart(
+    left: Option<&BTreeSet<String>>,
+    right: Option<&BTreeSet<String>>,
+) -> bool {
+    let (Some(left), Some(right)) = (left, right) else {
+        return false;
+    };
+    let chapter = |s: &str| s.split_once('/').map_or(s, |(c, _)| c).to_string();
+    let mine: BTreeSet<String> = left.iter().map(|a| chapter(a)).collect();
+    !chapters_compatible(Some(left), Some(right))
+        && right.iter().all(|b| mine.contains(&chapter(b)))
+}
+
+/// The declared necessary values alone.
+pub(super) fn values_compatible(
+    criterion: &Criterion,
+    left: &BTreeMap<String, BTreeSet<String>>,
+    right: &BTreeMap<String, BTreeSet<String>>,
+) -> bool {
     criterion.necessary.iter().all(|attr| {
         let Some(left) = left.get(&attr.name).filter(|values| !values.is_empty()) else {
             return true;
@@ -82,10 +134,7 @@ pub(super) fn necessary_compatible(
             return true;
         };
         left.len() == 1 && right.len() == 1 && left.first() == right.first()
-    }) && chapters_compatible(
-        left.get(super::CHAPTER_SUBJECT_KEY),
-        right.get(super::CHAPTER_SUBJECT_KEY),
-    )
+    })
 }
 
 /// Two references one window's reader gave are two particulars as it read
@@ -234,7 +283,15 @@ pub(super) fn gate_plans(
             } else {
                 &records[record].fields
             };
-            if !necessary_compatible(criterion, &supplied[i], held) {
+            // A forced choice's question showed the reader's other reference
+            // (`question`), so only declared values gate it; a partition
+            // answerer is shown no such mark and keeps the window's references.
+            let compatible = if reads_weighed {
+                offerable(criterion, &supplied[i], held)
+            } else {
+                necessary_compatible(criterion, &supplied[i], held)
+            };
+            if !compatible {
                 *vetoed += 1;
                 debug!(
                     document,
@@ -445,7 +502,7 @@ pub(super) async fn choose(
             continue;
         }
         let compatible = |a: Alt| match a {
-            Alt::Record(r) => necessary_compatible(criterion, &w.supplied[j], &records[r].supplied),
+            Alt::Record(r) => offerable(criterion, &w.supplied[j], &records[r].supplied),
             Alt::Opened(g) => necessary_compatible(criterion, &w.supplied[j], &w.supplied[g]),
         };
         let mut candidates: Vec<Candidate> = opened.iter().map(|&g| Candidate::Opened(g)).collect();
@@ -702,9 +759,24 @@ pub(super) fn question(
         doc.body
     ));
     let mut offered = Vec::with_capacity(candidates.len());
+    let mine: Option<BTreeSet<String>> = s
+        .keys
+        .get(super::CHAPTER_SUBJECT_KEY)
+        .map(|v| BTreeSet::from([v.clone()]));
     for (c, label) in candidates.iter().zip(LABELS) {
         let line = match *c {
-            Candidate::Record(r, p) => describe(&records[r], &reasons(p), doc.id),
+            Candidate::Record(r, p) => {
+                let mut why = reasons(p);
+                if !chapters_compatible(
+                    mine.as_ref(),
+                    records[r].supplied.get(super::CHAPTER_SUBJECT_KEY),
+                ) {
+                    why.push_str(
+                        "; the window's reader read this record's particular as another than this statement's",
+                    );
+                }
+                describe(&records[r], &why, doc.id)
+            }
             Candidate::Opened(g) => {
                 let o = &statements[asked[g]];
                 // Asked spans were checked readable in `resolve_document`.

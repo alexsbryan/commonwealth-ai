@@ -20,7 +20,7 @@ use tracing::{debug, info};
 
 use super::fields::{self, compare_necessary, declared_keys};
 use super::select::{
-    decision_call, necessary_compatible, question, reason_call, Ask, Candidate, LABELS, NONE,
+    decision_call, offerable, question, reason_call, Ask, Candidate, LABELS, NONE,
 };
 use super::weigh::{weigh, Zone};
 use super::{
@@ -112,7 +112,7 @@ impl Resolver {
         for (id, _) in &held.alternatives {
             if let Some(&r) = self.position.get(id) {
                 if !alts.contains(&r)
-                    && necessary_compatible(criterion, &held.supplied, &self.records[r].supplied)
+                    && offerable(criterion, &held.supplied, &self.records[r].supplied)
                 {
                     alts.push(r);
                 }
