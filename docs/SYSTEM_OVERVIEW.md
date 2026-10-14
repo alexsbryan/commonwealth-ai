@@ -505,7 +505,11 @@ writes `<corpus_id>-partition-<node_id>/`. `installed_indexes()` answers "is a
 writer active" (the resume paths). `usable_indexes()` answers "can I search
 this", filtering on `IndexInfo::indexes_built` and tracing every drop.
 `corpus_readiness` (`ready` / `building` / `absent`) is what `corpus status`
-and `corpus install --wait` share.
+and `corpus install --wait` share. `corpus install <recipe.toml> --inline`
+reads none of them: it registers nothing locally, sends the recipe in the
+daemon's published OICP install, refuses it before sending past the
+manifest's `max_install_bytes` (v0.6 §2.12), and its `--wait` polls the
+published progress (`sovereign-pipeline` `corpus_cmd/inline_install.rs`).
 
 ### Index maintenance — the decay nothing reports
 

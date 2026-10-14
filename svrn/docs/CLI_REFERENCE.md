@@ -294,6 +294,19 @@ svrn corpus install sep --wait=7200 && svrn enrich init sep --from-corpus sep
 svrn corpus status sep        # ready | building | absent
 ```
 
+`--inline` installs a recipe file the way a client that shares no disk with
+the daemon does: nothing is registered locally, and the recipe, its inline
+`[[document]]` texts included, goes in the daemon's published OICP install
+(`cmnwlth/docs/oicp-v0.5.md` §4). It is sized first against the largest
+install the daemon states, `max_install_bytes` (64 MiB on this daemon,
+`oicp-v0.6.md` §2.12), and refused by name past it without being sent. With
+`--wait` it polls the daemon's published progress and reports the time and
+how many documents were read:
+
+```bash
+svrn corpus install library.recipe.toml --inline --wait=1800
+```
+
 `status` reports one row per **corpus**, not per directory: an in-flight
 partition appears as its own corpus id in state `building`, never as a
 separate corpus named `<id>-partition-node-…`.

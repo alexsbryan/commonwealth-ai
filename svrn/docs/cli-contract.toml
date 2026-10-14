@@ -463,6 +463,9 @@ classification = "daemon"
 # `enrich-atlas` journey's first step depends on that distinction.
 flags = [
   { name = "--wait", takes_value = false },
+  # The recipe over the daemon's published OICP install, sized against its
+  # stated `max_install_bytes` (oicp-v0.6.md §2.12) before it is sent.
+  { name = "--inline", takes_value = false },
 ]
 [[command]]
 path = "corpus remove"
