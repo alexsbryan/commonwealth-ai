@@ -57,7 +57,7 @@ pub async fn read(
     infer: &InferenceFn,
 ) -> Result<String> {
     if super::window::chosen() {
-        return super::window::read(chapter, policies, infer).await;
+        return super::window::read(chapter, policies, classes, infer).await;
     }
     if super::waves::chosen() {
         return super::waves::read(chapter, policies, classes, infer).await;

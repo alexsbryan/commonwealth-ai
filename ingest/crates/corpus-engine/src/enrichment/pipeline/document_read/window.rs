@@ -17,6 +17,7 @@ use std::collections::BTreeSet;
 use serde_json::{json, Value};
 use tracing::{debug, info, warn};
 
+use super::line_classes::LineClasses;
 use super::pick::{candidates, Candidate};
 use super::validation::{field_evidence_exists, metadata_strings};
 use super::{
@@ -202,12 +203,41 @@ fn shown_fields(policies: &OntologyPolicies) -> Vec<String> {
     fields
 }
 
+/// A document's own lines, as the passes reader asks them: no line it carries
+/// from a document dated earlier, no header line, no line of a message it
+/// embeds (`line_classes.rs`). A reply's quoted history is the earlier
+/// message's, which the window holds under its own date or another window
+/// does; read here, it states the earlier stage under the later date.
+fn own_text(doc: &SourceDocument, classes: &LineClasses) -> String {
+    let raw = doc.raw_body();
+    let lines = super::passes::lines(&raw);
+    let mut held = 0usize;
+    let own: Vec<&str> = lines
+        .iter()
+        .zip(classes.classes(doc.key(), &raw, &lines))
+        .filter_map(|(line, carried)| match carried {
+            Some(_) => {
+                held += 1;
+                None
+            }
+            None => Some(&raw[line.start..line.end]),
+        })
+        .collect();
+    debug!(document = %doc.key(), lines = lines.len(), held, "document_read/window: carried, header and embedded lines not shown");
+    if own.is_empty() {
+        "(no line of its own: every line is carried, a header or an embedded message)".to_string()
+    } else {
+        own.join("\n")
+    }
+}
+
 fn compose(
     chapter: &ChapterInput,
     policies: &OntologyPolicies,
     index: &TypeIndex<'_>,
     contract: &Contract<'_>,
     labels: &[String],
+    classes: &LineClasses,
 ) -> ChatPrompt {
     let fields = shown_fields(policies);
     let named = contract.named(policies, index);
@@ -237,7 +267,7 @@ fn compose(
             if !listed.is_empty() {
                 head.push(format!("Named here: {}", listed.join("; ")));
             }
-            format!("{}\n\n{}\n", head.join("\n"), doc.raw_body().trim())
+            format!("{}\n\n{}\n", head.join("\n"), own_text(doc, classes))
         })
         .collect::<Vec<_>>()
         .join("\n");
@@ -267,6 +297,7 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
 pub(super) async fn read(
     chapter: &ChapterInput,
     policies: &OntologyPolicies,
+    classes: &LineClasses,
     infer: &InferenceFn,
 ) -> Result<String> {
     let index = TypeIndex::from_policies(policies);
@@ -279,7 +310,7 @@ pub(super) async fn read(
     let labels: Vec<String> = (1..=chapter.source_documents.len())
         .map(|n| format!("d{n}"))
         .collect();
-    let prompt = compose(chapter, policies, &index, &contract, &labels);
+    let prompt = compose(chapter, policies, &index, &contract, &labels, classes);
     debug!(chapter = %chapter.chapter_id, documents = labels.len(), prompt_chars = prompt.user.len(), "document_read/window: asking");
     let raw = infer(&prompt, None).await?;
     // A failure keeps the answer's tail: it says whether the answer was cut

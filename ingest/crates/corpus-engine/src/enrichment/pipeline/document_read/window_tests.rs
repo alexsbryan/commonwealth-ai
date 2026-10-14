@@ -38,7 +38,9 @@ async fn one_particular_across_a_window_is_one_chapter_subject() {
             {"kind": "reported_status", "about": "p1", "document": "d2", "quote": "Issue 42 is now closed.",
              "fields": {"status": "Closed"}}]});
     let (infer, seen) = scripted(vec![answer]);
-    let raw = read(&chapter, &policies, &infer).await.unwrap();
+    let raw = read(&chapter, &policies, &Default::default(), &infer)
+        .await
+        .unwrap();
     let mut extraction = parse_response(&raw, &policies)
         .unwrap()
         .section_extraction
@@ -104,7 +106,9 @@ async fn what_the_contract_cannot_hold_is_refused_or_unknown_by_name() {
             {"kind": "reported_status", "about": "p1", "document": "d2", "quote": "Issue 42 is now closed.",
              "fields": {"status": "maybe"}}]});
     let (infer, _) = scripted(vec![answer]);
-    let raw = read(&chapter, &policies, &infer).await.unwrap();
+    let raw = read(&chapter, &policies, &Default::default(), &infer)
+        .await
+        .unwrap();
     let mut extraction = parse_response(&raw, &policies)
         .unwrap()
         .section_extraction
@@ -134,5 +138,58 @@ async fn what_the_contract_cannot_hold_is_refused_or_unknown_by_name() {
         matches!(&b.claims[0].fields["status"], DocumentReadField::Unknown { reason } if reason.contains("none of the declared values")),
         "{:?}",
         b.claims[0].fields
+    );
+}
+
+/// Failing input, named: world-s4's January reply quotes October's "gone with
+/// another supplier", and a window that shows the quote reads the deal lost in
+/// January. Each document shows only its own lines (`line_classes.rs`).
+#[tokio::test]
+async fn a_reply_shows_only_its_own_lines_not_the_message_it_quotes() {
+    let mut policies = policies();
+    policies.change.document = Some(crate::enrichment::ontology::DocumentFieldsDecl {
+        date: Some("date".into()),
+        thread: None,
+        id: None,
+        author: None,
+    });
+    let chapter = input_chapter(&[
+        row(
+            1,
+            "doc-a",
+            "Issue 42 in uv is open.\nIt fails on start.",
+            r#"{"date":"Mon, 14 May 2001 09:00:00 -0700"}"#,
+        ),
+        row(
+            2,
+            "doc-b",
+            "Issue 42 is now closed.\n> Issue 42 in uv is open.\n> It fails on start.",
+            r#"{"date":"Tue, 15 May 2001 09:00:00 -0700"}"#,
+        ),
+    ]);
+    let empty = json!({"particulars": [], "claims": []});
+    let shown = |classes: super::super::LineClasses| {
+        let (policies, chapter, empty) = (policies.clone(), chapter.clone(), empty.clone());
+        async move {
+            let (infer, seen) = scripted(vec![empty]);
+            read(&chapter, &policies, &classes, &infer).await.unwrap();
+            let user = seen.lock().unwrap()[0].user.clone();
+            user[user.find("=== d2 ===").unwrap()..].to_string()
+        }
+    };
+    let control = shown(Default::default()).await;
+    assert!(
+        control.contains("> Issue 42 in uv is open."),
+        "control: no classes, the quote is shown"
+    );
+    let d2 = shown(super::super::LineClasses::of(
+        &chapter.source_documents,
+        &policies,
+    ))
+    .await;
+    assert!(d2.contains("Issue 42 is now closed."), "{d2}");
+    assert!(
+        !d2.contains("in uv is open"),
+        "the carried lines are not shown: {d2}"
     );
 }
