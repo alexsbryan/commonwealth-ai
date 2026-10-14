@@ -23,6 +23,23 @@ def line(run):
            f"right-stage {len(s['found_with_right_stage']):>2}  attached {att:>2}/{len(S['updates'])}  records {s['deal_records']}"
 
 
+def resolve_line(root):
+    """RESOLVE's questions over all corpora (decisions.py): decided right, and the model's own pick before any veto,
+    split by whether the asked particular's own record was offered (right answer: it) or not (right answer: none)."""
+    v, pick = Counter(), Counter()
+    for f in glob.glob(f"{root}/*/decisions.jsonl"):
+        for l in open(f):
+            r = json.loads(l)
+            if r["verdict"] in ("unjudged", "failed"): v[r["verdict"]] += 1; continue
+            v["judged"] += 1; v["right"] += r["verdict"] in ("right_link", "right_open", "veto_saved")
+            p = r.get("picked"); own = r.get("offered_right")
+            pick[(own, "none" if p is None else "own" if p == r["is_"] else "other")] += 1
+    if not v["judged"]: return "RESOLVE: no judged question"
+    return (f"RESOLVE: {v['right']}/{v['judged']} decided right; model's own pick: own record offered -> own {pick[(True, 'own')]}, "
+            f"other {pick[(True, 'other')]}, none {pick[(True, 'none')]}; not offered -> none {pick[(False, 'none')]}, "
+            f"other {pick[(False, 'other')]}; failed {v['failed']}")
+
+
 def arm(root):
     rows, cats, wcats = {}, Counter(), Counter()
     for run in sorted(glob.glob(f"{root}/*/")):
@@ -42,6 +59,7 @@ def arm(root):
     for cid in corpora.ALL:
         if cid in rows: print(f"  {cid:<11} " + (f"served {rows[cid][0]:>2}/{rows[cid][1]}  attached {rows[cid][2]:>3}/{rows[cid][3]}" if rows[cid] else "no score"))
     print(f"  worlds ({len(worlds)}) served {tot(worlds, 0)}/{tot(worlds, 1)}  attached {tot(worlds, 2)}/{tot(worlds, 3)}")
+    print("  " + resolve_line(root))
     print("  misses, worlds: " + ", ".join(f"{m} {n}" for m, n in cats.most_common()))
     print("  misses, ward:   " + ", ".join(f"{m} {n}" for m, n in wcats.most_common()))
     row = dict(meta, arm=os.path.basename(root.rstrip("/")), **{i: (f"{rows[i][0]}/{rows[i][1]}" if rows.get(i) else "") for i in corpora.ALL},
