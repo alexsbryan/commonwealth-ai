@@ -434,6 +434,7 @@ mod tests {
                     outcome: Outcome::Decided(super::super::Decision::Opened {
                         record: r.to_string(),
                         cite: None,
+                        vetoed: None,
                     }),
                     choice: None,
                     by: Vec::new(),

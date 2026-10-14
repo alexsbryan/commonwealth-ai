@@ -614,6 +614,7 @@ pub(super) fn judge(
                     (None, _, _) => Plan::Open {
                         group: root,
                         cite: Some(cite),
+                        vetoed: None,
                     },
                     _ => {
                         let mut targets: Vec<String> =

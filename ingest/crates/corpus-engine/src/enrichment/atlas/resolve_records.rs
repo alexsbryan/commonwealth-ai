@@ -228,9 +228,13 @@ pub enum Decision {
     },
     /// None of the candidates: a record was opened. `cite` is `None` only for
     /// a statement alone in its document with no candidate, where no call is made.
+    /// `vetoed` is the alternative the model picked when the weighed sources
+    /// found nothing for any (`select::decide`).
     Opened {
         record: String,
         cite: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        vetoed: Option<String>,
     },
 }
 
@@ -485,6 +489,7 @@ enum Plan {
     Open {
         group: usize,
         cite: Option<String>,
+        vetoed: Option<String>,
     },
     Refuse(Refusal),
 }
@@ -696,6 +701,7 @@ impl Resolver {
             vec![Plan::Open {
                 group: 0,
                 cite: None,
+                vetoed: None,
             }]
         } else {
             let answer = match answerer {
@@ -870,7 +876,11 @@ impl Resolver {
                 // Held: no record opens and nothing folds, so no later
                 // statement can join it at first sight.
                 Plan::Held(held) => Outcome::Held(held),
-                Plan::Open { group, cite } => {
+                Plan::Open {
+                    group,
+                    cite,
+                    vetoed,
+                } => {
                     let identity = open_identity_by_group
                         .get(&group)
                         .expect("every open plan has a linked statement identity")
@@ -891,6 +901,7 @@ impl Resolver {
                     Outcome::Decided(Decision::Opened {
                         record: self.records[record].id.clone(),
                         cite,
+                        vetoed,
                     })
                 }
             };

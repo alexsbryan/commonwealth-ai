@@ -809,7 +809,9 @@ question the pipeline asks about a type is a method on the resolved
   is a retired key, warned and ignored). The weighed posterior is kept beside
   every model choice; it decides only a statement no record was shown to the
   model for (a field-named or proposed record alone) and every statement under a
-  partition answerer. That decider (`resolve_records/weigh.rs`)
+  partition answerer, and it vetoes a pick only when it puts none at or above
+  `identity_bar`, which opens a record whose `Decision::Opened` names the
+  vetoed pick (`select::decide_asked`, one rule for a document and settling). That decider (`resolve_records/weigh.rs`)
   sums each alternative's weights with the pair prior into its log odds
   against none: one an agreeing source raised and whose posterior reaches
   `identity_bar` links (`Decision::Weighed`, with the sources that agreed);
