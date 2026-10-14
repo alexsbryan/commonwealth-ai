@@ -107,10 +107,13 @@ more over those only, linking at the bar, opening its own record when nothing ra
 the most probable, so nothing is left held, `resolve_records/settle.rs`; amended 2026-10-12 by the operator's
 delivery review: the model's forced choice decides every statement it was shown a record for, in its document and
 at settling, and the weighed posterior is kept beside it, deciding only what no model was shown, since on Ward the
-weights overrode 36 of its 39 picks of an offered company; amended 2026-10-13 from run 4's window reads: a pick
-against sources that put none at the type's `identity_bar` opens a record and names the vetoed pick, since the model
-picked an offered record for most deals' first statements, while sources that raise nothing veto nothing,
-`select::decide_asked`); **3** the layer's other identity deciders onto it (about fifteen today, with
+weights overrode 36 of its 39 picks of an offered company; amended 2026-10-14 from gold-judged RESOLVE questions on
+five generated worlds and Ward: the question shows each side by what its readers read it to be, their supported
+values of the type's other declared attributes (`resolve_records::Described`, shown and never compared), and the
+default path asks the reasoned choice, so where one token over the offered records joined 18 of 28 statements whose
+own record was not offered, reasoning joins 4 of 27; with both, the model's own pick decided 49 of 57 such
+questions, and the veto of 2026-10-13, a pick overruled when the weighed sources put none at the bar, 44, so it is
+withdrawn); **3** the layer's other identity deciders onto it (about fifteen today, with
 three ways of combining keys; begun: an entity or event type with a criterion and no source is RESOLVE's alone in the
 atlas build, over the claims whose subject it is, `resolution_records.rs`). A precision is measured on the rule as it runs, never under gold alone: a field
 follows whatever decision put its value in a record (uv thread .905 under gold, .71 live). That is why it is

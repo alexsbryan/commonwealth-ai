@@ -155,6 +155,10 @@ pub struct Statement {
     /// source, never forbidding a candidate as a supplied `keys` value does.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub read: BTreeMap<String, String>,
+    /// What its reader read its particular to be: shown to the model beside the
+    /// statement and, folded, on the record it joins (`Described`).
+    #[serde(default, skip_serializing_if = "Described::is_empty")]
+    pub described: Described,
 }
 
 /// An open record and what has been folded into it.
@@ -182,6 +186,10 @@ pub struct Record {
     /// model; never compared (`keys` are).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub shown: Vec<String>,
+    /// What the readers of its statements read it to be, folded: shown to
+    /// the model on its card; never compared.
+    #[serde(skip_serializing_if = "Described::is_empty")]
+    pub described: Described,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -228,13 +236,9 @@ pub enum Decision {
     },
     /// None of the candidates: a record was opened. `cite` is `None` only for
     /// a statement alone in its document with no candidate, where no call is made.
-    /// `vetoed` is the alternative the model picked when the weighed sources
-    /// found nothing for any (`select::decide`).
     Opened {
         record: String,
         cite: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        vetoed: Option<String>,
     },
 }
 
@@ -489,7 +493,6 @@ enum Plan {
     Open {
         group: usize,
         cite: Option<String>,
-        vetoed: Option<String>,
     },
     Refuse(Refusal),
 }
@@ -701,7 +704,6 @@ impl Resolver {
             vec![Plan::Open {
                 group: 0,
                 cite: None,
-                vetoed: None,
             }]
         } else {
             let answer = match answerer {
@@ -876,11 +878,7 @@ impl Resolver {
                 // Held: no record opens and nothing folds, so no later
                 // statement can join it at first sight.
                 Plan::Held(held) => Outcome::Held(held),
-                Plan::Open {
-                    group,
-                    cite,
-                    vetoed,
-                } => {
+                Plan::Open { group, cite } => {
                     let identity = open_identity_by_group
                         .get(&group)
                         .expect("every open plan has a linked statement identity")
@@ -901,7 +899,6 @@ impl Resolver {
                     Outcome::Decided(Decision::Opened {
                         record: self.records[record].id.clone(),
                         cite,
-                        vetoed,
                     })
                 }
             };
@@ -971,6 +968,7 @@ impl Resolver {
             supplied: BTreeMap::new(),
             evidence: Vec::new(),
             shown: Vec::new(),
+            described: Described::default(),
         });
         self.records.len() - 1
     }
@@ -1001,6 +999,7 @@ impl Resolver {
                 .or_default()
                 .extend(values.iter().cloned());
         }
+        record.described.extend(&statement.described);
         record.statements.push(statement.id.clone());
         for (k, v) in keys {
             record.keys.entry(k.clone()).or_default().insert(v.clone());
@@ -1029,6 +1028,8 @@ impl Resolver {
 
 mod answer;
 mod by;
+mod described;
+pub use described::Described;
 use estimate::{Comparison, Pairs};
 pub use estimate::{Estimate, SourceWeight};
 pub use weigh::Carried;

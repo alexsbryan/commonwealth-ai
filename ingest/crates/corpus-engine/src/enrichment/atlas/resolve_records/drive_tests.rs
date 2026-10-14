@@ -82,6 +82,7 @@ async fn resolve(order: &[usize], answerer: Answerer<'_>) -> (String, BTreeMap<S
             let start = f.body.find(f.surface).unwrap();
             vec![Statement {
                 read: Default::default(),
+                described: Default::default(),
                 id: format!("{}/s0", f.id),
                 start,
                 end: start + f.surface.len(),

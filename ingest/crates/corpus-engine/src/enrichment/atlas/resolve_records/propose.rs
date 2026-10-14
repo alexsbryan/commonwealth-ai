@@ -434,7 +434,6 @@ mod tests {
                     outcome: Outcome::Decided(super::super::Decision::Opened {
                         record: r.to_string(),
                         cite: None,
-                        vetoed: None,
                     }),
                     choice: None,
                     by: Vec::new(),
@@ -631,6 +630,7 @@ mod tests {
             end: 0,
             keys: Default::default(),
             read: Default::default(),
+            described: Default::default(),
         };
         let mut statements = HashMap::new();
         statements.insert(

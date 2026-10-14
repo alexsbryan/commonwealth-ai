@@ -67,6 +67,7 @@ fn stmt(id: &str, body: &str, surface: &str, nth: usize, keys: &[(&str, &str)]) 
         .0;
     Statement {
         read: Default::default(),
+        described: Default::default(),
         id: id.into(),
         start,
         end: start + surface.len(),
@@ -437,6 +438,7 @@ async fn a_span_outside_the_body_is_unreadable() {
     let (infer, _) = scripted(vec![]);
     let s = Statement {
         read: Default::default(),
+        described: Default::default(),
         id: "a".into(),
         start: 4,
         end: 99,
@@ -534,6 +536,7 @@ fn record(id: &str, surface: &str) -> Record {
         fields: Default::default(),
         supplied: Default::default(),
         shown: vec![],
+        described: Default::default(),
         evidence: vec![Evidence {
             document: "d0".into(),
             title: None,
@@ -973,6 +976,9 @@ mod weighed_tests;
 
 #[path = "settle_tests.rs"]
 mod settle_tests;
+
+#[path = "described_tests.rs"]
+mod described_tests;
 
 /// Failing input, named: the Ward window read eight deals, p1 to p8, and
 /// RESOLVE's forced choices folded them into three records (2026-10-13). Two

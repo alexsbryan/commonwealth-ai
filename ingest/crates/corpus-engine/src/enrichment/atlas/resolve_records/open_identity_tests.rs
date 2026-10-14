@@ -23,6 +23,7 @@ fn criterion() -> Criterion {
 fn statement(id: &str) -> Statement {
     Statement {
         read: Default::default(),
+        described: Default::default(),
         id: id.into(),
         start: 0,
         end: BODY.len(),

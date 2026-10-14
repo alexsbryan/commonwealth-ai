@@ -62,62 +62,6 @@ async fn the_models_choice_decides_whatever_the_proposed_answer_and_the_weights_
     }
 }
 
-/// A pick against weighed sources that put none at the type's bar (the pick
-/// counted among them) does not join: the statement opens a record and its
-/// outcome names the vetoed pick. Here the statement's thread is neither
-/// record's. Controls: a model choice weighed strongly enough for the pick,
-/// and sources that raise nothing (weights at zero, none's posterior below the
-/// bar), leave the pick to decide and open nothing.
-#[tokio::test]
-async fn a_pick_against_sources_that_put_none_at_the_bar_opens_a_record_and_names_it() {
-    for (model, thread, label, vetoed, records) in [
-        ((0.6, 0.3), (0.9, 0.05), "opened", Some("y"), 3),
-        ((0.99, 0.01), (0.9, 0.05), "chosen", None, 2),
-        ((0.5, 0.5), (0.5, 0.5), "chosen", None, 2),
-    ] {
-        let mut res = weights(&[
-            ("model_choice", model.0, model.1),
-            ("document_thread", thread.0, thread.1),
-            ("proposed_answer", 0.5, 0.5),
-        ]);
-        for (d, id, body, surface, t) in [
-            ("d0", "x", "Fire downtown.", "Fire downtown", "t1"),
-            ("d0b", "y", "Flood uptown.", "Flood uptown", "t2"),
-        ] {
-            res.resolve_document(
-                &criterion(&[]),
-                threaded(d, body, t),
-                &[stmt(id, body, surface, 0, &[])],
-                &[],
-                Answerer::Proposed,
-            )
-            .await;
-        }
-        let (infer, _) = scripted(vec![json!({"A": 0.1, "B": 0.8, "0": 0.1})]);
-        let b = "Fire downtown, again.";
-        let r = res
-            .resolve_document(
-                &barred(),
-                threaded("d1", b, "t3"),
-                &[stmt("z", b, "Fire downtown", 0, &[])],
-                &[similar("x", 0.6), similar("y", 0.5)],
-                Answerer::Select(&infer),
-            )
-            .await;
-        let o = &r.outcomes[0].outcome;
-        let case = format!("model {model:?} thread {thread:?}");
-        assert_eq!(o.label(), label, "{case}: {o:?}");
-        match o {
-            Outcome::Decided(Decision::Opened { vetoed: v, .. }) => {
-                assert_eq!(v.as_deref(), vetoed, "{case}")
-            }
-            Outcome::Decided(Decision::Chosen { record, .. }) => assert_eq!(record, "y"),
-            _ => unreachable!("{o:?}"),
-        }
-        assert_eq!(res.records().len(), records, "{case}");
-    }
-}
-
 /// The model's choice decides, said to be the model's at an unmeasured
 /// precision (C3); the sources that agreed with it are kept beside it at
 /// their estimated weights.

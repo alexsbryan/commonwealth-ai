@@ -172,7 +172,13 @@ pub(crate) async fn apply(
             policies,
             corpus_id,
             Some(embed),
-            Answerer::Select(infer),
+            // The model reasons before its choice is read (`select::reasoned_choice`).
+            // Asked for one token over the offered records, it joined 18 of 28
+            // statements whose own record was not offered to some other record;
+            // reasoning first, 4 of 27 (five worlds and Ward, gold-judged by
+            // research/ontology-apps/loop/decisions.py: runs/loop/described-a2
+            // against described-reason-noveto, 2026-10-14).
+            Answerer::Reason(infer),
             &mut |ty: &str, r: &DocumentResolution| decisions.typed_line(ty, r),
         )
         .await;

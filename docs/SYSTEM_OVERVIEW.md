@@ -769,7 +769,9 @@ question the pipeline asks about a type is a method on the resolved
   candidate shown with its `Reason`s, its statement and document counts, what
   it is as written (a seeded record's identity values, name and the records
   whose refs point at it, `mentions::card`) and the values its statements
-  were read with, never its folded comparison keys or its documents' stamps,
+  were read with and what its statements' readers read it to be (`Described`:
+  their supported values of its other declared attributes, folded; shown, never
+  compared), never its folded comparison keys or its documents' stamps,
   and up to four of
   its statements' cited lines from other documents (`passage::lines_of`: a
   span widened to its whole line, or the reader's lines as they stand on the
@@ -788,7 +790,12 @@ question the pipeline asks about a type is a method on the resolved
   kept on the outcome (`Choice`); its argmax decides whenever a record was
   shown, the record it picks (`Decision::Chosen`) or none, which opens one
   (operator delivery review 2026-10-12: on Ward the weighed decider overrode
-  36 of the model's 39 picks of an offered company).
+  36 of the model's 39 picks of an offered company). The asked statement is
+  shown beside what its reader read its subject to be, gathered over every
+  claim of its window subject (`resolution_records/described.rs`). The default
+  path, `enrich resolve` (`atlas_resolve_documents.rs`), asks the reasoned
+  choice (`Answerer::Reason`): the model reasons, bounded by `REASON_TOKENS`,
+  and its choice is read after (ONTOLOGY_METHOD §Identity, amended 2026-10-14).
   A type's `identity_necessary` attributes (each with declared `values`) are READ
   per asked statement as one forced choice over those values
   (`resolve_records/read.rs`), unless the document reader already chose it
@@ -809,9 +816,7 @@ question the pipeline asks about a type is a method on the resolved
   is a retired key, warned and ignored). The weighed posterior is kept beside
   every model choice; it decides only a statement no record was shown to the
   model for (a field-named or proposed record alone) and every statement under a
-  partition answerer, and it vetoes a pick only when it puts none at or above
-  `identity_bar`, which opens a record whose `Decision::Opened` names the
-  vetoed pick (`select::decide_asked`, one rule for a document and settling). That decider (`resolve_records/weigh.rs`)
+  partition answerer. That decider (`resolve_records/weigh.rs`)
   sums each alternative's weights with the pair prior into its log odds
   against none: one an agreeing source raised and whose posterior reaches
   `identity_bar` links (`Decision::Weighed`, with the sources that agreed);

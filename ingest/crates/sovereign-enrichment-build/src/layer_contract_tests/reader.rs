@@ -21,11 +21,12 @@ pub(super) fn asked_line(prompt: &ChatPrompt) -> &str {
 async fn every_question_opens_with_its_documents_declared_facts() {
     for shape in SHAPES {
         let run = run(&Fixture::load(shape)).await;
-        for p in run
-            .prompts
-            .iter()
-            .filter(|p| p.phase_id.as_deref() != Some("resolve_select"))
-        {
+        for p in run.prompts.iter().filter(|p| {
+            !matches!(
+                p.phase_id.as_deref(),
+                Some("resolve_select" | "resolve_reason")
+            )
+        }) {
             assert!(
                 p.user.starts_with("Declared facts of this document:\n"),
                 "{shape}: {}",

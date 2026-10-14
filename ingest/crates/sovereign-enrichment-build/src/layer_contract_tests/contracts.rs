@@ -76,6 +76,7 @@ async fn c1_questions_ask_only_what_declared_structure_leaves_open() {
                         | "document_passes_about"
                         | "document_passes_act"
                         | "document_passes_cite"
+                        | "resolve_reason"
                         | "resolve_select"
                 ),
                 "{shape}: a question the plan does not generate: `{phase}`"
@@ -170,7 +171,8 @@ async fn c2_a_read_turn_holds_one_document_and_a_resolve_turn_adds_only_marked_q
         let (mut asked_resolve, mut quoted) = (0, 0);
         for p in &run.prompts {
             let phase = p.phase_id.as_deref().unwrap_or("-");
-            if phase != "resolve_select" {
+            // A reasoning turn is the RESOLVE question it reasons about.
+            if !matches!(phase, "resolve_select" | "resolve_reason") {
                 let held = codes(&format!("{}\n{}", p.system, p.user), n);
                 assert!(
                     held.len() <= 1,

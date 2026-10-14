@@ -20,8 +20,7 @@ use tracing::{debug, info};
 
 use super::fields::{self, compare_necessary, declared_keys};
 use super::select::{
-    decide_asked, decision_call, necessary_compatible, question, reason_call, Ask, Candidate,
-    LABELS, NONE,
+    decision_call, necessary_compatible, question, reason_call, Ask, Candidate, LABELS, NONE,
 };
 use super::weigh::{weigh, Zone};
 use super::{
@@ -186,11 +185,14 @@ impl Resolver {
             debug!(document = doc.id, statement = %s.id, zone = ?weighed.zone, "atlas/resolve settle: unsettled at the bar; the most probable decides");
         }
         // The model's choice decides a statement it was asked about, as in a
-        // document (`select::decide_asked`); the weighed posterior is kept beside it.
-        let (zone, vetoed) = decide_asked(picked, &weighed, criterion.bar);
-        let vetoed = vetoed.map(|k| self.records[alts[k]].id.clone());
+        // document (`select.rs`); the weighed posterior is kept beside it.
+        let zone = match picked {
+            Some(Some(k)) => Zone::Link(k, weighed.posterior[k]),
+            Some(None) => Zone::NoLink,
+            None => weighed.zone,
+        };
         if picked.is_some() {
-            debug!(document = doc.id, statement = %s.id, decided = ?zone, weighed = ?weighed.zone, vetoed = ?vetoed, "atlas/resolve settle: the model's choice decides; the weighed zone is kept beside it");
+            debug!(document = doc.id, statement = %s.id, decided = ?zone, weighed = ?weighed.zone, "atlas/resolve settle: the model's choice decides; the weighed zone is kept beside it");
         }
         let surface = doc.body.get(s.start..s.end).unwrap_or("");
         let keys = declared_keys(criterion, s);
@@ -223,7 +225,6 @@ impl Resolver {
                 Outcome::Decided(Decision::Opened {
                     record: self.records[r].id.clone(),
                     cite: None,
-                    vetoed,
                 })
             }
         };

@@ -9,16 +9,12 @@
 //! The model is asked whenever a record is offered, and its most probable
 //! label decides: a record it picks over every other and over none
 //! (`Decision::Chosen`), or none, which opens one. The sources `weigh.rs`
-//! weighs at their corpus-estimated weights, the pick among them, are kept
-//! beside the choice; they decide a statement no candidate was offered for,
-//! and they veto a pick only when they put none at or above the type's bar,
-//! which opens a record (`decide_asked`). Operator delivery
-//! review, 2026-10-12: on Ward the weighed decider overrode 36 of the model's
-//! 39 picks of an offered company, so it does not override a pick it has
-//! evidence for. Window reads, 2026-10-13: the model picked an offered record
-//! for a deal's first statement in 17 of 21 such questions, so a pick the
-//! evidence is against does not join. The full distribution is kept on every
-//! outcome.
+//! weighs at their corpus-estimated weights are kept beside the choice, never
+//! over it: a statement no candidate was offered for is the only one they
+//! decide. Operator delivery review, 2026-10-12: on Ward the weighed decider
+//! overrode 36 of the model's 39 picks of an offered company and linked 42
+//! statements no model was asked about, so it earns no authority it has not
+//! shown in the workflow. The full distribution is kept on every outcome.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::Instant;
@@ -29,7 +25,7 @@ use tracing::{debug, warn};
 use super::answer::{describe, describe_opened, reasons, Proposed, ProposedVerdict};
 use super::estimate::{Comparison, Estimate};
 use super::fields::{self, compare_necessary};
-use super::weigh::{tally, weigh, Carried, Weighed, Zone};
+use super::weigh::{tally, weigh, Carried, Zone};
 use super::{
     context, marked_context, Choice, Criterion, Document, Held, Plan, Proposal, Record, Refusal,
     Statement,
@@ -356,26 +352,6 @@ impl Candidate<'_> {
     }
 }
 
-/// What decides a statement, from the model's pick (`None`: not asked;
-/// `Some(None)`: it picked none) and the weighed sources, which count the pick
-/// among them: the pick, unless it is of an alternative while the sources put
-/// none at or above the type's `bar`. That opens a record and names the vetoed
-/// alternative; sources that raised nothing veto nothing. One rule for a
-/// document (`choose`) and after the last one (`settle.rs`).
-pub(super) fn decide_asked(
-    picked: Option<Option<usize>>,
-    weighed: &Weighed,
-    bar: Option<f64>,
-) -> (Zone, Option<usize>) {
-    let novel = bar.is_some_and(|bar| weighed.none >= bar);
-    match picked {
-        Some(Some(at)) if novel => (Zone::NoLink, Some(at)),
-        Some(Some(at)) => (Zone::Link(at, weighed.posterior[at]), None),
-        Some(None) => (Zone::NoLink, None),
-        None => (weighed.zone, None),
-    }
-}
-
 /// Where an earlier asked statement's plan put it; `None` when held or refused.
 fn alt_of(plan: &Plan) -> Option<Alt> {
     match plan {
@@ -622,22 +598,28 @@ pub(super) async fn choose(
             picked = Some(best);
         }
         let weighed = weigh(&evidence(&comps), &raised(&comps), prior, criterion.bar);
-        let picked_at = picked.map(|p| {
-            p.map(|alt| {
-                alts.iter()
+        // The model's forced choice decides an asked statement, its pick or
+        // none (operator delivery review, 2026-10-12: fitted weights are not
+        // an authority; on Ward they overrode 36 of the model's 39 picks of an
+        // offered company). The weighed posterior is kept beside it.
+        let zone = match picked {
+            Some(Some(alt)) => {
+                let at = alts
+                    .iter()
                     .position(|&a| a == alt)
-                    .expect("the model picks among the alternatives it was shown")
-            })
-        });
-        let (zone, vetoed) = decide_asked(picked_at, &weighed, criterion.bar);
-        let vetoed = vetoed.map(|k| id_of(alts[k]));
+                    .expect("the model picks among the alternatives it was shown");
+                Zone::Link(at, weighed.posterior[at])
+            }
+            Some(None) => Zone::NoLink,
+            None => weighed.zone,
+        };
         tally(&mut carried, &comps, estimate, prior, criterion.bar, zone);
         // Each alternative by its record id beside its comparison, so the
         // estimate can be read against gold pair by pair (layer-estimator).
         let named: Vec<String> = alts.iter().map(|&a| id_of(a)).collect();
         debug!(document = doc.id, statement = %statements[i].id, alternatives = ?named, comparisons = ?comps, zone = ?weighed.zone, "atlas/resolve: the sources weighed");
         if picked.is_some() {
-            debug!(document = doc.id, statement = %statements[i].id, decided = ?zone, weighed = ?weighed.zone, vetoed = ?vetoed, "atlas/resolve: the model's choice decides; the weighed zone is kept beside it");
+            debug!(document = doc.id, statement = %statements[i].id, decided = ?zone, weighed = ?weighed.zone, "atlas/resolve: the model's choice decides; the weighed zone is kept beside it");
         }
         let decided = match zone {
             Zone::Link(at, posterior) => match alts[at] {
@@ -651,18 +633,13 @@ pub(super) async fn choose(
                     posterior,
                     votes: fields::votes_for(&comps[at], &records[record].id, estimate),
                 },
-                Alt::Opened(group) => Plan::Open {
-                    group,
-                    cite: None,
-                    vetoed: None,
-                },
+                Alt::Opened(group) => Plan::Open { group, cite: None },
             },
             Zone::NoLink => {
                 opened.push(j);
                 Plan::Open {
                     group: j,
                     cite: None,
-                    vetoed,
                 }
             }
             Zone::Unsettled => Plan::Held(Held {
@@ -734,6 +711,7 @@ pub(super) fn question(
                 describe_opened(
                     &doc.body[o.start..o.end],
                     &context(doc.body, o.start, o.end),
+                    &o.described.render(),
                 )
             }
         };
@@ -741,10 +719,13 @@ pub(super) fn question(
         offered.push(format!("{label} {}", line.trim_end()));
     }
     let shown = marked_context(doc.body, s.start, s.end);
-    debug!(document = doc.id, statement = %s.id, offered = ?offered, shown = %shown, "atlas/resolve: the records a question offers");
-    u.push_str(&format!(
-        "\nStatement, its words in [[ ]]: \"…{shown}…\"\n\n"
-    ));
+    let read_as = s.described.render();
+    debug!(document = doc.id, statement = %s.id, offered = ?offered, shown = %shown, read_as = %read_as, "atlas/resolve: the records a question offers");
+    u.push_str(&format!("\nStatement, its words in [[ ]]: \"…{shown}…\"\n"));
+    if !read_as.is_empty() {
+        u.push_str(&format!("Its reader read what it is about as: {read_as}\n"));
+    }
+    u.push('\n');
     match ask {
         Ask::Reason => {
             u.push_str(&format!("Which record is the statement about? Reason it through under the rule, then end with its letter, or {NONE} if none of them."));

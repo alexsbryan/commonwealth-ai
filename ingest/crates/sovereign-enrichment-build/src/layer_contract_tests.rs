@@ -264,7 +264,11 @@ fn oracle(asked: Arc<Mutex<Vec<ChatPrompt>>>, choose: Choose, parties: Parties) 
                 .map(|a| a.iter().map(|l| l.as_str().unwrap().to_string()).collect())
                 .unwrap_or_default();
             let phase = prompt.phase_id.clone().unwrap_or_default();
-            let answer = if labels.is_empty() {
+            // RESOLVE's reasoning before its choice: words the choice is read after,
+            // which the oracle's choice does not read.
+            let answer = if phase == "resolve_reason" {
+                Ok("Under the rule, the statement's own words decide.".to_string())
+            } else if labels.is_empty() {
                 Err(corpus_engine::Error::Extraction(format!(
                     "the oracle answers forced choices only; `{phase}` is not one"
                 )))

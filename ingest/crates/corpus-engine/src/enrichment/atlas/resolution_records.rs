@@ -34,7 +34,7 @@ use super::resolve_records::propose::{
     Proposers, SimilarDocuments, MAX_CANDIDATES, MIN_SIMILARITY, NEIGHBOURS,
 };
 use super::resolve_records::{
-    resolve_in_clock_order, Answerer, Choice, Criterion, Document, DocumentResolution,
+    resolve_in_clock_order, Answerer, Choice, Criterion, Described, Document, DocumentResolution,
     ProposalRule, Resolver, Statement, CHAPTER_SUBJECT_KEY,
 };
 use crate::enrichment::ontology::{
@@ -49,6 +49,8 @@ use crate::enrichment::pipeline::document_read::{
 use crate::enrichment::pipeline::types::{PhaseFailure, PhaseFailureKind};
 use crate::EmbedFn;
 
+#[path = "resolution_records/described.rs"]
+mod described;
 #[path = "resolution_records/local_subjects.rs"]
 mod local_subjects;
 #[path = "resolution_records/mentions.rs"]
@@ -379,6 +381,14 @@ async fn resolve_type(
         debug!(r#type = %t.name, claims = chapter_subject_of.len(), "atlas/resolve: a window read's chapter subjects are a sufficient key");
         criterion.keys.push(CHAPTER_SUBJECT_KEY.to_string());
     }
+    let carried: BTreeSet<&str> = criterion
+        .keys
+        .iter()
+        .chain(t.identity_necessary.iter())
+        .map(String::as_str)
+        .collect();
+    let described_of = described::of_claims(&read_subject_fields_of, &chapter_subject_of, &carried);
+    debug!(r#type = %t.name, claims = described_of.len(), "atlas/resolve: what readers read each subject to be is shown on both sides of its question");
     let declared: Vec<(DocumentStamp, &str)> = policies
         .change
         .document
@@ -506,8 +516,12 @@ async fn resolve_type(
                 end,
                 keys,
                 read: BTreeMap::new(),
+                described: described_of.get(&i).cloned().unwrap_or_default(),
             });
         } else if let Some(statement) = placed[k].statements.iter_mut().find(|s| s.id == id) {
+            if let Some(d) = described_of.get(&i) {
+                statement.described.extend(d);
+            }
             for (key, value) in keys {
                 let conflict = (id.clone(), key.clone());
                 if conflicting_keys.contains(&conflict) {

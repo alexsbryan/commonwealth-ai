@@ -5,11 +5,9 @@
 
 use super::*;
 
-/// E3 under the model's choice (`select::decide_asked`, `settle.rs`): a
-/// statement the model was asked about is decided in its document by its
-/// pick, the record it picked or a new one when it picked none or when the
-/// weighed sources found nothing for its pick (the outcome names the vetoed
-/// pick), and is never held there; one
+/// E3 under the model's choice (`select.rs`, `settle.rs`): a statement the
+/// model was asked about is decided in its document by its pick, the record
+/// it picked or a new one when it picked none, and is never held there; one
 /// held because no record was shown to the model is settled after the last
 /// document, so the decisions leave nothing held. The counts are printed per
 /// fixture.
@@ -52,10 +50,8 @@ async fn an_asked_statement_is_decided_by_the_models_pick_and_nothing_is_left_he
                             chosen += 1;
                         }
                         Some("opened") => assert!(
-                            pick.is_none_or(
-                                |id| own.contains(id) || decided["vetoed"].as_str() == Some(id)
-                            ),
-                            "{shape}: picked a record yet opened one without naming it vetoed: {o}"
+                            pick.is_none_or(|id| own.contains(id)),
+                            "{shape}: picked a record yet opened one: {o}"
                         ),
                         _ => panic!(
                             "{shape}: an asked statement decided by neither its pick nor none: {o}"

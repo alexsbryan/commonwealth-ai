@@ -232,6 +232,7 @@ pub(super) fn describe(rec: &Record, why: &str, this_document: &str) -> String {
                     )
                 }),
         )
+        .chain(Some(rec.described.render()).filter(|d| !d.is_empty()))
         .collect();
     let mut out = format!(
         "({why}), {} statement(s) in {} document(s); {}\n",
@@ -271,10 +272,16 @@ pub(super) fn describe(rec: &Record, why: &str, this_document: &str) -> String {
 }
 
 /// A record this document opened earlier, shown by its own words in this
-/// document: the one document the question holds.
-pub(super) fn describe_opened(surface: &str, context: &str) -> String {
+/// document, the one document the question holds, and what its reader read
+/// it to be.
+pub(super) fn describe_opened(surface: &str, context: &str, described: &str) -> String {
+    let read_as = if described.is_empty() {
+        String::new()
+    } else {
+        format!("; {described}")
+    };
     format!(
-        "(opened earlier in this document), said as {:?}\n    \"…{context}…\"\n",
+        "(opened earlier in this document), said as {:?}{read_as}\n    \"…{context}…\"\n",
         fold_ws(surface)
     )
 }
@@ -614,7 +621,6 @@ pub(super) fn judge(
                     (None, _, _) => Plan::Open {
                         group: root,
                         cite: Some(cite),
-                        vetoed: None,
                     },
                     _ => {
                         let mut targets: Vec<String> =
