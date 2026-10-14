@@ -90,10 +90,15 @@ fn state(engine: Arc<IngestPortDouble>) -> AppState {
 
 /// POST `/oicp/v1/corpus/install` from loopback; the status and the body.
 async fn install(state: AppState, body: serde_json::Value) -> (StatusCode, serde_json::Value) {
+    install_raw(state, body.to_string()).await
+}
+
+/// [`install`] with the body as sent, so a test sets its size to the byte.
+async fn install_raw(state: AppState, body: String) -> (StatusCode, serde_json::Value) {
     let mut req = Request::post("/oicp/v1/corpus/install")
         .header("host", "127.0.0.1:9741")
         .header("content-type", "application/json")
-        .body(Body::from(body.to_string()))
+        .body(Body::from(body))
         .unwrap();
     req.extensions_mut().insert(ConnectInfo(
         "127.0.0.1:55003".parse::<SocketAddr>().unwrap(),
@@ -473,4 +478,76 @@ async fn a_held_corpus_with_no_documents_record_is_read_again() {
     assert_eq!(reply["spawned"], true, "no documents record: {reply}");
     settled(&state, "notes").await;
     assert_eq!(progress(state).await.progress["notes"].documents.len(), 2);
+}
+
+/// The `max_install_bytes` the manifest states (OICP v0.6 §2.12).
+async fn stated_limit(state: AppState) -> usize {
+    let mut req = Request::get("/oicp/v1/capabilities")
+        .header("host", "127.0.0.1:9741")
+        .body(Body::empty())
+        .unwrap();
+    req.extensions_mut().insert(ConnectInfo(
+        "127.0.0.1:55003".parse::<SocketAddr>().unwrap(),
+    ));
+    let resp = client_router(state).oneshot(req).await.unwrap();
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    let m: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let limit = m["knowledge"]["ingest"]["max_install_bytes"].as_u64();
+    usize::try_from(limit.expect("the manifest states max_install_bytes")).unwrap()
+}
+
+/// An install of `notes` exactly `bytes` long: RECIPE_A's table, then a TOML
+/// comment padded with `x` to the size.
+fn padded_install(bytes: usize) -> String {
+    let head =
+        r#"{"corpus_id":"notes","recipe_toml":"[corpus]\nid = \"notes\"\nname = \"Notes\"\n# "#;
+    let tail = r#""}"#;
+    let pad = bytes - head.len() - tail.len();
+    format!("{head}{}{tail}", "x".repeat(pad))
+}
+
+/// v0.6 §2.12: an inline library whose install body is exactly the stated
+/// limit, far past the client surface's 8 MiB, is read and installed. Red
+/// against the parent's route, which read every body to the surface's bound
+/// and refused a 22,627,179-byte library `413` before the handler ran.
+#[tokio::test]
+async fn an_install_of_the_stated_size_past_the_surface_limit_installs() {
+    let tmp = tempfile::tempdir().unwrap();
+    let state = state(Arc::new(engine(tmp.path().to_path_buf())));
+    let limit = stated_limit(state.clone()).await;
+    assert!(
+        limit > sovereign_daemon::server::MAX_REQUEST_BODY_BYTES,
+        "the install limit must be past the surface's, or §2.12 changes nothing: {limit}"
+    );
+    let body = padded_install(limit);
+    assert_eq!(body.len(), limit);
+    let (status, reply) = install_raw(state.clone(), body).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert_eq!(reply["spawned"], true, "{reply}");
+    settled(&state, "notes").await;
+}
+
+/// One byte past the stated limit is `413 install too large`, naming the
+/// limit, never axum's unnamed 413 and never a prefix read.
+#[tokio::test]
+async fn an_install_one_byte_past_the_stated_limit_is_refused_by_name() {
+    let tmp = tempfile::tempdir().unwrap();
+    let state = state(Arc::new(engine(tmp.path().to_path_buf())));
+    let limit = stated_limit(state.clone()).await;
+    let (status, reply) = install_raw(state.clone(), padded_install(limit + 1)).await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE, "{reply}");
+    assert_eq!(reply["error"], "install too large", "{reply}");
+    assert_eq!(reply["max_install_bytes"], limit as u64, "{reply}");
+    assert!(
+        !state
+            .inner
+            .ingest
+            .active_ingests
+            .read()
+            .await
+            .contains("notes"),
+        "nothing of a refused install runs"
+    );
 }

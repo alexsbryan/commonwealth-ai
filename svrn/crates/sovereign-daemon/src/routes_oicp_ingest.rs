@@ -13,8 +13,10 @@
 //! must present a bearer token (§5.5); loopback is free. Pause / cancel /
 //! expand stay internal-only (a spec'd non-goal).
 
+use axum::extract::rejection::JsonRejection;
 use axum::extract::State;
 use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use axum::Json;
 
 use std::collections::BTreeMap;
@@ -28,6 +30,16 @@ use crate::routes_internal::{
     install_status, progress_fraction, spawn_install, ErrorBody, InstallSource,
 };
 use crate::state::AppState;
+
+/// OICP v0.6 §2.12: the largest install body this host reads, stated as
+/// `knowledge.ingest.max_install_bytes` (`routes_oicp`) and set on the install
+/// route alone (`server::client_router`). Every other route on the client
+/// surface keeps `MAX_REQUEST_BODY_BYTES` (8 MiB), which refused a
+/// 22,627,179-byte inline library `413`. 64 MiB holds that library, escaped
+/// twice (TOML, then JSON), with room for one near three times its size; the
+/// body is buffered whole, so this is also the transient memory one install
+/// may take before its recipe is read.
+pub const MAX_INSTALL_BYTES: usize = 64 * 1024 * 1024;
 
 /// Default per-run sample when the client doesn't cap it — small enough to
 /// stay a quick dry run, large enough to exercise extraction + chunking.
@@ -43,9 +55,52 @@ const DEFAULT_TEST_SAMPLE: u32 = 20;
 /// different recipe reingests. An invalid recipe or invalid parameters are a
 /// 400 and an unknown id a 404, never a 200 `spawned: false`
 /// (`install_status`, the mapping the internal route shares).
+///
+/// A body past [`MAX_INSTALL_BYTES`] is `413 install too large` naming the
+/// limit (v0.6 §2.12), never axum's unnamed 413; any other body that does not
+/// decode keeps axum's rejection.
 pub async fn corpus_install(
     State(state): State<AppState>,
-    Json(req): Json<CorpusInstallRequest>,
+    req: Result<Json<CorpusInstallRequest>, JsonRejection>,
+) -> Response {
+    let req = match req {
+        Ok(Json(req)) => req,
+        Err(rejection) if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE => {
+            tracing::info!(
+                limit = MAX_INSTALL_BYTES,
+                "oicp install: refused, the body is past max_install_bytes"
+            );
+            return (
+                StatusCode::PAYLOAD_TOO_LARGE,
+                Json(serde_json::json!({
+                    "error": oicp_types::ingest::reasons::INSTALL_TOO_LARGE,
+                    "max_install_bytes": MAX_INSTALL_BYTES,
+                })),
+            )
+                .into_response();
+        }
+        Err(rejection) => {
+            tracing::info!(%rejection, "oicp install: refused, the body does not decode");
+            return rejection.into_response();
+        }
+    };
+    tracing::debug!(
+        corpus = %req.corpus_id,
+        recipe_bytes = req.recipe_toml.as_ref().map(String::len),
+        "oicp install: request read"
+    );
+    match install(state, req).await {
+        Ok(reply) => reply.into_response(),
+        Err(refusal) => refusal.into_response(),
+    }
+}
+
+/// The install itself, once its body is read: the registry's recipe, or the
+/// one the request carried, through the outcome mapping both install routes
+/// share.
+async fn install(
+    state: AppState,
+    req: CorpusInstallRequest,
 ) -> Result<Json<CorpusInstallResponse>, (StatusCode, Json<ErrorBody>)> {
     let recipe_sha256 = req
         .recipe_toml

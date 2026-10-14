@@ -394,9 +394,13 @@ IngestEndpoints { … (v0.4 fields) …,
   host's recipe test (v0.4 §5.4) may read less; a client that dry-runs a
   library past the host's other bounds samples it first.
 
-The reference host does not state a limit yet. Its install route reads to
-its client surface's bound, 8 MiB (`sovereign_peer_wire::MAX_REQUEST_BODY_BYTES`),
-which refused an inline library of 22.6 MB `413`.
+The reference host states 64 MiB (67,108,864 bytes,
+`routes_oicp_ingest::MAX_INSTALL_BYTES`), set on its install route alone.
+Every other route on its client surface, the recipe test included, keeps the
+surface's 8 MiB (`sovereign_peer_wire::MAX_REQUEST_BODY_BYTES`), which until
+then bounded install too and refused an inline library of 22.6 MB `413`. It
+buffers an install whole before it reads the recipe, so the limit is also
+the memory one install may hold before it is validated.
 
 ## 6. Conformance (additions)
 

@@ -50,8 +50,10 @@ itself as `recipe_toml` and answers its `recipe_sha256`: the same recipe
 twice is `spawned: false`, a different one reingests, and a recipe that
 does not load is a 400. Under `ingest:documents` (v0.6 §2.9) progress lists
 an install from the poll right after its reply, and once it has returned,
-each document it read, `ready` under its text name or `failed` with why. The
-host advertises `auth:named_client` too: a presented named credential
+each document it read, `ready` under its text name or `failed` with why. An
+install body may be as large as `knowledge.ingest.max_install_bytes` (64 MiB
+on the reference host, v0.6 §2.12), past the 8 MiB every other route reads;
+one past it is `413 install too large`. The host advertises `auth:named_client` too: a presented named credential
 decides, from any address.
 `oicp-conformance` (a repo-root sibling of `oicp-types`) is a
 standalone certifier you

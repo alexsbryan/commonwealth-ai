@@ -232,9 +232,14 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
             // (no `corpus_engine` types on the wire); advertised in the
             // manifest's `knowledge.ingest` when a corpus engine is wired.
             // Covered by the outer `client_auth` layer like the rest of :9741.
+            // OICP v0.6 §2.12: install reads to its own, stated bound, past
+            // the surface's `MAX_REQUEST_BODY_BYTES` below; the innermost
+            // `DefaultBodyLimit` is the one a body is read against.
             .route(
                 "/oicp/v1/corpus/install",
-                post(routes_oicp_ingest::corpus_install),
+                post(routes_oicp_ingest::corpus_install).layer(
+                    axum::extract::DefaultBodyLimit::max(routes_oicp_ingest::MAX_INSTALL_BYTES),
+                ),
             )
             .route(
                 "/oicp/v1/corpus/progress",
