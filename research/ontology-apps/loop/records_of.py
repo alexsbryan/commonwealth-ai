@@ -17,7 +17,12 @@ def rows(t):
     if r.returncode != 0:
         return [], [f"{t}: query failed: {r.stderr.strip()[-200:]}"]
     d = json.loads(r.stdout)
-    recs = [ast.literal_eval(x["record"]) if isinstance(x["record"], str) else x["record"] for x in d.get("rows", [])]
+    # The row's own name is the atom's whole name (a claim's content, an event's description); the nested
+    # record's name is cut at 121 characters and its text near 400, which dropped the killer's name.
+    recs = []
+    for x in d.get("rows", []):
+        rec = ast.literal_eval(x["record"]) if isinstance(x["record"], str) else x["record"]
+        recs.append(dict(rec, name=x.get("name") or rec.get("name"), text=x.get("name") or rec.get("text")))
     return recs, [n for n in d.get("notes", []) if "showing the first" in n]
 
 
