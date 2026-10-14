@@ -17,8 +17,10 @@ the stored texts a caller may read, outside any conversation, and says for
 each claim which rung decided and how far that rung is calibrated. Knowledge
 search gains a **scope** (hits from named texts only) and a **range** on every
 hit (where in its stored text it stands, §2.8), install progress says which
-of a library's **documents** were read (§2.9), and a client can **correct** a
-verify decision so the host keeps the case it got wrong (§2.10).
+of a library's **documents** were read (§2.9), a client can **correct** a
+verify decision so the host keeps the case it got wrong (§2.10), and search
+can answer **sentences** ranked by meaning, each an address in its stored
+text (§2.11).
 
 As in v0.5, everything v0.6 adds is a serde-defaulted field, an optional
 endpoint, or a feature string, and **feature presence, not the version
@@ -37,6 +39,7 @@ string, gates behaviour**. The types are in
 | `knowledge:range` | every knowledge-search hit carries `span`, its range of its stored text, or names why not in `span_absent` (§2.8) | `knowledge:document`, `evidence:text` |
 | `evidence:verify_corrections` | `knowledge.evidence.verify_correction_endpoint` takes a client's correction of a verify decision (§2.10) | `evidence:verify`, `verify_correction_endpoint` |
 | `ingest:documents` | install progress lists an install from its spawn, and each document it read once it has returned (§2.9) | `ingest:v1` |
+| `knowledge:sentences` | knowledge search takes `granularity: "sentence"` and answers sentences, ranked by the scorer `knowledge.sentence_scorer` names (§2.11) | `knowledge:range`, `knowledge:scoped`, `knowledge.sentence_scorer` |
 
 ```rust
 EvidenceEndpoints {
@@ -140,14 +143,15 @@ that was asked and failed.
 | `not an exact slice` | — | a passage's `span_absent`: its text is not a slice of its stored text |
 | `passage names no text` | — | a passage's `span_absent`: it names no stored text |
 | — | 400 | a search's `documents` names something that is not a text name (§2.8) |
+| `scorer unavailable` | 503 | the sentence scorer the host's data file names cannot run here; the body names it (§2.11) |
 
 A passage whose stored text or record cannot be read gives v0.5 §2.5's reason
 in `span_absent` (`texts not stored`, `text not stored`, `document
 unreadable`), or an opaque one for a store error.
 
 The span absences are in `oicp_types::evidence::reasons` (`SPAN_ABSENCES`),
-shared by verify's passages and search's hits; the rest are in
-`oicp_types::verify::reasons`.
+shared by verify's passages and search's hits; `scorer unavailable` is in
+`oicp_types::knowledge::reasons`; the rest are in `oicp_types::verify::reasons`.
 
 ### 2.8 Scoped and ranged search
 
@@ -270,6 +274,91 @@ the sources, in no single passage) is a query over the journal. `fast`'s
 `abstained` and a `not_checkable` claim decide nothing and keep nothing.
 Only the operator listener keeps a journal.
 
+### 2.11 Sentence search
+
+The manifest's `search_endpoint` takes one more request field. At its
+default it is the search §2.8 describes; at `sentence` the hits are sentences
+of the stored texts, best first by meaning, each one an address a client can
+cite.
+
+```
+KnowledgeManifest       { … ,
+                          sentence_scorer: Option<SentenceScorer> }  // present iff knowledge:sentences
+KnowledgeSearchRequest  { … (§2.8 fields) …,
+                          granularity: Granularity }    // "passage" (default, never written) | "sentence"
+KnowledgeSearchResponse { … ,
+                          scorer: Option<Scorer>,       // present iff the request asked for sentences
+                          route: Option<SentenceRoute>, // beside scorer
+                          sentences_pending: Option<u64>,   // present iff route = "passages"
+                          truncated: Option<Truncated> }    // the scan stopped at the host's ceiling
+Scorer          { name: SentenceScorer, model: String }
+SentenceScorer  = "cosine" | "rerank"
+SentenceRoute   = "index" | "passages"
+Truncated       { scanned: u64, in_scope: u64 }
+```
+
+- **Hits.** At `sentence`, `results` holds at most `limit` sentences (20 by
+  default), best first. Each is a `KnowledgeResult` whose `content` is the
+  sentence, whose `document` is its text's record, whose `score` is the
+  scorer's, and whose `span` (§2.8) is its code-point range of that text,
+  dereferencing byte-equal through `text_endpoint` to `content`. A sentence
+  is cut from its stored text, so it always carries `span`, never
+  `span_absent`.
+- **Sentences.** How a host splits a text into sentences is its own, as
+  verify's claims are (§2.6); a hit's `span` says where each one stands. The
+  reference host splits with `sentence_ranges`
+  (`svrn/crates/sovereign-core/src/runtime/grounding/specifics.rs`), the rule
+  its verify claims are split by: a sentence ends at `.`, `!` or `?` and any
+  closers after it (`"` `'` `)` `]` `”` `’`) when the text ends there, or
+  when whitespace follows and then an uppercase letter, a digit, an opener
+  (`"` `“` `(` `[`) or the end; never at a `.` after a lone capital (an
+  initial). Each range is trimmed of whitespace; a text with no stop is one
+  sentence, and whitespace alone is none.
+- **Scope.** `corpora` and `documents` apply as in §2.8, before the top
+  `limit` is cut: under a non-empty `documents` every sentence is from a
+  named text, and a malformed name is `400`.
+- **Scorers.** The scorer is the one the host's data file names, advertised
+  as `knowledge.sentence_scorer`, from a closed set; a name outside it is a
+  decode error, never a default, and adding one is a spec revision.
+  `cosine` scores the query's embedding (in the embedder's query space, with
+  its `query_instruction_prefix`) against each sentence's (document space),
+  over every sentence in scope; it is the default. `rerank` takes cosine's
+  top candidates, as many as the data file says, and reorders them through
+  the host's rerank slot; the scores are the reranker's. Every reply names
+  the advertised scorer and the model that scored (`scorer.model`: the
+  embedder for `cosine`, the reranker for `rerank`). Scores are comparable
+  only under one scorer and model; a client that keeps a threshold keys it
+  on `scorer.name`.
+- **Refusal, never substitution.** A host whose scorer cannot run (`rerank`
+  with no rerank slot, `cosine` with no embedder) refuses the search `503`
+  with `{"error": "scorer unavailable", "scorer": "<name>"}`, and never
+  answers it with another scorer. This is deliberately not the precedent of
+  the reference host's passage search, whose
+  `CorpusIndex::search_with_rerank` quietly falls back to fusion order when
+  its reranker is missing or fails.
+- **Route.** `index` says every sentence of every scoped text is embedded
+  and every one was scored. `passages` says some scoped text is still being
+  indexed: the host ran the passage search for the same query and scope,
+  took the sentences of its top hits, and ranked those by the same scorer;
+  `sentences_pending` counts the scoped sentences not yet embedded. A client
+  reads `passages` as "still indexing", not as a smaller library.
+- **Ceiling.** On the `index` route the scan is exhaustive up to a ceiling of
+  sentences per scope, kept in the host's data file. A scope past it is
+  answered from `scanned` of its `in_scope` sentences and says so in
+  `truncated`; a reply without `truncated` scored every sentence in scope.
+  A scope is never cut short in silence.
+- **Gating.** A client sends `granularity` only to a host advertising
+  `knowledge:sentences`. A host that does not advertise it answers passages
+  with no `scorer`, which is how a client knows the field was not honoured.
+- **Locality.** Sentence search answers from the host's own corpora. A host
+  does not merge a peer's sentences, whose scores come from another model.
+
+Conformance holds a reply to the scorer it names, not to its arithmetic: a
+host that names `rerank` while scoring by cosine is beyond what a client can
+see. The reference host does not yet serve this section and does not
+advertise `knowledge:sentences`; its data file will name the scorer,
+`rerank`'s candidate count and the scan's ceiling.
+
 ## 6. Conformance (additions)
 
 | check | holds | red against |
@@ -279,13 +368,16 @@ Only the operator listener keeps a journal.
 | `evidence.verify_correction` | a decided claim of the fixture unit carries an `episode_id`; a correction whose witness is a span verify returned is `verified`, one running past its text `out_of_range`; a malformed episode is `400 not an episode id`. Writes two correction lines on a live host | a host that never reads the witness back |
 | `ingest.documents` | once the fixture's install has returned, every fixture document is listed `ready` under the sha256 of its text, each with a `source`, none `failed`; and `ingest.recipe` holds that an install answering `spawned: true` is in the next poll | an entry listing no documents; an install missing from the first poll |
 | `knowledge.scoped` | a query reaching several fixture texts, scoped to the second-ranked one, returns at least one hit and every hit from that text; a `documents` entry that is not a text name is `400` | a host that ignores `documents` |
+| `knowledge.sentences` | each fixture signature, at `granularity: sentence` scoped to its own text, returns at least one sentence, at most `limit`, best first, every one from that text; each carries `span` whose `exact` is its `content` and whose range reads back byte-equal through `text_endpoint`; the reply names the advertised scorer and a model, and a route, with `sentences_pending` exactly on `passages`. A `503 scorer unavailable` naming the advertised scorer is could-not-judge | a sentence range one code point off; a sentence from outside the scope; a host advertising `rerank`, holding no rerank slot, that answers with cosine |
 
 `manifest.features` checks §2.1's co-occurrence: `evidence:verify` iff
 `verify_endpoint`, with a non-empty `verify_tiers`, and never without
 `evidence:text`; `knowledge:scoped` and `knowledge:range` never without
 `knowledge:document`, and `knowledge:range` never without `evidence:text`;
 `ingest:documents` never without `ingest:v1`; `evidence:verify_corrections`
-iff `verify_correction_endpoint`, and never without `evidence:verify`.
+iff `verify_correction_endpoint`, and never without `evidence:verify`;
+`knowledge:sentences` iff `knowledge.sentence_scorer`, and never without
+`knowledge:range` and `knowledge:scoped`.
 
 ## 7. Backward compatibility
 
@@ -296,3 +388,7 @@ iff `verify_correction_endpoint`, and never without `evidence:verify`.
 - A v0.6 client against a v0.5 host sees no `evidence:verify` and finds no
   `verify_endpoint`; it sees no `knowledge:scoped`, and sends no `documents`,
   which such a host would ignore and answer unscoped.
+- `granularity` is never written at its default, so a v0.6 client's passage
+  search is the request a v0.5 host knew. A client sends `sentence` only to a
+  host advertising `knowledge:sentences`; the reply's sentence fields are
+  absent from every passage reply.

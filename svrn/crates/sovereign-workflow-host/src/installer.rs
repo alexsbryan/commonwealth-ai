@@ -309,6 +309,7 @@ mod tests {
                 test_endpoint: Some("/oicp/v1/recipe/test".into()),
             }),
             evidence: None,
+            sentence_scorer: None,
         }
     }
 

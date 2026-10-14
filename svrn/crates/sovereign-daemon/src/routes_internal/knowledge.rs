@@ -283,6 +283,7 @@ pub async fn knowledge_search(
             corpora_unavailable,
             corpora_unhosted: Vec::new(),
             total_chunks_searched: Some(total_chunks),
+            ..Default::default()
         }),
     )
 }

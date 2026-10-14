@@ -17,9 +17,10 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use oicp_types::evidence::{reasons, texts_digest_preimage, DEFAULT_CONTEXT};
+use oicp_types::knowledge::reasons::SCORER_UNAVAILABLE;
 use oicp_types::{
-    AlignRequest, Alignment, Difference, DifferenceKind, Document, KnowledgeResult, SourceRef,
-    Span, TextSlice,
+    AlignRequest, Alignment, Difference, DifferenceKind, Document, KnowledgeResult,
+    KnowledgeSearchRequest, SourceRef, Span, TextSlice,
 };
 use serde_json::{json, Value};
 
@@ -60,6 +61,16 @@ pub struct Breaks {
     pub address_only_locality: bool,
     /// auth.local_peer: every reply, preflights too, grants every origin.
     pub permissive_cors: bool,
+    /// knowledge.sentences — a configuration, not a break: the fake's data
+    /// file names `rerank` and it holds no rerank slot, so it refuses every
+    /// sentence search by that scorer's name.
+    pub rerank_without_slot: bool,
+    /// knowledge.sentences: advertises `rerank`, holds no rerank slot, and
+    /// answers with cosine anyway (`search_with_rerank`'s quiet fallback).
+    pub rerank_falls_back: bool,
+    /// knowledge.sentences: each sentence's range is one code point past
+    /// the sentence its `exact` and `content` carry.
+    pub sentence_range_off_by_one: bool,
 }
 
 /// The fake's live named credential.
@@ -102,6 +113,57 @@ impl Fake {
             } else {
                 s.metadata.clone()
             },
+        }
+    }
+
+    /// The sentence scorer the fake's data file names.
+    fn scorer(&self) -> &'static str {
+        if self.breaks.rerank_without_slot || self.breaks.rerank_falls_back {
+            "rerank"
+        } else {
+            "cosine"
+        }
+    }
+
+    /// Whether `s` is inside a `documents` scope (§2.8); `scope_leaks`
+    /// ignores it.
+    fn in_scope(&self, documents: &[String], s: &Stored) -> bool {
+        self.breaks.scope_leaks
+            || documents.is_empty()
+            || documents.contains(&sha256_hex(s.text.as_bytes()))
+    }
+
+    /// A hit cut from `s` at code points `[start, end)`; `exact_off_by_one`
+    /// shifts its span's `exact`.
+    fn hit(&self, s: &Stored, start: u64, end: u64, score: f32) -> KnowledgeResult {
+        let shift = u64::from(self.breaks.exact_off_by_one);
+        let len = s.text.chars().count() as u64;
+        let span = Span {
+            corpus_id: self.corpus.clone(),
+            document: self.record(s),
+            start,
+            end,
+            exact: code_points(&s.text, start + shift, (end + shift).min(len)).unwrap_or_default(),
+            prefix: String::new(),
+            suffix: String::new(),
+        };
+        KnowledgeResult {
+            content: code_points(&s.text, start, end).unwrap_or_default(),
+            title: None,
+            corpus_id: self.corpus.clone(),
+            url: None,
+            score,
+            metadata: Default::default(),
+            chunk_id: None,
+            source_doc_id: Some(s.name.clone()),
+            custody: None,
+            grain: None,
+            peer_name: None,
+            peer_node_id: None,
+            document: Some(self.record(s)),
+            document_absent: None,
+            span: Some(span),
+            span_absent: None,
         }
     }
 
@@ -267,18 +329,19 @@ async fn admit(f: &Fake, req: Request, next: Next) -> Response {
 
 // ── Routes ──────────────────────────────────────────────────────────────────
 
-async fn capabilities() -> Json<Value> {
+async fn capabilities(State(f): State<Arc<Fake>>) -> Json<Value> {
     Json(json!({
         "oicp_version": "0.4.0",
         "models": [],
         "features": [
             "ingest:v1", "ingest:recipe_test", "ingest:recipe", "ingest:documents", "evidence:text",
             "evidence:align", "evidence:verify", "evidence:verify_corrections", "knowledge:document", "knowledge:scoped",
-            "knowledge:range", "auth:named_client"
+            "knowledge:range", "knowledge:sentences", "auth:named_client"
         ],
         "knowledge": {
             "corpora": [],
             "search_endpoint": "/v1/knowledge/search",
+            "sentence_scorer": f.scorer(),
             "ingest": {
                 "install_endpoint": "/oicp/v1/corpus/install",
                 "progress_endpoint": "/oicp/v1/corpus/progress",
@@ -299,7 +362,8 @@ async fn capabilities() -> Json<Value> {
 /// query's words of four letters or more, so a query of several sentences
 /// reaches several texts (`knowledge.scoped`). Each hit is its whole text, so
 /// its span is `[0, len)`; `exact_off_by_one` shifts it, `scope_leaks`
-/// ignores `documents`, and a malformed name is 400 as §2.8 says.
+/// ignores `documents`, and a malformed name is 400 as §2.8 says. At
+/// `granularity: sentence` it answers [`sentences`].
 async fn search(State(f): State<Arc<Fake>>, Json(req): Json<Value>) -> Response {
     let query = req.get("query").and_then(Value::as_str).unwrap_or("");
     let words: Vec<String> = query
@@ -326,6 +390,11 @@ async fn search(State(f): State<Arc<Fake>>, Json(req): Json<Value>) -> Response 
     {
         return refuse(StatusCode::BAD_REQUEST, json!({"results": []}));
     }
+    if req.get("granularity").and_then(Value::as_str) == Some("sentence") {
+        let limit = req.get("limit").and_then(Value::as_u64);
+        let limit = limit.unwrap_or(KnowledgeSearchRequest::DEFAULT_LIMIT.into()) as usize;
+        return sentences(&f, query, &documents, limit);
+    }
     let hits: Vec<KnowledgeResult> = f
         .texts
         .iter()
@@ -333,44 +402,88 @@ async fn search(State(f): State<Arc<Fake>>, Json(req): Json<Value>) -> Response 
             let lower = s.text.to_lowercase();
             s.text.contains(query) || words.iter().any(|w| lower.contains(w.as_str()))
         })
-        .filter(|s| {
-            f.breaks.scope_leaks
-                || documents.is_empty()
-                || documents.contains(&sha256_hex(s.text.as_bytes()))
-        })
-        .map(|s| {
-            let len = s.text.chars().count() as u64;
-            let shift = u64::from(f.breaks.exact_off_by_one);
-            let span = Span {
-                corpus_id: f.corpus.clone(),
-                document: f.record(s),
-                start: 0,
-                end: len,
-                exact: code_points(&s.text, shift, len).unwrap_or_default(),
-                prefix: String::new(),
-                suffix: String::new(),
-            };
-            KnowledgeResult {
-                content: s.text.clone(),
-                title: None,
-                corpus_id: f.corpus.clone(),
-                url: None,
-                score: 1.0,
-                metadata: Default::default(),
-                chunk_id: None,
-                source_doc_id: Some(s.name.clone()),
-                custody: None,
-                grain: None,
-                peer_name: None,
-                peer_node_id: None,
-                document: Some(f.record(s)),
-                document_absent: None,
-                span: Some(span),
-                span_absent: None,
-            }
-        })
+        .filter(|s| f.in_scope(&documents, s))
+        .map(|s| f.hit(s, 0, s.text.chars().count() as u64, 1.0))
         .collect();
     Json(json!({"results": hits, "corpora_searched": [f.corpus]})).into_response()
+}
+
+/// The lawful sentence search (§2.11), every sentence indexed: each scoped
+/// text's sentences (`.`, `!` or `?` before whitespace or the end, trimmed)
+/// scored by cosine over word counts, best first, at most `limit`, those
+/// sharing no word with the query left out. `rerank_without_slot` refuses by
+/// name; `rerank_falls_back` answers with cosine anyway.
+fn sentences(f: &Fake, query: &str, documents: &[String], limit: usize) -> Response {
+    if f.breaks.rerank_without_slot && !f.breaks.rerank_falls_back {
+        return refuse(
+            StatusCode::SERVICE_UNAVAILABLE,
+            json!({"error": SCORER_UNAVAILABLE, "scorer": "rerank"}),
+        );
+    }
+    let q = word_counts(query);
+    let mut found: Vec<(f32, &Stored, u64, u64)> = Vec::new();
+    for s in f.texts.iter().filter(|s| f.in_scope(documents, s)) {
+        let chars: Vec<char> = s.text.chars().collect();
+        let mut start = 0;
+        for i in 0..chars.len() {
+            let stop = matches!(chars[i], '.' | '!' | '?')
+                && chars.get(i + 1).is_none_or(|c| c.is_whitespace());
+            if !stop && i + 1 < chars.len() {
+                continue;
+            }
+            let (mut a, mut b) = (start, i + 1);
+            start = i + 1;
+            while a < b && chars[a].is_whitespace() {
+                a += 1;
+            }
+            while b > a && chars[b - 1].is_whitespace() {
+                b -= 1;
+            }
+            let sentence: String = chars[a..b].iter().collect();
+            let score = cosine(&q, &word_counts(&sentence));
+            if score > 0.0 {
+                found.push((score, s, a as u64, b as u64));
+            }
+        }
+    }
+    found.sort_by(|x, y| y.0.total_cmp(&x.0));
+    found.truncate(limit);
+    let hits: Vec<KnowledgeResult> = found
+        .into_iter()
+        .map(|(score, s, a, b)| {
+            let mut hit = f.hit(s, a, b, score);
+            if let (true, Some(span)) = (f.breaks.sentence_range_off_by_one, hit.span.as_mut()) {
+                (span.start, span.end) = (a + 1, b + 1);
+            }
+            hit
+        })
+        .collect();
+    Json(json!({
+        "results": hits, "corpora_searched": [f.corpus],
+        "scorer": {"name": "cosine", "model": "fake-word-counts"}, "route": "index",
+    }))
+    .into_response()
+}
+
+fn word_counts(s: &str) -> BTreeMap<String, f32> {
+    let mut m = BTreeMap::new();
+    for w in s
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+    {
+        *m.entry(w.to_lowercase()).or_insert(0.0) += 1.0;
+    }
+    m
+}
+
+fn cosine(a: &BTreeMap<String, f32>, b: &BTreeMap<String, f32>) -> f32 {
+    let dot: f32 = a.iter().map(|(w, n)| n * b.get(w).unwrap_or(&0.0)).sum();
+    let norm = |m: &BTreeMap<String, f32>| m.values().map(|n| n * n).sum::<f32>().sqrt();
+    if dot == 0.0 {
+        0.0
+    } else {
+        dot / (norm(a) * norm(b))
+    }
 }
 
 async fn text(

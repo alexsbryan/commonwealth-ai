@@ -81,6 +81,7 @@ fn ingest_feature_must_match_ingest_section() {
             test_endpoint: None,
         }),
         evidence: None,
+        sentence_scorer: None,
     });
     assert!(feature_failures(&m).is_empty());
 }

@@ -37,6 +37,93 @@ pub struct KnowledgeSearchRequest {
     /// a filter a hit that names no text is never returned.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub documents: Vec<String>,
+    /// v0.6 §2.11 (`knowledge:sentences`): what the hits are. `passage`, the
+    /// default, is the search as it was and is never written on the wire, so
+    /// a request that does not ask for sentences is byte-for-byte unchanged.
+    #[serde(default, skip_serializing_if = "Granularity::is_passage")]
+    pub granularity: Granularity,
+}
+
+/// v0.6 §2.11: what a knowledge search's hits are cut as.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Granularity {
+    /// The host's passages (its chunks), as every version before v0.6 §2.11.
+    #[default]
+    Passage,
+    /// Sentences of the stored texts, ranked by the host's sentence scorer.
+    Sentence,
+}
+
+impl Granularity {
+    /// True for the default, which the wire leaves unwritten.
+    pub fn is_passage(&self) -> bool {
+        *self == Self::Passage
+    }
+}
+
+/// v0.6 §2.11: the closed set of sentence scorers. One is named in the
+/// host's data file and advertised as `knowledge.sentence_scorer`; a name
+/// outside the set is a decode error, never a default, and adding one is a
+/// spec revision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SentenceScorer {
+    /// Cosine between the query's embedding (query space) and each
+    /// sentence's (document space), over every sentence in scope.
+    Cosine,
+    /// Cosine's top candidates (their number in the host's data file)
+    /// reordered by the host's rerank slot; the scores are the reranker's.
+    Rerank,
+}
+
+impl SentenceScorer {
+    /// The wire spelling, as serde writes it.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Cosine => "cosine",
+            Self::Rerank => "rerank",
+        }
+    }
+}
+
+/// v0.6 §2.11: what scored a sentence reply. Scores are comparable only
+/// under one `name` and `model`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Scorer {
+    /// The scorer, always the one the manifest advertises.
+    pub name: SentenceScorer,
+    /// The model that produced the scores: the embedder for `cosine`, the
+    /// reranker for `rerank`.
+    pub model: String,
+}
+
+/// v0.6 §2.11: how a sentence reply was found.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SentenceRoute {
+    /// Every sentence in scope is embedded, and every one was scored.
+    Index,
+    /// Some scoped text is still being indexed: the sentences of the top
+    /// passage hits were scored instead, by the same scorer.
+    Passages,
+}
+
+/// v0.6 §2.11: a sentence scan stopped at the host's ceiling.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Truncated {
+    /// Sentences scored: the host's ceiling.
+    pub scanned: u64,
+    /// Sentences in the scope, more than `scanned`.
+    pub in_scope: u64,
+}
+
+/// v0.6 §2.11's named refusal.
+pub mod reasons {
+    /// The scorer the host's data file names cannot run here (`rerank` with
+    /// no rerank slot, `cosine` with no embedder): `503`, with the scorer
+    /// named beside it, never answered by another scorer.
+    pub const SCORER_UNAVAILABLE: &str = "scorer unavailable";
 }
 
 impl KnowledgeSearchRequest {
@@ -63,6 +150,21 @@ pub struct KnowledgeSearchResponse {
     pub corpora_unhosted: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub total_chunks_searched: Option<u64>,
+    /// v0.6 §2.11: what scored the sentences. Present exactly when the
+    /// request asked for `granularity: sentence` and the host honoured it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scorer: Option<Scorer>,
+    /// v0.6 §2.11: how the sentences were found; beside `scorer`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub route: Option<SentenceRoute>,
+    /// v0.6 §2.11: scoped sentences not yet embedded. Present exactly when
+    /// `route` is `passages`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sentences_pending: Option<u64>,
+    /// v0.6 §2.11: the scan stopped at the host's ceiling. Absent means
+    /// every sentence in scope was scored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub truncated: Option<Truncated>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -551,8 +653,74 @@ mod tests {
             corpora: None,
             limit: None,
             documents: Vec::new(),
+            granularity: Granularity::Passage,
         };
         let v = serde_json::to_value(&req).unwrap();
         assert!(v.get("query_embedding").is_none());
+    }
+
+    /// v0.6 §2.11: a request that does not name a granularity is a passage
+    /// search and writes back without the key, so old clients and hosts see
+    /// the wire they knew; `sentence` round-trips; a value outside the set
+    /// is an error, never a passage search.
+    #[test]
+    fn granularity_defaults_to_passage_and_stays_off_the_wire() {
+        let old = serde_json::json!({"query": "q", "limit": 3, "documents": ["ab"]});
+        let req: KnowledgeSearchRequest = serde_json::from_value(old.clone()).unwrap();
+        assert_eq!(req.granularity, Granularity::Passage);
+        let back = serde_json::to_value(&req).unwrap();
+        assert!(back.get("granularity").is_none(), "{back}");
+
+        let mut asks = old;
+        asks["granularity"] = "sentence".into();
+        let req: KnowledgeSearchRequest = serde_json::from_value(asks).unwrap();
+        assert_eq!(req.granularity, Granularity::Sentence);
+        assert_eq!(
+            serde_json::to_value(&req).unwrap()["granularity"],
+            "sentence"
+        );
+
+        let bad = serde_json::json!({"query": "q", "granularity": "paragraph"});
+        assert!(serde_json::from_value::<KnowledgeSearchRequest>(bad).is_err());
+    }
+
+    /// v0.6 §2.11: a passage reply carries none of the sentence fields and
+    /// writes back unchanged; a sentence reply round-trips them; a scorer
+    /// outside the closed set fails to decode rather than reading as one.
+    #[test]
+    fn sentence_reply_fields_are_additive_and_closed() {
+        let passage = serde_json::json!({"results": [], "corpora_searched": ["bk"]});
+        let r: KnowledgeSearchResponse = serde_json::from_value(passage.clone()).unwrap();
+        assert!(r.scorer.is_none() && r.route.is_none());
+        assert!(r.sentences_pending.is_none() && r.truncated.is_none());
+        assert_eq!(serde_json::to_value(&r).unwrap(), passage);
+
+        let sentences = serde_json::json!({
+            "results": [], "corpora_searched": ["bk"],
+            "scorer": {"name": "rerank", "model": "bge-reranker"},
+            "route": "passages", "sentences_pending": 412,
+            "truncated": {"scanned": 100000, "in_scope": 140000}
+        });
+        let r: KnowledgeSearchResponse = serde_json::from_value(sentences.clone()).unwrap();
+        assert_eq!(
+            r.scorer,
+            Some(Scorer {
+                name: SentenceScorer::Rerank,
+                model: "bge-reranker".into()
+            })
+        );
+        assert_eq!(r.route, Some(SentenceRoute::Passages));
+        assert_eq!(r.sentences_pending, Some(412));
+        assert_eq!(r.truncated.map(|t| t.in_scope), Some(140_000));
+        assert_eq!(serde_json::to_value(&r).unwrap(), sentences);
+        assert_eq!(SentenceScorer::Rerank.as_str(), "rerank");
+        assert_eq!(
+            serde_json::to_value(SentenceScorer::Cosine).unwrap(),
+            SentenceScorer::Cosine.as_str()
+        );
+
+        let mut unknown = sentences;
+        unknown["scorer"]["name"] = "bm25".into();
+        assert!(serde_json::from_value::<KnowledgeSearchResponse>(unknown).is_err());
     }
 }

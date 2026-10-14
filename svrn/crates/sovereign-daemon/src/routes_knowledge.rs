@@ -54,6 +54,7 @@ fn empty_knowledge_response() -> KnowledgeSearchResponse {
         corpora_unavailable: Vec::new(),
         corpora_unhosted: Vec::new(),
         total_chunks_searched: None,
+        ..Default::default()
     }
 }
 
@@ -488,6 +489,7 @@ async fn fanout_one_peer(
         corpora: Some(corpora.clone()),
         limit: Some(limit),
         documents,
+        granularity: oicp_types::Granularity::Passage,
     };
     // Hex-encode the requester id for the `X-Node-Id` header.
     // Matches the format `sovereign_contracts::principal::claimed_node_id`
@@ -653,6 +655,7 @@ fn build_response(
             corpora_unavailable: corpora_unavailable.into_iter().collect(),
             corpora_unhosted: corpora_unhosted.into_iter().collect(),
             total_chunks_searched: None,
+            ..Default::default()
         }),
     )
 }

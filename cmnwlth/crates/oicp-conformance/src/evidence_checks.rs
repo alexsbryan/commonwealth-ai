@@ -86,6 +86,23 @@ pub fn v05_feature_failures(m: &ProviderManifest) -> Vec<String> {
     if m.has_feature(features::KNOWLEDGE_RANGE) && !text {
         f.push("knowledge:range requires evidence:text".into());
     }
+    // v0.6 §2.11: a sentence is a range read back through the text endpoint,
+    // cut under the same scope, by the scorer the manifest names.
+    let sentences = m.has_feature(features::KNOWLEDGE_SENTENCES);
+    let scorer = m.knowledge.as_ref().and_then(|k| k.sentence_scorer);
+    if sentences != scorer.is_some() {
+        f.push(format!(
+            "knowledge:sentences ({sentences}) must co-occur with knowledge.sentence_scorer"
+        ));
+    }
+    for (feat, name) in [
+        (features::KNOWLEDGE_RANGE, "knowledge:range"),
+        (features::KNOWLEDGE_SCOPED, "knowledge:scoped"),
+    ] {
+        if sentences && !m.has_feature(feat) {
+            f.push(format!("knowledge:sentences requires {name}"));
+        }
+    }
     f
 }
 

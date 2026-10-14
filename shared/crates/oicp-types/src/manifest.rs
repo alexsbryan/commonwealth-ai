@@ -76,6 +76,10 @@ pub mod features {
     /// its stored text, or names why not in `span_absent`; requires
     /// `knowledge:document`.
     pub const KNOWLEDGE_RANGE: &str = "knowledge:range";
+    /// v0.6 §2.11: knowledge search takes `granularity: sentence` and
+    /// answers sentences ranked by `knowledge.sentence_scorer`; requires
+    /// `knowledge:range` and `knowledge:scoped`.
+    pub const KNOWLEDGE_SENTENCES: &str = "knowledge:sentences";
     /// v0.5 §4: install accepts `recipe_toml`; requires `ingest:v1`.
     pub const INGEST_RECIPE: &str = "ingest:recipe";
     /// v0.5 §5.1: a presented named credential is honoured, and a bogus
@@ -157,6 +161,7 @@ pub mod features {
         KNOWLEDGE_DOCUMENT,
         KNOWLEDGE_SCOPED,
         KNOWLEDGE_RANGE,
+        KNOWLEDGE_SENTENCES,
         INGEST_RECIPE,
         AUTH_NAMED_CLIENT,
     ];
@@ -349,6 +354,11 @@ pub struct KnowledgeManifest {
     /// `align_endpoint` is set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence: Option<EvidenceEndpoints>,
+    /// v0.6 §2.11: the sentence scorer the host's data file names. Present
+    /// iff the manifest advertises `knowledge:sentences`; every sentence
+    /// reply names this scorer, or the search is refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sentence_scorer: Option<crate::knowledge::SentenceScorer>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

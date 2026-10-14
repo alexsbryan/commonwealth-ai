@@ -129,8 +129,9 @@ pub use ingest::{
     RecipeTestOptions, RecipeTestReport, RecipeTestRequest,
 };
 pub use knowledge::{
-    ChunkRange, CorpusShardInfo, KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse,
-    LandscapeDigestEntry, LandscapeDigestRequest, LandscapeDigestResponse,
+    ChunkRange, CorpusShardInfo, Granularity, KnowledgeResult, KnowledgeSearchRequest,
+    KnowledgeSearchResponse, LandscapeDigestEntry, LandscapeDigestRequest, LandscapeDigestResponse,
+    Scorer, SentenceRoute, SentenceScorer, Truncated,
 };
 pub use manifest::{
     features, CorpusDescriptor, EmbedModelInfo, FederatedMeshDescriptor, FederationManifest,

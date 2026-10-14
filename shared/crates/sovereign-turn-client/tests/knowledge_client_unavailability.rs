@@ -111,6 +111,7 @@ async fn the_9_6_shape_carries_every_unavailable_corpus_to_the_caller() {
             corpora_unavailable: corpora(),
             corpora_unhosted: Vec::new(),
             total_chunks_searched: None,
+            ..Default::default()
         },
     )
     .await;
@@ -217,6 +218,7 @@ async fn a_healthy_fanout_reports_no_losses_at_all() {
             corpora_unavailable: Vec::new(),
             corpora_unhosted: Vec::new(),
             total_chunks_searched: Some(1),
+            ..Default::default()
         },
     )
     .await;
@@ -250,6 +252,7 @@ async fn the_serving_member_and_an_unhosted_corpus_each_arrive_named() {
             corpora_unavailable: vec!["sep".into(), "wikipedia".into()],
             corpora_unhosted: vec!["sep".into()],
             total_chunks_searched: Some(1),
+            ..Default::default()
         },
     )
     .await;

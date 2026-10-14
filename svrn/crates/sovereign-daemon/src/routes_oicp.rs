@@ -252,6 +252,7 @@ async fn apply_v04_enrichment(
                     embed_model,
                     ingest,
                     evidence,
+                    sentence_scorer: None,
                 });
             }
         }
@@ -396,6 +397,7 @@ pub async fn capabilities(
             embed_model: None,
             ingest: None,
             evidence: None,
+            sentence_scorer: None,
         }),
         federation,
         features: Vec::new(),

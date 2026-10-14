@@ -287,6 +287,101 @@ async fn knowledge_range_and_scoped_are_red_against_a_span_off_by_one_and_a_leak
     );
 }
 
+async fn sentences(b: &Bench) -> Check {
+    crate::search_checks::check_knowledge_sentences(&b.host, &b.manifest, &b.lib, &b.fixture).await
+}
+
+/// v0.6 §2.11's three failing inputs, and the lawful refusal beside the
+/// third: a host whose `rerank` cannot run refuses by name, which the check
+/// cannot judge, and never passes.
+#[tokio::test]
+async fn knowledge_sentences_is_red_against_a_range_off_by_one_a_leaking_scope_and_a_rerank_fallback(
+) {
+    let b = bench(Breaks::default()).await;
+    green(&sentences(&b).await);
+    assert!(v05_feature_failures(&b.manifest).is_empty());
+    for (breaks, says) in [
+        (
+            Breaks {
+                sentence_range_off_by_one: true,
+                ..Breaks::default()
+            },
+            "the text there says",
+        ),
+        (
+            Breaks {
+                scope_leaks: true,
+                ..Breaks::default()
+            },
+            "outside the `documents` scope",
+        ),
+        (
+            Breaks {
+                rerank_falls_back: true,
+                ..Breaks::default()
+            },
+            "advertises `rerank`; the reply was scored by `cosine`",
+        ),
+    ] {
+        red(&sentences(&bench(breaks).await).await, says);
+    }
+    let b = bench(Breaks {
+        rerank_without_slot: true,
+        ..Breaks::default()
+    })
+    .await;
+    let c = sentences(&b).await;
+    assert_eq!(c.status, CheckStatus::Skip, "{}", c.detail);
+    assert!(
+        c.detail
+            .contains("refuses its advertised scorer `rerank` by name"),
+        "{}",
+        c.detail
+    );
+    let mut m = b.manifest.clone();
+    m.features.retain(|f| f != "knowledge:scoped");
+    m.knowledge.as_mut().unwrap().sentence_scorer = None;
+    let f = v05_feature_failures(&m);
+    for want in [
+        "knowledge:sentences requires knowledge:scoped",
+        "knowledge:sentences (true) must co-occur with knowledge.sentence_scorer",
+    ] {
+        assert!(f.iter().any(|x| x == want), "{want}: {f:?}");
+    }
+}
+
+/// §2.11's route rule, offline: `sentences_pending` exactly on `passages`.
+#[test]
+fn a_sentence_reply_names_pending_sentences_exactly_on_the_passage_route() {
+    use crate::search_checks::sentence_reply_failures;
+    use oicp_types::{KnowledgeSearchResponse, Scorer, SentenceRoute, SentenceScorer};
+    let reply = |route, pending| KnowledgeSearchResponse {
+        scorer: Some(Scorer {
+            name: SentenceScorer::Cosine,
+            model: "m".into(),
+        }),
+        route: Some(route),
+        sentences_pending: pending,
+        ..Default::default()
+    };
+    let judge =
+        |r: &KnowledgeSearchResponse| sentence_reply_failures(SentenceScorer::Cosine, "", 5, r);
+    assert!(judge(&reply(SentenceRoute::Index, None)).is_empty());
+    assert!(judge(&reply(SentenceRoute::Passages, Some(3))).is_empty());
+    assert_eq!(
+        judge(&reply(SentenceRoute::Passages, None)),
+        ["route `passages` without `sentences_pending`"]
+    );
+    assert_eq!(
+        judge(&reply(SentenceRoute::Index, Some(3))),
+        ["route `index` with `sentences_pending: 3`"]
+    );
+    assert_eq!(
+        judge(&KnowledgeSearchResponse::default()),
+        ["the reply names no scorer", "the reply names no route"]
+    );
+}
+
 #[tokio::test]
 async fn evidence_verify_correction_is_red_against_a_witness_never_read() {
     use crate::verify_checks::check_evidence_verify_correction;

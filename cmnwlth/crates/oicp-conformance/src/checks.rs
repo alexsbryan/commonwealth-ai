@@ -246,8 +246,7 @@ async fn v05_checks(host: &Host, m: &ProviderManifest, args: &Args) -> Vec<Check
                 crate::verify_checks::check_evidence_verify_correction(host, m, &lib, &fixture)
                     .await,
             );
-            out.push(crate::search_checks::check_knowledge_range(host, m, &lib, &fixture).await);
-            out.push(crate::search_checks::check_knowledge_scoped(host, m, &lib, &fixture).await);
+            out.extend(crate::search_checks::search_checks(host, m, &lib, &fixture).await);
         }
         Err(e) => {
             for id in [
@@ -261,6 +260,7 @@ async fn v05_checks(host: &Host, m: &ProviderManifest, args: &Args) -> Vec<Check
                 "evidence.verify_correction",
                 "knowledge.range",
                 "knowledge.scoped",
+                "knowledge.sentences",
             ] {
                 out.push(Check::fail(
                     id,
