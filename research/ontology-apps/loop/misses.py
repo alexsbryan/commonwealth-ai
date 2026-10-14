@@ -56,26 +56,37 @@ def covers(gold_quote, text):
 
 
 def windows(run):
-    """{chapter: {labels, prompt, answer}} from extract.err's traces; written out to <run>/windows/ once."""
-    W, cur = {}, None
+    """{chapter: {labels, prompt, answer, reasoning}} from extract.err's traces; written out to <run>/windows/ once.
+    A reasoning engine's answer opens with a <think> block, as the reader's own parser sees it (prepare_phase_json):
+    the JSON is what follows the last </think>; the reasoning goes to <chapter>.reasoning.txt."""
+    W, cur, field, raw = {}, None, None, {}
     for line in open(f"{run}/extract.err", errors="replace"):
         if cur is not None:
             if LOGLINE.match(line): cur = None
-            else: W[cur]["prompt"] += line; continue
+            else:
+                if field == "prompt": W[cur]["prompt"] += line
+                else: raw[cur] += line
+                continue
         m = re.search(r"TRACE document_read/window: prompt chapter=(\S+) labels=(.*?) prompt=(.*)$", line, re.S)
         if m:
-            cur = m.group(1)
-            W[cur] = dict(labels=dict(x.split("=", 1) for x in m.group(2).split()), prompt=m.group(3), answer=None)
+            cur, field = m.group(1), "prompt"
+            W[cur] = dict(labels=dict(x.split("=", 1) for x in m.group(2).split()), prompt=m.group(3), answer=None, reasoning="")
             continue
-        m = re.search(r"TRACE document_read/window: answer chapter=(\S+) answer=(.*)$", line)
-        if m:
-            try: W[m.group(1)]["answer"] = json.loads(m.group(2))
-            except (ValueError, KeyError): W.setdefault(m.group(1), {})["answer"] = {"unparsed": m.group(2)[:2000]}
+        m = re.search(r"TRACE document_read/window: answer chapter=(\S+) answer=(.*)$", line, re.S)
+        if m: cur, field = m.group(1), "answer"; raw[cur] = m.group(2)
+    for ch, text in raw.items():
+        w = W.setdefault(ch, dict(labels={}, prompt="", reasoning=""))
+        if "</think>" in text:
+            head, text = text.rsplit("</think>", 1)
+            w["reasoning"] = head.replace("<think>", "", 1).strip()
+        try: w["answer"] = json.loads(text.strip())
+        except ValueError: w["answer"] = {"unparsed": text[:2000]}
     os.makedirs(f"{run}/windows", exist_ok=True)
     for ch, w in W.items():
         open(f"{run}/windows/{ch}.labels.txt", "w").write("".join(f"{k}={v}\n" for k, v in w["labels"].items()))
         open(f"{run}/windows/{ch}.prompt.txt", "w").write(w["prompt"])
         json.dump(w["answer"], open(f"{run}/windows/{ch}.answer.json", "w"), indent=1)
+        if w.get("reasoning"): open(f"{run}/windows/{ch}.reasoning.txt", "w").write(w["reasoning"])
     return W
 
 

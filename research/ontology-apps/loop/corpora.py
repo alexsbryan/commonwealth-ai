@@ -4,7 +4,7 @@ The one-shot reference is its records (runs/ceiling) scored by score.py --record
 runs/ceiling/worlds/*-oneshot-score.json were scored at folder level and serve 4 fewer (66 vs 70 of 93).
 
 The one place loop.sh, score.py's callers, misses.py and table.py learn a corpus's paths.
-`python3 corpora.py <id> score-args` prints the scorer's arguments after <msgids> <out>; `<id> msgids` its message ids.
+`python3 corpora.py --set inner|all` prints a corpus set; `<id> score-args` the scorer's arguments after <msgids> <out>; `<id> msgids` its message ids.
 """
 import json, os, sys
 
@@ -12,6 +12,9 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.a
 BENCH = os.path.expanduser("~/.svrnmesh/bench-corpora")
 WORLDS = ["world-s1", "world-s2", "world-s3", "world-s4", "world-s5"]
 ALL = WORLDS + ["ward-story"]
+# The inner ring: 16 of the 24 deals the one-shot serves and HEAD does not (resolve-confirm), in 10 of 19 windows.
+# world-s1 is the noisiest (7 of 18 deals flipped between two reads of the same code), so read it deal by deal.
+INNER = ["world-s3", "ward-story", "world-s1"]
 
 
 def corpus(cid):
@@ -34,6 +37,8 @@ def score_args(cid):
 
 
 if __name__ == "__main__":
+    if sys.argv[1] == "--set":
+        print(" ".join(INNER if sys.argv[2] == "inner" else ALL)); sys.exit()
     cid, what = sys.argv[1], sys.argv[2]
     c = corpus(cid)
     if what == "score-args":

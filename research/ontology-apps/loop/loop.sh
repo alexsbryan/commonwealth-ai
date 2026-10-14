@@ -1,7 +1,11 @@
 #!/bin/sh
-# loop.sh <arm> [corpus...]: one arm of the ontology loop, every step and its record, so no session rebuilds them.
+# loop.sh <arm> [corpus...|inner|all]: one arm of the ontology loop, every step and its record, so no session rebuilds them.
 #
-# Per corpus (default: the five worlds and ward-story) it writes runs/loop/<arm>/<corpus>/:
+# The corpora run concurrently (each has its own index and answer store; the daemon serves remote calls in parallel).
+# `inner` is the inner ring (corpora.py INNER: the corpora that carry most of the one-shot gap), for iterating;
+# `all` (the default) is the five worlds and ward-story, for an arm that is a candidate to adopt.
+#
+# Per corpus it writes runs/loop/<arm>/<corpus>/:
 #   run.json        what ran: HEAD, the dirty diff's hash, the svrn-ingest binary's mtime, engine, asker, NOTE
 #   chapters.json   the window cut the run read (indexes/<id>/chapters.json), so the arm replays: RESTORE=<arm>
 #   extract.*, resolve.*  the public commands' output; extract.err carries every window prompt and raw answer (trace)
@@ -17,7 +21,7 @@ cd "$(dirname "$0")/../../.." || exit 1
 L=research/ontology-apps/loop
 arm=$1; shift
 [ -n "$arm" ] && [ -n "$NOTE" ] || { echo "usage: NOTE='what this arm changes' $0 <arm> [corpus...]" >&2; exit 2; }
-[ $# -gt 0 ] || set -- world-s1 world-s2 world-s3 world-s4 world-s5 ward-story
+case "$1" in ""|all) set -- $(python3 $L/corpora.py --set all) ;; inner) set -- $(python3 $L/corpora.py --set inner) ;; esac
 root=runs/loop/$arm
 [ -e $root ] && [ -z "$FORCE" ] && { echo "$root exists; name a new arm (FORCE=1 overwrites)" >&2; exit 2; }
 mkdir -p $root
@@ -29,14 +33,14 @@ dirty=$(git diff HEAD -- . ':!runs' | shasum | cut -c1-12); [ -z "$(git diff HEA
 bin=$(stat -f '%Sm' -t '%Y-%m-%dT%H:%M:%S' target/debug/svrn-ingest)
 engine=$(curl -s -m 5 127.0.0.1:9741/v1/models | python3 -c "import json,sys; print(','.join(m['id'] for m in json.load(sys.stdin)['data']))" 2>/dev/null)
 git diff HEAD -- . ':!runs' > $root/dirty.diff
-for id in "$@"; do
-  out=$root/$id; mkdir -p $out; s=$(date +%s)
+one() {
+  id=$1; out=$root/$id; mkdir -p $out; s=$(date +%s)
   cut=~/.svrnmesh/indexes/$id/chapters.json; cfg=~/.svrnmesh/enrichment/$id/config.json
   if [ -n "$RESTORE" ]; then
-    cp runs/loop/$RESTORE/$id/chapters.json $cut || { echo "$id: no saved cut in runs/loop/$RESTORE"; continue; }
+    cp runs/loop/$RESTORE/$id/chapters.json $cut || { echo "$id: no saved cut in runs/loop/$RESTORE"; return; }
   elif [ -n "$INIT" ]; then  # re-cut the windows; init over a literary-pipeline config is put back (run_world.sh)
     cp $cfg $out/config.before.json
-    sovereign enrich init $id --from-corpus $id --chat-model commonwealth/primary --embed-model qwen3-embedding-0.6b --force > $out/init.out 2> $out/init.err || { echo "$id: init failed"; continue; }
+    sovereign enrich init $id --from-corpus $id --chat-model commonwealth/primary --embed-model qwen3-embedding-0.6b --force > $out/init.out 2> $out/init.err || { echo "$id: init failed"; return; }
     if python3 -c "import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get('pipeline_id') == 'literary' else 1)" $cfg; then
       python3 -c "import json,sys; c=json.load(open(sys.argv[1])); c['corpus_id']=sys.argv[3]; json.dump(c, open(sys.argv[2],'w'), indent=2)" $out/config.before.json $cfg $id
     fi
@@ -49,9 +53,11 @@ for id in "$@"; do
     arm "$arm" corpus "$id" note "$NOTE" head "$head" dirty "$dirty" svrn_ingest_mtime "$bin" engine "$engine" asker "$asker" \
     init "${INIT:-}" restore "${RESTORE:-}" extract_exit "$rx" resolve_exit "${rr:-not run}" seconds "$(( $(date +%s) - s ))" \
     finished "$(date -u +%FT%TZ)"
-  [ -f $out/score.json ] || { echo "$id: extract exit $rx, resolve exit ${rr:-not run}; see $out"; continue; }
+  [ -f $out/score.json ] || { echo "$id: extract exit $rx, resolve exit ${rr:-not run}; see $out"; return; }
   python3 $L/misses.py $out $id > $out/misses.txt
   python3 $L/decisions.py $out $id > $out/decisions.txt
   echo "$id $(python3 $L/table.py --line $out)"
-done
+}
+for id in "$@"; do one $id & done
+wait
 python3 $L/table.py $root
