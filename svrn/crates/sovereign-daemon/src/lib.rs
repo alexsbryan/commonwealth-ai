@@ -230,6 +230,7 @@ pub mod routes_rail;
 pub mod routes_rail_live;
 pub mod routes_responses;
 pub mod routes_status;
+pub mod search_stage;
 pub mod server;
 pub mod state;
 pub mod yield_hook;

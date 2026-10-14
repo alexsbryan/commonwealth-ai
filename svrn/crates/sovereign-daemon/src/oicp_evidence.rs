@@ -7,6 +7,7 @@
 //! and both knowledge routes read these, so none spells them a second time.
 
 use std::collections::{BTreeSet, HashMap};
+use std::time::{Duration, Instant};
 
 use corpus_index::chunkers::title_unheaded;
 use corpus_index::corpus::Corpus;
@@ -19,6 +20,7 @@ use oicp_types::KnowledgeResult;
 use sovereign_contracts::principal::Principal;
 use sovereign_core::context::PrincipalScope;
 
+use crate::search_stage::SearchStage;
 use crate::state::AppState;
 
 /// A stored text's record on the wire. `Err` only when the stored metadata is
@@ -349,6 +351,7 @@ pub(crate) async fn search_corpus(
     limit: usize,
     scope: Option<&[Sha256Hash]>,
 ) -> corpus_index::error::Result<Vec<KnowledgeResult>> {
+    let asked = Instant::now();
     let hits = match scope {
         Some(texts) => {
             index
@@ -357,6 +360,7 @@ pub(crate) async fn search_corpus(
         }
         None => index.search(query_embedding, query_text, limit).await?,
     };
+    SearchStage::IndexQuery.emit(asked.elapsed(), Some(corpus_id), hits.len());
     Ok(knowledge_results(index, corpus_id, hits).await)
 }
 
@@ -442,10 +446,14 @@ async fn knowledge_results(
     corpus_id: &str,
     hits: Vec<ScoredChunk>,
 ) -> Vec<KnowledgeResult> {
+    let asked = Instant::now();
     let mut documents = hit_documents(index, corpus_id, &hits).await;
+    SearchStage::Records.emit(asked.elapsed(), Some(corpus_id), hits.len());
     let mut texts = HashMap::new();
     let mut out = Vec::with_capacity(hits.len());
     let (mut ranged, mut inexact) = (0usize, 0usize);
+    // Summed over the hits, each emitted once below (PV1).
+    let (mut reading, mut locating, mut located_hits) = (Duration::ZERO, Duration::ZERO, 0usize);
     for r in hits {
         // Every hit carries its document or names why not (v0.5 §3). A
         // hit with no stable chunk id names no text.
@@ -459,17 +467,25 @@ async fn knowledge_results(
         let (span, span_absent) = match &document {
             None => (None, document_absent.clone()),
             Some(d) => {
-                let located = match hit_text(index, corpus_id, &d.text_sha256, &mut texts).await {
-                    Ok(stored) => span_of(
-                        stored,
-                        corpus_id,
-                        r.title.as_deref(),
-                        &r.content,
-                        r.source_doc_id.as_deref(),
-                        DEFAULT_CONTEXT as usize,
-                    ),
+                let read_at = Instant::now();
+                let read = hit_text(index, corpus_id, &d.text_sha256, &mut texts).await;
+                let locate_at = Instant::now();
+                reading += locate_at - read_at;
+                let located = match read {
+                    Ok(stored) => {
+                        located_hits += 1;
+                        span_of(
+                            stored,
+                            corpus_id,
+                            r.title.as_deref(),
+                            &r.content,
+                            r.source_doc_id.as_deref(),
+                            DEFAULT_CONTEXT as usize,
+                        )
+                    }
                     Err(why) => Err(why),
                 };
+                locating += locate_at.elapsed();
                 match located {
                     Ok(s) => {
                         ranged += 1;
@@ -517,6 +533,8 @@ async fn knowledge_results(
         texts_read = texts.len(),
         "knowledge hits: ranges located"
     );
+    SearchStage::TextRead.emit(reading, Some(corpus_id), texts.len());
+    SearchStage::SpanOf.emit(locating, Some(corpus_id), located_hits);
     out
 }
 

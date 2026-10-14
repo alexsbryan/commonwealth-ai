@@ -26,7 +26,7 @@
 //! fanned out either; it comes back unavailable and unhosted, exactly like
 //! a corpus nobody holds.
 use std::collections::{HashMap, HashSet};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -37,7 +37,9 @@ use crate::types::MemberStatus;
 use kernel_types::{NodeId, Sha256Hash};
 use oicp_types::{KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse};
 
+use crate::search_stage::{self, SearchStage};
 use crate::state::AppState;
+use tracing::Instrument;
 
 /// Same budget we use for gossip — if a peer can't answer in 3s,
 /// treat them as absent and move on. Keeps UI-latency bounded even
@@ -61,8 +63,20 @@ fn empty_knowledge_response() -> KnowledgeSearchResponse {
 pub async fn knowledge_search(
     State(state): State<AppState>,
     attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
-    Json(mut request): Json<KnowledgeSearchRequest>,
+    Json(request): Json<KnowledgeSearchRequest>,
 ) -> (StatusCode, Json<KnowledgeSearchResponse>) {
+    // One span per search, its stages' events under it (`search_stage`).
+    let span = search_stage::search_span("knowledge", &request.query_text);
+    search(state, attached, request).instrument(span).await
+}
+
+async fn search(
+    state: AppState,
+    attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
+    mut request: KnowledgeSearchRequest,
+) -> (StatusCode, Json<KnowledgeSearchResponse>) {
+    let admitted_at = Instant::now();
+    let mut embedding = Duration::ZERO;
     let limit = request.effective_limit() as usize;
     // v0.6 §2.8: a `documents` filter is text names; anything else is refused
     // before any work, never searched as "no filter".
@@ -104,10 +118,13 @@ pub async fn knowledge_search(
                 );
             }
         };
-        match local
+        let embed_at = Instant::now();
+        let embedded = local
             .embed(&format!("{prefix}{}", request.query_text))
-            .await
-        {
+            .await;
+        embedding = embed_at.elapsed();
+        SearchStage::QueryEmbed.emit(embedding, None, usize::from(embedded.is_ok()));
+        match embedded {
             Ok(v) => request.query_embedding = v,
             Err(e) => {
                 tracing::warn!(error = %e, "knowledge search: host-side query embedding failed");
@@ -117,6 +134,8 @@ pub async fn knowledge_search(
                 );
             }
         }
+    } else {
+        SearchStage::QueryEmbed.emit(Duration::ZERO, None, 0);
     }
 
     let self_id = state.inner.fabric.identity.current();
@@ -235,6 +254,11 @@ pub async fn knowledge_search(
             "knowledge: held here, outside this caller's read scope; not searched"
         );
     }
+    SearchStage::Admission.emit(
+        admitted_at.elapsed().saturating_sub(embedding),
+        None,
+        local_targets.len(),
+    );
     let mut all_results: Vec<KnowledgeResult> = Vec::new();
     let mut corpora_searched: HashSet<String> = HashSet::new();
     let mut corpora_unavailable: HashSet<String> = HashSet::new();

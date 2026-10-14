@@ -12,6 +12,7 @@ use axum::http::{Request, StatusCode};
 use kernel_types::Sha256Hash;
 use oicp_types::evidence::reasons;
 use oicp_types::KnowledgeResult;
+use sovereign_daemon::search_stage::SearchStage;
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::AppState;
 use tower::ServiceExt;
@@ -174,4 +175,63 @@ async fn a_documents_entry_that_is_not_a_text_name_is_refused() {
     let (_tmp, state, lib) = fixture(true).await;
     let (status, _) = search(&state, query(&lib, BROAD, &["harbour-notes".into()])).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+/// Platform row PV1: a search's trace names each of its stages once per
+/// corpus, with an elapsed time, under its `search` span. A build that drops one stage's event
+/// (`span_of`'s was the planted one) turns this red.
+#[tokio::test]
+async fn a_search_trace_names_every_stage_with_its_time_under_one_span() {
+    let (_tmp, state, lib) = fixture(true).await;
+    let trace = captured_debug(async {
+        let (status, body) = search(&state, query(&lib, BROAD, &[])).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+    })
+    .await;
+    for stage in SearchStage::ALL.map(SearchStage::as_str) {
+        let lines: Vec<&str> = trace
+            .lines()
+            .filter(|l| l.contains("search stage") && l.contains(&format!("stage=\"{stage}\"")))
+            .collect();
+        assert_eq!(lines.len(), 1, "one `{stage}` event:\n{trace}");
+        assert!(lines[0].contains("elapsed_us="), "{}", lines[0]);
+        assert!(
+            lines[0].contains("search{route=\"knowledge\" query="),
+            "under the search span: {}",
+            lines[0]
+        );
+    }
+}
+
+/// Every tracing line at DEBUG while `f` runs, without colour.
+async fn captured_debug<F: std::future::Future<Output = ()>>(f: F) -> String {
+    #[derive(Clone)]
+    struct Captured(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+    impl std::io::Write for Captured {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    impl tracing_subscriber::fmt::MakeWriter<'_> for Captured {
+        type Writer = Captured;
+        fn make_writer(&self) -> Captured {
+            self.clone()
+        }
+    }
+    let buf = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let subscriber = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .with_writer(Captured(std::sync::Arc::clone(&buf)))
+        .with_ansi(false)
+        .finish();
+    {
+        let _guard = tracing::subscriber::set_default(subscriber);
+        f.await;
+    }
+    let out = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+    out
 }

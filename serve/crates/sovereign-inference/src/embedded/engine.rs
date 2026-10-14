@@ -3921,15 +3921,20 @@ impl InferenceProvider for EmbeddedLlamaCpp {
     }
 
     async fn embed(&self, text: &str) -> Result<Vec<f32>> {
+        let asked = Instant::now();
         let slot = self.embed_handle("embed").await?;
         let text_len = text.len();
         let text = text.to_string();
 
         tracing::debug!(text_chars = text_len, "inference.embed: call");
 
+        // `done` under the caller's span; `slot_wait`: the slot's load or hand-over, then its context.
+        let span = tracing::Span::current();
         tokio::task::spawn_blocking(sovereign_contracts::engine_observe::carry(move || {
+            let _in_caller = span.enter();
             let start = Instant::now();
             let mut ctx_lock = slot.contexts[0].blocking_lock();
+            let slot_wait = asked.elapsed();
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 EmbedSlot::embed_sync(
                     &slot.model,
@@ -3945,6 +3950,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     tracing::debug!(
                         dims = v.len(),
                         latency_ms = start.elapsed().as_millis() as u64,
+                        slot_wait_ms = slot_wait.as_millis() as u64,
                         "inference.embed: done"
                     );
                     Ok(v)
