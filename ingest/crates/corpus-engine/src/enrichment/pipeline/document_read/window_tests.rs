@@ -206,14 +206,18 @@ async fn a_window_read_reasons_first_and_reads_what_follows_the_reasoning() {
         "particulars": [{"ref": "p1", "type": "case", "name": "issue 42", "fields": {}}],
         "claims": [{"kind": "reported_status", "about": "p1", "document": "d2",
                     "quote": "Issue 42 is now closed.", "fields": {"status": "Closed"}}]});
-    let raw = format!("<think>\nd2 says issue 42 is closed. {{\"not\": \"the answer\"}}\n</think>\n\n{answer}");
+    let raw = format!(
+        "<think>\nd2 says issue 42 is closed. {{\"not\": \"the answer\"}}\n</think>\n\n{answer}"
+    );
     let seen = Arc::new(Mutex::new(Vec::new()));
     let kept = seen.clone();
-    let infer: crate::InferenceFn = Arc::new(move |p: &crate::enrichment::pipeline::types::ChatPrompt, _| {
-        kept.lock().unwrap().push(p.clone());
-        let raw = raw.clone();
-        Box::pin(async move { Ok(raw) })
-    });
+    let infer: crate::InferenceFn = Arc::new(
+        move |p: &crate::enrichment::pipeline::types::ChatPrompt, _| {
+            kept.lock().unwrap().push(p.clone());
+            let raw = raw.clone();
+            Box::pin(async move { Ok(raw) })
+        },
+    );
     let out = read(&chapter, &policies, &Default::default(), &infer)
         .await
         .unwrap();
@@ -226,8 +230,15 @@ async fn a_window_read_reasons_first_and_reads_what_follows_the_reasoning() {
     assert_eq!(read.documents[1].claims.len(), 1, "{:?}", read.documents);
 
     let prompt = &seen.lock().unwrap()[0];
-    let thinking = prompt.thinking_tokens.expect("the reader sets its reasoning budget");
-    let answer_cap = prompt.max_output_tokens.expect("the reader sets its answer cap");
+    let thinking = prompt
+        .thinking_tokens
+        .expect("the reader sets its reasoning budget");
+    let answer_cap = prompt
+        .max_output_tokens
+        .expect("the reader sets its answer cap");
     assert!(thinking > 0, "the reader reasons");
-    assert!(answer_cap >= thinking + 16_000, "the reasoning leaves the JSON room: {thinking} of {answer_cap}");
+    assert!(
+        answer_cap >= thinking + 16_000,
+        "the reasoning leaves the JSON room: {thinking} of {answer_cap}"
+    );
 }
