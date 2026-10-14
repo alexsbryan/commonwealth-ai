@@ -1,0 +1,55 @@
+#!/bin/sh
+# loop.sh <arm> [corpus...]: one arm of the ontology loop, every step and its record, so no session rebuilds them.
+#
+# Per corpus (default: the five worlds and ward-story) it writes runs/loop/<arm>/<corpus>/:
+#   run.json        what ran: HEAD, the dirty diff's hash, the svrn-ingest binary's mtime, engine, asker, NOTE
+#   chapters.json   the window cut the run read (indexes/<id>/chapters.json), so the arm replays: RESTORE=<arm>
+#   extract.*, resolve.*  the public commands' output; extract.err carries every window prompt and raw answer (trace)
+#   windows/        each window's labels, prompt and answer, split out of extract.err
+#   score.json      score.py's report; misses.jsonl + misses.txt, each unserved gold deal's chain and verdict (misses.py)
+# then table.py prints the arm's totals and categories and appends a row to runs/loop/journal.tsv.
+#
+# Env: NOTE="what this arm changes" (required). ASKER=replay|recorded|daemon for extract (default recorded: a
+# question asked before reuses its answer, a new one goes to the daemon); resolve always runs --asker recorded.
+# INIT=1 re-cuts the windows (enrich init). RESTORE=<arm> puts that arm's cut back first, for an exact replay.
+cd "$(dirname "$0")/../../.." || exit 1
+L=research/ontology-apps/loop
+arm=$1; shift
+[ -n "$arm" ] && [ -n "$NOTE" ] || { echo "usage: NOTE='what this arm changes' $0 <arm> [corpus...]" >&2; exit 2; }
+[ $# -gt 0 ] || set -- world-s1 world-s2 world-s3 world-s4 world-s5 ward-story
+root=runs/loop/$arm
+[ -e $root ] && [ -z "$FORCE" ] && { echo "$root exists; name a new arm (FORCE=1 overwrites)" >&2; exit 2; }
+mkdir -p $root
+export SOVEREIGN_READER=${SOVEREIGN_READER:-window} SOVEREIGN_WAVES_ONE_BY_ONE=1 SOVEREIGN_NO_STALE_WARN=1 NO_COLOR=1
+export RUST_LOG=info,corpus_engine::enrichment::pipeline::document_read::window=trace,corpus_engine::enrichment::atlas::resolve_records=debug
+asker=${ASKER:-recorded}
+head=$(git rev-parse --short HEAD)
+dirty=$(git diff HEAD -- . ':!runs' | shasum | cut -c1-12); [ -z "$(git diff HEAD --stat -- . ':!runs')" ] && dirty=clean
+bin=$(stat -f '%Sm' -t '%Y-%m-%dT%H:%M:%S' target/debug/svrn-ingest)
+engine=$(curl -s -m 5 127.0.0.1:9741/v1/models | python3 -c "import json,sys; print(','.join(m['id'] for m in json.load(sys.stdin)['data']))" 2>/dev/null)
+git diff HEAD -- . ':!runs' > $root/dirty.diff
+for id in "$@"; do
+  out=$root/$id; mkdir -p $out; s=$(date +%s)
+  cut=~/.svrnmesh/indexes/$id/chapters.json; cfg=~/.svrnmesh/enrichment/$id/config.json
+  if [ -n "$RESTORE" ]; then
+    cp runs/loop/$RESTORE/$id/chapters.json $cut || { echo "$id: no saved cut in runs/loop/$RESTORE"; continue; }
+  elif [ -n "$INIT" ]; then  # re-cut the windows; init over a literary-pipeline config is put back (run_world.sh)
+    cp $cfg $out/config.before.json
+    sovereign enrich init $id --from-corpus $id --chat-model commonwealth/primary --embed-model qwen3-embedding-0.6b --force > $out/init.out 2> $out/init.err || { echo "$id: init failed"; continue; }
+    if python3 -c "import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get('pipeline_id') == 'literary' else 1)" $cfg; then
+      python3 -c "import json,sys; c=json.load(open(sys.argv[1])); c['corpus_id']=sys.argv[3]; json.dump(c, open(sys.argv[2],'w'), indent=2)" $out/config.before.json $cfg $id
+    fi
+  fi
+  cp $cut $out/chapters.json; cp $cfg $out/config.json
+  sovereign enrich extract $id --full --asker $asker > $out/extract.out 2> $out/extract.err; rx=$?
+  [ $rx = 0 ] && { sovereign enrich resolve $id --asker recorded > $out/resolve.out 2> $out/resolve.err; rr=$?; }
+  [ $rx = 0 ] && [ "$rr" = 0 ] && python3 $L/score.py $(python3 $L/corpora.py $id msgids) $out/score.json $(python3 $L/corpora.py $id score-args) > $out/score.out 2>&1
+  python3 -c "import json,sys; json.dump(dict(zip(sys.argv[2::2], sys.argv[3::2])), open(sys.argv[1], 'w'), indent=1)" $out/run.json \
+    arm "$arm" corpus "$id" note "$NOTE" head "$head" dirty "$dirty" svrn_ingest_mtime "$bin" engine "$engine" asker "$asker" \
+    init "${INIT:-}" restore "${RESTORE:-}" extract_exit "$rx" resolve_exit "${rr:-not run}" seconds "$(( $(date +%s) - s ))" \
+    finished "$(date -u +%FT%TZ)"
+  [ -f $out/score.json ] || { echo "$id: extract exit $rx, resolve exit ${rr:-not run}; see $out"; continue; }
+  python3 $L/misses.py $out $id > $out/misses.txt
+  echo "$id $(python3 $L/table.py --line $out)"
+done
+python3 $L/table.py $root
