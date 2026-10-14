@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Windows, the chapters the window reader reads (ONTOLOGY_METHOD §Reading):
 //! every document of the corpus in clock order, cut into consecutive runs of
-//! at most [`WINDOW_CHARS`] only where a document ends. The clock is the date
+//! at most [`WINDOW_CHARS`] where a document ends; a document longer than a
+//! window is cut where the recipe's chunker cut it, into consecutive parts of
+//! whole chunks, each read in its own window (a novel, a long report). The clock is the date
 //! the recipe declares (`change.document.date`), read as RESOLVE reads it
 //! (`read_stamp`), with undated documents after every dated one, as RESOLVE
 //! orders them. A window is one reading call, so a reader sees a thread's
@@ -26,6 +28,13 @@ use tracing::{debug, info, warn};
 /// to (REVIEW_BRIEF, "no one-way doors"). A cost bound: it sets how many
 /// calls a corpus takes, never what a record says.
 pub const WINDOW_CHARS: usize = 40_000;
+
+/// What a window holds of one document: all of it, or a run of its chunks.
+struct Piece<'a> {
+    doc: &'a Doc,
+    chunks: &'a [(u64, String)],
+    chars: usize,
+}
 
 /// One document as its chunk rows give it.
 struct Doc {
@@ -68,7 +77,9 @@ pub async fn build_window_manifest_for(
 /// (none declared: every document undated, in chunk order), cut where a
 /// document ends once a window would pass `max_chars` of the text `texts`
 /// holds for it (its chunks', where it holds none). A document longer than
-/// `max_chars` is a window of its own.
+/// `max_chars` is cut at its chunk boundaries into parts of at most
+/// `max_chars` of chunk text (a chunk longer than that is a part alone), and
+/// each part is placed as a document is.
 pub fn build_window_manifest(
     corpus_id: &str,
     rows: Vec<EnrichmentChunkRow>,
@@ -105,14 +116,60 @@ pub fn build_window_manifest(
     });
     let undated = docs.iter().filter(|d| d.date.is_none()).count();
 
-    let mut windows: Vec<Vec<&Doc>> = Vec::new();
-    let mut size = 0usize;
+    // Each document whole, or, longer than a window, its consecutive parts.
+    let mut pieces: Vec<Piece<'_>> = Vec::new();
+    let mut cut = 0usize;
     for doc in &docs {
         let chars = doc.chars(texts);
+        if chars <= max_chars {
+            pieces.push(Piece {
+                doc,
+                chunks: &doc.chunks,
+                chars,
+            });
+            continue;
+        }
+        let mut parts: Vec<Piece<'_>> = Vec::new();
+        let (mut from, mut size) = (0usize, 0usize);
+        for (i, (_, c)) in doc.chunks.iter().enumerate() {
+            if i > from && size + c.len() > max_chars {
+                parts.push(Piece {
+                    doc,
+                    chunks: &doc.chunks[from..i],
+                    chars: size,
+                });
+                (from, size) = (i, 0);
+            }
+            size += c.len();
+        }
+        parts.push(Piece {
+            doc,
+            chunks: &doc.chunks[from..],
+            chars: size,
+        });
+        if parts.len() == 1 {
+            // Its chunks fit one window though its stored text does not: it is
+            // read whole, as its stored text, so it is sized by that and stands alone.
+            pieces.push(Piece {
+                doc,
+                chunks: &doc.chunks,
+                chars,
+            });
+            continue;
+        }
+        cut += 1;
+        debug!(document = %doc.key, chars, parts = parts.len(), "window manifest: a document longer than a window cut at its chunks");
+        pieces.extend(parts);
+    }
+
+    let mut windows: Vec<Vec<Piece<'_>>> = Vec::new();
+    let mut size = 0usize;
+    for piece in pieces {
+        let chars = piece.chars;
         match windows.last_mut() {
-            Some(window) if !window.is_empty() && size + chars <= max_chars => window.push(doc),
+            Some(window) if !window.is_empty() && size + chars <= max_chars => window.push(piece),
             _ => {
-                windows.push(vec![doc]);
+                windows.push(vec![piece]);
                 size = 0;
             }
         }
@@ -123,16 +180,16 @@ pub fn build_window_manifest(
     let mut manifest = ChapterManifest::new(corpus_id);
     for (i, window) in windows.iter().enumerate() {
         let ordinal = i as u32 + 1;
-        let chunks: Vec<&(u64, String)> = window.iter().flat_map(|d| d.chunks.iter()).collect();
+        let chunks: Vec<&(u64, String)> = window.iter().flat_map(|p| p.chunks.iter()).collect();
         let span = match (
-            window[0].date.as_deref(),
-            window[window.len() - 1].date.as_deref(),
+            window[0].doc.date.as_deref(),
+            window[window.len() - 1].doc.date.as_deref(),
         ) {
             (Some(first), Some(last)) => format!("{first} to {last}"),
             (Some(first), None) => format!("{first} on, with undated documents"),
             _ => "undated documents".to_string(),
         };
-        debug!(window = ordinal, documents = window.len(), first = %window[0].key, %span, "window manifest: window cut");
+        debug!(window = ordinal, documents = window.len(), first = %window[0].doc.key, %span, "window manifest: window cut");
         let mut metadata = BTreeMap::new();
         metadata.insert("ordinal".to_string(), ordinal.to_string());
         metadata.insert("window_documents".to_string(), window.len().to_string());
@@ -160,6 +217,7 @@ pub fn build_window_manifest(
     }
     info!(
         documents = docs.len(),
+        cut_at_chunks = cut,
         sized_by_stored_text = docs.iter().filter(|d| texts.contains_key(&d.key)).count(),
         undated,
         windows = n,

@@ -38,8 +38,8 @@ fn documents_go_in_clock_order_with_undated_last() {
 
 /// A window is cut only where a document ends. Failing input, named: cut by
 /// chunk, `b`'s first chunk would join `a` (80 of 100) and its second open the
-/// next window; cut by document, `b` opens it whole. A document over the cap
-/// stands alone.
+/// next window; cut by document, `b` opens it whole. A single chunk over the
+/// cap stands alone.
 #[test]
 fn a_window_is_cut_only_between_documents() {
     let rows = vec![
@@ -83,4 +83,23 @@ fn a_window_is_sized_by_the_stored_text_the_reader_reads() {
     );
     let m = build_window_manifest("c", rows, &texts, Some("date"), 100);
     assert_eq!(windows(&m), vec![vec![1], vec![2]]);
+}
+
+/// A document longer than a window is cut where the recipe's chunker cut it:
+/// consecutive parts of whole chunks, each placed as a document is. Failing
+/// input, named: saltgrass, one 45k-character novel in 31 chunks, was one
+/// window, so the window reader read it as a one-shot (2026-10-14).
+#[test]
+fn a_document_longer_than_a_window_is_cut_at_its_chunks() {
+    let rows = vec![
+        row(1, "a", None, 10),
+        row(2, "novel", None, 40),
+        row(3, "novel", None, 40),
+        row(4, "novel", None, 40),
+        row(5, "novel", None, 40),
+        row(6, "novel", None, 40),
+        row(7, "b", None, 10),
+    ];
+    let m = build_window_manifest("c", rows, &Default::default(), None, 100);
+    assert_eq!(windows(&m), vec![vec![1, 2, 3], vec![4, 5], vec![6, 7]]);
 }

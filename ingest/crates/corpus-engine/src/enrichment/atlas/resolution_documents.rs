@@ -56,6 +56,12 @@ pub struct SourceDocument {
     /// offsets into it (`body_start`, `segments`) are exact.
     #[serde(default)]
     text: Option<String>,
+    /// This section holds a part of the document: its chunks run across
+    /// several windows (a document longer than a window, `window_manifest`).
+    /// The reader reads the part (`raw_body`); RESOLVE anchors in the whole
+    /// (`body`: the canonical text, or every section's chunks of it).
+    #[serde(default)]
+    part: bool,
 }
 
 impl SourceDocument {
@@ -95,6 +101,9 @@ impl SourceDocument {
     /// each headed by its title and overlapping its neighbour as the index
     /// cut it (the substitution was named where the texts were read).
     pub fn raw_body(&self) -> String {
+        if self.part {
+            return self.raw_texts.join("\n\n");
+        }
         match &self.text {
             Some(text) => text.clone(),
             None => self.raw_texts.join("\n\n"),
@@ -105,6 +114,11 @@ impl SourceDocument {
     /// offsets index.
     pub fn stored_text(&self) -> Option<&str> {
         self.text.as_deref()
+    }
+
+    /// Whether this section holds only a part of the document (`part`).
+    pub fn is_part(&self) -> bool {
+        self.part
     }
 }
 
@@ -184,10 +198,28 @@ impl SectionDocuments {
                         texts: vec![text],
                         raw_texts: vec![row.content.clone()],
                         text: None,
+                        part: false,
                     }),
                 }
             }
             by_section.insert(section_id.to_string(), docs);
+        }
+        // A document whose chunks fall in several sections is read in parts;
+        // each part anchors in all of its chunks, in section order.
+        let mut whole: HashMap<String, (usize, Vec<String>)> = HashMap::new();
+        for section in &order {
+            for d in by_section.get(section).into_iter().flatten() {
+                let e = whole.entry(d.key.clone()).or_default();
+                e.0 += 1;
+                e.1.extend(d.texts.iter().cloned());
+            }
+        }
+        for d in by_section.values_mut().flatten() {
+            if let Some((sections, texts)) = whole.get(&d.key).filter(|(n, _)| *n > 1) {
+                debug!(document = %d.key, sections, "atlas/resolution documents: a document read in parts across sections");
+                d.part = true;
+                d.texts = texts.clone();
+            }
         }
         Self { by_section, order }
     }
@@ -528,3 +560,7 @@ pub fn read_stamp(
         DocumentStamp::Thread | DocumentStamp::Id => Ok(raw),
     }
 }
+
+#[cfg(test)]
+#[path = "resolution_documents_tests.rs"]
+mod tests;

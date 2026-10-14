@@ -209,8 +209,9 @@ of whole documents served 76/93 deals against the one-shot's 66/93, windows cut 
 folder (78/93 against 76/93), and on the local model windows served 5/15 of world-s4's deals where this
 pipeline served 1/15. So a second reader
 is measured beside the passes reader through the default commands. `enrich init` cuts the corpus into
-windows (every document in declared-clock order, cut by size only where a document ends, so prompt and reasoned
-answer fit 128k), and one call reads a window, reasoning before it answers, prompted from the contract alone
+windows (every document in declared-clock order, cut by size where a document ends; a document longer than a
+window, a novel or a long report, is cut where the recipe's chunker cut it, its parts read in their own windows and
+its statements anchored in the whole; so prompt and reasoned answer fit 128k), and one call reads a window, reasoning before it answers, prompted from the contract alone
 (`window.rs`, `window_prompt.md`). One reading rule is the method's own, not a recipe's: a document that says
 one particular is replaced by, rolled into or superseded by another speaks of two, and states the first's end
 beside the second's beginning (supersession). The

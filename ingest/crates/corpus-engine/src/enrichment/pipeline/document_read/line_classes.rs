@@ -82,7 +82,9 @@ impl Layout {
     fn of(d: &SourceDocument) -> Result<Option<Self>, &'static str> {
         let fields = d.metadata();
         let stated = fields.contains_key("body_start") || fields.contains_key("segments");
-        if !stated {
+        // A part of a document (read across windows) is not the text the
+        // extractor's offsets index: its lines are classed from its own text.
+        if !stated || d.is_part() {
             return Ok(None);
         }
         let Some(text) = d.stored_text() else {
