@@ -353,7 +353,14 @@ pub(super) async fn read(
     let answer: Value = prepare_phase_json(&raw, "phase 1 (window read)")
         .map_err(|e| failed(e.to_string()))
         .and_then(|json| serde_json::from_str(&json).map_err(|e| failed(e.to_string())))?;
-    let documents = envelope(chapter, policies, &index, &contract, &labels, &answer);
+    let owns: Vec<String> = chapter
+        .source_documents
+        .iter()
+        .map(|doc| own_text(doc, classes))
+        .collect();
+    let documents = envelope(
+        chapter, policies, &index, &contract, &labels, &owns, &answer,
+    );
     serde_json::to_string(&json!({ "documents": documents, "subjects": SubjectScope::Chapter }))
         .map_err(|e| Error::Serialization(format!("window reader envelope: {e}")))
 }
@@ -503,13 +510,76 @@ fn sourced_identity(
         })
 }
 
+/// The sentence a quote stands in, from a document's own lines: the quote's
+/// words found in order (whitespace and case aside), widened to the
+/// sentence's ends (`.`, `!` or `?` before whitespace, a blank line, or the
+/// text's ends), its whitespace flattened as a model writes a quote. Words
+/// compare with their edge punctuation trimmed. A model
+/// cites a span and code widens it, so no reader spends its reasoning copying
+/// across a mail's line wraps: reasoned reads cut quotes at the wrap, 8 words
+/// at the median against 12 unreasoned (runs/loop/reader-think-uncapped,
+/// 2026-10-14). Longer than `MAX_SENTENCE` bytes, the quote's own lines are
+/// cited instead. None when the quote's words are not in the text.
+pub(super) fn sentence_of(text: &str, quote: &str) -> Option<String> {
+    const MAX_SENTENCE: usize = 600;
+    let words: Vec<(usize, &str)> = text
+        .split_whitespace()
+        .map(|w| (w.as_ptr() as usize - text.as_ptr() as usize, w))
+        .collect();
+    let want: Vec<&str> = quote.split_whitespace().collect();
+    if want.is_empty() {
+        return None;
+    }
+    // A span may stop inside a word's punctuation (".50" of ".50,"): words compare with it trimmed.
+    let bare = |w: &str| {
+        w.trim_matches(|c: char| !c.is_alphanumeric())
+            .to_lowercase()
+    };
+    let at = words
+        .windows(want.len())
+        .position(|ws| ws.iter().zip(&want).all(|((_, a), b)| bare(a) == bare(b)))?;
+    let start = words[at].0;
+    let (last, w) = words[at + want.len() - 1];
+    let end = last + w.len();
+    let bytes = text.as_bytes();
+    let stop = |i: usize| matches!(bytes[i], b'.' | b'!' | b'?');
+    let mut a = start;
+    // Byte steps: every place they stop is an ASCII byte or an end, so a char boundary.
+    while a > 0
+        && !(stop(a - 1) && bytes[a].is_ascii_whitespace())
+        && !bytes[..a].ends_with(b"\n\n")
+    {
+        a -= 1;
+    }
+    let mut b = end;
+    while b < text.len()
+        && !(b > 0 && stop(b - 1) && bytes[b].is_ascii_whitespace())
+        && !bytes[b..].starts_with(b"\n\n")
+    {
+        b += 1;
+    }
+    let (a, b) = if b - a > MAX_SENTENCE {
+        (
+            text[..start].rfind('\n').map_or(0, |i| i + 1),
+            text[end..].find('\n').map_or(text.len(), |i| end + i),
+        )
+    } else {
+        (a, b)
+    };
+    let span = text.get(a..b)?;
+    Some(span.split_whitespace().collect::<Vec<_>>().join(" "))
+}
+
 /// One outcome per supplied document, in order, from the window's answer.
+/// `owns` are the documents' own lines (`own_text`), each claim's quote
+/// widened to its sentence in them (`sentence_of`).
 fn envelope(
     chapter: &ChapterInput,
     policies: &OntologyPolicies,
     index: &TypeIndex<'_>,
     contract: &Contract<'_>,
     labels: &[String],
+    owns: &[String],
     answer: &Value,
 ) -> Vec<DocumentReadOutcome> {
     let empty = Vec::new();
@@ -581,6 +651,15 @@ fn envelope(
             continue;
         }
         let quote = text(&claim["quote"]);
+        let quote = match sentence_of(&owns[k], &quote) {
+            Some(sentence) => {
+                if sentence != quote {
+                    trace!(document = %outcome.document_id, %quote, %sentence, "document_read/window: a quote widened to its sentence");
+                }
+                sentence
+            }
+            None => quote,
+        };
         let fields = read_attrs(index, &decl.name)
             .into_iter()
             .map(|a| {

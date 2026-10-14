@@ -773,11 +773,14 @@ pub(super) async fn reason_call(
     let ms = started.elapsed().as_millis() as u64;
     match out {
         Ok(text) if !text.trim().is_empty() => {
+            // The reasoning itself, escaped onto one line: why a statement was
+            // joined or opened is read from it, not inferred from the choice.
             debug!(
                 document,
                 statement,
                 ms,
                 chars = text.len(),
+                reasoning = ?text,
                 "atlas/resolve: reasoning call"
             );
             Ok(text)

@@ -242,3 +242,22 @@ async fn a_window_read_reasons_first_and_reads_what_follows_the_reasoning() {
         "the reasoning leaves the JSON room: {thinking} of {answer_cap}"
     );
 }
+
+/// A quote cut at a mail's line wrap is cited as its whole sentence, across
+/// the wrap and no further; a price's decimal point ends no sentence; a quote
+/// whose words are not in the text is left for validation to refuse.
+#[test]
+fn a_quote_is_widened_to_its_sentence_across_line_wraps() {
+    use super::sentence_of;
+    let text = "Thanks for the call.\nHartosn the Border piece is .50, subject to credit and\nKim's got the attached confirm. Talk soon.\n\nNext para.";
+    assert_eq!(
+        sentence_of(text, "Hartosn the Border piece is .50").as_deref(),
+        Some("Hartosn the Border piece is .50, subject to credit and Kim's got the attached confirm.")
+    );
+    assert_eq!(
+        sentence_of(text, "talk SOON.").as_deref(),
+        Some("Talk soon.")
+    );
+    assert_eq!(sentence_of(text, "Next").as_deref(), Some("Next para."));
+    assert_eq!(sentence_of(text, "a sentence the mail never says"), None);
+}

@@ -15,16 +15,21 @@ scratchpad as score_fixed.py until loop.sh made it the loop's one scorer), each 
   msg  a statement matches a gold update only from the same message (document), as said above,
        not from any message in the same folder;
   own  a statement's match text is its own statement and its own stage evidence (its reading in the
-       stage fold), not every fold's evidence pooled (counterparty emails, delivery points, ...).
+       stage fold), not every fold's evidence pooled (counterparty emails, delivery points, ...);
+  fold a one-shot record's stage is its latest-dated statement's, as the product folds a record (the recipe's
+       deal_stage: the latest report by document date; statements of that date that disagree leave none),
+       not the stage the model declares for the record (2026-10-14: the declared stage served deals whose
+       statements end elsewhere). A record none of whose statements states a stage keeps the declared one: the
+       one-shot wrote no per-statement stage at all on world-s4.
 Everything else is score_ward.py's. The report also carries `matches` {claim: [gold update index]}.
 """
-import json, re, subprocess, sys
+import json, os, re, subprocess, sys
 from email.utils import parsedate_to_datetime
 
 RECORDS = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--records=")), None)
-_fx = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--fixes=")), "cap,msg,own")
+_fx = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--fixes=")), "cap,msg,own,fold")
 FIXES = set() if _fx == "none" else set(_fx.split(","))
-assert FIXES <= {"cap", "msg", "own"}, FIXES
+assert FIXES <= {"cap", "msg", "own", "fold"}, FIXES
 sys.argv = [a for a in sys.argv if not a.startswith("--records=") and not a.startswith("--fixes=")]
 MSGIDS = sys.argv[1]
 OUT = sys.argv[2] if len(sys.argv) > 2 else None
@@ -74,6 +79,15 @@ def current_stage(deal_id):
 
 
 
+def date_of(f):
+    """A cited file's message date, from its Date header in the corpus story (gold's sibling dir)."""
+    p = os.path.join(os.path.dirname(GOLD), "story", f)
+    if not os.path.exists(p): return None
+    m = re.search(r"^Date:\s*(.+)$", open(p, errors="replace").read(), re.M)
+    try: return parsedate_to_datetime(re.sub(r"\s*\(.*\)$", "", m.group(1).strip())) if m else None
+    except (TypeError, ValueError): return None
+
+
 def from_records(path):
     """A one-shot's deal records as atlas rows: each stage_update claim becomes a stage fold reading
     whose document is the cited file itself."""
@@ -90,7 +104,12 @@ def from_records(path):
             file_of_doc.setdefault(f, f)
             claims[cid] = {"name": c.get("quote") or "", "record": {"attributes": c.get("attributes") or {}}}
             readings.append({"claim": cid, "document": f, "evidence": c.get("quote")})
-        attrs = r.get("attributes") or {}
+        attrs = dict(r.get("attributes") or {})
+        if "fold" in FIXES:
+            dated = [(date_of(rd["document"]), (claims[rd["claim"]]["record"]["attributes"] or {}).get("stage")) for rd in readings]
+            dated = [(d, st) for d, st in dated if d and st]
+            last = {st for d, st in dated if d == max(d for d, _ in dated)} if dated else set()
+            if dated: attrs["stage"] = next(iter(last)) if len(last) == 1 else None
         deals.append({"atom_id": f"r{i}", "name": r.get("name") or "", "record": {
             "attributes": attrs, "folds": {"stage": {"readings": readings}},
             "refs": [{"attribute": "counterparty", "name": str(attrs.get("counterparty"))}]}})
