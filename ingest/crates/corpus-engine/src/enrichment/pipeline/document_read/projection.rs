@@ -14,8 +14,9 @@ use crate::error::{Error, Result};
 use super::schema;
 use super::validation;
 use super::{
-    supported_values, DocumentRead, DocumentReadOutcome, DocumentReadParticular, ABOUT_ATTRIBUTE,
-    CLAIM_FIELDS_ATTRIBUTE, LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE,
+    supported_values, DocumentRead, DocumentReadOutcome, DocumentReadParticular, SubjectScope,
+    ABOUT_ATTRIBUTE, CHAPTER_SUBJECT_ATTRIBUTE, CLAIM_FIELDS_ATTRIBUTE, LOCAL_REF_ATTRIBUTE,
+    SOURCE_DOCUMENT_ATTRIBUTE,
     SUBJECT_FIELDS_ATTRIBUTE, WORDS_ATTRIBUTE,
 };
 
@@ -23,6 +24,8 @@ use super::{
 #[serde(deny_unknown_fields)]
 struct RawRead {
     documents: Vec<DocumentReadOutcome>,
+    #[serde(default)]
+    subjects: SubjectScope,
 }
 
 /// Parse only the dedicated document envelope; no generic facet or question is required.
@@ -39,6 +42,7 @@ pub fn parse_response(response: &str, policies: &OntologyPolicies) -> Result<Pha
             contract_fingerprint: super::cache::contract_fingerprint(policies),
             context_fingerprint: String::new(),
             documents: raw.documents,
+            subjects: raw.subjects,
         }),
         ..Default::default()
     };
@@ -116,6 +120,12 @@ pub(super) fn project_compatibility_sketches(
                 LOCAL_REF_ATTRIBUTE.into(),
                 Value::String(claim.subject_local_ref.clone()),
             );
+            if read.subjects == SubjectScope::Chapter {
+                attributes.insert(
+                    CHAPTER_SUBJECT_ATTRIBUTE.into(),
+                    Value::String(claim.subject_local_ref.clone()),
+                );
+            }
             attributes.insert(
                 SOURCE_DOCUMENT_ATTRIBUTE.into(),
                 Value::String(outcome.document_id.clone()),

@@ -636,7 +636,13 @@ question the pipeline asks about a type is a method on the resolved
   reads with the compiled reader instead (`document_read/waves.rs`): the declaration compiled into levels,
   each declared target counted and its particulars pointed at first, then per particular its fields and acts,
   then per claim its fields, every question opening with one document prefix and each round of a level one
-  forced-choice wave (`waves_jobs.rs`). Every question about a
+  forced-choice wave (`waves_jobs.rs`). `SOVEREIGN_READER=window` (experiment, DEFAULTS_LEDGER) reads each
+  chapter in one call (`document_read/window.rs`, prompt `window_prompt.md`), and `enrich init` then cuts the
+  corpus into windows: every document in declared-clock order, cut by size only where a document ends
+  (`sovereign-enrichment-build/src/window_manifest.rs`, `WINDOW_CHARS`). The window reader names each
+  particular once across its chapter; its envelope says so (`DocumentRead.subjects = Chapter`), the projection
+  carries the reference (`CHAPTER_SUBJECT_ATTRIBUTE`), and RESOLVE links a chapter's statements by it as a
+  sufficient key (`resolution_records.rs::CHAPTER_SUBJECT_KEY`), deciding only across windows. Every question about a
   document opens with its declared facts (`prefill.rs`: the metadata fields the
   declaration names and the declared sets they put the document or a sourced
   record in, read through the projection's own field readers,

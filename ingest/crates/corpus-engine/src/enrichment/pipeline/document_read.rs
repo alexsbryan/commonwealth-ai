@@ -26,6 +26,7 @@ mod waves;
 mod waves_forms;
 mod waves_jobs;
 mod waves_readings;
+mod window;
 
 pub use cache::{
     cache_matches_chapter, checkpoint_processed_ids, context_fingerprint, contract_fingerprint,
@@ -43,6 +44,7 @@ pub(super) use runner_support::{
 pub use schema::compose;
 pub use validation::field_evidence_exists;
 pub use validation::validate_and_stamp;
+pub use window::chosen as window_chosen;
 
 #[cfg(test)]
 use schema::eligible_claim;
@@ -56,6 +58,10 @@ pub const SOURCE_DOCUMENT_ATTRIBUTE: &str = "__document_read_source_document";
 /// sourced subject by them (`resolution_identity/source_subject.rs`), and
 /// they stay on the claim, cited. No stage writes them onto the record.
 pub const SUBJECT_FIELDS_ATTRIBUTE: &str = "__document_read_subject_fields";
+/// The chapter-wide subject a window read gave a claim ([`SubjectScope::Chapter`]):
+/// claims in different documents that carry one value are one particular as
+/// the reader read them, and RESOLVE keys them together (`resolution_records`).
+pub const CHAPTER_SUBJECT_ATTRIBUTE: &str = "__document_read_chapter_subject";
 /// Source-supported claim fields retained beside the flattened compatibility values.
 pub const CLAIM_FIELDS_ATTRIBUTE: &str = "__document_read_fields";
 /// The type of the particular a document is about, on the claim projected
@@ -105,6 +111,29 @@ pub struct DocumentRead {
     pub context_fingerprint: String,
     /// Exactly one entry for each source document supplied to the reader.
     pub documents: Vec<DocumentReadOutcome>,
+    /// How far a claim's `subject_local_ref` reaches. Reads cached before
+    /// 2026-10-13 carry none: a document's own.
+    #[serde(default, skip_serializing_if = "SubjectScope::is_document")]
+    pub subjects: SubjectScope,
+}
+
+/// The closed set of reaches a reader's local subject reference has.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SubjectScope {
+    /// One reference is one particular within one document; across documents
+    /// it says nothing and RESOLVE alone decides (the passes reader).
+    #[default]
+    Document,
+    /// One reference is one particular across the chapter's documents: the
+    /// window reader read them together (`window.rs`).
+    Chapter,
+}
+
+impl SubjectScope {
+    pub fn is_document(&self) -> bool {
+        *self == SubjectScope::Document
+    }
 }
 
 /// One answer about one supplied document.

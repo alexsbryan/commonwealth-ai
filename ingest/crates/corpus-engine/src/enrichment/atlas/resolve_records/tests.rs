@@ -973,3 +973,27 @@ mod weighed_tests;
 
 #[path = "settle_tests.rs"]
 mod settle_tests;
+
+/// Failing input, named: the Ward window read eight deals, p1 to p8, and
+/// RESOLVE's forced choices folded them into three records (2026-10-13). Two
+/// references of one window never join; one of another window says nothing.
+#[test]
+fn two_references_of_one_window_never_join() {
+    let c = criterion(&[]);
+    let of = |values: &[&str]| {
+        BTreeMap::from([(
+            CHAPTER_SUBJECT_KEY.to_string(),
+            values.iter().map(|v| v.to_string()).collect::<BTreeSet<_>>(),
+        )])
+    };
+    let p2 = of(&["sec_00001/p2"]);
+    assert!(!super::select::necessary_compatible(&c, &p2, &of(&["sec_00001/p1"])));
+    assert!(super::select::necessary_compatible(&c, &p2, &of(&["sec_00001/p2"])));
+    assert!(super::select::necessary_compatible(&c, &p2, &of(&["sec_00002/p1"])));
+    assert!(!super::select::necessary_compatible(
+        &c,
+        &p2,
+        &of(&["sec_00002/p1", "sec_00001/p7"])
+    ));
+    assert!(super::select::necessary_compatible(&c, &p2, &BTreeMap::new()));
+}

@@ -30,6 +30,23 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### `SOVEREIGN_READER=window` — the window reader, off until measured (2026-10-13)
+
+**What ships.** `document_read/window.rs` reads a chapter in one call;
+`enrich init` cuts the corpus into windows in clock order
+(`window_manifest.rs`); a window's particulars reach RESOLVE as a chapter-wide
+sufficient key (`CHAPTER_SUBJECT_KEY`). Unset, the passes reader and the
+corpus's own sections, unchanged.
+
+**Why off.** It replaces how documents are read and how chapters are cut; the
+race that motivated it (REVIEW_BRIEF.md, 2026-10-13) ran outside the product.
+
+**Flip condition.** Through `run_world.sh` on DeepSeek Flash, it serves more
+deals than the race's one-shot (66/93) on the five worlds and does not lose
+Ward's served deals by more than single-run noise (~3 of 14). Then it becomes
+the one reader and passes and waves are deleted (operator, 2026-10-13).
+Refuted, this row moves to Rejected and the window files are deleted.
+
 ### `SOVEREIGN_READER=waves` — the compiled reader, off until measured (2026-10-12)
 
 **What ships.** `document_read/waves.rs`: the declaration compiled into levels

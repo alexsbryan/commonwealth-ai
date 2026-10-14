@@ -56,6 +56,9 @@ pub async fn read(
     classes: &LineClasses,
     infer: &InferenceFn,
 ) -> Result<String> {
+    if super::window::chosen() {
+        return super::window::read(chapter, policies, infer).await;
+    }
     if super::waves::chosen() {
         return super::waves::read(chapter, policies, classes, infer).await;
     }
@@ -610,6 +613,9 @@ pub fn read_fields(
 /// question's wording changes this value, and so the contract fingerprint
 /// that keys cached reads (`schema::contract_value`).
 pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
+    if super::window::chosen() {
+        return super::window::contract_value(policies);
+    }
     if super::waves::chosen() {
         return super::waves::contract_value(policies);
     }

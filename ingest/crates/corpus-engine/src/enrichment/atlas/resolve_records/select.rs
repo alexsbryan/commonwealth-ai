@@ -82,7 +82,25 @@ pub(super) fn necessary_compatible(
             return true;
         };
         left.len() == 1 && right.len() == 1 && left.first() == right.first()
-    })
+    }) && chapters_compatible(
+        left.get(super::CHAPTER_SUBJECT_KEY),
+        right.get(super::CHAPTER_SUBJECT_KEY),
+    )
+}
+
+/// Two references one window's reader gave are two particulars as it read
+/// them: a statement never joins a record holding another reference of its
+/// chapter. References of other chapters say nothing here.
+pub(super) fn chapters_compatible(
+    left: Option<&BTreeSet<String>>,
+    right: Option<&BTreeSet<String>>,
+) -> bool {
+    let (Some(left), Some(right)) = (left, right) else {
+        return true;
+    };
+    let chapter = |s: &str| s.split_once('/').map_or(s.to_string(), |(c, _)| c.to_string());
+    left.iter()
+        .all(|a| right.iter().all(|b| a == b || chapter(a) != chapter(b)))
 }
 
 /// Prior records matching a statement's declared sufficient keys.

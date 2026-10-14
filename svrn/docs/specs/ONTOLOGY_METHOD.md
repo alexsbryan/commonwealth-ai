@@ -197,6 +197,23 @@ subject) and warns on what nothing fills (a type no read claim kind is about, a 
 forced choice, a reference to a type only a table holds) and on any fold, protocol or identity key keyed on it (`validate_layer.rs::fill_analysis`; blind round 2's protocol folds keyed on `step_id`
 and `decision_ref` never folded, silently).
 
+**The window reader (experiment, 2026-10-13; `SOVEREIGN_READER=window`, DEFAULTS_LEDGER).** The race of
+2026-10-13 (REVIEW_BRIEF.md) read five generated mail worlds four ways with one hosted model: reading windows
+of whole documents served 76/93 deals against the one-shot's 66/93, windows cut by date tied windows cut by
+folder (78/93 against 76/93), and on the local model windows served 5/15 of world-s4's deals where this
+pipeline served 1/15. So a second reader
+is measured beside the passes reader through the default commands. `enrich init` cuts the corpus into
+windows (every document in declared-clock order, cut by size only where a document ends, so prompt and answer
+fit 32k), and one call reads a window, prompted from the contract alone (`window.rs`, `window_prompt.md`). The
+model names each particular once across the window and cites each claim by its document and exact words;
+code keeps the contract: every declared field answered or unknown with a reason, a closed value one of its
+declared values, a reference a record the document's fields name or words it holds, each field's evidence in
+the claim's own document, and a claim whose words are not in its document refused by validation. A window's
+particular reaches RESOLVE as a sufficient key over its chapter (`CHAPTER_SUBJECT_KEY`), so RESOLVE decides
+identity only across windows, statement by statement against bounded candidates. If it wins through the
+default commands it becomes the one reader and the passes and waves readers are deleted (operator,
+2026-10-13); if it loses, it is deleted.
+
 ## The generality test
 
 A piece belongs in the layer only if it is stated without a domain word and the examples exercise it:

@@ -35,7 +35,7 @@ use super::resolve_records::propose::{
 };
 use super::resolve_records::{
     resolve_in_clock_order, Answerer, Choice, Criterion, Document, DocumentResolution,
-    ProposalRule, Resolver, Statement,
+    ProposalRule, Resolver, Statement, CHAPTER_SUBJECT_KEY,
 };
 use crate::enrichment::ontology::{
     DocumentStamp, OntologyPolicies, OntologyTypeDecl, SourceDecl, TypeIndex, TypeKind,
@@ -43,7 +43,8 @@ use crate::enrichment::ontology::{
 use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType, EventType};
 use crate::enrichment::pipeline::document_read::{
     about_type, field_readings, mention_words, supported_values, ABOUT_ATTRIBUTE,
-    LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE,
+    CHAPTER_SUBJECT_ATTRIBUTE, LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE,
+    SUBJECT_FIELDS_ATTRIBUTE,
 };
 use crate::enrichment::pipeline::types::{PhaseFailure, PhaseFailureKind};
 use crate::EmbedFn;
@@ -61,6 +62,7 @@ use retire::retire;
 
 /// The extractor id on a record's atom.
 const EXTRACTOR_ID: &str = "atlas/resolve";
+
 
 /// Whether RESOLVE decides `type_name`'s identity in the atlas build: a type
 /// of a kind that is identified again (an entity or an event; PRIMITIVES §0:
@@ -265,6 +267,7 @@ pub async fn resolve_declared_types(
     // The subject's readings stay on each claim, cited.
     for claim in atoms.claims.iter_mut() {
         claim.attributes.remove(LOCAL_REF_ATTRIBUTE);
+        claim.attributes.remove(CHAPTER_SUBJECT_ATTRIBUTE);
         claim.attributes.remove(SOURCE_DOCUMENT_ATTRIBUTE);
         claim.attributes.remove(ABOUT_ATTRIBUTE);
     }
@@ -306,6 +309,7 @@ async fn resolve_type(
     // Reader-local references are transient handoff data. The subject's
     // readings stay on the claim: RESOLVE keys on their supported values.
     let mut read_local_ref_of = HashMap::<usize, String>::new();
+    let mut chapter_subject_of = HashMap::<usize, String>::new();
     let mut read_subject_fields_of = HashMap::<usize, Map<String, Value>>::new();
     for (i, claim) in atoms.claims.iter_mut().enumerate() {
         if !of_kinds(claim) {
@@ -319,6 +323,9 @@ async fn resolve_type(
         }
         if let Some(Value::String(local_ref)) = claim.attributes.remove(LOCAL_REF_ATTRIBUTE) {
             read_local_ref_of.insert(i, local_ref);
+        }
+        if let Some(Value::String(subject)) = claim.attributes.remove(CHAPTER_SUBJECT_ATTRIBUTE) {
+            chapter_subject_of.insert(i, subject);
         }
         if let Some(readings) = claim.attributes.get(SUBJECT_FIELDS_ATTRIBUTE) {
             match field_readings(readings) {
@@ -358,7 +365,7 @@ async fn resolve_type(
     report.retired = retired.len();
     report.dropped = retire(atoms, &retired, &t.name, failures);
 
-    let criterion = match Criterion::of(t, index.effective_identity(&t.name).to_vec()) {
+    let mut criterion = match Criterion::of(t, index.effective_identity(&t.name).to_vec()) {
         Ok(c) => c,
         Err(why) => {
             failures.push(failure(
@@ -369,6 +376,10 @@ async fn resolve_type(
             return report;
         }
     };
+    if !chapter_subject_of.is_empty() {
+        debug!(r#type = %t.name, claims = chapter_subject_of.len(), "atlas/resolve: a window read's chapter subjects are a sufficient key");
+        criterion.keys.push(CHAPTER_SUBJECT_KEY.to_string());
+    }
     let declared: Vec<(DocumentStamp, &str)> = policies
         .change
         .document
@@ -469,6 +480,9 @@ async fn resolve_type(
                     keys.insert(key.clone(), value);
                 }
             }
+        }
+        if let Some(subject) = chapter_subject_of.get(&i) {
+            keys.insert(CHAPTER_SUBJECT_KEY.to_string(), subject.clone());
         }
         spots.push(Spot {
             placed: k,

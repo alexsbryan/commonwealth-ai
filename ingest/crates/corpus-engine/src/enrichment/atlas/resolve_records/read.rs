@@ -59,6 +59,12 @@ pub(super) fn provided(
                 );
             }
         }
+        if let Some(subject) = of(statement).get(super::CHAPTER_SUBJECT_KEY) {
+            out[i]
+                .entry(super::CHAPTER_SUBJECT_KEY.to_string())
+                .or_default()
+                .insert(subject.clone());
+        }
     }
     out
 }

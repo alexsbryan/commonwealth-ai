@@ -26,6 +26,14 @@ use crate::InferenceFn;
 /// question. A cost knob: it bounds the prompt, it decides nothing.
 const CONTEXT_BYTES: usize = 200;
 
+/// A window read's chapter-wide subject, `<chapter>/<reference>`
+/// (`SubjectScope::Chapter`): a sufficient key, so a chapter's statements of
+/// one particular link with no question, and a supplied value no other
+/// reference of the same chapter may join (`select::necessary_compatible`),
+/// so RESOLVE decides identity only across windows. Reserved: no recipe
+/// declares it.
+pub const CHAPTER_SUBJECT_KEY: &str = "__chapter_subject";
+
 /// The most values a necessary attribute may declare: READ labels each with
 /// one single-token letter (`select::LABELS`).
 const MAX_READ_VALUES: usize = 25;
@@ -539,7 +547,10 @@ impl Resolver {
         let mut necessary: BTreeMap<&'static str, u32> = BTreeMap::new();
         let mut read_of = supplied.clone();
         for ((known, by_reader), given) in read_of.iter_mut().zip(chosen).zip(&supplied) {
-            *necessary.entry("supplied").or_default() += given.len() as u32;
+            // A chapter subject vetoes; it is no field a record shows.
+            known.remove(CHAPTER_SUBJECT_KEY);
+            *necessary.entry("supplied").or_default() +=
+                given.keys().filter(|k| *k != CHAPTER_SUBJECT_KEY).count() as u32;
             for (attr, values) in by_reader {
                 if known.contains_key(&attr) {
                     continue;

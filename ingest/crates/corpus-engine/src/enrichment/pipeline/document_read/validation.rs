@@ -219,7 +219,8 @@ fn validate_outcome(
     let changed = before > kept.len() || offered > particulars.len();
     outcome.claims = kept;
     outcome.particulars = particulars;
-    outcome.refused = refused;
+    // A reader's own refusals (the window reader's) stay beside validation's.
+    outcome.refused.extend(refused);
     if outcome.status == DocumentReadStatus::Read
         && outcome.claims.is_empty()
         && outcome.particulars.is_empty()
