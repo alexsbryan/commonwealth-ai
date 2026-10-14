@@ -261,3 +261,40 @@ fn a_quote_is_widened_to_its_sentence_across_line_wraps() {
     assert_eq!(sentence_of(text, "Next").as_deref(), Some("Next para."));
     assert_eq!(sentence_of(text, "a sentence the mail never says"), None);
 }
+
+/// A particular no statement of the window is about goes to RESOLVE as one
+/// of its own, on the first document whose own lines name it; one no line
+/// names is dropped. Failing input, named: saltgrass (2026-10-14), nine
+/// characters named, four records.
+#[tokio::test]
+async fn an_unstated_particular_is_sent_on_the_line_that_names_it() {
+    let policies = policies();
+    let chapter = window();
+    let answer = json!({
+        "particulars": [
+            {"ref": "p1", "type": "case", "name": "issue 42", "fields": {}},
+            {"ref": "p2", "type": "case", "name": "in uv", "fields": {}},
+            {"ref": "p3", "type": "case", "name": "issue 99", "fields": {}}],
+        "claims": [{"kind": "reported_status", "about": "p1", "document": "d2",
+                    "quote": "Issue 42 is now closed.", "fields": {"status": "Closed"}}]});
+    let (infer, _) = scripted(vec![answer]);
+    let raw = read(&chapter, &policies, &Default::default(), &infer)
+        .await
+        .unwrap();
+    let mut extraction = parse_response(&raw, &policies)
+        .unwrap()
+        .section_extraction
+        .unwrap();
+    validate_and_stamp(&chapter, &policies, &mut extraction).unwrap();
+    let read = extraction.document_read.as_ref().unwrap();
+    let [a, b] = read.documents.as_slice() else {
+        panic!("one outcome per document: {:?}", read.documents)
+    };
+    assert_eq!(a.particulars.len(), 1, "{:?}", a.particulars);
+    assert_eq!(a.particulars[0].subject_local_ref, "sec_1/p2");
+    assert_eq!(a.particulars[0].evidence, "Issue 42 in uv is open.");
+    assert!(
+        b.particulars.is_empty(),
+        "p1 has a statement; p3 is named by no line"
+    );
+}

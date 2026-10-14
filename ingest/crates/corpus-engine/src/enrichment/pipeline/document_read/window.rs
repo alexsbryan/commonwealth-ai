@@ -570,6 +570,37 @@ pub(super) fn sentence_of(text: &str, quote: &str) -> Option<String> {
     Some(span.split_whitespace().collect::<Vec<_>>().join(" "))
 }
 
+/// A particular's declared fields as the window read them, each supported only
+/// by what `document` holds; an identity its metadata source names fills an
+/// unknown one. One reading for a claim's subject and a particular of its own.
+fn particular_fields(
+    policies: &OntologyPolicies,
+    index: &TypeIndex<'_>,
+    subject: &OntologyTypeDecl,
+    particular: &Value,
+    document: &SourceDocument,
+    named: &[(String, Vec<Candidate>)],
+) -> std::collections::BTreeMap<String, DocumentReadField> {
+    subject_attrs(policies, index, &subject.name)
+        .into_iter()
+        .map(|a| {
+            let entry = &particular["fields"][&a.name];
+            let (value, evidence) = match entry {
+                Value::Object(o) if o.contains_key("value") => {
+                    (o.get("value"), o.get("quote").map(text))
+                }
+                Value::Null => (None, None),
+                other => (Some(other), None),
+            };
+            let mut r = reading(a, value, evidence.as_deref(), document, named);
+            if matches!(r, DocumentReadField::Unknown { .. }) {
+                r = sourced_identity(subject, a, &particular["name"], index, named).unwrap_or(r);
+            }
+            (a.name.clone(), r)
+        })
+        .collect()
+}
+
 /// One outcome per supplied document, in order, from the window's answer.
 /// `owns` are the documents' own lines (`own_text`), each claim's quote
 /// widened to its sentence in them (`sentence_of`).
@@ -673,25 +704,8 @@ fn envelope(
                 (a.name.clone(), r)
             })
             .collect();
-        let subject_fields = subject_attrs(policies, index, &subject.name)
-            .into_iter()
-            .map(|a| {
-                let entry = &particular["fields"][&a.name];
-                let (value, evidence) = match entry {
-                    Value::Object(o) if o.contains_key("value") => {
-                        (o.get("value"), o.get("quote").map(text))
-                    }
-                    Value::Null => (None, None),
-                    other => (Some(other), None),
-                };
-                let mut r = reading(a, value, evidence.as_deref(), document, named);
-                if matches!(r, DocumentReadField::Unknown { .. }) {
-                    r = sourced_identity(subject, a, &particular["name"], index, named)
-                        .unwrap_or(r);
-                }
-                (a.name.clone(), r)
-            })
-            .collect();
+        let subject_fields =
+            particular_fields(policies, index, subject, particular, document, named);
         let name = Some(text(&particular["name"]))
             .filter(|n| !n.is_empty())
             .unwrap_or_else(|| about.clone());
@@ -707,13 +721,23 @@ fn envelope(
             subject_fields,
         });
     }
+    particulars::unstated(
+        chapter,
+        policies,
+        index,
+        contract,
+        particulars,
+        claims,
+        owns,
+        &mut outcomes,
+    );
     let read: usize = outcomes.iter().map(|(o, _)| o.claims.len()).sum();
     let refused: usize = outcomes.iter().map(|(o, _)| o.refused.len()).sum();
     info!(chapter = %chapter.chapter_id, documents = outcomes.len(), particulars = particulars.len(), claims = claims.len(), read, refused, lost, "document_read/window: chapter read");
     outcomes
         .into_iter()
         .map(|(mut o, _)| {
-            if o.claims.is_empty() {
+            if o.claims.is_empty() && o.particulars.is_empty() {
                 (o.status, o.reason) = if o.refused.is_empty() {
                     (
                         DocumentReadStatus::NothingApplicable,
@@ -739,3 +763,6 @@ fn envelope(
 #[cfg(test)]
 #[path = "window_tests.rs"]
 mod tests;
+
+#[path = "window_particulars.rs"]
+mod particulars;
