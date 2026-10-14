@@ -5,6 +5,7 @@
 
 use std::time::Duration;
 
+use oicp_types::ingest::reasons::INSTALL_TOO_LARGE;
 use oicp_types::{features, CorpusInstallResponse, ProviderManifest, RecipeTestReport};
 use serde_json::json;
 
@@ -172,6 +173,115 @@ async fn wait_terminal(host: &Host, progress: &str, corpus: &str) -> Result<(), 
     Err(format!(
         "the fixture's ingest did not reach a terminal phase in {INSTALL_POLLS}s"
     ))
+}
+
+/// The largest body `ingest.install_limit` sends: a host may state a limit no
+/// run should spend its memory proving. Past it the check sends a body this
+/// size and says it sent none past the limit.
+const PROBE_CEILING: u64 = 256 * 1024 * 1024;
+
+/// An install request of exactly `bytes` bytes whose recipe does not load: the
+/// bad recipe, then a TOML comment padded with `x` to the size. Refused, by
+/// why, when `bytes` is smaller than the request around the padding or past
+/// what this platform can address.
+pub fn padded_install(bytes: u64) -> Result<Vec<u8>, String> {
+    let head = format!(r#"{{"corpus_id":"{BAD_CORPUS}","recipe_toml":"{BAD_RECIPE}\n# "#);
+    let tail = r#""}"#;
+    let total =
+        usize::try_from(bytes).map_err(|_| format!("{bytes} bytes is not addressable here"))?;
+    let pad = total.checked_sub(head.len() + tail.len()).ok_or_else(|| {
+        format!(
+            "{bytes} bytes is smaller than the smallest install request ({})",
+            head.len() + tail.len()
+        )
+    })?;
+    let mut body = Vec::with_capacity(total);
+    body.extend_from_slice(head.as_bytes());
+    body.resize(head.len() + pad, b'x');
+    body.extend_from_slice(tail.as_bytes());
+    Ok(body)
+}
+
+/// `ingest.install_limit` (v0.6 §2.12): a host stating `max_install_bytes`
+/// reads an install body of exactly that size (its recipe does not load, so
+/// it answers `400`, never `413`), and refuses one byte more `413 install too
+/// large` naming the limit. Red against a host that states a limit and reads
+/// install bodies only to its surface's bound.
+pub async fn check_ingest_install_limit(host: &Host, m: &ProviderManifest) -> Check {
+    let id = "ingest.install_limit";
+    let fail = |why: String| Check::fail(id, Level::Feature, why);
+    if !m.has_feature(features::INGEST_RECIPE) {
+        return Check::skip(id, Level::Feature, "ingest:recipe not advertised");
+    }
+    let Some(ing) = m.knowledge.as_ref().and_then(|k| k.ingest.as_ref()) else {
+        return Check::skip(id, Level::Feature, "no knowledge.ingest");
+    };
+    let Some(max) = ing.max_install_bytes else {
+        return Check::skip(id, Level::Feature, "max_install_bytes not stated");
+    };
+    let at = max.min(PROBE_CEILING);
+    let body = match padded_install(at) {
+        Ok(b) => b,
+        Err(e) => return fail(format!("max_install_bytes {max}: {e}")),
+    };
+    match host.post_bytes(&ing.install_endpoint, body).await {
+        Ok(r) if r.status == 400 => {}
+        Ok(r) if r.status == 413 => {
+            return fail(format!(
+                "an install body of {at} bytes, within the stated max_install_bytes {max}, \
+                 was refused: {}",
+                r.brief()
+            ))
+        }
+        Ok(r) => {
+            return fail(format!(
+                "an install body of {at} bytes whose recipe does not load must be 400, got {}",
+                r.brief()
+            ))
+        }
+        Err(e) => return fail(format!("an install body of {at} bytes: no reply: {e}")),
+    }
+    if max > PROBE_CEILING {
+        return Check::pass(
+            id,
+            Level::Feature,
+            format!(
+                "an install body of {at} bytes read (400 on its recipe); the stated \
+                 max_install_bytes {max} is past the check's {PROBE_CEILING}, so no body past \
+                 the limit was sent"
+            ),
+        );
+    }
+    let over = match padded_install(max + 1) {
+        Ok(b) => b,
+        Err(e) => return fail(format!("max_install_bytes {max}: {e}")),
+    };
+    match host.post_bytes(&ing.install_endpoint, over).await {
+        Ok(r)
+            if r.status == 413
+                && r.error() == Some(INSTALL_TOO_LARGE)
+                && r.body.get("max_install_bytes").and_then(|v| v.as_u64()) == Some(max) => {}
+        Ok(r) => {
+            return fail(format!(
+                "an install body one byte past max_install_bytes {max} must be 413 \
+                 `{INSTALL_TOO_LARGE}` naming the limit, got {}",
+                r.brief()
+            ))
+        }
+        Err(e) => {
+            return fail(format!(
+                "an install body one byte past max_install_bytes {max}: no reply: {e}"
+            ))
+        }
+    }
+    Check::pass(
+        id,
+        Level::Feature,
+        format!(
+            "an install body of {max} bytes read (400 on its recipe); one byte more 413 \
+             `{INSTALL_TOO_LARGE}` naming {max}"
+        ),
+    )
 }
 
 /// The stages a recipe test must report, in order (v0.4 §5.4).

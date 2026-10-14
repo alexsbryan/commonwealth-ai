@@ -26,6 +26,19 @@ pub struct IngestEndpoints {
     /// host advertises the `ingest:recipe_test` feature.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub test_endpoint: Option<String>,
+    /// v0.6 §2.12: the largest install request body, in bytes as sent, that
+    /// `install_endpoint` reads. A client sizes an inline recipe's request
+    /// against it before it sends; a body past it is `413` with
+    /// [`reasons::INSTALL_TOO_LARGE`]. Absent: the host states no number.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_install_bytes: Option<u64>,
+}
+
+/// Named refusals of the ingest routes.
+pub mod reasons {
+    /// v0.6 §2.12: an install body past the host's `max_install_bytes`:
+    /// `413`, with the limit named beside it, never read in part.
+    pub const INSTALL_TOO_LARGE: &str = "install too large";
 }
 
 /// `POST {install_endpoint}` — install a corpus by recipe id (§5.1), or,
@@ -276,11 +289,29 @@ mod tests {
             install_endpoint: "/oicp/v1/corpus/install".into(),
             progress_endpoint: "/oicp/v1/corpus/progress".into(),
             test_endpoint: None,
+            max_install_bytes: None,
         };
         let v = serde_json::to_value(&e).unwrap();
         assert!(
             v.get("test_endpoint").is_none(),
             "absent recipe-test endpoint omitted"
         );
+        assert!(
+            v.get("max_install_bytes").is_none(),
+            "an unstated install limit is omitted, so a v0.5 manifest round-trips"
+        );
+    }
+
+    /// v0.6 §2.12: a stated limit is read back as the number the host wrote.
+    #[test]
+    fn ingest_endpoints_state_the_largest_install() {
+        let v = serde_json::json!({
+            "install_endpoint": "/oicp/v1/corpus/install",
+            "progress_endpoint": "/oicp/v1/corpus/progress",
+            "max_install_bytes": 67_108_864u64,
+        });
+        let e: IngestEndpoints = serde_json::from_value(v.clone()).unwrap();
+        assert_eq!(e.max_install_bytes, Some(67_108_864));
+        assert_eq!(serde_json::to_value(&e).unwrap(), v);
     }
 }

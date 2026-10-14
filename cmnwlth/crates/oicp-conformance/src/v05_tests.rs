@@ -13,7 +13,10 @@ use crate::evidence_checks::{
 };
 use crate::fake_host::{named_token, revoked_token, spawn, Breaks};
 use crate::fixture::Library;
-use crate::ingest_checks::{check_ingest_recipe, check_ingest_recipe_test, FixtureState};
+use crate::ingest_checks::{
+    check_ingest_install_limit, check_ingest_recipe, check_ingest_recipe_test, padded_install,
+    FixtureState,
+};
 use crate::report::{Check, CheckStatus};
 
 struct Bench {
@@ -156,6 +159,44 @@ async fn ingest_recipe_serves_the_fixture_from_a_dir_on_a_local_host() {
     let written = std::fs::read_to_string(dir.join("okafor2019.txt")).unwrap();
     assert_eq!(written, b.lib.doc("okafor2019").unwrap().text);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// v0.6 §2.12. The break is the reference host before it: a manifest
+/// stating a limit over a route that reads bodies only to the surface's 8 MiB,
+/// which refused a 22.6 MB inline library `413`.
+#[tokio::test]
+async fn ingest_install_limit_is_red_against_an_install_read_only_to_the_surface_limit() {
+    let b = bench(Breaks::default()).await;
+    green(&check_ingest_install_limit(&b.host, &b.manifest).await);
+
+    let b = bench(Breaks {
+        install_at_surface_limit: true,
+        ..Breaks::default()
+    })
+    .await;
+    red(
+        &check_ingest_install_limit(&b.host, &b.manifest).await,
+        "within the stated max_install_bytes",
+    );
+}
+
+/// The probe body is the size asked, to the byte, and is an install request
+/// whose recipe does not load.
+#[test]
+fn a_padded_install_is_the_size_asked_and_its_recipe_does_not_load() {
+    for n in [200u64, 9 * 1024 * 1024 + 1] {
+        let body = padded_install(n).expect("large enough");
+        assert_eq!(body.len() as u64, n);
+        let v: serde_json::Value = serde_json::from_slice(&body).expect("JSON");
+        let recipe = v["recipe_toml"].as_str().expect("a recipe");
+        assert!(recipe.starts_with("this is [not a recipe"), "{recipe:.40}");
+        assert!(!recipe.contains("[corpus]"));
+    }
+    let small = padded_install(10).expect_err("smaller than the request around it");
+    assert!(
+        small.contains("smaller than the smallest install request"),
+        "{small}"
+    );
 }
 
 #[tokio::test]

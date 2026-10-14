@@ -20,7 +20,8 @@ hit (where in its stored text it stands, §2.8), install progress says which
 of a library's **documents** were read (§2.9), a client can **correct** a
 verify decision so the host keeps the case it got wrong (§2.10), and search
 can answer **sentences** ranked by meaning, each an address in its stored
-text (§2.11).
+text (§2.11), and a host states the **largest install** it reads, so a client
+sizes an inline library before it sends one (§2.12).
 
 As in v0.5, everything v0.6 adds is a serde-defaulted field, an optional
 endpoint, or a feature string, and **feature presence, not the version
@@ -144,6 +145,7 @@ that was asked and failed.
 | `passage names no text` | — | a passage's `span_absent`: it names no stored text |
 | — | 400 | a search's `documents` names something that is not a text name (§2.8) |
 | `scorer unavailable` | 503 | the sentence scorer the host's data file names cannot run here; the body names it (§2.11) |
+| `install too large` | 413 | an install body past the host's `max_install_bytes`; the body names the limit (§2.12) |
 
 A passage whose stored text or record cannot be read gives v0.5 §2.5's reason
 in `span_absent` (`texts not stored`, `text not stored`, `document
@@ -151,7 +153,8 @@ unreadable`), or an opaque one for a store error.
 
 The span absences are in `oicp_types::evidence::reasons` (`SPAN_ABSENCES`),
 shared by verify's passages and search's hits; `scorer unavailable` is in
-`oicp_types::knowledge::reasons`; the rest are in `oicp_types::verify::reasons`.
+`oicp_types::knowledge::reasons`; `install too large` is in
+`oicp_types::ingest::reasons`; the rest are in `oicp_types::verify::reasons`.
 
 ### 2.8 Scoped and ranged search
 
@@ -359,6 +362,42 @@ see. The reference host does not yet serve this section and does not
 advertise `knowledge:sentences`; its data file will name the scorer,
 `rerank`'s candidate count and the scan's ceiling.
 
+### 2.12 Large installs
+
+v0.5 §4.1's inline recipe is how a client that shares no disk with a host
+installs a library, and it carries every document's text in the one install
+request. So the largest library a client can install that way is the largest
+install body the host reads, and the manifest states it.
+
+```
+IngestEndpoints { … (v0.4 fields) …,
+                  max_install_bytes: Option<u64> }   // the largest install body the host reads
+```
+
+- **Stated.** `max_install_bytes` is the largest request body, counted in
+  bytes as sent (the request's JSON, every escape included), that
+  `install_endpoint` reads. A host that states it reads every install body up
+  to it, whatever bound it puts on its other routes. The measure is the
+  body, not the sum of the texts: escaping a text for TOML and then for JSON
+  grows it, so a client sizes the request it is about to send.
+- **Refusal by name.** A client refuses by name, before it sends, an install
+  whose body is past the stated limit. A host answers one `413` with
+  `{"error": "install too large", "max_install_bytes": <n>}`, and never reads
+  it in part or installs a prefix of it.
+- **Unstated.** A host that states no limit may refuse an install `413` at a
+  bound of its own, with any body. A client reads that `413` as "too large
+  for this host" and has no number to size against.
+- **One request.** An install is one request; v0.6 has no install in parts.
+  A library past a host's limit installs from a source the host reads itself
+  (a recipe naming files on a disk it shares), or not at that host.
+- **The recipe test.** `max_install_bytes` bounds the install route only. A
+  host's recipe test (v0.4 §5.4) may read less; a client that dry-runs a
+  library past the host's other bounds samples it first.
+
+The reference host does not state a limit yet. Its install route reads to
+its client surface's bound, 8 MiB (`sovereign_peer_wire::MAX_REQUEST_BODY_BYTES`),
+which refused an inline library of 22.6 MB `413`.
+
 ## 6. Conformance (additions)
 
 | check | holds | red against |
@@ -368,6 +407,7 @@ advertise `knowledge:sentences`; its data file will name the scorer,
 | `evidence.verify_correction` | a decided claim of the fixture unit carries an `episode_id`; a correction whose witness is a span verify returned is `verified`, one running past its text `out_of_range`; a malformed episode is `400 not an episode id`. Writes two correction lines on a live host | a host that never reads the witness back |
 | `ingest.documents` | once the fixture's install has returned, every fixture document is listed `ready` under the sha256 of its text, each with a `source`, none `failed`; and `ingest.recipe` holds that an install answering `spawned: true` is in the next poll | an entry listing no documents; an install missing from the first poll |
 | `knowledge.scoped` | a query reaching several fixture texts, scoped to the second-ranked one, returns at least one hit and every hit from that text; a `documents` entry that is not a text name is `400` | a host that ignores `documents` |
+| `ingest.install_limit` | with `ingest:recipe` and `max_install_bytes` stated, an install body of exactly that many bytes, a recipe that does not load padded to the size, is read: `400`, never `413`; one byte more is `413 install too large` naming the limit. A stated limit past 256 MiB is probed at 256 MiB, with nothing sent past it | a host stating a limit whose install route reads bodies only to its surface's 8 MiB |
 | `knowledge.sentences` | each fixture signature, at `granularity: sentence` scoped to its own text, returns at least one sentence, at most `limit`, best first, every one from that text; each carries `span` whose `exact` is its `content` and whose range reads back byte-equal through `text_endpoint`; the reply names the advertised scorer and a model, and a route, with `sentences_pending` exactly on `passages`. A `503 scorer unavailable` naming the advertised scorer is could-not-judge | a sentence range one code point off; a sentence from outside the scope; a host advertising `rerank`, holding no rerank slot, that answers with cosine |
 
 `manifest.features` checks §2.1's co-occurrence: `evidence:verify` iff
@@ -388,6 +428,9 @@ iff `verify_correction_endpoint`, and never without `evidence:verify`;
 - A v0.6 client against a v0.5 host sees no `evidence:verify` and finds no
   `verify_endpoint`; it sees no `knowledge:scoped`, and sends no `documents`,
   which such a host would ignore and answer unscoped.
+- `max_install_bytes` is skipped when unstated, so a v0.5 manifest reads and
+  writes back unchanged; a v0.6 client against a host that states none sends
+  as a v0.5 client does and reads a `413` as too large.
 - `granularity` is never written at its default, so a v0.6 client's passage
   search is the request a v0.5 host knew. A client sends `sentence` only to a
   host advertising `knowledge:sentences`; the reply's sentence fields are

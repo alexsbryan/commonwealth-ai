@@ -26,6 +26,8 @@ use serde_json::{json, Value};
 
 use crate::fixture::{code_points, sha256_hex, Library};
 
+mod ingest;
+
 /// The laws a fake can break, one switch each (oicp-v0.5.md §6's table).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Breaks {
@@ -71,6 +73,9 @@ pub struct Breaks {
     /// knowledge.sentences: each sentence's range is one code point past
     /// the sentence its `exact` and `content` carry.
     pub sentence_range_off_by_one: bool,
+    /// ingest.install_limit: the manifest states `max_install_bytes` and the
+    /// install route reads bodies only to the surface's 8 MiB.
+    pub install_at_surface_limit: bool,
 }
 
 /// The fake's live named credential.
@@ -215,14 +220,15 @@ pub async fn spawn(breaks: Breaks) -> Running {
         .route("/oicp/v1/align", post(align))
         .route("/oicp/v1/verify", post(verify))
         .route("/oicp/v1/verify/correction", post(verify_correction))
-        .route("/oicp/v1/corpus/install", post(install))
-        .route("/oicp/v1/corpus/progress", get(progress))
-        .route("/oicp/v1/recipe/test", post(recipe_test))
+        .route("/oicp/v1/corpus/install", ingest::install_route(&fake))
+        .route("/oicp/v1/corpus/progress", get(ingest::progress))
+        .route("/oicp/v1/recipe/test", post(ingest::recipe_test))
         .route(
             "/mcp",
             post(|| async { Json(json!({"jsonrpc": "2.0", "id": 1, "result": {"tools": []}})) }),
         )
         .layer(middleware::from_fn_with_state(fake.clone(), guard))
+        .layer(axum::extract::DefaultBodyLimit::max(ingest::SURFACE_LIMIT))
         .with_state(fake);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
@@ -345,7 +351,8 @@ async fn capabilities(State(f): State<Arc<Fake>>) -> Json<Value> {
             "ingest": {
                 "install_endpoint": "/oicp/v1/corpus/install",
                 "progress_endpoint": "/oicp/v1/corpus/progress",
-                "test_endpoint": "/oicp/v1/recipe/test"
+                "test_endpoint": "/oicp/v1/recipe/test",
+                "max_install_bytes": ingest::MAX_INSTALL_BYTES
             },
             "evidence": {
                 "text_endpoint": "/oicp/v1/text",
@@ -706,84 +713,4 @@ async fn verify_correction(
         },
     };
     Json(json!({"recorded": true, "witness": witness})).into_response()
-}
-
-async fn install(State(f): State<Arc<Fake>>, Json(req): Json<Value>) -> Response {
-    let corpus = req
-        .get("corpus_id")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string();
-    let Some(recipe) = req.get("recipe_toml").and_then(Value::as_str) else {
-        return Json(json!({"corpus_id": corpus, "spawned": false})).into_response();
-    };
-    if !recipe.contains("[corpus]") {
-        if f.breaks.ok_on_bad_recipe {
-            return Json(json!({"corpus_id": corpus, "spawned": false})).into_response();
-        }
-        return refuse(
-            StatusCode::BAD_REQUEST,
-            json!({"error": "invalid recipe: no [corpus] table"}),
-        );
-    }
-    let sha = sha256_hex(recipe.as_bytes());
-    let previous = f
-        .installed
-        .lock()
-        .unwrap()
-        .insert(corpus.clone(), sha.clone());
-    let spawned = previous.as_deref() != Some(sha.as_str());
-    if spawned {
-        f.polls.lock().unwrap().remove(&corpus);
-    }
-    Json(json!({"corpus_id": corpus, "spawned": spawned, "recipe_sha256": sha})).into_response()
-}
-
-/// The lawful progress: every install listed from its first poll, complete,
-/// with each fixture text `ready` under its name (v0.6 §2.9).
-/// `late_listing` hides an install from the first poll after it;
-/// `omit_documents` lists none.
-async fn progress(State(f): State<Arc<Fake>>) -> Json<Value> {
-    let installed = f.installed.lock().unwrap();
-    let mut polls = f.polls.lock().unwrap();
-    let documents: Vec<Value> = if f.breaks.omit_documents {
-        Vec::new()
-    } else {
-        f.texts
-            .iter()
-            .map(|s| {
-                let text = if f.breaks.unserved_text_names {
-                    s.name.as_str()
-                } else {
-                    s.text.as_str()
-                };
-                json!({"source": s.name, "state": "ready",
-                       "text_sha256": sha256_hex(text.as_bytes())})
-            })
-            .collect()
-    };
-    let mut progress: BTreeMap<&String, Value> = BTreeMap::new();
-    for c in installed.keys() {
-        let n = polls.entry(c.clone()).or_insert(0);
-        *n += 1;
-        if f.breaks.late_listing && *n == 1 {
-            continue;
-        }
-        progress.insert(c, json!({"phase": "complete", "documents": documents}));
-    }
-    Json(json!({"progress": progress}))
-}
-
-async fn recipe_test(State(f): State<Arc<Fake>>) -> Json<Value> {
-    let n = f.texts.len();
-    let mut stages = vec![
-        json!({"name": "validate", "docs_in": 0, "docs_out": 0}),
-        json!({"name": "acquire", "docs_in": 0, "docs_out": n}),
-        json!({"name": "extract", "docs_in": n, "docs_out": n}),
-        json!({"name": "chunk", "docs_in": n, "docs_out": 2 * n}),
-    ];
-    if f.breaks.drop_extract_stage {
-        stages.remove(2);
-    }
-    Json(json!({"stages": stages, "ok": true}))
 }

@@ -181,6 +181,7 @@ async fn apply_v04_enrichment(
             install_endpoint: "/oicp/v1/corpus/install".into(),
             progress_endpoint: "/oicp/v1/corpus/progress".into(),
             test_endpoint: Some("/oicp/v1/recipe/test".into()),
+            max_install_bytes: None,
         }
     });
     // v0.5 §2.2-2.3 stored texts, read by name and aligned against, on the

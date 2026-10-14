@@ -75,6 +75,16 @@ impl Host {
         send(self.req(Method::POST, &self.url(path)).json(body)).await
     }
 
+    /// POST `body`, already JSON, to `path` with the run's credential: a
+    /// body whose size the check sets to the byte.
+    pub(crate) async fn post_bytes(&self, path: &str, body: Vec<u8>) -> Result<Reply, String> {
+        let rb = self
+            .req(Method::POST, &self.url(path))
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body);
+        send(rb).await
+    }
+
     /// `host:port` of the base URL, as a client would send it in `Host`.
     pub(crate) fn authority(&self) -> String {
         let rest = self
