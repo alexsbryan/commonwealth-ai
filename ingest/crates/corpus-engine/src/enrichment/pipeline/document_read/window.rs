@@ -15,7 +15,7 @@
 use std::collections::BTreeSet;
 
 use serde_json::{json, Value};
-use tracing::{debug, info, warn};
+use tracing::{debug, info, trace, warn};
 
 use super::line_classes::LineClasses;
 use super::pick::{candidates, Candidate};
@@ -312,7 +312,17 @@ pub(super) async fn read(
         .collect();
     let prompt = compose(chapter, policies, &index, &contract, &labels, classes);
     debug!(chapter = %chapter.chapter_id, documents = labels.len(), prompt_chars = prompt.user.len(), "document_read/window: asking");
+    // What the model sees and says, whole, so a miss is diagnosed from the
+    // read itself: the labels map d1..dn back to document keys.
+    let keys: Vec<String> = chapter
+        .source_documents
+        .iter()
+        .zip(&labels)
+        .map(|(doc, label)| format!("{label}={}", doc.key()))
+        .collect();
+    trace!(chapter = %chapter.chapter_id, labels = %keys.join(" "), prompt = %prompt.user, "document_read/window: prompt");
     let raw = infer(&prompt, None).await?;
+    trace!(chapter = %chapter.chapter_id, answer = %raw, "document_read/window: answer");
     // A failure keeps the answer's tail: it says whether the answer was cut
     // off at its budget or malformed.
     let failed = |why: String| {
