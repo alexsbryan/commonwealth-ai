@@ -49,13 +49,22 @@ on two.
 
 On world-s4 with the local model, Qwen 35B-A3B with thinking off:
 
-| Run | Deals served | Time |
-|---|---|---|
-| Windows, local | 5/15 | 6 min |
-| Today's pipeline, local | 1/15 | 43 min |
+| Run | Deals served | Updates attached | Time |
+|---|---|---|---|
+| Windows, DeepSeek Flash | 14/15 | 48/55 | 4 min |
+| Windows, local, thinking on | 9/15 | 31/55 | 83 min |
+| Windows, local, thinking off | 5/15 | 27/55 | 6 min |
+| Today's pipeline, local | 1/15 | 27/55 | 43 min |
 
-The local model folds a company's deals into one record (four false merges); the pipeline splits them instead.
-Thinking on is being run.
+With thinking off the local model folds a company's deals into one record (four false merges); with thinking on it
+makes none, but it cites fewer statements (43 quotes against DeepSeek's 101), so updates stay unattached. Each call
+thinks for 7-9.5k tokens. With thinking on, the daemon's JSON format empties the answer (note 068f6b1f), so those
+runs ask for JSON in the prompt only.
+
+**Windows cut by date** (one date-ordered stream, folder names hidden, 15 calls against 67) tie windows cut by
+folder: 78/93 served against 76, 284/328 attached against 294. The folders were not doing the work. Ward fits in one
+date window, so it cannot answer this; its rerun (5/14 against the one-shot's 8/14) puts single-run noise on Ward at
+about three deals.
 
 ## What we could be wrong about
 
@@ -63,8 +72,8 @@ The percentages are my estimates, not measurements.
 
 | Belief | How sure | Cost if wrong | Cheapest check |
 |---|---|---|---|
-| Windows wins because of the design, not because Ward foldered his mail by counterparty | ~50% | It fails on a single inbox | Windows cut by date instead of by folder (~5 min) |
-| The merge step holds at 1M tokens once it is blocked (its input grows with the corpus today, which breaks the rule above) | ~50% | Windows doesn't scale | Merge in blocks (by counterparty, or by name similarity) on a bigger world |
+| Windows wins because of the design, not because Ward foldered his mail by counterparty | Checked: date cut ties folder cut on the worlds | – | – |
+| The merge holds once it works in capped blocks (its input grows with the corpus today, which breaks the rule above) | ~50% | Windows doesn't scale | Cap is structural; quality at 1M waits for a big real inbox |
 | What wins on mail wins on a novel | ~50% | Two designs, or a redesign | Saltgrass (key: `bench/lanes/chaos_monkey/corpora/SALTGRASS_FACT_LEDGER.md`) |
 | The ontology syntax can say what a novel needs | ~60% | A gap in the core | Write saltgrass's recipe and run `recipe validate` (an hour) |
 | Generated mail ranks designs as real mail does | ~65% (Ward roughly agrees) | We tune to MiMo's prose | Ward alongside every run |
@@ -73,12 +82,12 @@ The percentages are my estimates, not measurements.
 
 ## Steps
 
-1. **Thinking on locally** for world-s4 (running). This is the last model-track question for now.
-2. **Windows cut by date.** Is the design doing the work, or the folders?
-3. **A bounded merge**, in blocks, so no call grows with the corpus. Then a bigger world.
-4. **Saltgrass.** Write the recipe, then run windows on it, scored against its fact ledger.
-5. **Product.** Build windows into the default commands, reusing what exists.
-6. **The model track.** Engineer the system down to the local model.
+1. ~~Thinking on locally~~ (done: 9/15). ~~Windows cut by date~~ (done: ties the folder cut).
+2. **Product.** Build windows into the default commands, reusing what exists, with the merge in capped blocks so no
+   call grows with the corpus. Measure with `run_world.sh` on the five worlds and Ward. No new test world (operator,
+   2026-10-13: the instruments in hand are enough).
+3. **Saltgrass** through the same commands: write the recipe, `recipe validate`, score against its fact ledger.
+4. **The model track.** Engineer the system down to the local model.
 
 ## Rules
 
