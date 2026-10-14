@@ -193,3 +193,41 @@ async fn a_reply_shows_only_its_own_lines_not_the_message_it_quotes() {
         "the carried lines are not shown: {d2}"
     );
 }
+
+/// The reader asks the model to reason first, and reads the answer that
+/// follows the reasoning: a reasoning engine opens its answer with a
+/// `<think>` block, as every window read now does.
+#[tokio::test]
+async fn a_window_read_reasons_first_and_reads_what_follows_the_reasoning() {
+    use std::sync::{Arc, Mutex};
+    let policies = policies();
+    let chapter = window();
+    let answer = json!({
+        "particulars": [{"ref": "p1", "type": "case", "name": "issue 42", "fields": {}}],
+        "claims": [{"kind": "reported_status", "about": "p1", "document": "d2",
+                    "quote": "Issue 42 is now closed.", "fields": {"status": "Closed"}}]});
+    let raw = format!("<think>\nd2 says issue 42 is closed. {{\"not\": \"the answer\"}}\n</think>\n\n{answer}");
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let kept = seen.clone();
+    let infer: crate::InferenceFn = Arc::new(move |p: &crate::enrichment::pipeline::types::ChatPrompt, _| {
+        kept.lock().unwrap().push(p.clone());
+        let raw = raw.clone();
+        Box::pin(async move { Ok(raw) })
+    });
+    let out = read(&chapter, &policies, &Default::default(), &infer)
+        .await
+        .unwrap();
+    let mut extraction = parse_response(&out, &policies)
+        .unwrap()
+        .section_extraction
+        .unwrap();
+    validate_and_stamp(&chapter, &policies, &mut extraction).unwrap();
+    let read = extraction.document_read.as_ref().unwrap();
+    assert_eq!(read.documents[1].claims.len(), 1, "{:?}", read.documents);
+
+    let prompt = &seen.lock().unwrap()[0];
+    let thinking = prompt.thinking_tokens.expect("the reader sets its reasoning budget");
+    let answer_cap = prompt.max_output_tokens.expect("the reader sets its answer cap");
+    assert!(thinking > 0, "the reader reasons");
+    assert!(answer_cap >= thinking + 16_000, "the reasoning leaves the JSON room: {thinking} of {answer_cap}");
+}

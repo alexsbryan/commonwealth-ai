@@ -15,7 +15,7 @@ is five generated mail worlds with an answer key (93 deals; `research/ontology-a
 - **The system and the model are separate tracks.** Build the system on the fastest model that is reasonably
   capable; today that is DeepSeek Flash. Once the system works, engineer it down to leaner models.
 - **No one-way doors against small models.**
-  - Every call's prompt and answer fit in 32k tokens, which is the local model's per-request window.
+  - Every call's prompt, reasoning and answer fit in 128k tokens: a 64GB machine runs a capable local model (Qwen 35B-A3B MoE or Qwen3.8 27B) at that context (operator, 2026-10-14; it was 32k). The bound is tunable: be expansive within it until the quality objective is met, then engineer down.
   - No call's input grows with the size of the corpus.
   - Nothing depends on a feature only a hosted model has.
 

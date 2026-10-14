@@ -22,8 +22,8 @@ use tracing::{debug, info, warn};
 /// 190k characters). The answer grows with the window: at about 120k characters
 /// world-s4's answer passed 8k tokens and was cut off, and Ward's whole 37
 /// messages drew a 30k-token prompt and a 6.8k-token answer (2026-10-13). Here
-/// prompt and a 16k answer (`window.rs`) fit the 32k context of the smallest model the system is
-/// held to (REVIEW_BRIEF, "no one-way doors"). A cost bound: it sets how many
+/// prompt and the reasoned answer (`window.rs`, 64k) fit the 128k context the system is held
+/// to (REVIEW_BRIEF, "no one-way doors"). A cost bound: it sets how many
 /// calls a corpus takes, never what a record says.
 pub const WINDOW_CHARS: usize = 40_000;
 

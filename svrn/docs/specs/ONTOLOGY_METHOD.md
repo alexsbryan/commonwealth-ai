@@ -209,8 +209,9 @@ of whole documents served 76/93 deals against the one-shot's 66/93, windows cut 
 folder (78/93 against 76/93), and on the local model windows served 5/15 of world-s4's deals where this
 pipeline served 1/15. So a second reader
 is measured beside the passes reader through the default commands. `enrich init` cuts the corpus into
-windows (every document in declared-clock order, cut by size only where a document ends, so prompt and answer
-fit 32k), and one call reads a window, prompted from the contract alone (`window.rs`, `window_prompt.md`). The
+windows (every document in declared-clock order, cut by size only where a document ends, so prompt and reasoned
+answer fit 128k), and one call reads a window, reasoning before it answers, prompted from the contract alone
+(`window.rs`, `window_prompt.md`). The
 model names each particular once across the window and cites each claim by its document and exact words;
 code keeps the contract: every declared field answered or unknown with a reason, a closed value one of its
 declared values, a reference a record the document's fields name or words it holds, each field's evidence in
