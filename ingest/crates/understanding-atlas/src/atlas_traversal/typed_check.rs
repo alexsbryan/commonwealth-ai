@@ -138,9 +138,16 @@ pub(super) fn check<'q>(q: &'q TypedQuery, judge: &Judge<'q>) -> Result<Checked<
     let decl = index
         .get(t)
         .ok_or_else(|| format!("'{t}' is not a declared type in this atlas."))?;
-    if !matches!(decl.kind, TypeKind::Entity | TypeKind::Claim) {
+    // A declared event type is listable as entities and claims are (a novel's
+    // incidents: saltgrass, 2026-10-14). A relation is an edge between
+    // records, asked as a relation; a state atom carries no declared
+    // attributes to filter on yet.
+    if !matches!(
+        decl.kind,
+        TypeKind::Entity | TypeKind::Event | TypeKind::Claim
+    ) {
         return Err(format!(
-            "'{t}' is a {:?} type; a typed query answers over entity or claim types.",
+            "'{t}' is a {:?} type; a typed query answers over entity, event or claim types.",
             decl.kind
         ));
     }
