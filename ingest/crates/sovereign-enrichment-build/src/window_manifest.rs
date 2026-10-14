@@ -124,7 +124,10 @@ pub fn build_window_manifest(
     for (i, window) in windows.iter().enumerate() {
         let ordinal = i as u32 + 1;
         let chunks: Vec<&(u64, String)> = window.iter().flat_map(|d| d.chunks.iter()).collect();
-        let span = match (window[0].date.as_deref(), window[window.len() - 1].date.as_deref()) {
+        let span = match (
+            window[0].date.as_deref(),
+            window[window.len() - 1].date.as_deref(),
+        ) {
             (Some(first), Some(last)) => format!("{first} to {last}"),
             (Some(first), None) => format!("{first} on, with undated documents"),
             _ => "undated documents".to_string(),

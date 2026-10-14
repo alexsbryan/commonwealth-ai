@@ -285,7 +285,14 @@ pub(super) async fn read(
     // A failure keeps the answer's tail: it says whether the answer was cut
     // off at its budget or malformed.
     let failed = |why: String| {
-        let tail: String = raw.chars().rev().take(240).collect::<Vec<_>>().into_iter().rev().collect();
+        let tail: String = raw
+            .chars()
+            .rev()
+            .take(240)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
         Error::Serialization(format!(
             "the window read's answer is not JSON: {why} ({} chars, ending {tail:?})",
             raw.len()

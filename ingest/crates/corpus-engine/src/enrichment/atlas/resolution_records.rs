@@ -63,7 +63,6 @@ use retire::retire;
 /// The extractor id on a record's atom.
 const EXTRACTOR_ID: &str = "atlas/resolve";
 
-
 /// Whether RESOLVE decides `type_name`'s identity in the atlas build: a type
 /// of a kind that is identified again (an entity or an event; PRIMITIVES §0:
 /// events are full subjects of claims) that declares an `identity_criterion`

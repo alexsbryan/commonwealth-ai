@@ -983,17 +983,36 @@ fn two_references_of_one_window_never_join() {
     let of = |values: &[&str]| {
         BTreeMap::from([(
             CHAPTER_SUBJECT_KEY.to_string(),
-            values.iter().map(|v| v.to_string()).collect::<BTreeSet<_>>(),
+            values
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<BTreeSet<_>>(),
         )])
     };
     let p2 = of(&["sec_00001/p2"]);
-    assert!(!super::select::necessary_compatible(&c, &p2, &of(&["sec_00001/p1"])));
-    assert!(super::select::necessary_compatible(&c, &p2, &of(&["sec_00001/p2"])));
-    assert!(super::select::necessary_compatible(&c, &p2, &of(&["sec_00002/p1"])));
+    assert!(!super::select::necessary_compatible(
+        &c,
+        &p2,
+        &of(&["sec_00001/p1"])
+    ));
+    assert!(super::select::necessary_compatible(
+        &c,
+        &p2,
+        &of(&["sec_00001/p2"])
+    ));
+    assert!(super::select::necessary_compatible(
+        &c,
+        &p2,
+        &of(&["sec_00002/p1"])
+    ));
     assert!(!super::select::necessary_compatible(
         &c,
         &p2,
         &of(&["sec_00002/p1", "sec_00001/p7"])
     ));
-    assert!(super::select::necessary_compatible(&c, &p2, &BTreeMap::new()));
+    assert!(super::select::necessary_compatible(
+        &c,
+        &p2,
+        &BTreeMap::new()
+    ));
 }

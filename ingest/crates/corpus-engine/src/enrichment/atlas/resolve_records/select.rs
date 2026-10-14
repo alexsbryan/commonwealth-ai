@@ -98,7 +98,10 @@ pub(super) fn chapters_compatible(
     let (Some(left), Some(right)) = (left, right) else {
         return true;
     };
-    let chapter = |s: &str| s.split_once('/').map_or(s.to_string(), |(c, _)| c.to_string());
+    let chapter = |s: &str| {
+        s.split_once('/')
+            .map_or(s.to_string(), |(c, _)| c.to_string())
+    };
     left.iter()
         .all(|a| right.iter().all(|b| a == b || chapter(a) != chapter(b)))
 }

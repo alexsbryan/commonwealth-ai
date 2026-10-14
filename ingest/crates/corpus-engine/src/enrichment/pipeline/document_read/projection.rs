@@ -16,8 +16,7 @@ use super::validation;
 use super::{
     supported_values, DocumentRead, DocumentReadOutcome, DocumentReadParticular, SubjectScope,
     ABOUT_ATTRIBUTE, CHAPTER_SUBJECT_ATTRIBUTE, CLAIM_FIELDS_ATTRIBUTE, LOCAL_REF_ATTRIBUTE,
-    SOURCE_DOCUMENT_ATTRIBUTE,
-    SUBJECT_FIELDS_ATTRIBUTE, WORDS_ATTRIBUTE,
+    SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE, WORDS_ATTRIBUTE,
 };
 
 #[derive(Debug, Deserialize)]

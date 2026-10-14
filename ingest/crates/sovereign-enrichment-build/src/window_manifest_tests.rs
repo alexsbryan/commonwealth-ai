@@ -76,7 +76,11 @@ fn a_window_is_sized_by_the_stored_text_the_reader_reads() {
     ];
     let texts = [("b".to_string(), "y".repeat(500))].into_iter().collect();
     let m = build_window_manifest("c", rows.clone(), &Default::default(), Some("date"), 100);
-    assert_eq!(windows(&m), vec![vec![1, 2]], "control: by chunks they fit one window");
+    assert_eq!(
+        windows(&m),
+        vec![vec![1, 2]],
+        "control: by chunks they fit one window"
+    );
     let m = build_window_manifest("c", rows, &texts, Some("date"), 100);
     assert_eq!(windows(&m), vec![vec![1], vec![2]]);
 }

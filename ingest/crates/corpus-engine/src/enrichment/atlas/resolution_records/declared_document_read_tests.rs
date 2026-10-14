@@ -767,7 +767,13 @@ async fn resolve_window(chapter: bool) -> (Vec<Claim>, Vec<RecordsReport>) {
         claim
     };
     let mut claims = vec![
-        tag(local_subject_claim("membership", "case_membership", "issue", ISSUE, "1373")),
+        tag(local_subject_claim(
+            "membership",
+            "case_membership",
+            "issue",
+            ISSUE,
+            "1373",
+        )),
         tag(local_subject_claim(
             "label",
             "case_membership",
@@ -795,11 +801,16 @@ async fn a_window_reads_one_subject_across_two_documents_and_resolve_links_them_
 
     let (claims, reports) = resolve_window(true).await;
     assert!(claims[0].subject.is_some());
-    assert_eq!(claims[0].subject, claims[1].subject, "one case across the window");
+    assert_eq!(
+        claims[0].subject, claims[1].subject,
+        "one case across the window"
+    );
     assert_eq!(reports[0].records, 1);
     assert_eq!(reports[0].calls, 0, "a key links; no question is asked");
     assert!(
-        claims.iter().all(|c| !c.attributes.contains_key(CHAPTER_SUBJECT_ATTRIBUTE)),
+        claims
+            .iter()
+            .all(|c| !c.attributes.contains_key(CHAPTER_SUBJECT_ATTRIBUTE)),
         "the handoff attribute does not outlive RESOLVE"
     );
 }
