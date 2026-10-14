@@ -13,7 +13,7 @@ import corpora
 from misses import served, KIND
 
 JOURNAL = f"{corpora.REPO}/runs/loop/journal.tsv"
-COLS = ["finished", "arm", "head", "dirty", "asker", "init", "restore"] + corpora.ALL + ["worlds", "ward", "attached_worlds", "attached_ward", "categories", "note"]
+COLS = ["finished", "arm", "head", "dirty", "asker", "init", "restore"] + corpora.ALL + ["worlds", "ward", "attached_worlds", "attached_ward", "categories", "note", "roots"]
 
 
 def line(run):
@@ -41,7 +41,7 @@ def resolve_line(root):
 
 
 def arm(root):
-    rows, cats, wcats = {}, Counter(), Counter()
+    rows, cats, wcats, roots = {}, Counter(), Counter(), Counter()
     for run in sorted(glob.glob(f"{root}/*/")):
         cid = os.path.basename(run.rstrip("/"))
         if not os.path.exists(f"{run}/score.json"): rows[cid] = None; continue
@@ -49,8 +49,9 @@ def arm(root):
         rows[cid] = (sum(served(S, g) for g in S["gold"]), len(S["gold"]), sum(u["attached"] for u in S["updates"]), len(S["updates"]))
         if os.path.exists(f"{run}/misses.jsonl"):
             for l in open(f"{run}/misses.jsonl"):
-                v = json.loads(l)["verdict"]
+                m = json.loads(l); v = m["verdict"]
                 (wcats if cid == "ward-story" else cats)[v["mechanism"] + (f"[{v['referent']}]" if v.get("referent") else "")] += 1
+                roots[(v.get("root", "?"), bool(m.get("oneshot_served")))] += 1
     meta = next((json.load(open(p)) for p in sorted(glob.glob(f"{root}/*/run.json"))), {})
     tot = lambda ids, k: sum(rows[i][k] for i in ids if rows.get(i))
     worlds = [i for i in corpora.WORLDS if rows.get(i)]
@@ -60,13 +61,19 @@ def arm(root):
         if cid in rows: print(f"  {cid:<11} " + (f"served {rows[cid][0]:>2}/{rows[cid][1]}  attached {rows[cid][2]:>3}/{rows[cid][3]}" if rows[cid] else "no score"))
     print(f"  worlds ({len(worlds)}) served {tot(worlds, 0)}/{tot(worlds, 1)}  attached {tot(worlds, 2)}/{tot(worlds, 3)}")
     print("  " + resolve_line(root))
+    by = sorted({k for k, _ in roots}, key=lambda k: -(roots[(k, True)] + roots[(k, False)]))
+    print("  roots (all corpora; the one-shot serves): " + ", ".join(f"{k} {roots[(k, True)] + roots[(k, False)]} ({roots[(k, True)]})" for k in by))
     print("  misses, worlds: " + ", ".join(f"{m} {n}" for m, n in cats.most_common()))
     print("  misses, ward:   " + ", ".join(f"{m} {n}" for m, n in wcats.most_common()))
     row = dict(meta, arm=os.path.basename(root.rstrip("/")), **{i: (f"{rows[i][0]}/{rows[i][1]}" if rows.get(i) else "") for i in corpora.ALL},
                worlds=f"{tot(worlds, 0)}/{tot(worlds, 1)}", ward=f"{rows['ward-story'][0]}/{rows['ward-story'][1]}" if rows.get("ward-story") else "",
                attached_worlds=f"{tot(worlds, 2)}/{tot(worlds, 3)}", attached_ward=f"{rows['ward-story'][2]}/{rows['ward-story'][3]}" if rows.get("ward-story") else "",
-               categories=" ".join(f"{m}={n}" for m, n in (cats + wcats).most_common()))
+               categories=" ".join(f"{m}={n}" for m, n in (cats + wcats).most_common()),
+               roots=" ".join(f"{k}={roots[(k, True)] + roots[(k, False)]}({roots[(k, True)]})" for k in by))
     new = not os.path.exists(JOURNAL)
+    if not new:  # a journal begun before a column was added: its header gains it, its old rows leave it empty
+        lines = open(JOURNAL).read().split("\n")
+        if lines[0] != "\t".join(COLS): lines[0] = "\t".join(COLS); open(JOURNAL, "w").write("\n".join(lines))
     with open(JOURNAL, "a") as f:
         if new: f.write("\t".join(COLS) + "\n")
         f.write("\t".join(str(row.get(c, "")).replace("\t", " ").replace("\n", " ") for c in COLS) + "\n")
