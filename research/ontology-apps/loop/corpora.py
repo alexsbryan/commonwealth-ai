@@ -12,12 +12,18 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.a
 BENCH = os.path.expanduser("~/.svrnmesh/bench-corpora")
 WORLDS = ["world-s1", "world-s2", "world-s3", "world-s4", "world-s5"]
 ALL = WORLDS + ["ward-story"]
+# Corpora whose gold is a question bank, not deal records (score_bank.py): a novel read through a blind recipe.
+BANKS = ["saltgrass-ledger"]
 # The inner ring: 16 of the 24 deals the one-shot serves and HEAD does not (resolve-confirm), in 10 of 19 windows.
 # world-s1 is the noisiest (7 of 18 deals flipped between two reads of the same code), so read it deal by deal.
 INNER = ["world-s3", "ward-story", "world-s1"]
 
 
 def corpus(cid):
+    if cid == "saltgrass-ledger":
+        return dict(id=cid, kind="bank", recipe=f"{REPO}/research/ontology-apps/saltgrass/recipe.blind.toml",
+                    bank=f"{REPO}/bench/lanes/chaos_monkey/saltgrass.toml",
+                    oneshot_records=f"{REPO}/runs/ceiling/saltgrass/oneshot1.json")
     if cid == "ward-story":
         return dict(id=cid, msgids=f"{REPO}/runs/slice1/instruments/ward-msgids.json", gold=f"{BENCH}/enron-ward/gold",
                     folders=["tep", "pasadena"], story=f"{BENCH}/enron-ward/story", oneshot=f"{REPO}/runs/loop/reference/ward-story.oneshot-score.json",
@@ -38,10 +44,12 @@ def score_args(cid):
 
 if __name__ == "__main__":
     if sys.argv[1] == "--set":
-        print(" ".join(INNER if sys.argv[2] == "inner" else ALL)); sys.exit()
+        print(" ".join(INNER if sys.argv[2] == "inner" else BANKS if sys.argv[2] == "banks" else ALL)); sys.exit()
     cid, what = sys.argv[1], sys.argv[2]
     c = corpus(cid)
-    if what == "score-args":
+    if what == "kind":
+        print(c.get("kind", "deals"))
+    elif what == "score-args":
         print(" ".join(score_args(cid)))
     else:
         print(c[what])

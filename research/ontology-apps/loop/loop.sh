@@ -21,7 +21,7 @@ cd "$(dirname "$0")/../../.." || exit 1
 L=research/ontology-apps/loop
 arm=$1; shift
 [ -n "$arm" ] && [ -n "$NOTE" ] || { echo "usage: NOTE='what this arm changes' $0 <arm> [corpus...]" >&2; exit 2; }
-case "$1" in ""|all) set -- $(python3 $L/corpora.py --set all) ;; inner) set -- $(python3 $L/corpora.py --set inner) ;; esac
+case "$1" in ""|all) set -- $(python3 $L/corpora.py --set all) ;; inner) set -- $(python3 $L/corpora.py --set inner) ;; banks) set -- $(python3 $L/corpora.py --set banks) ;; esac
 root=runs/loop/$arm
 [ -e $root ] && [ -z "$FORCE" ] && { echo "$root exists; name a new arm (FORCE=1 overwrites)" >&2; exit 2; }
 mkdir -p $root
@@ -48,11 +48,22 @@ one() {
   cp $cut $out/chapters.json; cp $cfg $out/config.json
   sovereign enrich extract $id --full --asker $asker > $out/extract.out 2> $out/extract.err; rx=$?
   [ $rx = 0 ] && { sovereign enrich resolve $id --asker recorded > $out/resolve.out 2> $out/resolve.err; rr=$?; }
-  [ $rx = 0 ] && [ "$rr" = 0 ] && python3 $L/score.py $(python3 $L/corpora.py $id msgids) $out/score.json $(python3 $L/corpora.py $id score-args) > $out/score.out 2>&1
+  kind=$(python3 $L/corpora.py $id kind)
+  if [ "$kind" = bank ]; then  # a question bank's corpus: its records through the public query, asked the bank
+    [ $rx = 0 ] && [ "$rr" = 0 ] && python3 $L/records_of.py $id $(python3 $L/corpora.py $id recipe) $out/records.json > $out/records.out 2>&1 \
+      && python3 $L/score_bank.py $out/records.json $(python3 $L/corpora.py $id bank) $out/bank.json > $out/score.out 2>&1
+  else
+    [ $rx = 0 ] && [ "$rr" = 0 ] && python3 $L/score.py $(python3 $L/corpora.py $id msgids) $out/score.json $(python3 $L/corpora.py $id score-args) > $out/score.out 2>&1
+  fi
   python3 -c "import json,sys; json.dump(dict(zip(sys.argv[2::2], sys.argv[3::2])), open(sys.argv[1], 'w'), indent=1)" $out/run.json \
     arm "$arm" corpus "$id" note "$NOTE" head "$head" dirty "$dirty" svrn_ingest_mtime "$bin" engine "$engine" asker "$asker" \
     init "${INIT:-}" restore "${RESTORE:-}" extract_exit "$rx" resolve_exit "${rr:-not run}" seconds "$(( $(date +%s) - s ))" \
     finished "$(date -u +%FT%TZ)"
+  if [ "$kind" = bank ]; then
+    [ -f $out/bank.json ] && echo "$id $(python3 -c "import json,sys; s=json.load(open(sys.argv[1]))['summary']; print(f\"bank {s['right']}/{s['judged']} right; records {s['records']}\")" $out/bank.json)" \
+      || echo "$id: extract exit $rx, resolve exit ${rr:-not run}; see $out"
+    return
+  fi
   [ -f $out/score.json ] || { echo "$id: extract exit $rx, resolve exit ${rr:-not run}; see $out"; return; }
   python3 $L/misses.py $out $id > $out/misses.txt
   python3 $L/decisions.py $out $id > $out/decisions.txt
