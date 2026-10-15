@@ -16,7 +16,9 @@ use crate::enrichment::pipeline::types::{ChapterInput, ChatPrompt};
 /// v6: a claim carries its subject's readings whole and the projection
 /// sketches no subject; a v5 section holds bare values and subject sketches,
 /// so it is not reused.
-const CONTRACT_VERSION: u32 = 6;
+/// v7: a window read's statements and particulars carry their subject's name
+/// (`SUBJECT_NAME_ATTRIBUTE`); a v6 section lacks it, so it is not reused.
+const CONTRACT_VERSION: u32 = 7;
 
 /// The Phase-1 prompt of a declared reading: the plan this chapter will be read
 /// by, never dispatched. The passes reader asks its own small questions

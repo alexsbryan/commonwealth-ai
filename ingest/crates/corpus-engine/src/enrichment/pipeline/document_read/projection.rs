@@ -16,7 +16,7 @@ use super::validation;
 use super::{
     supported_values, DocumentRead, DocumentReadOutcome, DocumentReadParticular, SubjectScope,
     ABOUT_ATTRIBUTE, CHAPTER_SUBJECT_ATTRIBUTE, CLAIM_FIELDS_ATTRIBUTE, LOCAL_REF_ATTRIBUTE,
-    SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE, WORDS_ATTRIBUTE,
+    SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE, SUBJECT_NAME_ATTRIBUTE, WORDS_ATTRIBUTE,
 };
 
 #[derive(Debug, Deserialize)]
@@ -125,6 +125,10 @@ pub(super) fn project_compatibility_sketches(
                     CHAPTER_SUBJECT_ATTRIBUTE.into(),
                     Value::String(claim.subject_local_ref.clone()),
                 );
+                attributes.insert(
+                    SUBJECT_NAME_ATTRIBUTE.into(),
+                    Value::String(claim.subject_name.clone()),
+                );
             }
             attributes.insert(
                 SOURCE_DOCUMENT_ATTRIBUTE.into(),
@@ -178,7 +182,7 @@ pub(super) fn project_compatibility_sketches(
             });
         }
         for particular in &outcome.particulars {
-            sketches.push(particular_sketch(particular, &outcome.document_id)?);
+            sketches.push(particular_sketch(particular, &outcome.document_id, read.subjects)?);
         }
     }
     extraction.claims.extend(sketches);
@@ -189,10 +193,12 @@ pub(super) fn project_compatibility_sketches(
 /// asserts it is about the particular, at the words that first name it. It
 /// declares no claim kind; its type rides on [`ABOUT_ATTRIBUTE`], and its
 /// reference, document and identifying readings as a claim's do. A mention's
-/// words ride on [`WORDS_ATTRIBUTE`].
+/// words ride on [`WORDS_ATTRIBUTE`]; a window read's name for it on
+/// [`SUBJECT_NAME_ATTRIBUTE`].
 fn particular_sketch(
     particular: &DocumentReadParticular,
     document_id: &str,
+    subjects: SubjectScope,
 ) -> Result<ClaimSketch> {
     let mut attributes = serde_json::Map::new();
     attributes.insert(
@@ -209,6 +215,12 @@ fn particular_sketch(
     );
     if let Some(words) = &particular.words {
         attributes.insert(WORDS_ATTRIBUTE.into(), Value::String(words.clone()));
+    }
+    if subjects == SubjectScope::Chapter {
+        attributes.insert(
+            SUBJECT_NAME_ATTRIBUTE.into(),
+            Value::String(particular.subject_name.clone()),
+        );
     }
     attributes.insert(
         SUBJECT_FIELDS_ATTRIBUTE.into(),

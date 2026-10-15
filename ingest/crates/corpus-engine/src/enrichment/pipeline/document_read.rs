@@ -73,6 +73,11 @@ pub const ABOUT_ATTRIBUTE: &str = "__document_read_about";
 /// that names them lands on its record (`resolution_derived/read_fields.rs`).
 /// Stays on the claim after RESOLVE, cited by its evidence.
 pub const WORDS_ATTRIBUTE: &str = "__document_read_words";
+/// The name a window read ([`SubjectScope::Chapter`]) gave a statement's
+/// subject: a reference reading of that name in the same document lands on
+/// the record RESOLVE put the statement on (`resolution_derived/read_fields.rs`).
+/// Stays on the claim after RESOLVE, which never reads it.
+pub const SUBJECT_NAME_ATTRIBUTE: &str = "__document_read_subject_name";
 
 /// The type a claim projected from a [`DocumentReadParticular`] is about.
 pub fn about_type(attributes: &Map<String, Value>) -> Option<&str> {
@@ -82,6 +87,13 @@ pub fn about_type(attributes: &Map<String, Value>) -> Option<&str> {
 /// The words a mention particular's claim names its particular by.
 pub fn mention_words(attributes: &Map<String, Value>) -> Option<&str> {
     attributes.get(WORDS_ATTRIBUTE).and_then(Value::as_str)
+}
+
+/// The name a window read gave a statement's subject.
+pub fn window_subject_name(attributes: &Map<String, Value>) -> Option<&str> {
+    attributes
+        .get(SUBJECT_NAME_ATTRIBUTE)
+        .and_then(Value::as_str)
 }
 
 /// The value of each supported reading among `fields`, by field.
