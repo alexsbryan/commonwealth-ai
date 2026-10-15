@@ -60,6 +60,9 @@ pub fn gold_match(answer: &str, keywords: &[String]) -> bool {
 /// disagreeing (ARCH §10.6), and the export path would then abort on cases
 /// this generator had just certified.
 pub fn value_present(value: &str, chunks: &[String]) -> bool {
+    if let Some(want) = numeric_value(value) {
+        return numbers_in(&chunks.join(" ")).contains(&want);
+    }
     let hay: String = chunks
         .join(" ")
         .to_lowercase()
@@ -83,6 +86,79 @@ pub fn value_present(value: &str, chunks: &[String]) -> bool {
         .map(|w| w.to_lowercase())
         .collect();
     !sig.is_empty() && sig.iter().all(|w| hay.contains(w.as_str()))
+}
+
+// Numeric presence (port of grounding/number_presence.rs; keep in step).
+// Canonical form of every number in `s`: thousands commas dropped, leading
+/// zeros and trailing fractional zeros trimmed ("3.20" == "3.2" == "03.2").
+fn numbers_in(s: &str) -> Vec<String> {
+    scan(s).into_iter().map(|(_, _, c)| c).collect()
+}
+
+/// `Some(canonical)` when `value` is purely a number with optional sign,
+/// currency sign and percent marker; `None` leaves it to the word path.
+fn numeric_value(value: &str) -> Option<String> {
+    let lower = value.trim().to_lowercase();
+    let s = lower.trim_start_matches(|c: char| {
+        matches!(c, '+' | '-' | '\u{2212}' | '$' | '€' | '£') || c.is_whitespace()
+    });
+    let s = s.trim_end();
+    let s = ["percent", "per cent", "per-cent", "%"]
+        .iter()
+        .find_map(|m| s.strip_suffix(m))
+        .unwrap_or(s)
+        .trim_end();
+    match scan(s).as_slice() {
+        [(0, end, canon)] if *end == s.len() => Some(canon.clone()),
+        _ => None,
+    }
+}
+
+/// `(start, end, canonical)` per number. A comma joins only before exactly
+/// three digits; a dot only before a digit and once.
+fn scan(s: &str) -> Vec<(usize, usize, String)> {
+    let b = s.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        if !b[i].is_ascii_digit() {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        let (mut int, mut frac, mut dot) = (String::new(), String::new(), false);
+        while i < b.len() {
+            let c = b[i];
+            let three = |j: usize| {
+                b.len() >= j + 4
+                    && b[j + 1..j + 4].iter().all(u8::is_ascii_digit)
+                    && !b.get(j + 4).is_some_and(u8::is_ascii_digit)
+            };
+            if c.is_ascii_digit() {
+                if dot {
+                    frac.push(c as char)
+                } else {
+                    int.push(c as char)
+                }
+            } else if c == b',' && !dot && three(i) {
+            } else if c == b'.' && !dot && b.get(i + 1).is_some_and(u8::is_ascii_digit) {
+                dot = true;
+            } else {
+                break;
+            }
+            i += 1;
+        }
+        let int = int.trim_start_matches('0');
+        let frac = frac.trim_end_matches('0');
+        let int = if int.is_empty() { "0" } else { int };
+        let canon = if frac.is_empty() {
+            int.to_string()
+        } else {
+            format!("{int}.{frac}")
+        };
+        out.push((start, i, canon));
+    }
+    out
 }
 
 #[cfg(test)]
@@ -200,5 +276,15 @@ mod tests {
         let e = ev("the lock sluice had been opened");
         assert!(value_present("lock", &e));
         assert!(!value_present("1ock", &e));
+    }
+
+    #[test]
+    fn value_present_finds_a_number_by_value_like_production() {
+        let one = |t: &str| vec![t.to_string()];
+        assert!(value_present("3.2%", &one("It grew 3.2 per cent.")));
+        assert!(value_present("3.2%", &one("It grew 3.2%.")));
+        assert!(!value_present("4.12%", &one("only 12 here")));
+        assert!(!value_present("4.12%", &one("room 412 here")));
+        assert!(value_present("3 million", &one("about 3 million people")));
     }
 }

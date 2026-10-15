@@ -53,6 +53,7 @@ mod sealed;
 mod search;
 mod specifics;
 mod surgical;
+mod number_presence;
 mod value_presence;
 
 // The gold-free groundedness primitive: the gate consumes it to DECIDE, the
