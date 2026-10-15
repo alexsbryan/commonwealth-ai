@@ -48,12 +48,12 @@ mod decline;
 pub(crate) mod config;
 mod judge;
 pub mod native_grounding;
+mod number_presence;
 mod pipeline;
 mod sealed;
 mod search;
 mod specifics;
 mod surgical;
-mod number_presence;
 mod value_presence;
 
 // The gold-free groundedness primitive: the gate consumes it to DECIDE, the
