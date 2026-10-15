@@ -436,7 +436,8 @@ exact slice`).
 
 Checks a piece of writing against your corpora, one paragraph at a time, and
 prints each sentence's verdict with the line it is on. It is a client of the
-daemon's OICP `verify` (`cmnwlth/docs/oicp-v0.6.md` §2.6).
+daemon's OICP `verify` (`cmnwlth/docs/oicp-v0.6.md` §2.6, read by meaning
+under §2.15).
 
 ```
 svrn verify draft.md                      # every corpus you may read, fast tier
@@ -445,11 +446,15 @@ svrn verify draft.md --tier checker       # the daemon's judge reads each claim
 svrn verify - --json < draft.md           # one reply per paragraph, as JSON
 ```
 
-`fast` uses no model: a sentence is `unsupported` when a number, date or name
-in it appears in no passage the search returns, and `abstained` otherwise.
-`checker` judges each sentence against the passages. Every verdict is
-uncalibrated, so `unsupported` means nothing backs the sentence, not that it is
-false.
+Each sentence is read against the sentences of your corpora that sentence
+search finds about it; one nothing in them is about (below the relevance floor
+in the daemon's `sentence_search.toml`) is `unsupported` at either tier. `fast`
+uses no model: it says `abstained` and lists the figures, dates and names no
+sentence it read carries, a hint and not a verdict. `checker` judges each
+sentence against the best of them; one that states a figure, date or quantity
+otherwise makes the sentence `contradicted`, and the output names both.
+Every verdict is uncalibrated, so `unsupported` means nothing backs the
+sentence, not that it is false.
 
 ### `svrn notes` (alias: `svrn reflect`)
 

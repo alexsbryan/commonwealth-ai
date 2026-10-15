@@ -62,7 +62,7 @@ pub(crate) fn record_claim(
         VerifyVerdict::Unsupported => GateJudgeVerdict::Unsupported,
         VerifyVerdict::CouldNotJudge { .. } => GateJudgeVerdict::CouldNotJudge,
         // Not a decision this journal can hold: `abstained` decided nothing,
-        // and `contradicted` has no grounding verdict (no rung says it yet).
+        // and `contradicted` (§2.15) has no grounding verdict to hold it.
         VerifyVerdict::Abstained | VerifyVerdict::Contradicted => return None,
     };
     if !GROUNDING_STREAM.enabled(dir) {
@@ -70,7 +70,8 @@ pub(crate) fn record_claim(
         return None;
     }
     // The checker's cut is on support; the line's `tau` is on violation, as
-    // the gate's is. `fast` has no threshold: any absent specific decides.
+    // the gate's is. The floor rung (`unsupported`, no evidence) has no
+    // support threshold: the data file's floor on retrieval decides.
     let tau = if claim.rung.starts_with("checker") {
         1.0 - SUPPORTED_TAU
     } else {

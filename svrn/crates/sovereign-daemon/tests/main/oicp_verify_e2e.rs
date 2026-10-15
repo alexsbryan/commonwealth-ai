@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `POST /oicp/v1/verify` through the real client router (OICP v0.6 §2.6),
-//! over the conformance suite's fixture library
-//! (`common::fixture_library`).
+//! `POST /oicp/v1/verify` through the real client router (OICP v0.6 §2.6,
+//! §2.15), over the conformance suite's fixture library
+//! (`common::fixture_library`), its sentences embedded by the word-list
+//! embedder (`common::concept_embedder`) and read through sentence search.
 //!
-//! The fast tier's pair is one sentence of the harbour notes, once with the
-//! day the notes give ("Tuesday") and once with a day they never mention
-//! ("Friday"): the first is not refused, the second is `unsupported` naming
-//! the day. The checker's judge is a test double that supports exactly the
-//! passage about the tide tables, so its verdicts are the route's mapping,
-//! not a model's.
+//! The fast tier reads one sentence of the harbour notes with a day they
+//! never mention ("Friday"): the miss is a hint, never a verdict. The
+//! checker's judge is a test double that supports exactly the sentence about
+//! the tide tables, so its verdicts are the route's mapping, not a model's.
+//! The figure claims, the floor and the contradiction are
+//! `oicp_verify_sentences_e2e`'s.
 
 use std::net::SocketAddr;
 use std::pin::Pin;
@@ -27,6 +28,7 @@ use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::AppState;
 use tower::ServiceExt;
 
+use crate::common::concept_embedder::{sentences_indexed, state_with_concepts};
 use crate::common::fixture_library::{install, library, state_over};
 
 const NOTES: &str = "harbour-notes";
@@ -67,7 +69,7 @@ impl InferenceProvider for TideTableJudge {
     }
 
     async fn embed(&self, _i: &str) -> sovereign_core::error::Result<Vec<f32>> {
-        unimplemented!("verify reads lexical candidates only")
+        unimplemented!("the judge never embeds: the host's embedder does")
     }
 
     fn capabilities(&self) -> ProviderCapabilities {
@@ -104,7 +106,8 @@ async fn fixture_state() -> (tempfile::TempDir, AppState) {
     let indexes = tmp.path().join("indexes");
     std::fs::create_dir_all(&indexes).unwrap();
     install(&indexes, &lib.corpus_id, &lib.documents, true).await;
-    let state = state_over(indexes).await;
+    let state = state_with_concepts(indexes).await;
+    sentences_indexed(&state, &lib.corpus_id).await;
     (tmp, state)
 }
 
@@ -117,62 +120,59 @@ fn cp(s: &str, a: u64, b: u64) -> String {
     s.chars().skip(a as usize).take((b - a) as usize).collect()
 }
 
+/// Failing input (platform row PC1): a claim settled from the fast hint
+/// alone. A day the notes never give is named as the hint it is, and the
+/// tier abstains on the sentence the claim is about, carried with its span.
 #[tokio::test]
-async fn the_fast_tier_refuses_a_day_the_notes_never_give_and_not_the_one_they_do() {
+async fn the_fast_tiers_miss_is_a_hint_and_never_a_verdict() {
     let (_tmp, state) = fixture_state().await;
     let lib = library();
     let notes = lib.documents.iter().find(|d| d.name == NOTES).unwrap();
 
-    let given = "The harbour master blamed the tide tables on Tuesday.";
+    let planted = "The harbour master blamed the tide tables on Friday.";
     let (status, body) = verify_on(
-        client_router(state.clone()),
-        serde_json::json!({"unit": given, "tier": "fast"}),
+        client_router(state),
+        serde_json::json!({"unit": planted, "tier": "fast"}),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     let r = reply(&body);
-    assert_eq!(r.verifier, "verify/1 fast/value-presence");
+    assert_eq!(
+        r.verifier,
+        "verify/2 scorer=cosine floor=0.5 fast/value-presence"
+    );
     assert_eq!(r.corpora.len(), 1, "{body}");
     let [c] = r.claims.as_slice() else {
         panic!("one sentence is one claim: {body}")
     };
-    assert_eq!(c.exact, given);
-    assert_eq!((c.start, c.end), (0, given.chars().count() as u64));
+    assert_eq!(c.exact, planted);
+    assert_eq!((c.start, c.end), (0, planted.chars().count() as u64));
     assert_eq!(c.class, Checkability::Checkable);
     assert_eq!(c.verdict, VerifyVerdict::Abstained, "{body}");
-    assert!(c.specifics_absent.is_empty(), "{body}");
+    assert_eq!(c.specifics_absent, vec!["Friday".to_string()], "{body}");
     assert_eq!(c.rung, "fast/value-presence");
     assert_eq!(c.operating_point, UNCALIBRATED);
-    // The passage the claim was read against, as a range of its own text.
-    let span = c
-        .evidence
-        .iter()
-        .filter_map(|p| p.span.as_ref())
-        .find(|s| s.document.source.id == NOTES)
-        .unwrap_or_else(|| panic!("the harbour notes are among the evidence: {body}"));
+    let [day] = c.specifics.as_slice() else {
+        panic!("{body}")
+    };
+    assert_eq!(
+        (day.kind, day.exact.as_str()),
+        (oicp_types::ClaimSpecificKind::Name, "Friday")
+    );
+    assert_eq!(day.exact, cp(planted, day.start, day.end));
+    // The sentence the claim was read against, as a range of its own text.
+    let [p] = c.evidence.as_slice() else {
+        panic!("one sentence of the library is about the tide tables: {body}")
+    };
+    assert_eq!(p.verdict, VerifyVerdict::Abstained);
+    let span = p.span.as_ref().expect("a sentence with its span");
+    assert_eq!(span.document.source.id, NOTES);
     assert_eq!(
         span.document.text_sha256,
         Sha256Hash::of_str(&notes.text).to_hex()
     );
     assert_eq!(span.exact, cp(&notes.text, span.start, span.end));
     assert!(span.exact.contains("tide tables"), "{body}");
-
-    let planted = "The harbour master blamed the tide tables on Friday.";
-    let (_, body) = verify_on(
-        client_router(state),
-        serde_json::json!({"unit": planted, "tier": "fast"}),
-    )
-    .await;
-    let r = reply(&body);
-    let [c] = r.claims.as_slice() else {
-        panic!("{body}")
-    };
-    assert_eq!(c.verdict, VerifyVerdict::Unsupported, "{body}");
-    assert_eq!(c.specifics_absent, vec!["Friday".to_string()], "{body}");
-    assert!(c
-        .evidence
-        .iter()
-        .all(|p| p.verdict == VerifyVerdict::Unsupported));
 }
 
 #[tokio::test]
@@ -195,11 +195,23 @@ async fn each_sentence_is_a_claim_and_one_with_nothing_to_look_for_is_not_checke
     assert_eq!(first.class, Checkability::NotCheckable);
     assert_eq!(first.verdict, VerifyVerdict::Abstained);
     assert_eq!(first.rung, "class/no-specifics");
-    assert_eq!(second.verdict, VerifyVerdict::Unsupported, "{body}");
+    assert_eq!(second.verdict, VerifyVerdict::Abstained, "{body}");
     assert_eq!(
         second.specifics_absent,
         vec!["14".to_string(), "2019".to_string()],
         "{body}"
+    );
+    let kinds: Vec<_> = second
+        .specifics
+        .iter()
+        .map(|s| (s.kind, s.exact.as_str()))
+        .collect();
+    assert_eq!(
+        kinds,
+        vec![
+            (oicp_types::ClaimSpecificKind::Quantity, "14"),
+            (oicp_types::ClaimSpecificKind::Date, "2019"),
+        ]
     );
 }
 
@@ -222,13 +234,14 @@ async fn the_checker_maps_its_judges_support_and_names_its_model() {
     let r = reply(&body);
     assert_eq!(
         r.verifier,
-        "verify/1 checker/chunk-support tau=0.5 passages=3 model=tide-table-judge"
+        "verify/2 scorer=cosine floor=0.5 checker/sentence-support tau=0.5 passages=3 \
+         model=tide-table-judge"
     );
     let [c] = r.claims.as_slice() else {
         panic!("{body}")
     };
     assert_eq!(c.verdict, VerifyVerdict::Supported, "{body}");
-    assert_eq!(c.rung, "checker/chunk-support");
+    assert_eq!(c.rung, "checker/sentence-support");
     assert!(c.score.is_some_and(|s| s >= 0.5), "{body}");
     let backing = c
         .evidence
@@ -259,11 +272,10 @@ async fn the_checker_maps_its_judges_support_and_names_its_model() {
     );
 }
 
-/// The checker reads its passages one at a time, so how many it judges is
-/// the tier's latency. A claim whose words reach a passage of every document
-/// has more lexical candidates than the cap, and none of the best three
-/// supports it (the tide-table one ranks below them), so nothing exits early:
-/// the judge reads exactly the cap, and each is named.
+/// The checker reads its candidates one at a time, so how many it judges is
+/// the tier's latency. A claim about the rivers' survey has more sentences
+/// above the floor than the cap, and none supports it, so nothing exits
+/// early: the judge reads exactly the cap, and each is named.
 #[tokio::test]
 async fn the_checker_judges_no_more_passages_than_its_cap() {
     let (_tmp, state) = fixture_state().await;
@@ -365,10 +377,13 @@ async fn the_manifest_advertises_verify_with_its_endpoint_and_tiers() {
         evidence.verify_tiers,
         vec![VerifyTier::Fast, VerifyTier::Checker]
     );
-    assert!(m
-        .features
-        .iter()
-        .any(|f| f == oicp_types::features::EVIDENCE_VERIFY));
+    for feature in [
+        oicp_types::features::EVIDENCE_VERIFY,
+        oicp_types::features::EVIDENCE_VERIFY_SENTENCES,
+        oicp_types::features::KNOWLEDGE_SENTENCES,
+    ] {
+        assert!(m.features.iter().any(|f| f == feature), "{feature}");
+    }
 }
 
 /// POST `body` to `path` on `router` from loopback.
@@ -461,7 +476,7 @@ async fn a_judged_claim_is_journaled_by_reference_and_a_correction_names_it() {
     assert_eq!(d["surface"], "oicp_verify");
     assert_eq!(d["episode_id"], episode.as_str());
     assert_eq!(d["verdict"], "unsupported");
-    assert_eq!(d["action"], "checker/chunk-support");
+    assert_eq!(d["action"], "checker/sentence-support");
     assert_eq!(d["chunks"], c.evidence.len());
     // "14" only: a one-word name opening the sentence is not a specific
     // (`sentence_specifics`), and the notes say eleven, so it is absent.
@@ -574,7 +589,7 @@ impl InferenceProvider for ShedJudge {
     }
 
     async fn embed(&self, _i: &str) -> sovereign_core::error::Result<Vec<f32>> {
-        unimplemented!("verify reads lexical candidates only")
+        unimplemented!("the judge never embeds: the host's embedder does")
     }
 
     fn capabilities(&self) -> ProviderCapabilities {

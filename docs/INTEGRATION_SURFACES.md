@@ -73,7 +73,10 @@ searched is named with its reason. `POST /oicp/v1/verify`
 corpora at the tiers the manifest names (`fast` with no model, `checker` with
 the daemon's judge): each claim an exact range of the unit with one of five
 verdicts, the rung that decided, the passages it judged as spans, and an
-`uncalibrated` operating point. A decided claim carries an `episode_id`, and
+`uncalibrated` operating point. Under `evidence:verify_sentences` (§2.15) a
+claim's candidates are its sentences from sentence search, each claim names
+its specifics by kind, the fast tier's miss is a hint, and a contradicted
+sentence names the figure it states otherwise. A decided claim carries an `episode_id`, and
 `POST /oicp/v1/verify/correction` (`evidence:verify_corrections`, §2.10) takes
 a client's correction of it, with an optional witness range the host reads
 back; both are kept by reference in the operator's grounding journal. Every knowledge-search hit carries

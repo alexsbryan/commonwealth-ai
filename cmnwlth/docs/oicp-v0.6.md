@@ -591,12 +591,15 @@ DifferingSpecific { claim: ClaimSpecific,              // in the unit
   first: the library discusses it and does not back it.
 
 A host advertising `evidence:verify_sentences` verifies by this section;
-§2.6's rung table is the reference host's before it. That host does not
-advertise it yet. When it does, its rungs become `class/no-specifics`,
-then the floor (`unsupported`, no evidence), then `fast/value-presence` as
-a hint (`abstained`), then the checker judging the best candidate
-sentences, with a differing figure, date or quantity making `contradicted`;
-its specifics finder (`sentence_specifics`, in
+§2.6's rung table is the reference host's before it. The reference host
+advertises it (`svrn/crates/sovereign-daemon/src/routes_oicp_verify.rs`),
+its floor `verify_floor` in its data file
+(`svrn/crates/sovereign-daemon/data/sentence_search.toml`). Its rungs are
+`class/no-specifics`, then `sentences/floor` (`unsupported`, no
+evidence), then `fast/value-presence` as a hint (`abstained`), then
+`checker/sentence-support` judging the best candidate sentences, with a
+differing figure, date or quantity making `contradicted`; its specifics
+finder (`sentence_specifics`, in
 `svrn/crates/sovereign-core/src/runtime/grounding/specifics.rs`) splits its
 numbers into the three kinds and leaves citations and locators out.
 
