@@ -830,7 +830,7 @@ pub(super) enum Ask<'a> {
 
 /// The reasoning budget: a cost knob, it decides nothing. Ward's reasoned
 /// answers ran to about 900 tokens; a cut answer is still read as a choice.
-const REASON_TOKENS: u32 = 2000;
+pub(crate) const REASON_TOKENS: u32 = 2000;
 
 /// The reasoning before a reasoned choice: one bounded generation, traced
 /// and counted by the caller. Empty or failed, the statement is refused.

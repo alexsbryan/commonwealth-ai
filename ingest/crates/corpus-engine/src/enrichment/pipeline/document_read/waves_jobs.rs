@@ -2,14 +2,15 @@
 //! The compiled reader's jobs (`waves.rs`): each a small state machine over
 //! closed questions (enumerate what a document holds of one target; read one
 //! field of a particular or claim; read an act and cite it). [`run`] asks
-//! every job's next questions together, one forced-choice wave per round, so
-//! a document costs as many requests as its deepest job has steps.
+//! every job's next questions together, each reasoned through then read as one
+//! forced-choice wave per round (`Asking`), so a document costs as many rounds
+//! as its deepest job has steps.
 
 use std::collections::BTreeMap;
 use std::ops::Range;
 
 use oicp_types::forced_choice;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use super::about::{count_of, Count, Particular, MAX_PARTICULARS};
 use super::act::Unit;
@@ -18,7 +19,9 @@ use super::pick::Candidates;
 use super::point::words;
 use super::waves_forms::{self as forms, Target, Who, COUNT_LABELS};
 use super::waves_readings::{ActRead, Field};
-use crate::enrichment::atlas::resolve_records::{decision_wave, LABELS, NONE};
+use crate::enrichment::atlas::resolve_records::{
+    decision_wave, reasoned_wave, LABELS, NONE, REASON_TOKENS,
+};
 use crate::enrichment::pipeline::types::ChatPrompt;
 use crate::InferenceFn;
 
@@ -46,9 +49,44 @@ pub(super) fn question(prefix: &str, suffix: &str, labels: &[&str]) -> ChatPromp
         .with_temperature(0.0)
 }
 
+/// How each question is answered: one forced choice read off the wave, or
+/// RESOLVE's bounded reasoning first and the choice read after it
+/// (`reasoned_wave`).
+#[derive(Clone, Copy, Debug)]
+pub(super) enum Asking {
+    // The forced path the tests read against; `waves::READ_ASKING` decides.
+    #[cfg_attr(not(test), allow(dead_code))]
+    Wave,
+    Reason,
+}
+
+const ANSWER: &str = "Answer with its letter.";
+const REASON_PHASE: &str = "waves_reason";
+
+/// `q` asking for reasoning instead of its letter: its closing line reworded,
+/// no forced choice, at most `REASON_TOKENS`.
+fn reason(q: &ChatPrompt) -> ChatPrompt {
+    let head = q.user.strip_suffix(ANSWER).unwrap_or_else(|| {
+        warn!(
+            phase = ?q.phase_id,
+            "document_read/waves: a question does not close on its letter; reasoning appended"
+        );
+        &q.user
+    });
+    ChatPrompt {
+        user: format!("{head}Reason it through, then end with its letter."),
+        response_schema: None,
+        response_schema_name: None,
+        ..q.clone()
+    }
+    .with_phase_id(REASON_PHASE)
+    .with_max_output_tokens(REASON_TOKENS)
+}
+
 /// One document as the jobs ask about it.
 pub(super) struct Doc<'a> {
     pub(super) infer: &'a InferenceFn,
+    pub(super) asking: Asking,
     pub(super) document: &'a str,
     /// What every question opens with: the declared facts and the numbered
     /// document (`ask::opening`).
@@ -483,8 +521,14 @@ pub(super) async fn run(d: &Doc<'_>, jobs: &mut [Job<'_>], level: &str, spent: &
             jobs = asked.len(),
             "document_read/waves: round"
         );
-        let mut answers = decision_wave(d.infer, &prompts, &labels, d.document, &items)
-            .await
+        let answered = match d.asking {
+            Asking::Wave => decision_wave(d.infer, &prompts, &labels, d.document, &items).await,
+            Asking::Reason => {
+                let reasons: Vec<ChatPrompt> = prompts.iter().map(reason).collect();
+                reasoned_wave(d.infer, &reasons, &prompts, &labels, d.document, &items).await
+            }
+        };
+        let mut answers = answered
             .into_iter()
             .map(|a| a.map_err(|r| format!("{r:?}")));
         for (j, n) in asked {

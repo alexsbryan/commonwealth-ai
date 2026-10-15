@@ -277,7 +277,7 @@ async fn a_document_is_read_in_levels_each_round_one_wave_off_one_prefix() {
         r#"{"from": "Kim Ward <kim@enron.com>"}"#,
     )]);
     let (infer, seen) = oracle(RULES);
-    let envelope = read(&chapter, &policies, &LineClasses::default(), &infer)
+    let envelope = read_as(&chapter, &policies, &LineClasses::default(), &infer, Asking::Wave)
         .await
         .unwrap();
     let docs: Vec<DocumentReadOutcome> = serde_json::from_value(
@@ -353,7 +353,7 @@ async fn a_document_that_holds_nothing_declared_says_so() {
         r#"{"from": "Kim Ward <kim@enron.com>"}"#,
     )]);
     let (infer, seen) = oracle(&[]);
-    let envelope = read(&chapter, &policies, &LineClasses::default(), &infer)
+    let envelope = read_as(&chapter, &policies, &LineClasses::default(), &infer, Asking::Wave)
         .await
         .unwrap();
     let docs: Vec<DocumentReadOutcome> = serde_json::from_value(
@@ -372,5 +372,73 @@ async fn a_document_that_holds_nothing_declared_says_so() {
         seen.lock().unwrap().len(),
         2,
         "one round of counts, one of the act's two wordings"
+    );
+}
+
+#[tokio::test]
+async fn waves_questions_reason_then_choose() {
+    let policies = mail(NAMES);
+    let chapter = input_chapter(&[row(
+        1,
+        "m1",
+        BODY,
+        r#"{"from": "Kim Ward <kim@enron.com>"}"#,
+    )]);
+    let envelope = |text: String| -> Vec<DocumentReadOutcome> {
+        serde_json::from_value(serde_json::from_str::<Value>(&text).unwrap()["documents"].clone())
+            .unwrap()
+    };
+    let (forced_infer, _) = oracle(RULES);
+    let forced = envelope(
+        read_as(&chapter, &policies, &LineClasses::default(), &forced_infer, Asking::Wave)
+            .await
+            .unwrap(),
+    );
+
+    // The oracle reads every label question; a prompt with no forced choice
+    // is a reasoning request, answered in prose that ends with a letter.
+    let (choose, chosen) = oracle(RULES);
+    let reasoned = Arc::new(Mutex::new(Vec::new()));
+    let kept = reasoned.clone();
+    let infer: crate::InferenceFn = Arc::new(move |p: &ChatPrompt, budget| {
+        if p.response_schema.is_none() {
+            kept.lock().unwrap().push((p.clone(), budget));
+            return Box::pin(async { Ok("...reasoning... A".to_string()) });
+        }
+        choose(p, budget)
+    });
+    let read = envelope(
+        read(&chapter, &policies, &LineClasses::default(), &infer)
+            .await
+            .unwrap(),
+    );
+
+    let reasoned = reasoned.lock().unwrap();
+    assert!(!reasoned.is_empty());
+    for (p, budget) in reasoned.iter() {
+        assert_eq!(*budget, Some(2000));
+        assert_eq!(p.phase_id.as_deref(), Some("waves_reason"));
+        assert!(p.user.ends_with("Reason it through, then end with its letter."));
+    }
+    let chosen = chosen.lock().unwrap();
+    for p in chosen.iter() {
+        let singles = match wave_singles(p) {
+            Some(split) => split.unwrap(),
+            None => vec![p.clone()],
+        };
+        for q in singles {
+            assert!(q.user.contains("Your reasoning:\n...reasoning... A\n\n"), "{}", q.user);
+        }
+    }
+    let stage = read[0]
+        .claims
+        .iter()
+        .find(|c| c.kind == "stage_update")
+        .expect("the act is a claim");
+    assert_eq!(supported(&stage.fields, "stage"), json!("proposal"));
+    assert_eq!(
+        serde_json::to_value(&read).unwrap(),
+        serde_json::to_value(&forced).unwrap(),
+        "reasoning first reads what the forced choice reads"
     );
 }

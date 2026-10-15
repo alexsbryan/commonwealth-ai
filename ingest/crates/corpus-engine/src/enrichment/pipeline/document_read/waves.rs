@@ -3,8 +3,9 @@
 //! declaration compiled into levels of closed questions about a document,
 //! particulars first. Every question opens with the same prefix, the
 //! document's declared facts and its numbered lines (`waves_forms.rs`), and
-//! each round of a level asks every job's next questions as one forced-choice
-//! wave (`waves_jobs.rs`), so the document is read off one shared prefix.
+//! each round of a level reasons through every job's next questions, then
+//! reads them as one forced-choice wave (`waves_jobs.rs`), so the document is
+//! read off one shared prefix.
 //!
 //! Level 1, at the document: each type RESOLVE decides is counted and each of
 //! its particulars pointed at where it is first named (About's question); each
@@ -35,7 +36,7 @@ use super::line_classes::{LineClass, LineClasses};
 use super::mention::{self, Mention};
 use super::passes::{lines, mentioned, numbered, FieldPlan, Line, Plan};
 use super::waves_forms::{self as forms, Target, Who};
-use super::waves_jobs::{question, run, Doc, Enumerate, Job, Spent};
+use super::waves_jobs::{question, run, Asking, Doc, Enumerate, Job, Spent};
 use super::waves_readings::{ActRead, Field};
 use super::{pick, prefill};
 use super::{DocumentReadClaim, DocumentReadField, DocumentReadOutcome, DocumentReadStatus};
@@ -98,12 +99,26 @@ impl<'a> Levels<'a> {
     }
 }
 
+/// How the compiled reader answers its questions; in the contract value, so a
+/// read answered one way is never served as the other.
+const READ_ASKING: Asking = Asking::Reason;
+
 /// Read every supplied document of `chapter` by the compiled plan.
 pub async fn read(
     chapter: &ChapterInput,
     policies: &OntologyPolicies,
     classes: &LineClasses,
     infer: &InferenceFn,
+) -> Result<String> {
+    read_as(chapter, policies, classes, infer, READ_ASKING).await
+}
+
+async fn read_as(
+    chapter: &ChapterInput,
+    policies: &OntologyPolicies,
+    classes: &LineClasses,
+    infer: &InferenceFn,
+    asking: Asking,
 ) -> Result<String> {
     let plan = Plan::of(policies);
     if plan.kinds.is_empty() {
@@ -117,7 +132,7 @@ pub async fn read(
     for document in &chapter.source_documents {
         documents.push(
             read_document(
-                document, &plan, &levels, policies, classes, infer, &mut spent,
+                document, &plan, &levels, policies, classes, infer, asking, &mut spent,
             )
             .await,
         );
@@ -166,6 +181,7 @@ async fn read_document(
     policies: &OntologyPolicies,
     classes: &LineClasses,
     infer: &InferenceFn,
+    asking: Asking,
     spent: &mut Spent,
 ) -> DocumentReadOutcome {
     let id = document.key().to_string();
@@ -198,6 +214,7 @@ async fn read_document(
     let view = numbered(&raw, &lines);
     let mut d = Doc {
         infer,
+        asking,
         document: &id,
         prefix: opening(&facts, &view),
         body: &raw,
@@ -660,6 +677,7 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
     ];
     json!({
         "reader": "waves",
+        "asking": format!("{READ_ASKING:?}"),
         "max_particulars": about::MAX_PARTICULARS,
         "labels": LABELS.len(),
         "levels": [levels.decided.len(), levels.mentioned.len(), levels.at_document.len(), levels.per_particular.len(), levels.acts.len()],

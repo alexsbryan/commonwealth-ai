@@ -19,7 +19,7 @@ use std::time::Instant;
 use oicp_types::forced_choice::{self, Branch};
 use tracing::{debug, warn};
 
-use super::select::decision_call;
+use super::select::{decision_call, reason_call};
 use super::Refusal;
 use crate::enrichment::pipeline::types::ChatPrompt;
 use crate::InferenceFn;
@@ -255,6 +255,53 @@ pub(crate) async fn decision_wave(
             }
         })
         .collect()
+}
+
+/// RESOLVE's bounded reason-then-choose, for a wave: `reasons[i]` asked
+/// through [`reason_call`], every question at once, then each `choose_after`
+/// prompt with its reasoning set before its closing line (as `select.rs`
+/// `Ask::ChooseAfter` sets it) read as ONE [`decision_wave`]. A question
+/// whose reasoning fails is refused alone.
+pub(crate) async fn reasoned_wave(
+    infer: &InferenceFn,
+    reasons: &[ChatPrompt],
+    choose_after: &[ChatPrompt],
+    labels: &[Vec<&str>],
+    document: &str,
+    items: &[String],
+) -> Vec<Result<BTreeMap<String, f64>, Refusal>> {
+    debug_assert_eq!(reasons.len(), choose_after.len());
+    let reasoned = futures::future::join_all(
+        reasons
+            .iter()
+            .zip(items)
+            .map(|(p, item)| reason_call(infer, p, document, item)),
+    )
+    .await;
+    let mut out: Vec<Option<Result<BTreeMap<String, f64>, Refusal>>> =
+        Vec::with_capacity(reasons.len());
+    let (mut prompts, mut ls, mut its, mut at) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    for (i, r) in reasoned.into_iter().enumerate() {
+        match r {
+            Ok(text) => {
+                let mut p = choose_after[i].clone();
+                let close = p.user.trim_end().rfind('\n').map_or(0, |n| n + 1);
+                p.user
+                    .insert_str(close, &format!("Your reasoning:\n{text}\n\n"));
+                prompts.push(p);
+                ls.push(labels[i].clone());
+                its.push(items[i].clone());
+                at.push(i);
+                out.push(None);
+            }
+            Err(refused) => out.push(Some(Err(refused))),
+        }
+    }
+    let chosen = decision_wave(infer, &prompts, &ls, document, &its).await;
+    for (i, answer) in at.into_iter().zip(chosen) {
+        out[i] = Some(answer);
+    }
+    out.into_iter().flatten().collect()
 }
 
 #[cfg(test)]
