@@ -177,6 +177,10 @@ async fn apply_v04_enrichment(
         // v0.6 §2.9: progress lists installs from their spawn and each
         // install's documents (`routes_oicp_ingest::corpus_progress`).
         feats.push(features::INGEST_DOCUMENTS.to_string());
+        // v0.6 §2.16: an install that allows lookups gets its documents'
+        // records by identifier (`records_by_identifier`), listed on progress
+        // and on hits.
+        feats.push(features::INGEST_LOOKUPS.to_string());
         IngestEndpoints {
             install_endpoint: "/oicp/v1/corpus/install".into(),
             progress_endpoint: "/oicp/v1/corpus/progress".into(),

@@ -30,7 +30,7 @@ use tower::ServiceExt;
 
 use crate::common::ledger_double::RecordingLedger;
 
-const RECIPE_A: &str = "[corpus]\nid = \"notes\"\nname = \"Notes\"\n";
+pub(crate) const RECIPE_A: &str = "[corpus]\nid = \"notes\"\nname = \"Notes\"\n";
 const RECIPE_B: &str = "[corpus]\nid = \"notes\"\nname = \"Notes, revised\"\n";
 
 /// The double's install of a supplied recipe: a stand-in loader (the real
@@ -89,7 +89,10 @@ fn state(engine: Arc<IngestPortDouble>) -> AppState {
 }
 
 /// POST `/oicp/v1/corpus/install` from loopback; the status and the body.
-async fn install(state: AppState, body: serde_json::Value) -> (StatusCode, serde_json::Value) {
+pub(crate) async fn install(
+    state: AppState,
+    body: serde_json::Value,
+) -> (StatusCode, serde_json::Value) {
     install_raw(state, body.to_string()).await
 }
 
@@ -115,7 +118,7 @@ async fn install_raw(state: AppState, body: String) -> (StatusCode, serde_json::
 }
 
 /// Wait until no install of `corpus_id` is in flight.
-async fn settled(state: &AppState, corpus_id: &str) {
+pub(crate) async fn settled(state: &AppState, corpus_id: &str) {
     for _ in 0..200 {
         if !state
             .inner
@@ -241,7 +244,7 @@ fn state_from(engine: IngestPortDouble) -> AppState {
 }
 
 /// GET `/oicp/v1/corpus/progress` from loopback.
-async fn progress(state: AppState) -> oicp_types::CorpusProgressResponse {
+pub(crate) async fn progress(state: AppState) -> oicp_types::CorpusProgressResponse {
     let mut req = Request::get("/oicp/v1/corpus/progress")
         .header("host", "127.0.0.1:9741")
         .body(Body::empty())

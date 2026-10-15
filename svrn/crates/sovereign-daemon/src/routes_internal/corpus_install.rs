@@ -60,7 +60,7 @@ pub async fn spawn_corpus_install_outcome(
     corpus_id: String,
     parameters: std::collections::BTreeMap<String, serde_json::Value>,
 ) -> InstallOutcome {
-    spawn_install(state, corpus_id, parameters, InstallSource::Registry).await
+    spawn_install(state, corpus_id, parameters, InstallSource::Registry, false).await
 }
 
 /// [`spawn_corpus_install_outcome`] from either [`InstallSource`].
@@ -69,12 +69,14 @@ pub async fn spawn_corpus_install_outcome(
 /// recipe_sha256)` as the stamp on an installed corpus is
 /// [`InstallOutcome::AlreadyInstalled`], and a different one reingests the
 /// corpus — validated first, so a recipe that does not load never costs the
-/// installed corpus.
+/// installed corpus. `allow_lookups` is part of the install (OICP v0.6
+/// §2.16): the same recipe with the other allowance is a new one.
 pub async fn spawn_install(
     state: AppState,
     corpus_id: String,
     parameters: std::collections::BTreeMap<String, serde_json::Value>,
     source: InstallSource,
+    allow_lookups: bool,
 ) -> InstallOutcome {
     let Some(engine) = state.inner.node.corpus_engine.clone() else {
         tracing::warn!(
@@ -113,12 +115,16 @@ pub async fn spawn_install(
         let documented = installed
             .as_ref()
             .is_some_and(|c| c.install_documents().is_some());
+        let same_allowance = installed
+            .as_ref()
+            .map(crate::records_by_identifier::allowed_by_last_install)
+            == Some(allow_lookups);
         if stamped.as_deref() == Some(sha.as_str()) {
-            if documented {
+            if documented && same_allowance {
                 release(&state, &corpus_id).await;
                 return InstallOutcome::AlreadyInstalled;
             }
-            tracing::info!(corpus = %corpus_id, "spawn_corpus_install: held with no documents record, reading it again");
+            tracing::info!(corpus = %corpus_id, documented, same_allowance, "spawn_corpus_install: held with no documents record or another allowance, reading it again");
         }
     }
 
@@ -187,6 +193,14 @@ pub async fn spawn_install(
         // before anything was recorded: the corpus stayed in
         // `active_ingests` and a poller saw no failure, only absence.
         let joined = tokio::spawn((prepared.run)(Some(progress_cb))).await;
+        // Records by identifier (OICP v0.6 §2.16) are part of the install, so
+        // kept while it is still listed active: its lookups can take seconds,
+        // and a poll must never find a returned install listed nowhere.
+        if let (Ok(Ok(info)), Some(c)) = (&joined, documents_at.as_ref()) {
+            let fetch = state_for_task.inner.node.record_fetch.as_ref();
+            crate::records_by_identifier::record_install(c, &info.documents, allow_lookups, fetch)
+                .await;
+        }
 
         state_for_task
             .inner

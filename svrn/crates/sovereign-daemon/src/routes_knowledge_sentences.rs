@@ -306,6 +306,10 @@ pub(crate) async fn sentences(
             }
         }
     }
+    // v0.6 §2.16: each hit's document carries the record progress lists.
+    for t in &targets {
+        crate::records_by_identifier::attach_to_hits(&t.ix.path(), &t.corpus, &mut results);
+    }
     tracing::debug!(target: TARGET, route = ?route, hits = results.len(), scorer = scorer.as_str(), %model, "sentence search: answered");
     Ok(KnowledgeSearchResponse {
         results,

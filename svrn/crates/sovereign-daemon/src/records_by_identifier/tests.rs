@@ -1,0 +1,190 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! Records by identifier against replies recorded from Crossref and Open
+//! Library (`RecordedFetch::recorded_2026_10_15`), offline. The library is
+//! the conformance suite's records shelf (`fixture/records.json`) and two
+//! books declaring an ISBN.
+
+use serde_json::json;
+
+use super::*;
+
+fn table() -> ResolverTable {
+    ResolverTable::from_data_file().expect("the data file loads")
+}
+
+/// Each document's declared metadata, by name; a document declaring none
+/// is absent. The first three are the conformance suite's records shelf
+/// (`cmnwlth/crates/oicp-conformance/fixture/records.json`), restated here
+/// so the package needs no tree outside it; `oicp_records_e2e` installs
+/// that file itself.
+fn library() -> BTreeMap<String, Map<String, Value>> {
+    let mut out = BTreeMap::new();
+    let books = [
+        json!({"name": "fair-principles", "metadata": {"id": "fair-principles",
+               "type": "article-journal", "title": "A Title the Recipe Declares",
+               "DOI": "10.1038/sdata.2016.18"}}),
+        json!({"name": "no-such-doi", "metadata": {"id": "no-such-doi",
+               "type": "article-journal", "DOI": "10.0000/oicp-conformance.unresolvable"}}),
+        json!({"name": "plain-note"}),
+        json!({"name": "sicp", "metadata": {"id": "sicp", "ISBN": "978-0-262-51087-5"}}),
+        json!({"name": "no-such-isbn", "metadata": {"id": "no-such-isbn", "type": "book",
+               "title": "A Book Nobody Catalogued", "ISBN": "9780999999990"}}),
+    ];
+    for d in &books {
+        if let Some(Value::Object(m)) = d.get("metadata") {
+            out.insert(d["name"].as_str().unwrap().to_string(), m.clone());
+        }
+    }
+    out
+}
+
+/// Each declared document's record, its install allowing lookups or not.
+async fn records(allow: bool, fetch: &RecordedFetch) -> BTreeMap<String, Option<MergedRecord>> {
+    let (t, lib) = (table(), library());
+    let answers = resolve(&t, lib.values(), &RecordLookups::for_install(allow, fetch)).await;
+    lib.iter()
+        .map(|(n, d)| (n.clone(), merge(&t, d, answers.as_ref())))
+        .collect()
+}
+
+fn golden(text: &str) -> MergedRecord {
+    serde_json::from_str(text).expect("a golden record parses")
+}
+
+#[test]
+fn the_data_file_maps_doi_to_crossref_and_isbn_to_open_library() {
+    let t = table();
+    let rows: Vec<(&str, &str, ReplyShape)> = t
+        .resolvers
+        .iter()
+        .map(|r| (r.variable.as_str(), r.name.as_str(), r.reply))
+        .collect();
+    assert_eq!(
+        rows,
+        vec![
+            ("DOI", "crossref", ReplyShape::Csl),
+            ("ISBN", "open_library", ReplyShape::OpenLibraryBooks)
+        ]
+    );
+    assert!(ResolverTable::parse(&DATA_FILE.replace("concurrency", "concurency")).is_err());
+}
+
+#[test]
+fn a_declared_identifier_is_asked_for_normalised() {
+    let t = table();
+    let (doi, isbn) = (&t.resolvers[0], &t.resolvers[1]);
+    assert_eq!(
+        doi.url_for("https://doi.org/10.1038/sdata.2016.18"),
+        doi.url_for("10.1038/sdata.2016.18")
+    );
+    assert_eq!(
+        doi.url_for("doi:10.1002/(SICI)1097"),
+        "https://api.crossref.org/works/10.1002/%28SICI%291097/transform/application/vnd.citationstyles.csl+json"
+    );
+    assert_eq!(
+        isbn.url_for("978-0-262 51087-5"),
+        isbn.url_for("9780262510875")
+    );
+}
+
+/// PASS BAR: recorded Crossref and Open Library replies give the committed
+/// golden records.
+#[tokio::test]
+async fn recorded_replies_give_the_golden_records() {
+    let fetch = RecordedFetch::recorded_2026_10_15();
+    let r = records(true, &fetch).await;
+    for (name, want) in [
+        (
+            "fair-principles",
+            include_str!("../../tests/fixtures/records/golden_fair-principles.json"),
+        ),
+        (
+            "sicp",
+            include_str!("../../tests/fixtures/records/golden_sicp.json"),
+        ),
+    ] {
+        let got = r[name].as_ref().expect("a record");
+        assert_eq!(
+            got,
+            &golden(want),
+            "{name}: {}",
+            serde_json::to_string_pretty(got).unwrap()
+        );
+    }
+    assert!(!r.contains_key("plain-note"), "it declares nothing");
+    assert_eq!(fetch.asked().len(), 4, "each identifier asked once");
+}
+
+/// FAILING INPUT: a field invented for an identifier that did not resolve.
+#[tokio::test]
+async fn an_identifier_that_does_not_resolve_is_named_and_adds_nothing() {
+    let lib = library();
+    let r = records(true, &RecordedFetch::recorded_2026_10_15()).await;
+    for name in ["no-such-doi", "no-such-isbn"] {
+        let rec = r[name].as_ref().expect("an identifier, so a record");
+        let outcomes: Vec<LookupOutcome> = rec.lookups.iter().map(|l| l.outcome).collect();
+        assert_eq!(outcomes, vec![LookupOutcome::Unresolved], "{name}");
+        assert_eq!(
+            rec.csl, lib[name],
+            "{name}: nothing added to what it declared"
+        );
+        assert_eq!(rec.looked_up().count(), 0, "{name}: {:?}", rec.origins);
+    }
+}
+
+/// FAILING INPUT: a declared title overwritten by the looked-up one.
+#[tokio::test]
+async fn a_declared_title_is_kept_over_the_looked_up_one() {
+    let r = records(true, &RecordedFetch::recorded_2026_10_15()).await;
+    let rec = r["fair-principles"].as_ref().expect("a record");
+    assert_eq!(rec.csl["title"], json!("A Title the Recipe Declares"));
+    assert_eq!(rec.origins["title"], DECLARED);
+    assert_eq!(
+        rec.origins["container-title"], "crossref",
+        "{:?}",
+        rec.origins
+    );
+    assert_eq!(rec.csl["container-title"], json!("Scientific Data"));
+}
+
+/// FAILING INPUT: a lookup sent for a client that did not allow it.
+#[tokio::test]
+async fn no_lookup_is_sent_for_an_install_that_did_not_allow_it() {
+    let lib = library();
+    let fetch = RecordedFetch::recorded_2026_10_15();
+    let r = records(false, &fetch).await;
+    assert_eq!(fetch.asked(), Vec::<String>::new(), "nothing left the host");
+    for (name, rec) in &r {
+        let Some(rec) = rec else { continue };
+        assert!(
+            rec.lookups
+                .iter()
+                .all(|l| l.outcome == LookupOutcome::NotAllowed),
+            "{name}: {:?}",
+            rec.lookups
+        );
+        assert_eq!(rec.csl, lib[name], "{name}");
+    }
+}
+
+/// A resolver that does not answer, or answers other than its record or
+/// its not-found, is unreachable and adds nothing.
+#[tokio::test]
+async fn an_unreachable_resolver_is_named_and_adds_nothing() {
+    let t = table();
+    let d = library().remove("fair-principles").unwrap();
+    for fetch in [
+        RecordedFetch::default(),
+        RecordedFetch::default().with(t.resolvers[0].url_for("10.1038/sdata.2016.18"), 503, "busy"),
+        RecordedFetch::default().with(
+            t.resolvers[0].url_for("10.1038/sdata.2016.18"),
+            200,
+            "<html>",
+        ),
+    ] {
+        let answers = resolve(&t, [&d], &RecordLookups::Allowed(&fetch)).await;
+        let rec = merge(&t, &d, answers.as_ref()).unwrap();
+        assert_eq!(rec.lookups[0].outcome, LookupOutcome::Unreachable);
+        assert_eq!(rec.csl, d);
+    }
+}

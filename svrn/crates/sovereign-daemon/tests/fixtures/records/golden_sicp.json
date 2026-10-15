@@ -1,0 +1,50 @@
+{
+  "csl": {
+    "id": "sicp",
+    "ISBN": "978-0-262-51087-5",
+    "type": "book",
+    "title": "Structure and Interpretation of Computer Programs",
+    "author": [
+      {
+        "literal": "Harold Abelson"
+      },
+      {
+        "literal": "Gerald Jay Sussman"
+      },
+      {
+        "literal": "Julie Sussman"
+      }
+    ],
+    "publisher": "MIT Press Ltd",
+    "publisher-place": "S. l",
+    "issued": {
+      "date-parts": [
+        [
+          1996
+        ]
+      ]
+    },
+    "number-of-pages": 683,
+    "URL": "http://openlibrary.org/books/OL15495574M/Structure_and_Interpretation_of_Computer_Programs"
+  },
+  "origins": {
+    "id": "declared",
+    "ISBN": "declared",
+    "type": "open_library",
+    "title": "open_library",
+    "author": "open_library",
+    "publisher": "open_library",
+    "publisher-place": "open_library",
+    "issued": "open_library",
+    "number-of-pages": "open_library",
+    "URL": "open_library"
+  },
+  "lookups": [
+    {
+      "identifier": "ISBN",
+      "value": "978-0-262-51087-5",
+      "resolver": "open_library",
+      "outcome": "resolved"
+    }
+  ]
+}

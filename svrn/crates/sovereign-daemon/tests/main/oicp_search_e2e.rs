@@ -19,7 +19,10 @@ use tower::ServiceExt;
 
 use crate::common::fixture_library::{install, library, state_over, Library, DIM};
 
-async fn search(state: &AppState, body: serde_json::Value) -> (StatusCode, serde_json::Value) {
+pub(crate) async fn search(
+    state: &AppState,
+    body: serde_json::Value,
+) -> (StatusCode, serde_json::Value) {
     let mut req = Request::post("/v1/knowledge/search")
         .header("host", "127.0.0.1:9741")
         .header("content-type", "application/json")
@@ -35,7 +38,7 @@ async fn search(state: &AppState, body: serde_json::Value) -> (StatusCode, serde
     (status, serde_json::from_slice(&bytes).unwrap_or_default())
 }
 
-fn hits(body: &serde_json::Value) -> Vec<KnowledgeResult> {
+pub(crate) fn hits(body: &serde_json::Value) -> Vec<KnowledgeResult> {
     serde_json::from_value(body["results"].clone()).unwrap_or_else(|e| panic!("{e}: {body}"))
 }
 

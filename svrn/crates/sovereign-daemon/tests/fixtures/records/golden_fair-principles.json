@@ -1,0 +1,781 @@
+{
+  "csl": {
+    "id": "fair-principles",
+    "type": "article-journal",
+    "title": "A Title the Recipe Declares",
+    "DOI": "10.1038/sdata.2016.18",
+    "publisher": "Springer Science and Business Media LLC",
+    "issue": "1",
+    "volume": "3",
+    "author": [
+      {
+        "ORCID": "https://orcid.org/0000-0001-6960-357X",
+        "authenticated-orcid": false,
+        "given": "Mark D.",
+        "family": "Wilkinson",
+        "sequence": "first",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0003-4727-9435",
+        "authenticated-orcid": false,
+        "given": "Michel",
+        "family": "Dumontier",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0002-0209-4480",
+        "authenticated-orcid": false,
+        "given": "IJsbrand Jan",
+        "family": "Aalbersberg",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0003-0179-7384",
+        "authenticated-orcid": false,
+        "given": "Gabrielle",
+        "family": "Appleton",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0002-8042-4131",
+        "authenticated-orcid": false,
+        "given": "Myles",
+        "family": "Axton",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0003-2829-6715",
+        "authenticated-orcid": false,
+        "given": "Arie",
+        "family": "Baak",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0003-4155-5910",
+        "authenticated-orcid": false,
+        "given": "Niklas",
+        "family": "Blomberg",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0003-0327-638X",
+        "authenticated-orcid": false,
+        "given": "Jan-Willem",
+        "family": "Boiten",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0002-1164-1351",
+        "authenticated-orcid": false,
+        "given": "Luiz Bonino",
+        "family": "da Silva Santos",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0002-7618-7292",
+        "authenticated-orcid": false,
+        "given": "Philip E.",
+        "family": "Bourne",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "given": "Jildau",
+        "family": "Bouwman",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0001-8686-0017",
+        "authenticated-orcid": false,
+        "given": "Anthony J.",
+        "family": "Brookes",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0003-4060-7360",
+        "authenticated-orcid": false,
+        "given": "Tim",
+        "family": "Clark",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0003-1304-1939",
+        "authenticated-orcid": false,
+        "given": "Mercè",
+        "family": "Crosas",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0001-5654-2392",
+        "authenticated-orcid": false,
+        "given": "Ingrid",
+        "family": "Dillo",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0001-8599-7345",
+        "authenticated-orcid": false,
+        "given": "Olivier",
+        "family": "Dumon",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0001-6444-1436",
+        "authenticated-orcid": false,
+        "given": "Scott",
+        "family": "Edmunds",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0002-5301-3142",
+        "authenticated-orcid": false,
+        "given": "Chris T.",
+        "family": "Evelo",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0002-4368-8058",
+        "authenticated-orcid": false,
+        "given": "Richard",
+        "family": "Finkers",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0003-3499-8262",
+        "authenticated-orcid": false,
+        "given": "Alejandra",
+        "family": "Gonzalez-Beltran",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0002-5711-4872",
+        "authenticated-orcid": false,
+        "given": "Alasdair J.G.",
+        "family": "Gray",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0003-0183-6910",
+        "authenticated-orcid": false,
+        "given": "Paul",
+        "family": "Groth",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0003-1219-2137",
+        "authenticated-orcid": false,
+        "given": "Carole",
+        "family": "Goble",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0001-5212-7052",
+        "authenticated-orcid": false,
+        "given": "Jeffrey S.",
+        "family": "Grethe",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0001-8641-4930",
+        "authenticated-orcid": false,
+        "given": "Jaap",
+        "family": "Heringa",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0003-4450-3112",
+        "authenticated-orcid": false,
+        "given": "Peter A.C",
+        "family": "’t Hoen",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0001-6825-9439",
+        "authenticated-orcid": false,
+        "given": "Rob",
+        "family": "Hooft",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0002-1267-0234",
+        "authenticated-orcid": false,
+        "given": "Tobias",
+        "family": "Kuhn",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "given": "Ruben",
+        "family": "Kok",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0002-7352-1400",
+        "authenticated-orcid": false,
+        "given": "Joost",
+        "family": "Kok",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0003-2401-4223",
+        "authenticated-orcid": false,
+        "given": "Scott J.",
+        "family": "Lusher",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0002-8406-3871",
+        "authenticated-orcid": false,
+        "given": "Maryann E.",
+        "family": "Martone",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "given": "Albert",
+        "family": "Mons",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0001-9610-5728",
+        "authenticated-orcid": false,
+        "given": "Abel L.",
+        "family": "Packer",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0003-3165-5344",
+        "authenticated-orcid": false,
+        "given": "Bengt",
+        "family": "Persson",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0001-9853-5668",
+        "authenticated-orcid": false,
+        "given": "Philippe",
+        "family": "Rocca-Serra",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0002-8691-772X",
+        "authenticated-orcid": false,
+        "given": "Marco",
+        "family": "Roos",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "given": "Rene",
+        "family": "van Schaik",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0001-5306-5690",
+        "authenticated-orcid": false,
+        "given": "Susanna-Assunta",
+        "family": "Sansone",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0001-8888-635X",
+        "authenticated-orcid": false,
+        "given": "Erik",
+        "family": "Schultes",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0002-7516-6246",
+        "authenticated-orcid": false,
+        "given": "Thierry",
+        "family": "Sengstag",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0003-1386-0731",
+        "authenticated-orcid": false,
+        "given": "Ted",
+        "family": "Slater",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "given": "George",
+        "family": "Strawn",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0002-0979-3401",
+        "authenticated-orcid": false,
+        "given": "Morris A.",
+        "family": "Swertz",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0002-7633-1442",
+        "authenticated-orcid": false,
+        "given": "Mark",
+        "family": "Thompson",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "given": "Johan",
+        "family": "van der Lei",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0003-1377-9386",
+        "authenticated-orcid": false,
+        "given": "Erik",
+        "family": "van Mulligen",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0002-4836-6568",
+        "authenticated-orcid": false,
+        "given": "Jan",
+        "family": "Velterop",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0001-9773-4008",
+        "authenticated-orcid": false,
+        "given": "Andra",
+        "family": "Waagmeester",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "given": "Peter",
+        "family": "Wittenburg",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0002-1279-5133",
+        "authenticated-orcid": false,
+        "given": "Katherine",
+        "family": "Wolstencroft",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0001-6935-9028",
+        "authenticated-orcid": false,
+        "given": "Jun",
+        "family": "Zhao",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "ORCID": "https://orcid.org/0000-0003-3934-0072",
+        "authenticated-orcid": false,
+        "given": "Barend",
+        "family": "Mons",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      }
+    ],
+    "container-title": "Scientific Data",
+    "language": "en",
+    "issued": {
+      "date-parts": [
+        [
+          2016,
+          3,
+          15
+        ]
+      ]
+    },
+    "URL": "http://dx.doi.org/10.1038/sdata.2016.18",
+    "ISSN": [
+      "2052-4463"
+    ],
+    "container-title-short": "Sci Data"
+  },
+  "origins": {
+    "DOI": "declared",
+    "ISSN": "crossref",
+    "URL": "crossref",
+    "author": "crossref",
+    "container-title": "crossref",
+    "container-title-short": "crossref",
+    "id": "declared",
+    "issue": "crossref",
+    "issued": "crossref",
+    "language": "crossref",
+    "publisher": "crossref",
+    "title": "declared",
+    "type": "declared",
+    "volume": "crossref"
+  },
+  "lookups": [
+    {
+      "identifier": "DOI",
+      "value": "10.1038/sdata.2016.18",
+      "resolver": "crossref",
+      "outcome": "resolved"
+    }
+  ]
+}

@@ -16,6 +16,12 @@
 //! scorer, its route (`passages` while the library is still being indexed,
 //! with the count pending) and any ceiling the scan stopped at are printed.
 //! A host that does not advertise the feature is told so, never asked.
+//!
+//! A hit whose document carries a record (v0.6 §2.16, `ingest:lookups`) or
+//! declared metadata prints its catalogue entry under it (`catalogue`).
+
+#[path = "search_cmd/catalogue.rs"]
+mod catalogue;
 
 use sovereign_contracts::oicp::{
     features, KnowledgeResult, KnowledgeSearchResponse, ProviderManifest, SentenceRoute,
@@ -210,7 +216,12 @@ fn print_hit(rank: usize, hit: &KnowledgeResult) {
     }
     println!("     {head}");
     match (&hit.document, &hit.document_absent) {
-        (Some(d), _) => println!("     text {}", d.text_sha256),
+        (Some(d), _) => {
+            for line in catalogue::lines(d) {
+                println!("     {line}");
+            }
+            println!("     text {}", d.text_sha256)
+        }
         (None, Some(why)) => println!("     no text: {why}"),
         (None, None) => {}
     }
@@ -235,7 +246,10 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
         crate::util::help::HelpSection::Notes(
             "Each hit prints its text's name (`text <64 hex>`): pass it to --document to \
              search within that text. A hit's range `at [start, end)` is in code points of \
-             that text; a hit with none says why (`no range: not an exact slice`).",
+             that text; a hit with none says why (`no range: not an exact slice`). A hit \
+             whose document has a catalogue record prints it first: author, year, title, \
+             where it appeared, how many fields a resolver supplied, and any identifier \
+             that did not resolve.",
         ),
     ],
 };

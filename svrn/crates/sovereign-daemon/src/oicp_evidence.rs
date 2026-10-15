@@ -537,6 +537,8 @@ async fn knowledge_results(
     );
     SearchStage::TextRead.emit(reading, Some(corpus_id), texts.len());
     SearchStage::SpanOf.emit(locating, Some(corpus_id), located_hits);
+    // v0.6 §2.16: each document carries the record progress lists beside it.
+    crate::records_by_identifier::attach_to_hits(&index.path(), corpus_id, &mut out);
     out
 }
 

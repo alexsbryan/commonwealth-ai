@@ -80,6 +80,10 @@ pub struct NodeSeed {
     /// what a caller may read (`oicp_evidence::readable_corpora`). `None` when this
     /// daemon holds no runtime.
     pub corpus_principal: Option<Arc<dyn sovereign_contracts::traits::PrincipalResolver>>,
+    /// Where an install's identifier lookups leave (OICP v0.6 §2.16). `None`
+    /// is the network, through the egress boundary
+    /// (`records_by_identifier::web`); a test hands in recorded replies.
+    pub record_fetch: Option<Arc<dyn crate::records_by_identifier::RecordFetch>>,
 }
 
 impl NodeSeed {
@@ -178,6 +182,7 @@ impl NodeSeed {
             atlas: None,
             // Handed in by the daemon from its turn runtime.
             corpus_principal: None,
+            record_fetch: None,
         })
     }
 }
@@ -255,6 +260,8 @@ pub struct NodePart {
     /// The corpora's sentence indexes and the worker filling them (OICP
     /// v0.6 §2.11, `sentence_index`), beside the corpus engine they read.
     pub sentences: crate::sentence_index::SentenceIndex,
+    /// Where identifier lookups leave ([`NodeSeed::record_fetch`]).
+    pub record_fetch: Arc<dyn crate::records_by_identifier::RecordFetch>,
     /// Unix-seconds timestamp of the last foreground inference request
     /// observed at `chat_completions`. `0` means "never touched" — the
     /// initial state at boot. Bumped via
