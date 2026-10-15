@@ -3315,7 +3315,7 @@ impl ModelSlot {
             );
         }
 
-        if saw_close_tag && !saw_open_tag {
+        if saw_close_tag && !saw_open_tag && turn_opener.is_empty() {
             tracing::warn!(
                 model = model_id,
                 "thinking-tag stray close: model emitted </think> without a \
@@ -5521,7 +5521,7 @@ fn stream_generate_loop(p: StreamLoopParams<'_, '_>) -> Result<()> {
         // else: FIM partial-keep — the prompt's KV slice stays resident
         // for the next request's LCP (see generate_stream_sync_fim).
 
-        if saw_close_tag && !saw_open_tag {
+        if saw_close_tag && !saw_open_tag && turn_opener.is_empty() {
             tracing::warn!(
                 model = model_id,
                 "thinking-tag stray close (typed stream): model emitted \
