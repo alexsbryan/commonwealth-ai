@@ -67,6 +67,11 @@ pub mod features {
     /// client's correction of a verify decision; requires
     /// `evidence:verify`.
     pub const EVIDENCE_VERIFY_CORRECTIONS: &str = "evidence:verify_corrections";
+    /// v0.6 §2.15: verify retrieves a claim's candidates through sentence
+    /// search, names its specifics by kind, and decides nothing from the
+    /// fast tier's literal miss; requires `evidence:verify` and
+    /// `knowledge:sentences`.
+    pub const EVIDENCE_VERIFY_SENTENCES: &str = "evidence:verify_sentences";
     /// v0.5 §3: knowledge-search hits carry `document`.
     pub const KNOWLEDGE_DOCUMENT: &str = "knowledge:document";
     /// v0.6 §2.8: knowledge search takes `documents`, the text names its
@@ -176,6 +181,7 @@ pub mod features {
         EVIDENCE_ALIGN,
         EVIDENCE_VERIFY,
         EVIDENCE_VERIFY_CORRECTIONS,
+        EVIDENCE_VERIFY_SENTENCES,
         KNOWLEDGE_DOCUMENT,
         KNOWLEDGE_SCOPED,
         KNOWLEDGE_RANGE,

@@ -17,6 +17,7 @@
 mod args;
 mod auth_checks;
 mod checks;
+mod claim_checks;
 mod evidence_checks;
 #[cfg(test)]
 mod fake_host;

@@ -24,7 +24,9 @@ text (§2.11), a host states the **largest install** it reads, so a client
 sizes an inline library before it sends one (§2.12), and a span says
 **where it stands** in its source, such as the headings it stands under
 (§2.13) or the turn of a recipe document declared a **transcript** it was
-spoken in (§2.14).
+spoken in (§2.14). Verify can find a claim's candidates **by meaning**,
+name its specifics by kind, and say which figure a source states otherwise
+(§2.15).
 
 As in v0.5, everything v0.6 adds is a serde-defaulted field, an optional
 endpoint, or a feature string, and **feature presence, not the version
@@ -45,6 +47,7 @@ string, gates behaviour**. The types are in
 | `ingest:documents` | install progress lists an install from its spawn, and each document it read once it has returned (§2.9) | `ingest:v1` |
 | `knowledge:sentences` | knowledge search takes `granularity: "sentence"` and answers sentences, ranked by the scorer `knowledge.sentence_scorer` names (§2.11) | `knowledge:range`, `knowledge:scoped`, `knowledge.sentence_scorer` |
 | `knowledge:locator` | every span carries `locator` where the extraction that stored its text found one, a plain text's heading paths by §2.13's rule | `knowledge:range` |
+| `evidence:verify_sentences` | verify's candidates are §2.11's sentences, each claim names its specifics by kind, the fast tier's literal miss is a hint, and a contradicted passage names what differs (§2.15) | `evidence:verify`, `knowledge:sentences` |
 | `ingest:transcripts` | a recipe `[[document]]` takes `format = "transcript"`, read by turn, each turn's start and speaker the locator of its spans (§2.14) | `knowledge:locator`, `ingest:recipe` |
 
 ```rust
@@ -532,6 +535,69 @@ implementation. The reference host does not advertise
 `ingest:transcripts` yet; WebVTT, SRT and DOCX are later members of the
 set, each read into the same locator.
 
+### 2.15 Verify by meaning
+
+§2.6's reference rungs look for a claim's numbers and names as strings, and
+its fast tier settles a claim on a literal miss: "3.2%" against a source
+reading "3.2 per cent" is `unsupported`. A host advertising
+`evidence:verify_sentences` verifies the way §2.11 searches instead: a
+claim's candidates are found by meaning, its specifics are named by kind,
+and the fast tier's miss is a hint, never a verdict.
+
+```
+VerifiedClaim     { … (§2.6 fields) …,
+                    specifics: Vec<ClaimSpecific> }    // code points of the unit, inside the claim
+JudgedPassage     { … (§2.6 fields) …,
+                    differing: Vec<DifferingSpecific> } // on a contradicted passage, and only there
+ClaimSpecific     { kind: "figure" | "date" | "quantity" | "name",
+                    start: u64, end: u64, exact: String }
+DifferingSpecific { claim: ClaimSpecific,              // in the unit
+                    source: ClaimSpecific }            // in the passage's stored text
+```
+
+- **Candidates are sentences.** A claim's candidates are the sentences of
+  the request's corpora that §2.11's search returns for the claim, by the
+  advertised scorer: one retrieval path for search and verify. Every
+  passage judged is such a sentence and carries its `span`.
+- **The floor.** A claim no sentence reaches the host's relevance floor
+  for is `unsupported` with `evidence: []`, at every tier: nothing in the
+  library is about it. The floor is in the host's data file, never in its
+  code, and `verifier` names it, so a client's cached verdicts change with
+  it (§2.6, identity).
+- **Specifics by kind.** Every checkable claim names its specifics, each
+  an exact range of the unit inside the claim: a `figure` (a number with
+  or without a unit, a percentage, a currency amount), a `date` (a year, a
+  written date), a `quantity` (a number with a counted noun), a `name` (a
+  run of name-shaped words). A number inside a citation is none of them:
+  an author-date citation (`(Okafor 2019)`, `(Okafor, 2019, p. 4)`) or a
+  citekey (`[@okafor2019]`). Nor is one inside a locator (`(page 14)`, `(p.
+  3)`, `(§ 4)`, `(chapter 2)`). A figure inside any other parentheses is a
+  specific: `(against 6.1 percent the year before)` names `6.1`. `ClaimSpecificKind` is a
+  closed set.
+- **The fast miss is a hint.** At `fast`, a claim a sentence reaches the
+  floor for is `abstained`, and each of its specifics no candidate carries
+  as written is named in `specifics_absent` for the checker to read. The
+  fast tier says `unsupported` only below the floor, with no evidence, and
+  never `supported` or `contradicted`.
+- **Contradicted names what differs.** A candidate the claim is about that
+  states one of the claim's figures, dates or quantities otherwise, and
+  does not back the claim, is `contradicted`, and its `differing` pairs the
+  claim's specific with the sentence's of the same kind. A claim is
+  `contradicted` only on such a passage. A client offering the source's
+  figure as a fix offers it when exactly one pair differs. A claim whose
+  candidates neither back it nor differ is `unsupported` with them, nearest
+  first: the library discusses it and does not back it.
+
+A host advertising `evidence:verify_sentences` verifies by this section;
+§2.6's rung table is the reference host's before it. That host does not
+advertise it yet. When it does, its rungs become `class/no-specifics`,
+then the floor (`unsupported`, no evidence), then `fast/value-presence` as
+a hint (`abstained`), then the checker judging the best candidate
+sentences, with a differing figure, date or quantity making `contradicted`;
+its specifics finder (`sentence_specifics`, in
+`svrn/crates/sovereign-core/src/runtime/grounding/specifics.rs`) splits its
+numbers into the three kinds and leaves citations and locators out.
+
 ## 6. Conformance (additions)
 
 | check | holds | red against |
@@ -544,6 +610,7 @@ set, each read into the same locator.
 | `ingest.install_limit` | with `ingest:recipe` and `max_install_bytes` stated, an install body of exactly that many bytes, a recipe that does not load padded to the size, is read: `400`, never `413`; one byte more is `413 install too large` naming the limit. A stated limit past 256 MiB is probed at 256 MiB, with nothing sent past it | a host stating a limit whose install route reads bodies only to its surface's 8 MiB |
 | `knowledge.sentences` | each fixture signature, at `granularity: sentence` scoped to its own text, returns at least one sentence, at most `limit`, best first, every one from that text; each carries `span` whose `exact` is its `content` and whose range reads back byte-equal through `text_endpoint`; the reply names the advertised scorer and a model, and a route, with `sentences_pending` exactly on `passages`. A `503 scorer unavailable` naming the advertised scorer is could-not-judge | a sentence range one code point off; a sentence from outside the scope; a host advertising `rerank`, holding no rerank slot, that answers with cosine |
 | `knowledge.locator` | installs its own library (`fixture/headings.json`: a headed text with a contents line and a preface, and a text with no headings) and aligns each listed sentence verbatim; each span's `locator` is the heading path the rule gives, or absent where it gives none. Needs `ingest:recipe` and `evidence:align`, could-not-judge without | a span given the heading path of the part before the one it stands in; a locator invented for a span under no heading |
+| `evidence.verify_sentences` | installs its own library (`fixture/claims.json`, a ledger of figure sentences) and verifies five units at each served tier: every specific is an exact range of the unit inside its claim; each listed figure, date or quantity is covered, a parenthesised one too; nothing inside `(Okafor 2019)` or `(page 14)` is a specific; the fast tier never says `supported` or `contradicted` and says `unsupported` only with no evidence; a unit restating the library's figure in another form is `abstained` at `fast` and `supported` at `checker`; another figure is `contradicted`, naming the pair, each side read back; a concept the library lacks is `unsupported` with no evidence. A checker that answers `could_not_judge` is could-not-judge | a claim settled from the fast tier's literal miss; a citation's year made a specific; a figure inside parentheses left out; a contradiction that names no differing specific |
 | `ingest.transcript` | installs its own library (`fixture/transcripts.json`: a paragraph transcript with three header shapes and an opening, Whisper's JSON with a sentence across segments, and a declared transcript in neither shape) and aligns each listed quotation verbatim; each span's `locator` is its turn's start and speaker, a Whisper segment's with none; with `ingest:documents`, the one in neither shape is listed `failed: not a transcript` and the others `ready`. Needs `evidence:align`, could-not-judge without | a header line read into the turn before it (the turn given the previous speaker); a speaker invented for a Whisper segment; a document in neither shape stored as plain text |
 
 `manifest.features` checks §2.1's co-occurrence: `evidence:verify` iff
@@ -555,7 +622,8 @@ iff `verify_correction_endpoint`, and never without `evidence:verify`;
 `knowledge:sentences` iff `knowledge.sentence_scorer`, and never without
 `knowledge:range` and `knowledge:scoped`; `knowledge:locator` never
 without `knowledge:range`; `ingest:transcripts` never without
-`knowledge:locator` and `ingest:recipe`.
+`knowledge:locator` and `ingest:recipe`; `evidence:verify_sentences` never
+without `evidence:verify` and `knowledge:sentences`.
 
 ## 7. Backward compatibility
 
@@ -576,6 +644,9 @@ without `knowledge:range`; `ingest:transcripts` never without
 - `locator` is skipped when absent, so a v0.5 span reads and writes back
   unchanged, and a v0.6 client reads a span from a host without
   `knowledge:locator` as one that names no place.
+- `specifics` and `differing` are skipped when empty, so a §2.6 reply
+  reads and writes back unchanged; a client reads their absence from a
+  host without `evidence:verify_sentences` as "not named", not as none.
 - A client sends `format = "transcript"` only to a host advertising
   `ingest:transcripts`; a host without it may refuse the recipe or read the
   document as plain text, its spans then carrying no turn.

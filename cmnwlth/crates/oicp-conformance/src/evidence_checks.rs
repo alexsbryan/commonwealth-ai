@@ -107,6 +107,15 @@ pub fn v05_feature_failures(m: &ProviderManifest) -> Vec<String> {
     if m.has_feature(features::KNOWLEDGE_LOCATOR) && !m.has_feature(features::KNOWLEDGE_RANGE) {
         f.push("knowledge:locator requires knowledge:range".into());
     }
+    // v0.6 §2.15: verify's candidates are sentences.
+    for (feat, name) in [
+        (features::EVIDENCE_VERIFY, "evidence:verify"),
+        (features::KNOWLEDGE_SENTENCES, "knowledge:sentences"),
+    ] {
+        if m.has_feature(features::EVIDENCE_VERIFY_SENTENCES) && !m.has_feature(feat) {
+            f.push(format!("evidence:verify_sentences requires {name}"));
+        }
+    }
     // v0.6 §2.14: a transcript is declared in a recipe and located by turn.
     for (feat, name) in [
         (features::KNOWLEDGE_LOCATOR, "knowledge:locator"),

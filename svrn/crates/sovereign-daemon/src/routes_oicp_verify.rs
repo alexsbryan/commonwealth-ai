@@ -532,6 +532,7 @@ impl Judged {
                 span_absent,
                 verdict,
                 score,
+                differing: Vec::new(),
             });
         }
         VerifiedClaim {
@@ -542,6 +543,7 @@ impl Judged {
             verdict: self.verdict,
             evidence,
             specifics_absent: self.specifics_absent,
+            specifics: Vec::new(),
             rung: self.rung.to_string(),
             score: self.score,
             operating_point: UNCALIBRATED.to_string(),

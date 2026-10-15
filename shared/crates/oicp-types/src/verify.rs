@@ -127,9 +127,14 @@ pub struct VerifiedClaim {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub evidence: Vec<JudgedPassage>,
     /// The claim's specifics that no passage carries, as written in the
-    /// claim. Set by the fast tier; empty otherwise.
+    /// claim. Set by the fast tier; empty otherwise. Under v0.6 §2.15 a
+    /// hint the checker reads, never a verdict.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub specifics_absent: Vec<String>,
+    /// v0.6 §2.15 (`evidence:verify_sentences`): the specifics the claim
+    /// asserts, each by kind and as a range of the unit inside the claim.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub specifics: Vec<ClaimSpecific>,
     /// The rung that decided, the host's name for it.
     pub rung: String,
     /// The deciding rung's score, in `[0, 1]`, where it has one.
@@ -191,6 +196,49 @@ pub struct JudgedPassage {
     /// The rung's score for this passage, where it has one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub score: Option<f32>,
+    /// v0.6 §2.15: on a `contradicted` passage, and only there, each
+    /// specific of the claim the passage states otherwise.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub differing: Vec<DifferingSpecific>,
+}
+
+/// v0.6 §2.15: what a specific is. A closed set; a kind outside it is a
+/// decode error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClaimSpecificKind {
+    /// A number with or without a unit, a percentage, a currency amount.
+    Figure,
+    /// A year or a written date.
+    Date,
+    /// A number with a counted noun.
+    Quantity,
+    /// A run of name-shaped words: a person, a place, a work.
+    Name,
+}
+
+/// v0.6 §2.15: one specific, as a range of the text it is read from (the
+/// unit for a claim's, the stored text for a passage's), in code points.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClaimSpecific {
+    /// What it is.
+    pub kind: ClaimSpecificKind,
+    /// First code point.
+    pub start: u64,
+    /// One past the last code point.
+    pub end: u64,
+    /// The text's `[start, end)`, exactly.
+    pub exact: String,
+}
+
+/// v0.6 §2.15: a specific of the claim and the passage's of the same kind
+/// that states it otherwise: what makes the passage `contradicted`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DifferingSpecific {
+    /// The claim's, in the unit.
+    pub claim: ClaimSpecific,
+    /// The passage's, in its stored text.
+    pub source: ClaimSpecific,
 }
 
 /// What a client says a decision should have been. Closed, and wider than

@@ -3,6 +3,7 @@
 //! lawful fake and red against the fake that breaks exactly their field
 //! (oicp-v0.6.md §6).
 
+use crate::claim_checks::check_evidence_verify_sentences;
 use crate::evidence_checks::v05_feature_failures;
 use crate::fake_host::Breaks;
 use crate::located_checks::{check_ingest_transcript, check_knowledge_locator};
@@ -89,6 +90,62 @@ async fn ingest_transcript_is_red_against_a_turn_read_into_the_one_before_and_an
     assert!(
         f.iter()
             .any(|x| x == "ingest:transcripts requires knowledge:locator"),
+        "{f:?}"
+    );
+}
+
+/// v0.6 §2.15's failing inputs: a claim settled from the fast hint alone; a
+/// citation's year made a specific; a figure inside parentheses left out of
+/// the claim's specifics; beside them, a contradiction that names no
+/// differing specific.
+#[tokio::test]
+async fn evidence_verify_sentences_is_red_against_a_fast_verdict_a_cited_year_and_a_dropped_parenthesis(
+) {
+    let b = bench(Breaks::default()).await;
+    green(&check_evidence_verify_sentences(&b.host, &b.manifest).await);
+    for (breaks, says) in [
+        (
+            Breaks {
+                fast_hint_decides: true,
+                ..Breaks::default()
+            },
+            "at fast, `Late sailings rose to 7.5% of the total in 2020.` is unsupported; it \
+             should be abstained",
+        ),
+        (
+            Breaks {
+                citation_year_specific: true,
+                ..Breaks::default()
+            },
+            "`2019` is named a specific inside `(Okafor 2019)`, a citation or a locator",
+        ),
+        (
+            Breaks {
+                parenthesis_dropped: true,
+                ..Breaks::default()
+            },
+            "no figure, date or quantity specific covers `6.1`",
+        ),
+        (
+            Breaks {
+                contradicted_unnamed: true,
+                ..Breaks::default()
+            },
+            "is contradicted and no passage names a differing specific",
+        ),
+    ] {
+        let b = bench(breaks).await;
+        red(
+            &check_evidence_verify_sentences(&b.host, &b.manifest).await,
+            says,
+        );
+    }
+    let mut m = b.manifest.clone();
+    m.features.retain(|f| f != "knowledge:sentences");
+    let f = v05_feature_failures(&m);
+    assert!(
+        f.iter()
+            .any(|x| x == "evidence:verify_sentences requires knowledge:sentences"),
         "{f:?}"
     );
 }

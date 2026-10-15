@@ -17,7 +17,6 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use oicp_types::evidence::{reasons, texts_digest_preimage, DEFAULT_CONTEXT};
-use oicp_types::knowledge::reasons::SCORER_UNAVAILABLE;
 use oicp_types::transcript::reasons::NOT_A_TRANSCRIPT;
 use oicp_types::{
     AlignRequest, Alignment, Difference, DifferenceKind, Document, HeadingOutline, KnowledgeResult,
@@ -26,9 +25,10 @@ use oicp_types::{
 use serde_json::{json, Value};
 
 use crate::fixture::{code_points, sha256_hex, Library};
-use crate::shelf::{LocatedShelf, Shelf};
+use crate::shelf::Shelf;
 
 mod ingest;
+mod sentences;
 mod verify;
 
 /// The laws a fake can break, one switch each (oicp-v0.5.md §6's table).
@@ -87,6 +87,18 @@ pub struct Breaks {
     /// ingest.transcript: a declared transcript in neither shape is stored
     /// as plain text.
     pub non_transcript_stored: bool,
+    /// evidence.verify_sentences: the fast tier's literal miss decides
+    /// `unsupported`.
+    pub fast_hint_decides: bool,
+    /// evidence.verify_sentences: a year inside a citation, and a number
+    /// inside a locator, are read as specifics.
+    pub citation_year_specific: bool,
+    /// evidence.verify_sentences: no number inside parentheses is read as a
+    /// specific.
+    pub parenthesis_dropped: bool,
+    /// evidence.verify_sentences: a contradicted passage names no differing
+    /// specific.
+    pub contradicted_unnamed: bool,
     /// knowledge.sentences: each sentence's range is one code point past
     /// the sentence its `exact` and `content` carry.
     pub sentence_range_off_by_one: bool,
@@ -298,9 +310,13 @@ fn shelves() -> Vec<Shelf> {
     [
         include_str!("../fixture/headings.json"),
         include_str!("../fixture/transcripts.json"),
+        include_str!("../fixture/claims.json"),
     ]
     .into_iter()
-    .map(|j| LocatedShelf::load(j).expect("shelf loads").shelf)
+    .map(|j| {
+        let fixture: Value = serde_json::from_str(j).expect("shelf fixture parses");
+        serde_json::from_value(fixture["shelf"].clone()).expect("shelf loads")
+    })
     .collect()
 }
 
@@ -493,7 +509,7 @@ async fn capabilities(State(f): State<Arc<Fake>>) -> Json<Value> {
         "models": [],
         "features": [
             "ingest:v1", "ingest:recipe_test", "ingest:recipe", "ingest:documents", "evidence:text",
-            "evidence:align", "evidence:verify", "evidence:verify_corrections", "knowledge:document", "knowledge:scoped",
+            "evidence:align", "evidence:verify", "evidence:verify_corrections", "evidence:verify_sentences", "knowledge:document", "knowledge:scoped",
             "knowledge:range", "knowledge:sentences", "knowledge:locator", "ingest:transcripts", "auth:named_client"
         ],
         "knowledge": {
@@ -554,7 +570,7 @@ async fn search(State(f): State<Arc<Fake>>, Json(req): Json<Value>) -> Response 
     if req.get("granularity").and_then(Value::as_str) == Some("sentence") {
         let limit = req.get("limit").and_then(Value::as_u64);
         let limit = limit.unwrap_or(KnowledgeSearchRequest::DEFAULT_LIMIT.into()) as usize;
-        return sentences(&f, query, &corpora, &documents, limit);
+        return sentences::search(&f, query, &corpora, &documents, limit);
     }
     let hits: Vec<KnowledgeResult> = f
         .of(&corpora)
@@ -566,90 +582,6 @@ async fn search(State(f): State<Arc<Fake>>, Json(req): Json<Value>) -> Response 
         .map(|s| f.hit(s, 0, s.text.chars().count() as u64, 1.0))
         .collect();
     Json(json!({"results": hits, "corpora_searched": f.searched(&corpora)})).into_response()
-}
-
-/// The lawful sentence search (§2.11), every sentence indexed: each scoped
-/// text's sentences (`.`, `!` or `?` before whitespace or the end, trimmed)
-/// scored by cosine over word counts, best first, at most `limit`, those
-/// sharing no word with the query left out. `rerank_without_slot` refuses by
-/// name; `rerank_falls_back` answers with cosine anyway.
-fn sentences(
-    f: &Fake,
-    query: &str,
-    corpora: &[String],
-    documents: &[String],
-    limit: usize,
-) -> Response {
-    if f.breaks.rerank_without_slot && !f.breaks.rerank_falls_back {
-        return refuse(
-            StatusCode::SERVICE_UNAVAILABLE,
-            json!({"error": SCORER_UNAVAILABLE, "scorer": "rerank"}),
-        );
-    }
-    let q = word_counts(query);
-    let mut found: Vec<(f32, &Stored, u64, u64)> = Vec::new();
-    for s in f.of(corpora).filter(|s| f.in_scope(documents, s)) {
-        let chars: Vec<char> = s.text.chars().collect();
-        let mut start = 0;
-        for i in 0..chars.len() {
-            let stop = matches!(chars[i], '.' | '!' | '?')
-                && chars.get(i + 1).is_none_or(|c| c.is_whitespace());
-            if !stop && i + 1 < chars.len() {
-                continue;
-            }
-            let (mut a, mut b) = (start, i + 1);
-            start = i + 1;
-            while a < b && chars[a].is_whitespace() {
-                a += 1;
-            }
-            while b > a && chars[b - 1].is_whitespace() {
-                b -= 1;
-            }
-            let sentence: String = chars[a..b].iter().collect();
-            let score = cosine(&q, &word_counts(&sentence));
-            if score > 0.0 {
-                found.push((score, s, a as u64, b as u64));
-            }
-        }
-    }
-    found.sort_by(|x, y| y.0.total_cmp(&x.0));
-    found.truncate(limit);
-    let hits: Vec<KnowledgeResult> = found
-        .into_iter()
-        .map(|(score, s, a, b)| {
-            let mut hit = f.hit(s, a, b, score);
-            if let (true, Some(span)) = (f.breaks.sentence_range_off_by_one, hit.span.as_mut()) {
-                (span.start, span.end) = (a + 1, b + 1);
-            }
-            hit
-        })
-        .collect();
-    Json(json!({
-        "results": hits, "corpora_searched": f.searched(corpora),
-        "scorer": {"name": "cosine", "model": "fake-word-counts"}, "route": "index",
-    }))
-    .into_response()
-}
-
-fn word_counts(s: &str) -> BTreeMap<String, f32> {
-    let mut m = BTreeMap::new();
-    for w in s
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|w| !w.is_empty())
-    {
-        *m.entry(w.to_lowercase()).or_insert(0.0) += 1.0;
-    }
-    m
-}
-
-fn cosine(a: &BTreeMap<String, f32>, b: &BTreeMap<String, f32>) -> f32 {
-    let dot: f32 = a.iter().map(|(w, n)| n * b.get(w).unwrap_or(&0.0)).sum();
-    let norm = |m: &BTreeMap<String, f32>| m.values().map(|n| n * n).sum::<f32>().sqrt();
-    if dot == 0.0 {
-        0.0
-    } else {
-        dot / (norm(a) * norm(b))
-    }
 }
 
 async fn text(

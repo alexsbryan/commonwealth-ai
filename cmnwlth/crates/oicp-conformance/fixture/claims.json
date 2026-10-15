@@ -1,0 +1,83 @@
+{
+  "shelf": {
+    "corpus_id": "oicp-conformance-claims",
+    "documents": [
+      {
+        "name": "port-ledger",
+        "text": "The port recorded 412 sailings in 2019, and 31 of them left late.\n\nLate sailings rose to 7.5 percent of the total in 2020.\n\nThe harbour office blamed the tide tables for most of the delays.\n"
+      }
+    ]
+  },
+  "claims": [
+    {
+      "unit": "The port recorded 412 sailings in 2019 (Okafor 2019).",
+      "specifics": [
+        "412",
+        "2019"
+      ],
+      "none_within": [
+        "(Okafor 2019)"
+      ],
+      "fast": {
+        "verdict": "abstained"
+      },
+      "checker": {
+        "verdict": "supported"
+      }
+    },
+    {
+      "unit": "The port recorded 512 sailings in 2019.",
+      "specifics": [
+        "512",
+        "2019"
+      ],
+      "checker": {
+        "verdict": "contradicted",
+        "differing": [
+          [
+            "512",
+            "412"
+          ]
+        ]
+      }
+    },
+    {
+      "unit": "Late sailings rose to 7.5% of the total in 2020.",
+      "specifics": [
+        "7.5%",
+        "2020"
+      ],
+      "fast": {
+        "verdict": "abstained"
+      },
+      "checker": {
+        "verdict": "supported"
+      }
+    },
+    {
+      "unit": "Late sailings rose to 7.5 percent of the total in 2020 (against 6.1 percent the year before).",
+      "specifics": [
+        "7.5",
+        "2020",
+        "6.1"
+      ]
+    },
+    {
+      "unit": "Lighthouse keepers were paid 300 shillings a year (page 14).",
+      "specifics": [
+        "300"
+      ],
+      "none_within": [
+        "(page 14)"
+      ],
+      "fast": {
+        "verdict": "unsupported",
+        "evidence": false
+      },
+      "checker": {
+        "verdict": "unsupported",
+        "evidence": false
+      }
+    }
+  ]
+}

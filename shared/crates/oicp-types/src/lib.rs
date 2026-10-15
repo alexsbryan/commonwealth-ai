@@ -157,4 +157,5 @@ pub use scoring::{
     THROUGHPUT_FLOOR, THROUGHPUT_OBSERVATION_THRESHOLD, THROUGHPUT_REFERENCE_TG_TOK_S,
 };
 pub use transcript::{DocumentFormat, TranscriptShape, TurnOutline, TurnStart};
+pub use verify::{ClaimSpecific, ClaimSpecificKind, DifferingSpecific};
 pub use version::OICP_VERSION;
