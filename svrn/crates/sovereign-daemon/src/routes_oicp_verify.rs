@@ -20,7 +20,9 @@
 //!   value). A miss is a hint in `specifics_absent`; the tier `abstained`;
 //! - **checker** judges the claim against each of the best candidates in the
 //!   gate's own per-claim register (`claim_chunk_support`), at the
-//!   faithfulness lane's threshold. A candidate it does not back that states
+//!   faithfulness lane's threshold. It is shown the claim less its citations
+//!   and locators (`without_citations`, the recogniser the specifics use):
+//!   a source backs what a claim says, not whom it cites. A candidate it does not back that states
 //!   one of the claim's figures, dates or quantities otherwise
 //!   (`differing_specifics`) is `contradicted` and names the pair.
 //!
@@ -50,7 +52,7 @@ use sovereign_contracts::types::SpecificsTally;
 use sovereign_core::oicp::ShardingPrivacy;
 use sovereign_core::runtime::{
     claim_chunk_support_checked, differing_specifics, sentence_ranges, sentence_specifics,
-    value_present_in_chunks, Specific, SpecificKind,
+    value_present_in_chunks, without_citations, Specific, SpecificKind,
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::Speed;
@@ -540,13 +542,22 @@ async fn judge_claim(
 /// A candidate it does not back that states one of the claim's specifics
 /// otherwise is `contradicted`; the claim is `supported` on any support, else
 /// `contradicted` on any contradiction, else `unsupported` with its
-/// candidates, nearest first.
+/// candidates, nearest first. The judge reads the claim less its citations
+/// and locators; the claim's specifics and wire span stay the unit's.
 async fn judge_with_checker(
     claim: &str,
     specifics: Vec<Specific>,
     shown: Vec<Passage>,
     inference: &Arc<dyn InferenceProvider>,
 ) -> Result<Judged, Shed> {
+    let (asked, cut) = without_citations(claim);
+    if cut > 0 {
+        tracing::debug!(
+            %claim,
+            citations = cut,
+            "oicp verify: citations and locators removed from what the checker judges"
+        );
+    }
     let mut evidence = Vec::new();
     let mut best: Option<f64> = None;
     let mut answered = 0usize;
@@ -554,7 +565,7 @@ async fn judge_with_checker(
         let support = match claim_chunk_support_checked(
             inference,
             &p.span.exact,
-            claim,
+            &asked,
             ShardingPrivacy::LocalOnly,
         )
         .await

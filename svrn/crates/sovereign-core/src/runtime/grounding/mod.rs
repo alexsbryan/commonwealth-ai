@@ -61,7 +61,8 @@ mod value_presence;
 // `sovereign_core::runtime` (see runtime.rs) so the bench shares one
 // implementation rather than re-deriving the check.
 pub use specifics::{
-    differing_specifics, sentence_ranges, sentence_specifics, Specific, SpecificKind,
+    differing_specifics, sentence_ranges, sentence_specifics, without_citations, Specific,
+    SpecificKind,
 };
 pub use value_presence::{assess_asserted_value, value_present_in_chunks, AssertedValue};
 

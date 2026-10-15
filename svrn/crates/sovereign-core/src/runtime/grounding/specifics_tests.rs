@@ -180,6 +180,42 @@ fn nothing_inside_a_citation_or_a_locator_is_a_specific() {
     }
 }
 
+/// What a model judging a claim is shown: the claim less what
+/// [`cited_ranges`] recognises, the whitespace at each cut tidied, and
+/// parentheses that are no citation kept with their figure.
+#[test]
+fn without_citations_cuts_what_the_specifics_leave_out_and_nothing_else() {
+    for (s, want, n) in [
+        (
+            "The port recorded 412 sailings in 2019 (Okafor 2019).",
+            "The port recorded 412 sailings in 2019.",
+            1,
+        ),
+        (
+            "The port recorded 412 sailings in 2019 [@okafor2019].",
+            "The port recorded 412 sailings in 2019.",
+            1,
+        ),
+        (
+            "The basin held 14 treaties (p. 12), [3] by 1990 [12, 13].",
+            "The basin held 14 treaties, by 1990.",
+            3,
+        ),
+        (
+            "[3] The basin held 14 treaties (see Okafor 2019; Ruiz 2020a).",
+            "The basin held 14 treaties.",
+            2,
+        ),
+        (
+            "Late sailings rose to 7.5 percent (against 6.1 percent the year before).",
+            "Late sailings rose to 7.5 percent (against 6.1 percent the year before).",
+            0,
+        ),
+    ] {
+        assert_eq!(without_citations(s), (want.to_string(), n), "{s}");
+    }
+}
+
 /// Failing input (platform row PC1, amended 2026-10-15): a figure inside
 /// parentheses left out of the claim's specifics. Parentheses that are no
 /// citation and no locator hold specifics like any other words.

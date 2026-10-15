@@ -12,7 +12,7 @@
 
 use std::net::SocketAddr;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use axum::body::Body;
 use axum::extract::ConnectInfo;
@@ -76,8 +76,11 @@ fn numbers(s: &str) -> Vec<String> {
 }
 
 /// Backs a claim (label A at 0.9) exactly when the sentence it is shown
-/// carries every number the claim writes.
-struct FigureJudge;
+/// carries every number the claim writes, and keeps each claim it is asked.
+#[derive(Default)]
+struct FigureJudge {
+    asked: Mutex<Vec<String>>,
+}
 
 #[async_trait::async_trait]
 impl InferenceProvider for FigureJudge {
@@ -96,6 +99,7 @@ impl InferenceProvider for FigureJudge {
             .nth(1)
             .and_then(|c| c.split("\n\n").next())
             .expect("the judge prompt names its claim");
+        self.asked.lock().unwrap().push(claim.to_string());
         let held = numbers(passage);
         let backs = numbers(claim).iter().all(|n| held.contains(n));
         let text = if backs {
@@ -150,8 +154,19 @@ async fn verify_one(
     unit: &str,
     tier: &str,
 ) -> (VerifiedClaim, VerifyResponse) {
-    let router =
-        client_router(state.clone()).layer(axum::Extension(VerifyJudge(Arc::new(FigureJudge))));
+    let (c, r, _) = verify_asking(state, fx, unit, tier).await;
+    (c, r)
+}
+
+/// [`verify_one`], and each claim the checker's judge was asked.
+async fn verify_asking(
+    state: &AppState,
+    fx: &Fixture,
+    unit: &str,
+    tier: &str,
+) -> (VerifiedClaim, VerifyResponse, Vec<String>) {
+    let judge = Arc::new(FigureJudge::default());
+    let router = client_router(state.clone()).layer(axum::Extension(VerifyJudge(judge.clone())));
     let mut req = Request::post("/oicp/v1/verify")
         .header("host", "127.0.0.1:9741")
         .header("content-type", "application/json")
@@ -172,7 +187,8 @@ async fn verify_one(
     let [c] = r.claims.as_slice() else {
         panic!("one sentence is one claim: {r:?}")
     };
-    (c.clone(), r)
+    let asked = judge.asked.lock().unwrap().clone();
+    (c.clone(), r, asked)
 }
 
 /// `s`'s code points `[a, b)`.
@@ -304,4 +320,33 @@ async fn each_claim_names_its_figures_by_kind_and_none_inside_a_citation() {
     let (c, _) = verify_one(&state, &fx, OTHER_FIGURE, "fast").await;
     assert_eq!(c.verdict, VerifyVerdict::Abstained, "{c:?}");
     assert_eq!(c.specifics_absent, vec!["512".to_string()], "{c:?}");
+}
+
+/// Failing input (platform row PC1, live 2026-10-15): the checker judging a
+/// citation as content the source must back. On the daemon at :9741
+/// `The port recorded 412 sailings in 2019 (Okafor 2019).` was `unsupported`
+/// at 0.387 while the same sentence bare was `supported` at 1.0. What the
+/// checker is asked is the claim less its citations and locators, the same
+/// ones its specifics leave out; parentheses that are no citation stay, and
+/// the wire's claim is still the unit's own.
+#[tokio::test]
+async fn the_checker_judges_the_claim_without_its_citations() {
+    let (_tmp, state, fx) = shelf_host().await;
+    let bare = "The port recorded 412 sailings in 2019.";
+    for unit in [
+        RESTATED,
+        "The port recorded 412 sailings in 2019 [@okafor2019].",
+        "The port recorded 412 sailings in 2019 (p. 12).",
+        "The port recorded 412 sailings in 2019 [3].",
+    ] {
+        let (c, _, asked) = verify_asking(&state, &fx, unit, "checker").await;
+        assert_eq!(c.exact, unit, "{c:?}");
+        assert!(!asked.is_empty(), "{unit} reached no checker: {c:?}");
+        assert!(asked.iter().all(|a| a == bare), "{unit} asked as {asked:?}");
+    }
+    let kept = "Late sailings rose to 7.5 percent of the total in 2020 (against 6.1 percent the year before).";
+    let (c, _, asked) = verify_asking(&state, &fx, kept, "checker").await;
+    assert_eq!(c.exact, kept, "{c:?}");
+    assert!(!asked.is_empty(), "{kept} reached no checker: {c:?}");
+    assert!(asked.iter().all(|a| a == kept), "asked as {asked:?}");
 }

@@ -171,11 +171,13 @@ pub use grounding::{
 // implementation (the flywheel generates against a pinned port of this fn;
 // export is where the genuine article gets the final word).
 pub use grounding::value_present_in_chunks;
-// A text's sentences and their specifics by kind, found without a model, and
-// what a passage states otherwise: `POST /oicp/v1/verify` reads them (the
-// daemon's `routes_oicp_verify`, OICP v0.6 §2.15).
+// A text's sentences and their specifics by kind, found without a model,
+// what a passage states otherwise, and a sentence less its citations (what
+// the checker is shown): `POST /oicp/v1/verify` reads them (the daemon's
+// `routes_oicp_verify`, OICP v0.6 §2.15).
 pub use grounding::{
-    differing_specifics, sentence_ranges, sentence_specifics, Specific, SpecificKind,
+    differing_specifics, sentence_ranges, sentence_specifics, without_citations, Specific,
+    SpecificKind,
 };
 // The native-grounding stack (`NATIVE_GROUNDING.md`). Default ON since
 // 2026-08-11; `SOVEREIGN_NATIVE_GROUNDING=0` is the opt-out. What is on

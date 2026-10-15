@@ -2,9 +2,10 @@
 //! A text's sentences and each sentence's specifics (the figures, dates,
 //! quantities and names it asserts), found without a model: what
 //! `POST /oicp/v1/verify` (`cmnwlth/docs/oicp-v0.6.md` §2.15) names on every
-//! claim, hints at the fast tier with [`super::value_present_in_chunks`], and
+//! claim, hints at the fast tier with [`super::value_present_in_chunks`],
 //! pairs against a passage's when the passage states one otherwise
-//! ([`differing_specifics`]).
+//! ([`differing_specifics`]), and cuts from what its checker is shown
+//! ([`without_citations`]).
 //!
 //! Both are shapes, not readings. A sentence ends at `.`, `!` or `?` before
 //! whitespace and an uppercase letter, a digit or an opening quote, unless
@@ -450,6 +451,37 @@ pub(crate) fn cited_ranges(sentence: &str) -> Vec<Range<usize>> {
         }
     }
     out
+}
+
+/// `sentence` with its citations and locators ([`cited_ranges`], the one
+/// recogniser) taken out, and how many were: what a model judging the
+/// sentence's content is shown, since a source backs what a claim says, not
+/// who it cites (§2.15). The whitespace at each cut is tidied — one space
+/// between words, none before closing punctuation; the rest is untouched.
+pub fn without_citations(sentence: &str) -> (String, usize) {
+    let mut cuts = cited_ranges(sentence);
+    if cuts.is_empty() {
+        return (sentence.to_string(), 0);
+    }
+    // A citation inside a cited parenthesis is cut with it.
+    cuts.sort_by_key(|r| (r.start, std::cmp::Reverse(r.end)));
+    cuts.dedup_by(|inner, outer| inner.end <= outer.end);
+    let chars: Vec<char> = sentence.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    for r in &cuts {
+        out.extend(&chars[i..r.start]);
+        out.truncate(out.trim_end().len());
+        i = r.end;
+        while chars.get(i).is_some_and(|c| c.is_whitespace()) {
+            i += 1;
+        }
+        if !out.is_empty() && chars.get(i).is_some_and(|c| !".,;:!?)]".contains(*c)) {
+            out.push(' ');
+        }
+    }
+    out.extend(&chars[i..]);
+    (out, cuts.len())
 }
 
 /// Words that open a locator: "(page 14)", "(p. 3)", "(§ 4)", "(chapter 2)".
