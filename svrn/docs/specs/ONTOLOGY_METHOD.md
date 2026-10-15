@@ -163,7 +163,8 @@ folding the field holds the record a pick names or nothing, never a mention's wo
 them: a mention's reading holds the record RESOLVE put the same document's mention of those words on when the
 type's mentions are decided, and otherwise stays on the derivation line as a cited unresolved reading; a held record
 no exclusion set can judge (a condition's attribute absent) is served and marked `unjudged` on its line (operator,
-2026-10-12), `read_fields.rs`), and Pick the subject whose type has a metadata source
+2026-10-12), `read_fields.rs`; a statement's own reference field, a relation's `to` among them, holds its record by
+the same rule, `statement_refs.rs`, 2026-10-15), and Pick the subject whose type has a metadata source
 among the records that source reads from this document, its answer written as the subject's identity readings
 (the statement's words rarely write the address that identifies a person: of Ward's 64 commitments, 59 pointed at no
 word and none reached its person, 2026-10-11), and **Point** at each open-valued field

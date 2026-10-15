@@ -40,6 +40,8 @@ mod protocol_moves;
 mod protocol_support;
 #[path = "resolution_derived/read_fields.rs"]
 mod read_fields;
+#[path = "resolution_derived/statement_refs.rs"]
+mod statement_refs;
 
 pub use outcome::{
     protocol_readings, write_fold, DeriveStage, DerivedOutcome, DerivedProtocolAudit,
@@ -47,11 +49,13 @@ pub use outcome::{
 };
 
 /// Whether `policies` derive anything in the atlas build: a declared path or
-/// fold, a field whose readings a record folds (`AttrDecl::by`), or a thread
-/// that places documents on records (`membership`).
+/// fold, a field whose readings a record folds (`AttrDecl::by`), a read
+/// statement's own reference (`statement_refs`), or a thread that places
+/// documents on records (`membership`).
 pub fn derives(policies: &OntologyPolicies) -> bool {
     !policies.derivation.derived.is_empty()
         || !read_fields::declared(policies).is_empty()
+        || !statement_refs::declared(policies).is_empty()
         || membership::applies(policies)
 }
 
@@ -70,9 +74,18 @@ pub fn derive_attributes(
     let order = declared.order(&policies.shape.types)?;
     let mut report = DerivedReport::new();
     // First, so a declared derivation after RESOLVE reads a record's folded
-    // fields as it reads any attribute.
+    // fields and a statement's references as it reads any attribute.
     if stage == DeriveStage::AfterResolve {
         read_fields::derive(
+            atoms,
+            documents,
+            participants,
+            policies,
+            &index,
+            &mut report,
+            sink,
+        )?;
+        statement_refs::resolve(
             atoms,
             documents,
             participants,
@@ -702,3 +715,7 @@ fn scalars(v: Option<&Value>) -> Vec<String> {
 #[cfg(test)]
 #[path = "resolution_derived/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "resolution_derived/statement_refs_tests.rs"]
+mod statement_refs_tests;

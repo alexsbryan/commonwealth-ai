@@ -885,7 +885,12 @@ question the pipeline asks about a type is a method on the resolved
   (`DerivedPolicy::exclusions_of`, the one Pick reads too), and otherwise is
   never held: it stays on the derivation line under `unresolved`, cited by its
   statement, document, words and evidence, so a served reference is a record of
-  its type or nothing; RESOLVE itself writes no record value. When
+  its type or nothing; RESOLVE itself writes no record value. A read
+  statement's own `ref` field (a claim kind's declared one, a relation's
+  `to`) follows the same rule next (`read_fields::held`,
+  `resolution_derived/statement_refs.rs`, added 2026-10-15): it holds the
+  record its reading names or is removed, its reading kept on the statement
+  and an unresolved one on the derivation line. When
   `change.document` declares a thread and an id, a record also holds each
   document the run read that states nothing of its type and whose thread's
   statements all sit on it, by declared id under `thread_documents`

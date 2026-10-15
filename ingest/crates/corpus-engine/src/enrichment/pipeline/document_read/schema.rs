@@ -157,7 +157,7 @@ pub(super) fn read_kind(ty: &OntologyTypeDecl, policies: &OntologyPolicies) -> b
 /// The fields a read statement of `decl` carries: those its shape implies (a
 /// state's value, a relation's `to`: `OntologyTypeDecl::implied_fields`), then
 /// its declared attributes.
-pub(super) fn statement_attributes<'a>(
+pub fn statement_attributes<'a>(
     index: &TypeIndex<'a>,
     decl: &'a OntologyTypeDecl,
 ) -> Vec<Cow<'a, AttrDecl>> {

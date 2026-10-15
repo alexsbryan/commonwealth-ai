@@ -28,7 +28,7 @@ use super::{
 use crate::enrichment::atlas::precision::{Precision, SourcePrecision};
 use crate::enrichment::atlas::resolution_records::{decides, BuildAtoms};
 use crate::enrichment::atlas::resolution_sources::key_name;
-use crate::enrichment::ontology::derived::FoldBy;
+use crate::enrichment::ontology::derived::{FoldBy, SetDecl};
 use crate::enrichment::ontology::{AttrDecl, AttrFamily, OntologyPolicies, TypeIndex};
 use crate::enrichment::pipeline::document_read::{
     field_readings, mention_words, DocumentReadField, SUBJECT_FIELDS_ATTRIBUTE,
@@ -139,6 +139,50 @@ fn record_read(
     }
 }
 
+/// What a reading of a reference to `of` holds.
+pub(super) enum Held {
+    /// The record it names, and the exclusion set over `of` that cannot
+    /// judge it, if one cannot (D3, operator 2026-10-12: held, and said so).
+    Record {
+        id: String,
+        unjudged: Option<String>,
+    },
+    /// The record it names, dropped by the exclusion set it is in.
+    Excluded { id: String, set: String },
+    /// Why it names no record ([`record_read`]).
+    Unresolved(String),
+}
+
+/// The one rule a reading of a reference follows, a record's folded field and
+/// a statement's own alike: the record [`record_read`] finds, unless an
+/// exclusion set over `of` holds it.
+pub(super) fn held(
+    graph: &Graph<'_>,
+    exclusions: &[&SetDecl],
+    doc: Option<&str>,
+    of: &str,
+    value: &Value,
+) -> Held {
+    let i = match record_read(graph, doc, of, value) {
+        Ok(i) => i,
+        Err(why) => return Held::Unresolved(why),
+    };
+    let id = graph.entities[i].id.as_str().to_string();
+    let node = Node::Entity(i);
+    if let Some(set) = exclusions
+        .iter()
+        .find(|s| graph.member(s, &node) == Some(true))
+    {
+        let set = set.id.clone();
+        return Held::Excluded { id, set };
+    }
+    let unjudged = exclusions
+        .iter()
+        .find(|s| graph.member(s, &node).is_none())
+        .map(|s| s.id.clone());
+    Held::Record { id, unjudged }
+}
+
 /// Fold each declared field onto every record of its type, writing the
 /// decided value and telling `sink` every record's outcome.
 pub(super) fn derive(
@@ -202,30 +246,22 @@ pub(super) fn derive(
                     };
                     let doc = graph.claim_doc[j];
                     let cited = evidence.clone();
-                    let (key, value) = match of.map(|of| record_read(&graph, doc, of, &value)) {
+                    let (key, value) = match of.map(|of| held(&graph, &exclusions, doc, of, &value))
+                    {
                         None => (words(&value), value),
-                        Some(Ok(i)) => {
-                            let id = graph.entities[i].id.as_str().to_string();
-                            let node = Node::Entity(i);
-                            if let Some(set) = exclusions
-                                .iter()
-                                .find(|s| graph.member(s, &node) == Some(true))
-                            {
-                                debug!(claim = %claim.id.as_str(), attribute = attr, atom = %id, set = %set.id, "atlas/derive: a reference read names a record in an exclusion set; the record does not hold it");
-                                excluded.insert(id);
-                                continue;
-                            }
-                            // D3 (operator, 2026-10-12): a record no set can
-                            // judge is held, and the line says it is unjudged.
-                            if let Some(set) =
-                                exclusions.iter().find(|s| graph.member(s, &node).is_none())
-                            {
-                                debug!(claim = %claim.id.as_str(), attribute = attr, atom = %id, set = %set.id, "atlas/derive: a reference read names a record no exclusion set can judge; the record holds it, marked unjudged");
+                        Some(Held::Excluded { id, set }) => {
+                            debug!(claim = %claim.id.as_str(), attribute = attr, atom = %id, %set, "atlas/derive: a reference read names a record in an exclusion set; the record does not hold it");
+                            excluded.insert(id);
+                            continue;
+                        }
+                        Some(Held::Record { id, unjudged: set }) => {
+                            if let Some(set) = set {
+                                debug!(claim = %claim.id.as_str(), attribute = attr, atom = %id, %set, "atlas/derive: a reference read names a record no exclusion set can judge; the record holds it, marked unjudged");
                                 unjudged.insert(id.clone());
                             }
                             (id.clone(), Value::String(id))
                         }
-                        Some(Err(why)) => {
+                        Some(Held::Unresolved(why)) => {
                             debug!(claim = %claim.id.as_str(), attribute = attr, %why, "atlas/derive: a reference read names no record; it stays unresolved on the derivation line");
                             unresolved.push(UnresolvedReading {
                                 claim: claim.id.as_str().to_string(),
