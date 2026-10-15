@@ -393,6 +393,7 @@ fn what_the_document_reader_leaves_inert_is_warned_by_name() {
          [[enrichment.ontology.types]]\nname = \"batch_row\"\nkind = \"entity\"\nsource = {{ file = \"batches.csv\" }}\n\n\
          [[enrichment.ontology.types]]\nname = \"gadget\"\nkind = \"entity\"\nspecializes = \"item\"\n\n\
          [[enrichment.ontology.patterns]]\ntype = \"circular_flow\"\nedge_types = [\"near\"]\nmin_entities = 3\n\n\
+         [[enrichment.ontology.patterns]]\ntype = \"circular_flow\"\nname = \"loop\"\nedge_types = [\"near\", \"move\"]\nmin_entities = 3\n\n\
          [enrichment.ontology.derive]\narguments = true\n\n\
          [enrichment.ontology.voices]\nnot_entities = [\"the poster\"]\n",
         fixture()
@@ -405,7 +406,7 @@ fn what_the_document_reader_leaves_inert_is_warned_by_name() {
     );
     for needle in [
         "`derive.arguments` reconstructs arguments",
-        "`patterns` (1 declared)",
+        "pattern `loop` walks `move`, which the document reader makes no relation atom of",
         "`voices` (not_entities)",
         "`batch_row` declares a table source",
         "`gadget` specializes `item` but declares no identity_criterion",
@@ -414,7 +415,8 @@ fn what_the_document_reader_leaves_inert_is_warned_by_name() {
     }
     assert!(
         warned(&v, "`near`").is_empty(),
-        "a relation of a decided holder is read: {:#?}",
+        "a relation of a decided holder is read, and a pattern over it walks its atoms: {:#?}",
         v.warnings
     );
+    assert_eq!(warned(&v, "pattern `").len(), 1, "{:#?}", v.warnings);
 }

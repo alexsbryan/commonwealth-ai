@@ -206,12 +206,15 @@ and `decision_ref` never folded, silently). It names each declared type the read
 relation whose holder RESOLVE cannot decide, or an entity with no criterion no statement is about and no source supplies
 (`document_read::unread_types`; saltgrass's first blind recipe lost `vessel` and `condition` that way, silently). It
 also names what the declaration asks that the reader leaves inert (`validate_layer.rs::reader_inert`, 2026-10-15):
-argument reconstruction and voices (the general extractor's alone), patterns (they walk relation atoms the reader
-does not make), a table source (no stage reads one yet) and a type that specializes a decided one with no criterion
+argument reconstruction and voices (the general extractor's alone), a pattern over an edge type that is no read
+relation kind (patterns walk relation atoms, which the reader makes of read relation statements only), a table source (no stage reads one yet) and a type that specializes a decided one with no criterion
 of its own (RESOLVE inherits none); for that reason the ten templates stay on the general extractor. A
 state or relation whose holder RESOLVE decides is read as a statement about it (2026-10-15): a state carries its value,
 a field named for the state type, and a relation its other endpoint, `to` (`OntologyTypeDecl::implied_fields`), and
-both are served as claims of their type.
+both are served as claims of their type. After RESOLVE and the reference derive each is also a State or Relation
+atom beside its claim, one per statement, so trajectories, configurations and patterns read them as they read an
+extracted one (`resolution_records/statement_atoms.rs`, 2026-10-15; holders' trajectories chained by
+`resolution/trajectories.rs`, the pass 3b runs).
 
 **The window reader (experiment, 2026-10-13; `SOVEREIGN_READER=window`, DEFAULTS_LEDGER).** The race of
 2026-10-13 (REVIEW_BRIEF.md) read five generated mail worlds four ways with one hosted model: reading windows

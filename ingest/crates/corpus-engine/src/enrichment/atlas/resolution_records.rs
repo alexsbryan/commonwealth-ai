@@ -59,6 +59,8 @@ mod mentions;
 mod nearest;
 #[path = "resolution_records/retire.rs"]
 mod retire;
+#[path = "resolution_records/statement_atoms.rs"]
+pub mod statement_atoms;
 use local_subjects::{Assigned, Spot};
 use retire::retire;
 

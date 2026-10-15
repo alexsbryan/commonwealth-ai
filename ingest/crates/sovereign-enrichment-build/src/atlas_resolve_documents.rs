@@ -14,7 +14,9 @@ use corpus_engine::enrichment::atlas::resolution_derived::membership::place_thre
 use corpus_engine::enrichment::atlas::resolution_derived::{
     derive_attributes, derives, DeriveStage, DerivedReport,
 };
-use corpus_engine::enrichment::atlas::resolution_records::{resolve_declared_types, BuildAtoms};
+use corpus_engine::enrichment::atlas::resolution_records::{
+    resolve_declared_types, statement_atoms, BuildAtoms,
+};
 use corpus_engine::enrichment::atlas::resolve_records::{Answerer, DocumentResolution};
 use corpus_engine::enrichment::atlas::{
     project_source_atoms, stamp_claim_documents, Participants, SectionDocuments, SourceProjection,
@@ -190,6 +192,11 @@ pub(crate) async fn apply(
         failures.extend(refused);
     }
     derive(&mut atoms, DeriveStage::AfterResolve)?;
+    // After the reference derive, so a read relation's `to` is a record.
+    let projected = statement_atoms::project(&mut atoms, policies, sections, corpus_id);
+    if projected.states + projected.relations + projected.skipped.values().sum::<usize>() > 0 {
+        println!("  ✓ {}", projected.summary());
+    }
     if let Some(out) = derived.as_mut() {
         let read = read_documents(sections, documents);
         let report =

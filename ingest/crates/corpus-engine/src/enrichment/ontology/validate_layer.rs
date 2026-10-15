@@ -12,6 +12,7 @@ use super::derived::{FoldBy, DOCUMENT, SUBJECT};
 use super::{AttrDecl, AttrFamily, OntologyPolicies, SourceDecl, TypeIndex, TypeKind};
 use crate::enrichment::atlas::resolution_records::decides;
 use crate::recipe::OntologyBlock;
+use understanding_vocab::ontology::decl::PatternDecl;
 
 pub(super) fn layer_warnings(
     block: &OntologyBlock,
@@ -60,9 +61,9 @@ pub(super) fn layer_warnings(
 /// What a declaration the document reader reads also declares that the reader
 /// leaves inert, one warning each, so a feature never drops out unsaid. Each
 /// names its consumer's limit: argument reconstructions and voices are the
-/// general extractor's alone, patterns walk relation atoms the reader does not
-/// make (it stores a read relation as a claim of its type), no stage reads a
-/// table source yet, and RESOLVE does not inherit a criterion through
+/// general extractor's alone, a pattern walks relation atoms, which the reader
+/// makes of a read relation statement only (`statement_atoms`), no stage reads
+/// a table source yet, and RESOLVE does not inherit a criterion through
 /// `specializes` (`Criterion::of`). Failing input, named: the ten templates
 /// against the reader (inventory 2026-10-15): research-notebook's arguments
 /// and voices, due-diligence's pattern, product-support's `ticket`,
@@ -82,12 +83,27 @@ fn reader_inert(policies: &OntologyPolicies) -> Vec<String> {
                 .to_string(),
         );
     }
-    if !derivation.patterns.is_empty() {
-        out.push(format!(
-            "`patterns` ({} declared) walk relation atoms between entities, which the document \
-             reader does not make (a read relation is a claim of its type), so none is found.",
-            derivation.patterns.len()
-        ));
+    for p in &derivation.patterns {
+        let (name, edges) = pattern_edges(p);
+        let unread: Vec<&str> = edges
+            .into_iter()
+            .filter(|e| {
+                !types.iter().any(|t| {
+                    t.name == *e && t.kind == TypeKind::Relation && t.is_read_statement(types)
+                })
+            })
+            .collect();
+        if !unread.is_empty() {
+            out.push(format!(
+                "pattern `{name}` walks {}, which the document reader makes no relation atom of: \
+                 it makes one of a read relation statement only, so the pattern finds none there.",
+                unread
+                    .iter()
+                    .map(|e| format!("`{e}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
     }
     let voices = &policies.assertion.voices;
     let declared: Vec<&str> = [
@@ -131,6 +147,29 @@ fn reader_inert(policies: &OntologyPolicies) -> Vec<String> {
         }
     }
     out
+}
+
+/// A pattern's name and the edge types it walks. `custom_sql` walks none the
+/// declaration names (`recipe validate` already says it does not run).
+fn pattern_edges(p: &PatternDecl) -> (&str, Vec<&str>) {
+    match p {
+        PatternDecl::CircularFlow {
+            name, edge_types, ..
+        } => (name, edge_types.iter().map(String::as_str).collect()),
+        PatternDecl::RoleOverlap {
+            name, entity_roles, ..
+        } => (
+            name,
+            entity_roles
+                .values()
+                .filter_map(|r| r.split('.').next())
+                .collect(),
+        ),
+        PatternDecl::Threshold {
+            name, edge_type, ..
+        } => (name, vec![edge_type.as_str()]),
+        PatternDecl::CustomSql { name, .. } => (name, Vec::new()),
+    }
 }
 
 /// What `recipe validate` says of a metadata-sourced type's mentions in text

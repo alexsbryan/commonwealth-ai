@@ -145,6 +145,18 @@ async fn a_relation_statement_holds_its_other_endpoint_as_a_record() {
         &mut |v| lines.push(v.clone()),
     )
     .unwrap();
+    let sections = [crate::enrichment::pipeline::atlas::SectionExtraction {
+        section_id: "s1".into(),
+        ..Default::default()
+    }];
+    let projected = crate::enrichment::atlas::resolution_records::statement_atoms::project(
+        &mut atoms,
+        &p,
+        &sections,
+        "relations",
+    );
+    assert_eq!(projected.relations, 1, "{projected:?}");
+    assert_eq!(projected.skipped.get("no `to` record"), Some(&1));
 
     let claim = |id: &str| claims.iter().find(|c| c.id.as_str() == id).unwrap();
     let (trust, doubt, maren) = (claim("trust"), claim("doubt"), claim("maren"));
@@ -165,6 +177,20 @@ async fn a_relation_statement_holds_its_other_endpoint_as_a_record() {
         None,
         "no record is mentioned as Pellow"
     );
+    let [relation] = &relations[..] else {
+        panic!("one relation: {relations:?}");
+    };
+    let ends: Vec<Option<String>> = relation
+        .participants
+        .iter()
+        .map(|a| Some(a.as_str().to_string()))
+        .collect();
+    assert_eq!(
+        ends,
+        [record_of(trust), record_of(maren)],
+        "from Tabb to Maren"
+    );
+    assert_eq!(relation.label, LINE);
     let line = lines.iter().find(|l| l.atom == "doubt").expect("a line");
     assert_eq!(line.unresolved.len(), 1, "{line:?}");
     assert_eq!(line.unresolved[0].words, json!("Pellow"));

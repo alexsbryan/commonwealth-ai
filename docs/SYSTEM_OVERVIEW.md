@@ -892,7 +892,11 @@ question the pipeline asks about a type is a method on the resolved
   `to`) follows the same rule next (`read_fields::held`,
   `resolution_derived/statement_refs.rs`, added 2026-10-15): it holds the
   record its reading names or is removed, its reading kept on the statement
-  and an unresolved one on the derivation line. When
+  and an unresolved one on the derivation line. Then each read state or
+  relation statement is also a State or Relation atom beside its claim, one
+  per statement, and every holder given a state has its trajectory chained
+  again by 3b's own pass (`resolution_records/statement_atoms.rs`,
+  `resolution/trajectories.rs`, 2026-10-15). When
   `change.document` declares a thread and an id, a record also holds each
   document the run read that states nothing of its type and whose thread's
   statements all sit on it, by declared id under `thread_documents`
