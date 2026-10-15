@@ -6,7 +6,7 @@ use crate::enrichment::atlas::resolution_records::resolve_declared_types;
 use crate::enrichment::atlas::resolve_records::{Answerer, DocumentResolution};
 use crate::enrichment::pipeline::document_read::{
     ABOUT_ATTRIBUTE, CLAIM_FIELDS_ATTRIBUTE, LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE,
-    SUBJECT_FIELDS_ATTRIBUTE, WORDS_ATTRIBUTE,
+    SUBJECT_FIELDS_ATTRIBUTE, SUBJECT_NAME_ATTRIBUTE, WORDS_ATTRIBUTE,
 };
 use crate::index::EnrichmentChunkRow;
 use crate::recipe_ontology::OntologyBlock;
@@ -198,4 +198,132 @@ async fn a_relation_statement_holds_its_other_endpoint_as_a_record() {
         doubt.attributes[CLAIM_FIELDS_ATTRIBUTE]["to"]["value"], "Pellow",
         "the reading stays on the statement, cited"
     );
+}
+
+const TOLD: &str = "Maren said Tabb crossed the cobbles at six.";
+const HEARD: &str = "Pellow swore Maren was at the quay.";
+
+const ACCOUNT: &str = r#"
+[[types]]
+name = "character"
+kind = "entity"
+identity_criterion = "the same person"
+identity = ["name"]
+attributes = [{ name = "name", type = "text" }]
+
+[[types]]
+name = "account"
+kind = "claim"
+force = "assertive"
+subject = "character"
+attributes = [{ name = "speaker", type = "ref", of = "character" }]
+"#;
+
+/// A window read names a speaker by the name it read another statement's
+/// subject under: `Maren said Tabb crossed the cobbles` holds, as `speaker`,
+/// the record RESOLVE put the same document's statement about Maren on, with
+/// no mention of her read. A name read nowhere is not held, and says why.
+#[tokio::test]
+async fn a_window_ref_holds_the_record_its_window_read_under_that_name() {
+    let p = OntologyBlock {
+        version: 1,
+        body: toml::from_str(ACCOUNT).unwrap(),
+    }
+    .policies()
+    .unwrap();
+    let rows = [EnrichmentChunkRow {
+        id: 1,
+        content: format!("{TOLD} {HEARD}"),
+        title: None,
+        url: None,
+        metadata_raw: Some(json!({ "id": "ch1" }).to_string()),
+        source_doc_id: Some("ch1".into()),
+    }];
+    let docs = SectionDocuments::from_chunk_rows([("s1", &[1u64][..])], &rows);
+    let mut claims = vec![
+        handed(
+            "told",
+            Some("account"),
+            "tabb",
+            "Tabb",
+            json!({ "speaker": read("Maren") }),
+            json!({ SUBJECT_NAME_ATTRIBUTE: "Tabb" }),
+        ),
+        handed(
+            "heard",
+            Some("account"),
+            "maren",
+            "Maren",
+            json!({ "speaker": read("Pellow") }),
+            json!({ SUBJECT_NAME_ATTRIBUTE: "Maren" }),
+        ),
+    ];
+    for (claim, line) in claims.iter_mut().zip([TOLD, HEARD]) {
+        claim.content = line.into();
+        claim.anchor = Some(line.into());
+        claim.evidence[0].passage_preview = Some(line.into());
+    }
+    let mut entities = Vec::new();
+    let mut events = Vec::new();
+    let (mut states, mut relations, mut ars) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut positions, mut oppositions, mut edges) = (Vec::new(), Vec::new(), Vec::new());
+    let mut trajectories = BTreeMap::new();
+    let mut atoms = BuildAtoms {
+        entities: &mut entities,
+        events: &mut events,
+        states: &mut states,
+        relations: &mut relations,
+        claims: &mut claims,
+        argument_reconstructions: &mut ars,
+        positions: &mut positions,
+        oppositions: &mut oppositions,
+        edges: &mut edges,
+        trajectories: &mut trajectories,
+    };
+    let participants = Participants::default();
+    let mut on_document = |_: &str, _: &DocumentResolution| {};
+    let (reports, failures) = resolve_declared_types(
+        &mut atoms,
+        &docs,
+        &participants,
+        &p,
+        "accounts",
+        None,
+        Answerer::Proposed,
+        &mut on_document,
+    )
+    .await;
+    assert_eq!(reports[0].records, 2, "{reports:?} {failures:?}");
+    let mut lines = Vec::new();
+    derive_attributes(
+        &mut atoms,
+        &docs,
+        &participants,
+        &p,
+        DeriveStage::AfterResolve,
+        &mut |v| lines.push(v.clone()),
+    )
+    .unwrap();
+
+    let claim = |id: &str| claims.iter().find(|c| c.id.as_str() == id).unwrap();
+    let (told, heard) = (claim("told"), claim("heard"));
+    let record_of = |c: &Claim| c.subject.as_ref().map(|s| s.as_str().to_string());
+    assert!(
+        record_of(heard).is_some(),
+        "the account is about Maren's record"
+    );
+    assert_ne!(record_of(told), record_of(heard), "Tabb and Maren are two");
+    assert_eq!(
+        told.attributes.get("speaker"),
+        record_of(heard).map(Value::String).as_ref(),
+        "`speaker` holds Maren's record, not her name"
+    );
+    assert_eq!(
+        heard.attributes.get("speaker"),
+        None,
+        "no statement is read about Pellow"
+    );
+    let line = lines.iter().find(|l| l.atom == "heard").expect("a line");
+    assert_eq!(line.unresolved.len(), 1, "{line:?}");
+    assert_eq!(line.unresolved[0].words, json!("Pellow"));
 }

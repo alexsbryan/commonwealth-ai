@@ -884,7 +884,10 @@ question the pipeline asks about a type is a method on the resolved
   referenced type that its statement's document names in its fields and whose
   identity values it folds equal to (`key_name`, the projection's own naming),
   is dropped (`excluded`) when that record is in an exclusion set over the type
-  (`DerivedPolicy::exclusions_of`, the one Pick reads too), and otherwise is
+  (`DerivedPolicy::exclusions_of`, the one Pick reads too); failing a named
+  record it counts as the one RESOLVE put the same document's mention of those
+  words on, then the one it put the same document's statements a window read
+  under that name on (`SUBJECT_NAME_ATTRIBUTE`, 2026-10-15), and otherwise is
   never held: it stays on the derivation line under `unresolved`, cited by its
   statement, document, words and evidence, so a served reference is a record of
   its type or nothing; RESOLVE itself writes no record value. A read

@@ -11,7 +11,10 @@
 //! record is in an exclusion set over the type (`exclusions_of`). A reading
 //! that names no such record is a mention's words: it counts as the record
 //! RESOLVE put the same document's mention of those words on
-//! (`decides_mentions`). One that names neither is never held and never
+//! (`decides_mentions`). One that names no mention is a window read's name
+//! for a subject: it counts as the record RESOLVE put the same document's
+//! statements read under that name on (`SUBJECT_NAME_ATTRIBUTE`). One that
+//! names none of these is never held and never
 //! minted into a record: it stays on the derivation line, cited
 //! (`UnresolvedReading`).
 
@@ -31,7 +34,7 @@ use crate::enrichment::atlas::resolution_sources::key_name;
 use crate::enrichment::ontology::derived::{FoldBy, SetDecl};
 use crate::enrichment::ontology::{AttrDecl, AttrFamily, OntologyPolicies, TypeIndex};
 use crate::enrichment::pipeline::document_read::{
-    field_readings, mention_words, DocumentReadField, SUBJECT_FIELDS_ATTRIBUTE,
+    field_readings, mention_words, window_subject_name, DocumentReadField, SUBJECT_FIELDS_ATTRIBUTE,
 };
 
 /// Every `(type, attribute, by)` a declaration folds onto its records.
@@ -73,8 +76,10 @@ struct Folded {
 /// The one record of type `of` that document `doc`'s fields name and whose
 /// identity values, joined by a space as a Pick of it gives them, fold equal
 /// to `value`, by its place among the entities; failing that, the one record
-/// `doc`'s mention whose words fold equal to `value` is on; or why there is
-/// none. Keyed by the document, never by words across documents.
+/// `doc`'s mention whose words fold equal to `value` is on; failing that, the
+/// one record `doc`'s statements whose window-read subject name folds equal to
+/// `value` are on; or why there is none. Keyed by the document, never by words
+/// across documents.
 fn record_read(
     graph: &Graph<'_>,
     doc: Option<&str>,
@@ -129,12 +134,39 @@ fn record_read(
         })
         .collect();
     match mentioned.len() {
-        1 => Ok(*mentioned.first().unwrap()),
+        1 => return Ok(*mentioned.first().unwrap()),
+        0 => {}
+        n => {
+            return Err(format!(
+                "the document's mentions of {want:?} are on {n} `{of}` records"
+            ))
+        }
+    }
+    // A reading that names no mention is a window read's name for a subject:
+    // it holds the record RESOLVE put that document's statements about it on.
+    let subjects: BTreeSet<usize> = graph
+        .claims
+        .iter()
+        .zip(&graph.claim_doc)
+        .filter(|(_, d)| **d == Some(doc))
+        .filter(|(c, _)| {
+            window_subject_name(&c.attributes)
+                .and_then(fold_identity_value)
+                .is_some_and(|w| w == want)
+        })
+        .filter_map(|(c, _)| graph.entity_at.get(c.subject.as_ref()?.as_str()).copied())
+        .filter(|&i| {
+            let t = graph.entities[i].entity_type.as_str_repr();
+            t == of || graph.index.is_a(t, of)
+        })
+        .collect();
+    match subjects.len() {
+        1 => Ok(*subjects.first().unwrap()),
         0 => Err(format!(
             "no `{of}` the document's fields name or its text mentions is {want:?}"
         )),
         n => Err(format!(
-            "the document's mentions of {want:?} are on {n} `{of}` records"
+            "the document's statements about {want:?} are on {n} `{of}` records"
         )),
     }
 }

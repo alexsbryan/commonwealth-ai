@@ -161,7 +161,8 @@ reads from this document's fields, plus this document's mentions that name no li
 a declared exclusion set, a set a declared path drops by, and any mention naming such a record; `pick.rs`; a record
 folding the field holds the record a pick names or nothing, never a mention's words and never a record minted from
 them: a mention's reading holds the record RESOLVE put the same document's mention of those words on when the
-type's mentions are decided, and otherwise stays on the derivation line as a cited unresolved reading; a held record
+type's mentions are decided, or else the record RESOLVE put the same document's statements a window read under that
+name on (2026-10-15), and otherwise stays on the derivation line as a cited unresolved reading; a held record
 no exclusion set can judge (a condition's attribute absent) is served and marked `unjudged` on its line (operator,
 2026-10-12), `read_fields.rs`; a statement's own reference field, a relation's `to` among them, holds its record by
 the same rule, `statement_refs.rs`, 2026-10-15), and Pick the subject whose type has a metadata source
