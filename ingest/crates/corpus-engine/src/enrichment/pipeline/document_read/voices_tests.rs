@@ -92,7 +92,11 @@ async fn a_declared_voice_is_never_a_particular_or_a_subject() {
         .iter()
         .map(|c| c.subject.as_deref())
         .collect();
-    assert_eq!(subjects, [Some("issue 42"); 2], "the claim and the kept particular");
+    assert_eq!(
+        subjects,
+        [Some("issue 42"); 2],
+        "the claim and the kept particular"
+    );
     assert!(extraction
         .entities_introduced
         .iter()

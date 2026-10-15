@@ -345,7 +345,12 @@ fn verify_claim(
             claim.kind
         ));
     }
-    refuse_voice(policies, &claim.subject_name, None, &claim.subject_local_ref)?;
+    refuse_voice(
+        policies,
+        &claim.subject_name,
+        None,
+        &claim.subject_local_ref,
+    )?;
     if !claim_evidence_exists(document, &claim.evidence) {
         return Err(format!(
             "evidence is not an exact passage in document `{}` nor one of its declared identity fields",
