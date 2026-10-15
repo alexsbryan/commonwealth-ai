@@ -177,6 +177,11 @@ async fn apply_v04_enrichment(
         // v0.6 §2.9: progress lists installs from their spawn and each
         // install's documents (`routes_oicp_ingest::corpus_progress`).
         feats.push(features::INGEST_DOCUMENTS.to_string());
+        // v0.6 §2.14: a declared transcript is read by turn at ingest
+        // (`recipe_documents::DeclaredMetadata::read`); its turns' locators
+        // are served with `knowledge:locator`, advertised below on the same
+        // condition.
+        feats.push(features::INGEST_TRANSCRIPTS.to_string());
         IngestEndpoints {
             install_endpoint: "/oicp/v1/corpus/install".into(),
             progress_endpoint: "/oicp/v1/corpus/progress".into(),
@@ -205,6 +210,9 @@ async fn apply_v04_enrichment(
         // text located at serve time (`oicp_evidence::span_of`).
         feats.push(features::KNOWLEDGE_SCOPED.to_string());
         feats.push(features::KNOWLEDGE_RANGE.to_string());
+        // v0.6 §2.13: every span carries the locator its text's writer kept
+        // beside it (`oicp_evidence::locator_at`): a transcript's turns today.
+        feats.push(features::KNOWLEDGE_LOCATOR.to_string());
         // v0.6 §2.11: sentences from the sentence index
         // (`routes_knowledge_sentences`), scored by the data file's scorer,
         // advertised beside it below; not offered when the file does not read.

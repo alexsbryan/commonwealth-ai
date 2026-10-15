@@ -90,6 +90,23 @@ impl HeadingOutline {
         &self.heads
     }
 
+    /// The headings as the places a host keeps beside the stored text: each
+    /// heading's first code point and the path it opens. Empty for a text
+    /// with none, so nothing is placed and no span is located.
+    pub fn placed(&self) -> PlacedLocators {
+        PlacedLocators(
+            self.heads
+                .iter()
+                .map(|(at, path)| PlacedLocator {
+                    at: *at,
+                    locator: SpanLocator::HeadingPath {
+                        headings: path.clone(),
+                    },
+                })
+                .collect(),
+        )
+    }
+
     /// The heading path at code point `at`: the one the last heading
     /// starting at or before it opened. `None` before the first heading and
     /// in a text with none.
@@ -171,6 +188,37 @@ fn numbered(w: &str) -> bool {
         && (n.bytes().all(|b| b.is_ascii_digit()) || n.bytes().all(|b| b"IVXLCDM".contains(&b)))
 }
 
+/// Where each place starts in a stored text, in text order: what a host keeps
+/// beside a text so a span's [`SpanLocator`] is read back at serve time, not
+/// re-derived from a source it no longer holds. One shape for every kind
+/// (a transcript's turns now, a plain text's headings next), serialised as
+/// JSON by the writer and parsed by the reader.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct PlacedLocators(pub Vec<PlacedLocator>);
+
+/// One place: its first code point and the locator spans starting at or after
+/// it (until the next place) carry.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlacedLocator {
+    /// The place's first code point in the stored text.
+    pub at: u64,
+    /// The locator of a span that starts in it.
+    pub locator: SpanLocator,
+}
+
+impl PlacedLocators {
+    /// The locator at code point `at`: the last place starting at or before
+    /// it. `None` before the first place.
+    pub fn at(&self, at: u64) -> Option<SpanLocator> {
+        self.0
+            .iter()
+            .rev()
+            .find(|p| p.at <= at)
+            .map(|p| p.locator.clone())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -225,6 +273,25 @@ mod tests {
         assert!(o.heads().is_empty());
         assert_eq!(o.at(0), None);
         assert_eq!(o.at(40), None);
+    }
+
+    /// What a host keeps beside a text answers every code point as the
+    /// outline does, after a JSON round trip; a text with no headings
+    /// places nothing.
+    #[test]
+    fn placed_headings_survive_json_and_answer_as_the_outline_does() {
+        let text = "Preface.\n\nBOOK I. OF LABOUR.\n\nCHAPTER I. OF DIVISION.\n\nPins.\n\n\
+                    BOOK II. OF STOCK.\n\nStock.\n";
+        let o = HeadingOutline::of(text);
+        let back: PlacedLocators =
+            serde_json::from_str(&serde_json::to_string(&o.placed()).unwrap()).unwrap();
+        for at in 0..text.chars().count() as u64 {
+            assert_eq!(back.at(at), o.at(at), "code point {at}");
+        }
+        assert!(HeadingOutline::of("Tuesday. No headings.\n")
+            .placed()
+            .0
+            .is_empty());
     }
 
     #[test]

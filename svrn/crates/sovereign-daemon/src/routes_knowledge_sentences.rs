@@ -657,6 +657,7 @@ fn hit(
         .map_or(text.len(), |(b, _)| be + b);
     let record = record_for(&stored.documents, None).ok_or("the text has no record")?;
     let document = wire_document(record)?;
+    let locator = crate::oicp_evidence::locator_at(stored.locators.as_deref(), u64::from(r.start))?;
     Ok(KnowledgeResult {
         content: exact.clone(),
         title: None,
@@ -678,7 +679,7 @@ fn hit(
             exact,
             prefix: text[before..bs].to_string(),
             suffix: text[be..after].to_string(),
-            locator: None,
+            locator,
         }),
         span_absent: None,
         document: Some(document),

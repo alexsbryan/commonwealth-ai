@@ -11,7 +11,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::locator::SpanLocator;
+use crate::locator::{PlacedLocator, PlacedLocators, SpanLocator};
 
 /// A recipe `[[document]]`'s `format`: how its source is read. Absent, the
 /// recipe's extractor reads it as it reads any document. A closed set: a
@@ -77,6 +77,22 @@ impl TurnOutline {
             Ok(v) if v.get("segments").is_some_and(Value::is_array) => whisper(&v),
             _ => paragraph(source),
         }
+    }
+
+    /// The turns as the places a host keeps beside the stored text.
+    pub fn placed(&self) -> PlacedLocators {
+        PlacedLocators(
+            self.turns
+                .iter()
+                .map(|t| PlacedLocator {
+                    at: t.at,
+                    locator: SpanLocator::Timestamp {
+                        milliseconds: t.milliseconds,
+                        speaker: t.speaker.clone(),
+                    },
+                })
+                .collect(),
+        )
     }
 
     /// The locator at code point `at`: the turn it falls in. `None` before
@@ -305,6 +321,22 @@ mod tests {
         assert_eq!(timestamp("12:60"), None);
         assert_eq!(timestamp("1:2"), None);
         assert_eq!(timestamp("102:45:40,25"), Some(369_940_250));
+    }
+
+    /// The places a host stores beside the text read back, through JSON, to
+    /// the locator `TurnOutline::at` gives: the daemon serves from these.
+    #[test]
+    fn placed_turns_survive_json_and_answer_as_the_outline_does() {
+        let o = TurnOutline::read(
+            "HARBOUR MASTER  00:00:04\nWe left early.\n\nInterviewer (00:00:11)\nWhy?\n",
+        )
+        .unwrap();
+        let back: PlacedLocators =
+            serde_json::from_str(&serde_json::to_string(&o.placed()).unwrap()).unwrap();
+        for at in [0, 5, 20, o.text.chars().count() as u64 - 1] {
+            assert_eq!(back.at(at), o.at(at), "at {at}");
+        }
+        assert_eq!(PlacedLocators::default().at(3), None);
     }
 
     #[test]

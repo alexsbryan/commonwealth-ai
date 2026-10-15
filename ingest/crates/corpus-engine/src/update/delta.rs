@@ -689,8 +689,10 @@ impl CorpusUpdater {
 }
 
 /// The delta's document -> chunks transform, the main loop's in one place:
-/// store the canonical text, then chunk that same string and stamp each chunk
-/// with the document's identity and the text's name.
+/// read the canonical text by the one rule (`DeclaredMetadata::read`: a
+/// transcript's words, a plain text's heading paths), store it with its
+/// locators, then chunk that same string and stamp each chunk with the
+/// document's identity and the text's name.
 fn stored_chunks(
     engine: &CorpusEngine,
     recipe: &crate::recipe::Recipe,
@@ -698,8 +700,16 @@ fn stored_chunks(
     doc_id: &str,
     fetched: &FetchedDoc,
 ) -> Result<Vec<crate::index::InsertChunk>> {
-    let text = crate::engine::normalize_content(&fetched.content);
-    let name = texts.store_document(declared.input(&text, doc_id, 0, &fetched.source, None))?;
+    let read = declared.read(
+        &crate::engine::normalize_content(&fetched.content),
+        doc_id,
+        &fetched.source,
+    )?;
+    let text = read.text;
+    let name = texts.store_document_located(
+        declared.input(&text, doc_id, 0, &fetched.source, None),
+        read.locators.as_deref(),
+    )?;
     let mut chunks = engine.chunk_document(recipe, &text)?;
     stamp_doc_identity(&mut chunks, doc_id, name);
     Ok(chunks)

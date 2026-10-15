@@ -121,6 +121,8 @@ mod oicp_align_e2e;
 mod oicp_evidence_e2e;
 #[path = "main/oicp_install_recipe_e2e.rs"]
 mod oicp_install_recipe_e2e;
+#[path = "main/oicp_locator_e2e.rs"]
+mod oicp_locator_e2e;
 #[path = "main/oicp_search_e2e.rs"]
 mod oicp_search_e2e;
 #[path = "main/oicp_sentences_e2e.rs"]
