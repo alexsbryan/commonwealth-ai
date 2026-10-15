@@ -108,7 +108,8 @@
       "Bash(scripts/ralph-check.sh *)",
       "Bash(./scripts/ralph-check.sh *)",
       "Bash(scripts/ralph-mark.sh *)",
-      "Bash(./scripts/ralph-mark.sh *)"
+      "Bash(./scripts/ralph-mark.sh *)",
+      "Bash(ralph-result *)"
     ],
     "deny": [
       "Agent",

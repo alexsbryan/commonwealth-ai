@@ -21,15 +21,10 @@ comment beyond the one the row asks for (ARCH principle 2).
 <!-- section: pick -->
 ## 1. Pick your unit
 
-1. Open `{{state}}`. If a row is `[~]`, that is your unit — a previous
-   session was killed in the middle of it. Continue it.
-2. Otherwise your unit is the FIRST `[ ]` row, top to bottom, whose
-   `depends [...]` ids are all `[x]`.
-3. If this prompt opens with a `POOL LANE` note, the note names your unit and
-   you do not edit `{{state}}` at all.
-4. If the loop told you the tree holds uncommitted work, it belongs to the
-   `[~]` unit: read `git status` and `git diff`, keep what is right, continue.
-5. If the loop's note names your unit (`Your unit: <id>`), open only that row.
+1. The loop's note names your unit (`Your unit: <id>`); open only that row in
+   `{{state}}`. The loop marks rows: never edit a row's `[ ]`/`[~]`/`[x]` yourself.
+2. If the loop told you the tree holds uncommitted work, it belongs to your
+   unit: read `git status` and `git diff`, keep what is right, continue.
 
 <!-- section: row -->
 ## 2. Reading a row
@@ -59,12 +54,12 @@ spent 39-46% of worker time in fixed checks, and 43% of them halted at least onc
 | `REVIEW-audit-{{prefix}}-` | full gate and principles review (§4) |
 | `DEMO-{{prefix}}-` | run the demo command in the row; paste its output; anything but its expected verdict is §6 |
 | `REVIEW-DEMO-{{prefix}}-` | the same, but it runs in the MAIN workdir (a lane worktree has no built binaries and no gitignored files) |
-| `HUMAN-{{prefix}}-` | never do it and never mark it: write `{{control_dir}}/NEEDS_HUMAN.md` (§6) from the row, then stop |
+| `HUMAN-{{prefix}}-` | the operator's act: the loop never hands you one, and you never do it or mark it |
 
 <!-- section: build -->
 ## 3. Building a unit
 
-1. Mark the row `[~]` in `{{state}}`. Do not commit that edit on its own.
+1. Never edit your row's status in `{{state}}`: the loop marks it.
 2. **Site census before any edit, once per row.** The row states facts — a
    path, a symbol, a count, a site. Verify every one with `ls`, `git grep` or
    `grep` first, and write the census into your first commit's body. If one is
@@ -85,11 +80,10 @@ spent 39-46% of worker time in fixed checks, and 43% of them halted at least onc
    `<unit-id>: <one line>`; its body = the `exit=` lines it ran, and the LAST
    commit's body carries every PLANT's red line and anything the row says to
    paste.
-7. When the proof is green, mark the row and commit the queue with ONE command:
-   `scripts/ralph-mark.sh <unit-id> <short-hash>` — it rewrites the row to
-   `- [x] <unit-id> <short-hash> — depends [...] — ...` and commits
-   `{{state}}` alone as `ralph: <unit-id> done`. In a POOL
-   LANE, write `ralph/lanes/<unit-id>.done` and commit that instead.
+7. When the proof is green and every commit is made, run `ralph-result done`
+   in the shell, as its own command. The loop marks the row `[x]` with your
+   commit and commits `{{state}}` as `ralph: <unit-id> done`; in a POOL LANE
+   it merges your branch first.
 
 Commit as soon as a coherent piece compiles. A killed session with commits
 resumes; one holding an hour of uncommitted work is lost.
@@ -104,10 +98,10 @@ the mint row, in §2's grammar: one OUTCOME each, with its lift, the surface it
 extends, its proof, a premise a worker can verify with grep, and §5 checks. Two
 outcomes that touch the same files back to back are one row. **The row's `cap`
 is a hard limit, stated as a lift.** If the work exceeds it, do not mint:
-write `{{control_dir}}/NEEDS_HUMAN.md` with the lift you measured and why, and stop —
+end with a needs-human package (§6) carrying the lift you measured and why —
 growth past a cap is a design finding, never a queue edit. Commit
-`{{state}}` as `REVIEW-mint-{{prefix}}-<x>: <n> rows minted`, then mark the mint
-row `[x]`.
+`{{state}}` as `REVIEW-mint-{{prefix}}-<x>: <n> rows minted`, then
+`ralph-result done`.
 
 <!-- section: review-audit -->
 **`REVIEW-audit-{{prefix}}-<n>`.** Run TESTALL and PREPUSH. Read `git log` and
@@ -125,7 +119,7 @@ On Linux every check runs inside the `sovereign-vulkan` toolbox; if
 | name | command (each writes `{{log_dir}}/<check>.log`, prints `exit=N`, tails it; `scripts/ralph-check.sh` is the one place the commands live) | passes when |
 |---|---|---|
 <!-- section: checks-core -->
-| CLEAN | `scripts/ralph-check.sh clean` | exit=0 (once per unit). No lock wrapper: at this ceiling the gate is a `du` and never runs cargo, and another campaign holds the cargo lock for ~19 min per fresh build in this tree - waiting on it here bought nothing (rd-1-scaffold lost a session to that wait). The ceiling is 256G here, not the 50G default: another campaign (build-latency) measures warm builds in this tree and a clean under it destroys their numbers - a clean is the operator's call, say so in NEEDS_HUMAN if the gate trips |
+| CLEAN | `scripts/ralph-check.sh clean` | exit=0 (once per unit). No lock wrapper: at this ceiling the gate is a `du` and never runs cargo, and another campaign holds the cargo lock for ~19 min per fresh build in this tree - waiting on it here bought nothing (rd-1-scaffold lost a session to that wait). The ceiling is 256G here, not the 50G default: another campaign (build-latency) measures warm builds in this tree and a clean under it destroys their numbers - a clean is the operator's call, say so in a needs-human package (§6) if the gate trips |
 | LINT | `scripts/ralph-check.sh lint` | exit=0 |
 | TEST(c) | `scripts/ralph-check.sh test c` | exit=0 |
 | LAYER | `scripts/ralph-check.sh layer` | exit=0 |
@@ -145,19 +139,19 @@ Never print a whole log into the session; grep it. A PLANT that stays green is
 <!-- section: stopping -->
 ## 6. Stopping
 
-- **`{{control_dir}}/NEEDS_HUMAN.md`** — a decision package, not a question: (a) the
-  unit id and its row; (b) the exact commands you ran and their ACTUAL output,
-  trimmed; (c) what the operator must decide, numbered, with file:line;
-  (d) "edit or mark the row in {{state}}, then
-  `rm {{control_dir}}/STOP {{control_dir}}/NEEDS_HUMAN.md`". Leave the tree compiling. Commit
-  nothing broken. Then stop.
-  When the charter leaves the fork to the operator (its "Leave these for the
-  operator" list), add the line `operator-only: <that clause>`: the supervisor then
-  sends the package to no resolution session and exits for the operator.
-  The package alone halts the loop; never create `{{control_dir}}/STOP` yourself.
-  The supervisor reads an empty STOP as the operator's and exits without sending
-  your package to a resolution session (fp-44 and fp-57, 2026-09-24).
-- **`{{control_dir}}/DONE`** — only when every row in `{{state}}` is `[x]`.
+Every session ends with ONE `ralph-result` command (the block at the top of
+this prompt); the loop reads nothing else you write.
+
+- **needs-human** — a decision package, not a question. Write
+  `{{log_dir}}/needs-human.md` with (a) the unit id and its row; (b) the exact
+  commands you ran and their ACTUAL output, trimmed; (c) what the operator must
+  decide, numbered, with file:line. Leave the tree compiling and commit nothing
+  broken. Then run `ralph-result needs-human --package {{log_dir}}/needs-human.md
+  <the decision in one line>`. When the charter leaves the fork to the operator
+  (its "Leave these for the operator" list), add `--operator`: no resolution
+  session is sent.
+- Never create `{{control_dir}}/STOP`, `{{control_dir}}/NEEDS_HUMAN.md` or
+  `{{control_dir}}/DONE`: the loop finishes itself when every row is `[x]`.
 
 <!-- section: hard-rules -->
 ## 7. Hard rules

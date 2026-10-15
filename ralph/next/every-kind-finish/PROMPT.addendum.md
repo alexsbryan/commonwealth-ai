@@ -20,7 +20,7 @@ design decision is in the row. When a row and the tree disagree, you stop (§6);
 | `REVIEW-audit-ek-` | full gate and principles review (§4) |
 | `DEMO-ek-` | run the demo command in the row; paste its output; anything but its expected verdict is §6 |
 | `REVIEW-DEMO-ek-` | the same, but it runs in the MAIN workdir (a lane worktree has no built binaries and no gitignored files) |
-| `HUMAN-ek-` | never do it and never mark it: write `{{control_dir}}/NEEDS_HUMAN.md` (§6) from the row, then stop |
+| `HUMAN-ek-` | the operator's act: the loop never hands you one, and you never do it or mark it |
 
 <!-- section: checks-queue-1 -->
 | TESTFN(c,f) | `scripts/ralph-check.sh testfn c f` — `f` is the WHOLE test fn name (a vague filter rebuilds the workspace) | exit=0 |
