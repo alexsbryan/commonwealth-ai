@@ -115,9 +115,10 @@ pub async fn spawn_install(
         let documented = installed
             .as_ref()
             .is_some_and(|c| c.install_documents().is_some());
+        // `None` (records that do not read) is unknown: never the same.
         let same_allowance = installed
             .as_ref()
-            .map(crate::records_by_identifier::allowed_by_last_install)
+            .and_then(crate::records_by_identifier::allowed_by_last_install)
             == Some(allow_lookups);
         if stamped.as_deref() == Some(sha.as_str()) {
             if documented && same_allowance {

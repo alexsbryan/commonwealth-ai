@@ -188,3 +188,91 @@ async fn an_unreachable_resolver_is_named_and_adds_nothing() {
         assert_eq!(rec.csl, d);
     }
 }
+
+fn hit_over(corpus: &str, sha: &str) -> KnowledgeResult {
+    use oicp_types::evidence::{Document, SourceRef};
+    let document = Document {
+        text_sha256: sha.into(),
+        extractor: "plaintext@1".into(),
+        source: SourceRef {
+            id: "notes".into(),
+            sha256: None,
+        },
+        metadata: None,
+        record: None,
+    };
+    serde_json::from_value(json!({
+        "content": "c", "corpus_id": corpus, "score": 0.5,
+        "document": document,
+    }))
+    .expect("a hit parses")
+}
+
+/// A `_records.json` that does not parse is unreadable, not "kept none" (ARCH 6).
+/// On a hit that is `document unreadable` (v0.5 §3), never a document that
+/// merely has no record; an absent file leaves hits as they were.
+#[test]
+fn a_corrupt_records_file_makes_the_hit_document_unreadable() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = Corpus::records_in(dir.path());
+    let sha = "a".repeat(64);
+
+    let mut hits = [hit_over("c", &sha)];
+    attach_to_hits(dir.path(), "c", &mut hits);
+    assert!(
+        hits[0].document.is_some(),
+        "no file: the hit is left as it is"
+    );
+
+    std::fs::write(&path, "{ not json").unwrap();
+    assert!(matches!(
+        InstallRecords::read(&path),
+        RecordsRead::Unreadable(_)
+    ));
+    let mut hits = [hit_over("c", &sha)];
+    attach_to_hits(dir.path(), "c", &mut hits);
+    assert!(hits[0].document.is_none());
+    assert_eq!(
+        hits[0].document_absent.as_deref(),
+        Some(oicp_types::evidence::reasons::DOCUMENT_UNREADABLE)
+    );
+}
+
+/// Absent, kept-empty, and failed-to-make are three different reads, and
+/// only the first two allow an answer of "no record".
+#[test]
+fn not_written_kept_and_unreadable_are_told_apart() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = Corpus::records_in(dir.path());
+    assert_eq!(InstallRecords::read(&path), RecordsRead::NotWritten);
+
+    let kept = InstallRecords {
+        allow_lookups: true,
+        ..Default::default()
+    };
+    std::fs::write(&path, serde_json::to_vec(&kept).unwrap()).unwrap();
+    assert_eq!(InstallRecords::read(&path), RecordsRead::Kept(kept));
+
+    let failed = InstallRecords {
+        allow_lookups: true,
+        unread: Some("the installed corpus does not open: gone".into()),
+        ..Default::default()
+    };
+    std::fs::write(&path, serde_json::to_vec(&failed).unwrap()).unwrap();
+    assert!(matches!(
+        InstallRecords::read(&path),
+        RecordsRead::Unreadable(w) if w.contains("does not open")
+    ));
+}
+
+/// A corrupt file is an unknown allowance, so the install reads again; an
+/// absent one is a pre-records install that allowed none.
+#[test]
+fn a_corrupt_records_file_leaves_the_allowance_unknown() {
+    let dir = tempfile::tempdir().unwrap();
+    let corpus = Corpus::named(dir.path(), "c").unwrap();
+    std::fs::create_dir_all(corpus.root()).unwrap();
+    assert_eq!(allowed_by_last_install(&corpus), Some(false));
+    std::fs::write(corpus.records_path(), "{ not json").unwrap();
+    assert_eq!(allowed_by_last_install(&corpus), None);
+}

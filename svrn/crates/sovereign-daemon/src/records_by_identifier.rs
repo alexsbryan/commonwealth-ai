@@ -369,29 +369,58 @@ pub struct InstallRecords {
     /// Each ready document's record, by its text name.
     #[serde(default)]
     pub records: BTreeMap<String, MergedRecord>,
+    /// Why the install could not make its records, when it could not: kept
+    /// so a later read says "unreadable" and not "kept none".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unread: Option<String>,
+}
+
+/// What reading an install's `_records.json` found. The three are never
+/// folded into one another: "kept none" and "could not read" are different
+/// claims, and only the first may be answered as no record (ARCH 6).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RecordsRead {
+    /// The install kept its records (possibly an empty set).
+    Kept(InstallRecords),
+    /// No file: a corpus installed before records existed, which allowed no
+    /// lookup.
+    NotWritten,
+    /// A file that does not read or parse, or one the install wrote to say
+    /// its own records could not be made ([`InstallRecords::unread`]).
+    Unreadable(String),
 }
 
 impl InstallRecords {
-    /// The records at `path`; none when it is absent (a corpus installed
-    /// before records existed, which allowed no lookup), or named and none
-    /// when it does not read.
-    pub fn read(path: &Path) -> Self {
+    /// The records at `path`: kept, not written, or unreadable with why.
+    pub fn read(path: &Path) -> RecordsRead {
         let raw = match std::fs::read_to_string(path) {
             Ok(raw) => raw,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Self::default(),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                tracing::debug!(path = %path.display(), "records: none written");
+                return RecordsRead::NotWritten;
+            }
             Err(e) => {
-                tracing::warn!(path = %path.display(), error = %e, "records: the records do not read, none listed");
-                return Self::default();
+                tracing::warn!(path = %path.display(), error = %e, "records: the records do not read");
+                return RecordsRead::Unreadable(format!("does not read: {e}"));
             }
         };
-        serde_json::from_str(&raw).unwrap_or_else(|e| {
-            tracing::warn!(path = %path.display(), error = %e, "records: the records do not parse, none listed");
-            Self::default()
-        })
+        match serde_json::from_str::<Self>(&raw) {
+            Ok(Self {
+                unread: Some(why), ..
+            }) => {
+                tracing::warn!(path = %path.display(), %why, "records: the install could not keep its records");
+                RecordsRead::Unreadable(why)
+            }
+            Ok(kept) => RecordsRead::Kept(kept),
+            Err(e) => {
+                tracing::warn!(path = %path.display(), error = %e, "records: the records do not parse");
+                RecordsRead::Unreadable(format!("does not parse: {e}"))
+            }
+        }
     }
 
     /// `corpus`'s records.
-    pub fn of(corpus: &Corpus) -> Self {
+    pub fn of(corpus: &Corpus) -> RecordsRead {
         Self::read(&corpus.records_path())
     }
 
@@ -471,27 +500,30 @@ pub async fn record_install(
     fetch: &dyn RecordFetch,
 ) {
     let lookups = RecordLookups::for_install(allow_lookups, fetch);
-    let records = match ResolverTable::from_data_file() {
-        Err(e) => {
-            tracing::error!(corpus = %corpus, error = %e, "records: the resolver data file does not load, no record kept");
-            BTreeMap::new()
-        }
+    let made: Result<BTreeMap<String, MergedRecord>, String> = match ResolverTable::from_data_file()
+    {
+        Err(e) => Err(format!("the resolver data file does not load: {e}")),
         Ok(table) => match corpus.open().await {
-            Err(e) => {
-                tracing::warn!(corpus = %corpus, error = %e, "records: the installed corpus does not open, no record kept");
-                BTreeMap::new()
-            }
+            Err(e) => Err(format!("the installed corpus does not open: {e}")),
             Ok(index) => records_of(&index, documents, &table, &lookups)
                 .await
-                .unwrap_or_else(|e| {
-                    tracing::warn!(corpus = %corpus, error = %e, "records: the stored records do not read, no record kept");
-                    BTreeMap::new()
-                }),
+                .map_err(|e| format!("the stored records do not read: {e}")),
         },
     };
-    let kept = InstallRecords {
-        allow_lookups,
-        records,
+    let kept = match made {
+        Ok(records) => InstallRecords {
+            allow_lookups,
+            records,
+            unread: None,
+        },
+        Err(why) => {
+            tracing::warn!(corpus = %corpus, %why, "records: not made; kept as unreadable, never as none");
+            InstallRecords {
+                allow_lookups,
+                records: BTreeMap::new(),
+                unread: Some(why),
+            }
+        }
     };
     match kept.write(corpus) {
         Ok(()) => {
@@ -503,9 +535,17 @@ pub async fn record_install(
     }
 }
 
-/// Whether `corpus`'s last install allowed lookups.
-pub fn allowed_by_last_install(corpus: &Corpus) -> bool {
-    InstallRecords::of(corpus).allow_lookups
+/// Whether `corpus`'s last install allowed lookups; `None` when its records
+/// do not read, which is unknown and never "did not allow".
+pub fn allowed_by_last_install(corpus: &Corpus) -> Option<bool> {
+    match InstallRecords::of(corpus) {
+        RecordsRead::Kept(r) => Some(r.allow_lookups),
+        RecordsRead::NotWritten => Some(false),
+        RecordsRead::Unreadable(why) => {
+            tracing::warn!(corpus = %corpus, %why, "records: the last install's allowance is unknown");
+            None
+        }
+    }
 }
 
 /// Give each of `corpus_id`'s hits' documents, and its span's, the record
@@ -521,7 +561,26 @@ pub fn attach_to_hits(index_root: &Path, corpus_id: &str, hits: &mut [KnowledgeR
         );
         return;
     }
-    let records = InstallRecords::read(&path);
+    let records = match InstallRecords::read(&path) {
+        RecordsRead::Kept(r) => r,
+        RecordsRead::NotWritten => return,
+        RecordsRead::Unreadable(why) => {
+            // §2.16 has no field to say "records unreadable" beside a
+            // document; the hit's place for a damaged record is
+            // `document_absent` (v0.5 §3), and a span's is `span_absent`.
+            tracing::warn!(corpus = corpus_id, %why, "records: unreadable; hits name their document unreadable");
+            for h in hits.iter_mut().filter(|h| h.corpus_id == corpus_id) {
+                if h.document.take().is_some() {
+                    h.document_absent =
+                        Some(oicp_types::evidence::reasons::DOCUMENT_UNREADABLE.into());
+                }
+                if h.span.take().is_some() {
+                    h.span_absent = Some(oicp_types::evidence::reasons::DOCUMENT_UNREADABLE.into());
+                }
+            }
+            return;
+        }
+    };
     let mut carried = 0usize;
     for h in hits.iter_mut().filter(|h| h.corpus_id == corpus_id) {
         if let Some(d) = h.document.as_mut() {

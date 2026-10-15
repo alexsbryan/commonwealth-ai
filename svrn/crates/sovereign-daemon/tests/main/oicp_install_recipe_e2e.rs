@@ -52,8 +52,9 @@ fn engine(indexes: std::path::PathBuf) -> IngestPortDouble {
                 run: Box::new(move |_progress| {
                     Box::pin(async move {
                         let corpus = Corpus::named(&dir, &id).expect("an id");
-                        std::fs::create_dir_all(corpus.root()).unwrap();
-                        std::fs::write(corpus.meta_path(), "{}").unwrap();
+                        // A real index: an install whose records cannot be made is
+                        // unreadable, never held as "kept none".
+                        crate::common::fixture_library::install(&dir, &id, &[], true).await;
                         corpus.stamp_recipe_sha256(&recipe_sha256(&toml)).unwrap();
                         Ok(IngestResult {
                             corpus_id: id,
@@ -287,8 +288,9 @@ async fn an_install_is_listed_from_its_spawn_and_then_lists_each_document() {
                     Box::pin(async move {
                         gate.notified().await;
                         let corpus = Corpus::named(&dir, &id).expect("an id");
-                        std::fs::create_dir_all(corpus.root()).unwrap();
-                        std::fs::write(corpus.meta_path(), "{}").unwrap();
+                        // A real index: an install whose records cannot be made is
+                        // unreadable, never held as "kept none".
+                        crate::common::fixture_library::install(&dir, &id, &[], true).await;
                         corpus.stamp_recipe_sha256(&recipe_sha256(&toml)).unwrap();
                         Ok(IngestResult {
                             corpus_id: id,
@@ -372,8 +374,19 @@ fn documented_engine(indexes: std::path::PathBuf) -> IngestPortDouble {
                 run: Box::new(move |_progress| {
                     Box::pin(async move {
                         let corpus = Corpus::named(&dir, &id).expect("an id");
-                        std::fs::create_dir_all(corpus.root()).unwrap();
-                        std::fs::write(corpus.meta_path(), "{}").unwrap();
+                        // A real index: an install whose records cannot be made is
+                        // unreadable, never held as "kept none".
+                        crate::common::fixture_library::install(
+                            &dir,
+                            &id,
+                            &[crate::common::fixture_library::Doc {
+                                name: "okafor2019".into(),
+                                metadata: None,
+                                text: "okafor".into(),
+                            }],
+                            true,
+                        )
+                        .await;
                         corpus.stamp_recipe_sha256(&recipe_sha256(&toml)).unwrap();
                         Ok(IngestResult {
                             corpus_id: id,

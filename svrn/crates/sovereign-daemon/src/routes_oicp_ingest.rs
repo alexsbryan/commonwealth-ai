@@ -198,7 +198,22 @@ pub async fn corpus_progress(State(state): State<AppState>) -> Json<CorpusProgre
             .and_then(|dir| corpus_index::corpus::Corpus::named(dir, id));
         if let Some((c, d)) = corpus.and_then(|c| c.install_documents().map(|d| (c, d))) {
             // v0.6 §2.16: each ready document's record, kept with the install.
-            let records = crate::records_by_identifier::InstallRecords::of(&c);
+            use crate::records_by_identifier::{InstallRecords, RecordsRead};
+            let records = match InstallRecords::of(&c) {
+                RecordsRead::Kept(r) => r,
+                RecordsRead::NotWritten => InstallRecords::default(),
+                RecordsRead::Unreadable(why) => {
+                    // §2.16 gives a ready document no place to say its record
+                    // is unreadable; the entry's `detail` is the human-readable one.
+                    tracing::warn!(corpus = %id, %why, "oicp corpus progress: records unreadable, named in detail");
+                    let note = format!("records unreadable: {why}");
+                    entry.detail = Some(match entry.detail.take() {
+                        Some(d) => format!("{d}; {note}"),
+                        None => note,
+                    });
+                    InstallRecords::default()
+                }
+            };
             entry.documents = d
                 .documents
                 .iter()
