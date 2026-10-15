@@ -395,7 +395,7 @@ fn what_the_document_reader_leaves_inert_is_warned_by_name() {
          [[enrichment.ontology.patterns]]\ntype = \"circular_flow\"\nedge_types = [\"near\"]\nmin_entities = 3\n\n\
          [[enrichment.ontology.patterns]]\ntype = \"circular_flow\"\nname = \"loop\"\nedge_types = [\"near\", \"move\"]\nmin_entities = 3\n\n\
          [enrichment.ontology.derive]\narguments = true\n\n\
-         [enrichment.ontology.voices]\nnot_entities = [\"the poster\"]\n",
+         [enrichment.ontology.voices]\nnot_entities = [\"the poster\"]\nattributed_to = [\"member\"]\n",
         fixture()
     ));
     let ours = ["near", "batch_row", "gadget", "pattern", "derive", "voices"];
@@ -407,12 +407,17 @@ fn what_the_document_reader_leaves_inert_is_warned_by_name() {
     for needle in [
         "`derive.arguments` reconstructs arguments",
         "pattern `loop` walks `move`, which the document reader makes no relation atom of",
-        "`voices` (not_entities)",
+        "`voices` (attributed_to)",
         "`batch_row` declares a table source",
         "`gadget` specializes `item` but declares no identity_criterion",
     ] {
         assert_eq!(warned(&v, needle).len(), 1, "{needle}: {:#?}", v.warnings);
     }
+    assert!(
+        warned(&v, "not_entities").is_empty(),
+        "the reader refuses a declared voice as a subject: {:#?}",
+        v.warnings
+    );
     assert!(
         warned(&v, "`near`").is_empty(),
         "a relation of a decided holder is read, and a pattern over it walks its atoms: {:#?}",

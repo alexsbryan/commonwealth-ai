@@ -60,8 +60,8 @@ pub(super) fn layer_warnings(
 
 /// What a declaration the document reader reads also declares that the reader
 /// leaves inert, one warning each, so a feature never drops out unsaid. Each
-/// names its consumer's limit: argument reconstructions and voices are the
-/// general extractor's alone, a pattern walks relation atoms, which the reader
+/// names its consumer's limit: argument reconstructions and attributing to a
+/// voice are the general extractor's alone, a pattern walks relation atoms, which the reader
 /// makes of a read relation statement only (`statement_atoms`), no stage reads
 /// a table source yet, and RESOLVE does not inherit a criterion through
 /// `specializes` (`Criterion::of`). Failing input, named: the ten templates
@@ -107,7 +107,6 @@ fn reader_inert(policies: &OntologyPolicies) -> Vec<String> {
     }
     let voices = &policies.assertion.voices;
     let declared: Vec<&str> = [
-        ("not_entities", !voices.not_entities.is_empty()),
         ("attributed_to", !voices.attributed_to.is_empty()),
         ("self", voices.self_voice.is_some()),
     ]
@@ -117,7 +116,7 @@ fn reader_inert(policies: &OntologyPolicies) -> Vec<String> {
     if !declared.is_empty() {
         out.push(format!(
             "`voices` ({}) are applied by the general extractor only; the document reader \
-             neither keeps a voice from becoming a record nor attributes a statement to a speaker.",
+             attributes no statement to a speaker.",
             declared.join(", ")
         ));
     }
