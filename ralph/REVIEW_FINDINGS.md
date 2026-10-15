@@ -4798,3 +4798,57 @@ world-s1 16/18, world-s3 22/27, ward-story 8/14, as expected.
 - **size, out of range** · arch-gate blocks: model_slot.rs 6146 -> 6209
   (+63 > slack 50), approach band 191 -> 196 files. None of the range's
   files entered the 800-1200 band (decl.rs was already in it, 854 -> 882).
+
+## REVIEW-audit-ek-verify, second pass (2026-10-15, range e68365a17..2e06e110a)
+
+One unit (ek-window-ref-labels, aa5d52b93) and two decisions
+(every-kind-finish-1, every-kind-finish-2), +304 / -9. TESTALL 14646 pass /
+3 fail, PREPUSH exit 1 (arch-gate), both as in the first pass and none in a
+file the queue touched (`git log 60eeeb73c..HEAD` empty for found_and_join.rs,
+f26_egress_census.rs, chat_round_trip.rs, and for the four files the F26
+census names). `a_peer_routed_turn_identifies_this_node_to_the_peer` passed
+this run. Zero model spend: the four answer stores' mtimes are unchanged
+(world-s1 1792017259, world-s3 1792035028, ward-story 1792008681,
+saltgrass-asked 1792091658, 313 lines) and no replay printed `no recorded
+answer`.
+
+Replay `NOTE='ek verify' ASKER=replay RESTORE=particulars-all2 loop.sh
+ek-verify-2 inner` (arm `ek-verify` already held the first pass's run):
+world-s1 16/18, world-s3 22/27, ward-story 8/14, as expected.
+
+saltgrass-asked, `SOVEREIGN_READER=window enrich extract --full --asker
+replay` then `enrich resolve --asker replay` (the resolve replays per
+every-kind-finish-2, which kept the store's 9 local answers):
+`read statements as atoms: 8 state(s), 0 relation(s)`. `"derived":"reference"`
+lines by (type, attribute, outcome): account speaker decided 9 / nothing 1,
+account place nothing 10; notice speaker decided 3 / nothing 12, notice holder
+decided 1 / nothing 4, notice place nothing 16; verdict speaker decided 3 /
+nothing 2, verdict blamed decided 1; motive speaker decided 2, motive against
+nothing 3; sighting speaker decided 1, sighting place nothing 1; ledger_entry
+hand decided 1, ledger_entry vessel decided 1. Speaker refs went from 0
+atoms to 18 decided, so the first pass's NEEDS_HUMAN finding is closed by
+aa5d52b93. "the narrator" appears only in ontology.json's declaration
+(`not_entities`, guidance text), never as a particular.
+
+### Findings
+
+- **ARCH 8, recorded, not fixed** · window_particulars.rs:95 `label_name`
+  matches its type with `ty == of || index.is_a(&ty, of)`, the same
+  inline test at 10 other sites in corpus-engine (11 lines match `== .* ||
+  .*is_a(` with this one; read_fields.rs:104/133/160,
+  resolution_derived.rs:103/534, resolution_ontology.rs:118, ...). The range
+  adds one site to an existing idiom; a `TypeIndex` method replacing all of
+  them is a row of its own, not an audit fix.
+- **ARCH 3, minor, not fixed** · window.rs `reading` calls
+  `particulars::label_name(particulars, ...)`, where `particulars` is both
+  the module (window.rs:799) and the parameter. Rust keeps them apart; a
+  reader may not. Left: renaming either is churn the row did not name.
+- **ARCH 4, checked** · `label_name`'s doc cites `window_prompt.md`; line 16
+  of it does have the model label particulars (`"ref": <your label, such as
+  p1>`) and claims cite `"about": <ref>`.
+- **ARCH 5, checked** · `a_window_ref_label_reads_as_its_particulars_name`
+  asserts the named, the unknown-label and the wrong-type cases, and its
+  commit records the plant watched red.
+- **tree, not this unit's** · 12 untracked files (layer/issues and
+  layer/news fixtures, research/ontology-apps/{ward,world}, the loop log)
+  are dated 2026-10-10..13, before this queue's first commit; left as found.
