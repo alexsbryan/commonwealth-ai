@@ -8,6 +8,7 @@ mod cancel;
 mod document_ledger;
 mod expand;
 mod ingest;
+mod ingest_document;
 mod ingest_factories;
 mod ingest_helpers;
 pub(crate) mod ingest_prebuilt;

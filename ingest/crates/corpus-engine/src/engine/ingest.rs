@@ -1287,40 +1287,23 @@ impl CorpusEngine {
                 }
             }
 
-            // A document the recipe declares a transcript is stored as its
-            // words (v0.6 §2.14); one in neither shape is listed failed.
+            // Read through its declared format and stored (v0.6 §2.13-2.14);
+            // one its format does not read is listed failed.
             let named = source_doc_id.as_deref().unwrap_or_default();
-            let read = match declared.read(&normalize_content(&doc.content), named, &doc.source) {
-                Ok(read) => read,
-                Err(e) => {
-                    docs_skipped += 1;
-                    let source = documents.failed(&declared, &e);
-                    tracing::warn!(
-                        corpus = %recipe.corpus.id,
-                        source = source.as_deref().unwrap_or("(unnamed)"),
-                        error = %e,
-                        "skipping document: declared format does not read it"
-                    );
-                    continue;
-                }
+            let Some((text, text_sha256)) = super::ingest_document::store_read(
+                &mut texts,
+                &declared,
+                &mut documents,
+                &recipe.corpus.id,
+                &doc,
+                named,
+                ordinal,
+            )?
+            else {
+                docs_skipped += 1;
+                continue;
             };
             docs_processed += 1;
-
-            // The canonical text is stored, then chunked: one string, so the
-            // chunks name the text they were cut from (`chunk_doc` is the
-            // same transform, for the authoring-harness runner).
-            let text = read.text;
-            let text_sha256 = texts.store_document_located(
-                declared.input(
-                    &text,
-                    source_doc_id.as_deref().unwrap_or_default(),
-                    ordinal,
-                    &doc.source,
-                    doc.metadata.as_ref(),
-                ),
-                read.locators.as_deref(),
-            )?;
-            documents.ready(&declared, named, &doc.source, text_sha256);
             let chunk_texts = chunk_text(chunker.as_ref(), doc.title.as_deref(), &text);
 
             // `doc.embed_text` is honored only when the configured chunker
