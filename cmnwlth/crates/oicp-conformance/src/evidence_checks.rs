@@ -107,6 +107,15 @@ pub fn v05_feature_failures(m: &ProviderManifest) -> Vec<String> {
     if m.has_feature(features::KNOWLEDGE_LOCATOR) && !m.has_feature(features::KNOWLEDGE_RANGE) {
         f.push("knowledge:locator requires knowledge:range".into());
     }
+    // v0.6 §2.14: a transcript is declared in a recipe and located by turn.
+    for (feat, name) in [
+        (features::KNOWLEDGE_LOCATOR, "knowledge:locator"),
+        (features::INGEST_RECIPE, "ingest:recipe"),
+    ] {
+        if m.has_feature(features::INGEST_TRANSCRIPTS) && !m.has_feature(feat) {
+            f.push(format!("ingest:transcripts requires {name}"));
+        }
+    }
     f
 }
 

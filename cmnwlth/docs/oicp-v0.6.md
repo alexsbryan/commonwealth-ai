@@ -23,7 +23,8 @@ can answer **sentences** ranked by meaning, each an address in its stored
 text (§2.11), a host states the **largest install** it reads, so a client
 sizes an inline library before it sends one (§2.12), and a span says
 **where it stands** in its source, such as the headings it stands under
-(§2.13).
+(§2.13) or the turn of a recipe document declared a **transcript** it was
+spoken in (§2.14).
 
 As in v0.5, everything v0.6 adds is a serde-defaulted field, an optional
 endpoint, or a feature string, and **feature presence, not the version
@@ -44,6 +45,7 @@ string, gates behaviour**. The types are in
 | `ingest:documents` | install progress lists an install from its spawn, and each document it read once it has returned (§2.9) | `ingest:v1` |
 | `knowledge:sentences` | knowledge search takes `granularity: "sentence"` and answers sentences, ranked by the scorer `knowledge.sentence_scorer` names (§2.11) | `knowledge:range`, `knowledge:scoped`, `knowledge.sentence_scorer` |
 | `knowledge:locator` | every span carries `locator` where the extraction that stored its text found one, a plain text's heading paths by §2.13's rule | `knowledge:range` |
+| `ingest:transcripts` | a recipe `[[document]]` takes `format = "transcript"`, read by turn, each turn's start and speaker the locator of its spans (§2.14) | `knowledge:locator`, `ingest:recipe` |
 
 ```rust
 EvidenceEndpoints {
@@ -149,6 +151,7 @@ that was asked and failed.
 | — | 400 | a search's `documents` names something that is not a text name (§2.8) |
 | `scorer unavailable` | 503 | the sentence scorer the host's data file names cannot run here; the body names it (§2.11) |
 | `install too large` | 413 | an install body past the host's `max_install_bytes`; the body names the limit (§2.12) |
+| `not a transcript` | — | a document's `failed` reason (§2.9): declared `format = "transcript"`, in neither shape (§2.14) |
 
 A passage whose stored text or record cannot be read gives v0.5 §2.5's reason
 in `span_absent` (`texts not stored`, `text not stored`, `document
@@ -157,7 +160,8 @@ unreadable`), or an opaque one for a store error.
 The span absences are in `oicp_types::evidence::reasons` (`SPAN_ABSENCES`),
 shared by verify's passages and search's hits; `scorer unavailable` is in
 `oicp_types::knowledge::reasons`; `install too large` is in
-`oicp_types::ingest::reasons`; the rest are in `oicp_types::verify::reasons`.
+`oicp_types::ingest::reasons`; `not a transcript` is in
+`oicp_types::transcript::reasons`; the rest are in `oicp_types::verify::reasons`.
 
 ### 2.8 Scoped and ranged search
 
@@ -437,7 +441,7 @@ Span        { … (v0.5 fields) …,
               locator: Option<SpanLocator> }        // absent when the extraction found none
 SpanLocator = {"kind": "page", "page": u32}                     // the 1-based page of the source
             | {"kind": "heading_path", "headings": [String]}    // outermost first, never empty
-            | {"kind": "timestamp", "milliseconds": u64,        // a transcript turn's start
+            | {"kind": "timestamp", "milliseconds": u64,        // a transcript turn's start (§2.14)
                                     "speaker": Option<String>}  // absent when the source names none
             | {"kind": "row", "row": u64}                       // the 1-based record of a file of many
 ```
@@ -476,6 +480,58 @@ host's extractor and a test host read headings by one implementation. The
 reference host does not advertise `knowledge:locator` yet: its spans carry
 no locator until its extractor records where each text's headings stand.
 
+### 2.14 Transcripts
+
+An interview or a meeting is cited by when it was said and who said it.
+A recipe document declares it is a transcript; the host stores its words
+and puts each turn's start and speaker on the spans cut from it.
+
+```toml
+[[document]]
+name = "interview-2026-03-02"
+format = "transcript"        # DocumentFormat, a closed set; absent, the recipe's extractor reads it
+source = "interview.txt"     # or the text inline
+```
+
+- **Two shapes, detected.** A source that is a JSON object with a
+  `segments` array is Whisper's JSON: each segment, its `text` trimmed,
+  is a turn starting at its `start` seconds, with no speaker. Any other
+  source is a paragraph transcript: a header line opens each turn, and the
+  lines after it, up to the next header, are the turn. A header line holds
+  one timestamp, first or last on the line, and otherwise a speaker:
+  `HARBOUR MASTER  00:00:04`, `Interviewer (00:00:11)`, `[00:00:15]
+  HARBOUR MASTER:`, or a timestamp alone for a turn with no speaker. A
+  timestamp is `H:MM:SS` (any number of hours) or `M:SS`/`MM:SS`, with an
+  optional `.` or `,` fraction of up to three digits, optionally in `()` or
+  `[]` and followed by `:` or `,`. A speaker is at most six words, each
+  opening with a capital, a digit or a bracket, with `:` `-` `–` `—` `|`
+  trimmed from its ends, and does not end a sentence; a line that is not
+  of that shape ("We left at 10:30") is words of the turn.
+- **The words are stored.** The stored text is the turns' words, never a
+  header line, so a quotation from it is the speaker's bytes. A paragraph
+  transcript keeps each turn's lines as written, trimmed, the turns joined
+  by a blank line; lines before its first header are kept as the text's
+  opening, under no turn. Whisper's segments are joined by one space, so a
+  sentence may run across segments.
+- **The locator is the turn.** Every span cut from a transcript carries
+  `{"kind": "timestamp", "milliseconds": …, "speaker": …}` (§2.13): the
+  start of the turn its `start` falls in, so a sentence across Whisper
+  segments takes the first one's time. `speaker` is the header's, absent
+  for a timestamp alone and always absent for Whisper's JSON, whose
+  segments name none: never guessed. A span in a paragraph transcript's
+  opening carries no locator.
+- **Neither shape.** A document declared a transcript that is in neither
+  shape (no header line, or a `segments` entry without a `start` or a
+  `text`) is not stored: §2.9 lists it `failed` with `not a transcript`,
+  and it is never read as plain text instead. A `format` outside the set
+  is a recipe that does not load, `400`.
+
+`oicp_types::transcript` holds the set and the rule (`TurnOutline::read`),
+so a host's extractor and a test host read transcripts by one
+implementation. The reference host does not advertise
+`ingest:transcripts` yet; WebVTT, SRT and DOCX are later members of the
+set, each read into the same locator.
+
 ## 6. Conformance (additions)
 
 | check | holds | red against |
@@ -488,6 +544,7 @@ no locator until its extractor records where each text's headings stand.
 | `ingest.install_limit` | with `ingest:recipe` and `max_install_bytes` stated, an install body of exactly that many bytes, a recipe that does not load padded to the size, is read: `400`, never `413`; one byte more is `413 install too large` naming the limit. A stated limit past 256 MiB is probed at 256 MiB, with nothing sent past it | a host stating a limit whose install route reads bodies only to its surface's 8 MiB |
 | `knowledge.sentences` | each fixture signature, at `granularity: sentence` scoped to its own text, returns at least one sentence, at most `limit`, best first, every one from that text; each carries `span` whose `exact` is its `content` and whose range reads back byte-equal through `text_endpoint`; the reply names the advertised scorer and a model, and a route, with `sentences_pending` exactly on `passages`. A `503 scorer unavailable` naming the advertised scorer is could-not-judge | a sentence range one code point off; a sentence from outside the scope; a host advertising `rerank`, holding no rerank slot, that answers with cosine |
 | `knowledge.locator` | installs its own library (`fixture/headings.json`: a headed text with a contents line and a preface, and a text with no headings) and aligns each listed sentence verbatim; each span's `locator` is the heading path the rule gives, or absent where it gives none. Needs `ingest:recipe` and `evidence:align`, could-not-judge without | a span given the heading path of the part before the one it stands in; a locator invented for a span under no heading |
+| `ingest.transcript` | installs its own library (`fixture/transcripts.json`: a paragraph transcript with three header shapes and an opening, Whisper's JSON with a sentence across segments, and a declared transcript in neither shape) and aligns each listed quotation verbatim; each span's `locator` is its turn's start and speaker, a Whisper segment's with none; with `ingest:documents`, the one in neither shape is listed `failed: not a transcript` and the others `ready`. Needs `evidence:align`, could-not-judge without | a header line read into the turn before it (the turn given the previous speaker); a speaker invented for a Whisper segment; a document in neither shape stored as plain text |
 
 `manifest.features` checks §2.1's co-occurrence: `evidence:verify` iff
 `verify_endpoint`, with a non-empty `verify_tiers`, and never without
@@ -497,7 +554,8 @@ no locator until its extractor records where each text's headings stand.
 iff `verify_correction_endpoint`, and never without `evidence:verify`;
 `knowledge:sentences` iff `knowledge.sentence_scorer`, and never without
 `knowledge:range` and `knowledge:scoped`; `knowledge:locator` never
-without `knowledge:range`.
+without `knowledge:range`; `ingest:transcripts` never without
+`knowledge:locator` and `ingest:recipe`.
 
 ## 7. Backward compatibility
 
@@ -518,3 +576,6 @@ without `knowledge:range`.
 - `locator` is skipped when absent, so a v0.5 span reads and writes back
   unchanged, and a v0.6 client reads a span from a host without
   `knowledge:locator` as one that names no place.
+- A client sends `format = "transcript"` only to a host advertising
+  `ingest:transcripts`; a host without it may refuse the recipe or read the
+  document as plain text, its spans then carrying no turn.

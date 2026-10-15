@@ -95,22 +95,26 @@ async fn install(State(f): State<Arc<Fake>>, req: Result<Json<Value>, JsonReject
 pub(super) async fn progress(State(f): State<Arc<Fake>>) -> Json<Value> {
     let installed = f.installed.lock().unwrap();
     let mut polls = f.polls.lock().unwrap();
-    let documents = |corpus: &str| -> Vec<Value> {
-        if f.breaks.omit_documents {
-            return Vec::new();
-        }
-        f.of(&[corpus.to_string()])
-            .map(|s| {
-                let text = if f.breaks.unserved_text_names {
-                    s.name.as_str()
-                } else {
-                    s.text.as_str()
-                };
-                json!({"source": s.name, "state": "ready",
+    let documents =
+        |corpus: &str| -> Vec<Value> {
+            if f.breaks.omit_documents {
+                return Vec::new();
+            }
+            f.of(&[corpus.to_string()])
+                .map(|s| {
+                    let text = if f.breaks.unserved_text_names {
+                        s.name.as_str()
+                    } else {
+                        s.text.as_str()
+                    };
+                    json!({"source": s.name, "state": "ready",
                        "text_sha256": sha256_hex(text.as_bytes())})
-            })
-            .collect()
-    };
+                })
+                .chain(f.failed.iter().filter(|(c, ..)| c == corpus).map(
+                    |(_, name, why)| json!({"source": name, "state": "failed", "reason": why}),
+                ))
+                .collect()
+        };
     let mut progress: BTreeMap<&String, Value> = BTreeMap::new();
     for c in installed.keys() {
         let n = polls.entry(c.clone()).or_insert(0);

@@ -84,6 +84,10 @@ pub mod features {
     /// stored its text found one, the plain-text extractor's heading paths
     /// by that section's rule; requires `knowledge:range`.
     pub const KNOWLEDGE_LOCATOR: &str = "knowledge:locator";
+    /// v0.6 §2.14: a recipe `[[document]]` takes `format = "transcript"`,
+    /// read by turn, each turn's start and speaker its spans' locator;
+    /// requires `knowledge:locator` and `ingest:recipe`.
+    pub const INGEST_TRANSCRIPTS: &str = "ingest:transcripts";
     /// v0.5 §4: install accepts `recipe_toml`; requires `ingest:v1`.
     pub const INGEST_RECIPE: &str = "ingest:recipe";
     /// v0.5 §5.1: a presented named credential is honoured, and a bogus
@@ -177,6 +181,7 @@ pub mod features {
         KNOWLEDGE_RANGE,
         KNOWLEDGE_SENTENCES,
         KNOWLEDGE_LOCATOR,
+        INGEST_TRANSCRIPTS,
         INGEST_RECIPE,
         AUTH_NAMED_CLIENT,
     ];

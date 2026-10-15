@@ -89,6 +89,7 @@ pub mod tool;
 /// `REVIEW-build-serving-drop-inference`) so the host reaches it without
 /// linking the inference stack.
 pub mod tool_calls;
+pub mod transcript;
 pub mod version;
 /// The `work` plane's wire vocabulary (pb-work-doors): acts, the folded
 /// queue, refusals and the `process:v1` payload.
@@ -155,4 +156,5 @@ pub use scoring::{
     LOCALITY_LOCAL_BONUS, LOCALITY_NEAR_BONUS, SCORING_EPSILON, THROUGHPUT_EWMA_ALPHA,
     THROUGHPUT_FLOOR, THROUGHPUT_OBSERVATION_THRESHOLD, THROUGHPUT_REFERENCE_TG_TOK_S,
 };
+pub use transcript::{DocumentFormat, TranscriptShape, TurnOutline, TurnStart};
 pub use version::OICP_VERSION;

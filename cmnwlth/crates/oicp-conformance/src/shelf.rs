@@ -49,6 +49,20 @@ pub struct LocatedShelf {
     pub shelf: Shelf,
     /// Quotations of its stored texts and their locators.
     pub located: Vec<Located>,
+    /// Documents the install lists `failed` (v0.6 §2.9), and why; every
+    /// other document is listed `ready`.
+    #[serde(default)]
+    pub failed: Vec<FailedDoc>,
+}
+
+/// A shelf document an install cannot store, and the reason it names.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FailedDoc {
+    /// The document.
+    pub document: String,
+    /// The reason its progress entry names.
+    pub reason: String,
 }
 
 /// A quotation of one shelf document's stored text, and its locator.
@@ -68,9 +82,10 @@ impl LocatedShelf {
     /// its documents.
     pub fn load(json: &str) -> Result<Self, String> {
         let s: Self = serde_json::from_str(json).map_err(|e| format!("does not load: {e}"))?;
-        for l in &s.located {
-            if s.shelf.doc(&l.document).is_none() {
-                return Err(format!("`{}` names no document of the shelf", l.quote));
+        let named = s.located.iter().map(|l| &l.document);
+        for d in named.chain(s.failed.iter().map(|f| &f.document)) {
+            if s.shelf.doc(d).is_none() {
+                return Err(format!("`{d}` is no document of the shelf"));
             }
         }
         Ok(s)

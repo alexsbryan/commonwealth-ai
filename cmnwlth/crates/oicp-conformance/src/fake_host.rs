@@ -18,9 +18,10 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use oicp_types::evidence::{reasons, texts_digest_preimage, DEFAULT_CONTEXT};
 use oicp_types::knowledge::reasons::SCORER_UNAVAILABLE;
+use oicp_types::transcript::reasons::NOT_A_TRANSCRIPT;
 use oicp_types::{
     AlignRequest, Alignment, Difference, DifferenceKind, Document, HeadingOutline, KnowledgeResult,
-    KnowledgeSearchRequest, SourceRef, Span, SpanLocator, TextSlice,
+    KnowledgeSearchRequest, SourceRef, Span, SpanLocator, TextSlice, TranscriptShape, TurnOutline,
 };
 use serde_json::{json, Value};
 
@@ -78,6 +79,14 @@ pub struct Breaks {
     /// knowledge.locator: a span under no heading is given the text's first
     /// line as its heading path.
     pub locator_invented: bool,
+    /// ingest.transcript: a turn is given the turn before it (its header
+    /// line read into the previous turn).
+    pub turn_read_into_previous: bool,
+    /// ingest.transcript: a Whisper segment is given a speaker.
+    pub whisper_speaker_invented: bool,
+    /// ingest.transcript: a declared transcript in neither shape is stored
+    /// as plain text.
+    pub non_transcript_stored: bool,
     /// knowledge.sentences: each sentence's range is one code point past
     /// the sentence its `exact` and `content` carry.
     pub sentence_range_off_by_one: bool,
@@ -108,14 +117,24 @@ struct Stored {
     source_sha256: String,
     text: String,
     metadata: Option<Value>,
-    /// Its headings, by v0.6 §2.13's rule.
-    outline: HeadingOutline,
+    /// Where its spans stand, as its extraction found them.
+    places: Places,
+}
+
+/// The places a stored text's extraction found.
+enum Places {
+    /// A plain text's headings (v0.6 §2.13).
+    Headings(HeadingOutline),
+    /// A transcript's turns (v0.6 §2.14).
+    Turns(TurnOutline),
 }
 
 struct Fake {
     breaks: Breaks,
     corpus: String,
     texts: Vec<Stored>,
+    /// Documents an install read and could not store: corpus, name, why.
+    failed: Vec<(String, String, &'static str)>,
     installed: Mutex<BTreeMap<String, String>>,
     /// Polls of progress since each corpus's last install.
     polls: Mutex<BTreeMap<String, u32>>,
@@ -178,7 +197,11 @@ impl Fake {
     /// `locator_previous_part` names the heading before that one;
     /// `locator_invented` names the text's first line where none is open.
     fn locator(&self, s: &Stored, start: u64) -> Option<SpanLocator> {
-        let heads = s.outline.heads();
+        let outline = match &s.places {
+            Places::Turns(o) => return self.turn(o, start),
+            Places::Headings(o) => o,
+        };
+        let heads = outline.heads();
         let open = heads.iter().rposition(|(at, _)| *at <= start);
         let path = |i: usize| SpanLocator::HeadingPath {
             headings: heads[i].1.clone(),
@@ -188,8 +211,32 @@ impl Fake {
                 headings: vec![s.text.lines().next()?.trim().to_string()],
             }),
             Some(i) if self.breaks.locator_previous_part => i.checked_sub(1).map(path),
-            _ => s.outline.at(start),
+            _ => outline.at(start),
         }
+    }
+
+    /// Where `start` stands in a transcript (§2.14): the turn it falls in.
+    /// `turn_read_into_previous` names the turn before it;
+    /// `whisper_speaker_invented` names a speaker for a Whisper segment.
+    fn turn(&self, o: &TurnOutline, start: u64) -> Option<SpanLocator> {
+        let b = &self.breaks;
+        if !(b.turn_read_into_previous || b.whisper_speaker_invented) {
+            return o.at(start);
+        }
+        let i = o.turns.iter().rposition(|t| t.at <= start)?;
+        let t = &o.turns[if b.turn_read_into_previous {
+            i.saturating_sub(1)
+        } else {
+            i
+        }];
+        let speaker = match o.shape {
+            TranscriptShape::WhisperJson if b.whisper_speaker_invented => Some("SPEAKER_00".into()),
+            _ => t.speaker.clone(),
+        };
+        Some(SpanLocator::Timestamp {
+            milliseconds: t.milliseconds,
+            speaker,
+        })
     }
 
     /// A hit cut from `s` at code points `[start, end)`; `exact_off_by_one`
@@ -248,10 +295,13 @@ impl Fake {
 /// The shelves the fake holds beside the fixture library, as if each had
 /// been installed: the v0.6 checks that install their own read them.
 fn shelves() -> Vec<Shelf> {
-    [include_str!("../fixture/headings.json")]
-        .into_iter()
-        .map(|j| LocatedShelf::load(j).expect("shelf loads").shelf)
-        .collect()
+    [
+        include_str!("../fixture/headings.json"),
+        include_str!("../fixture/transcripts.json"),
+    ]
+    .into_iter()
+    .map(|j| LocatedShelf::load(j).expect("shelf loads").shelf)
+    .collect()
 }
 
 /// A running fake: its base URL.
@@ -272,7 +322,7 @@ pub async fn spawn(breaks: Breaks) -> Running {
             source_sha256: sha256_hex(source.as_bytes()),
             text: text.to_string(),
             metadata: metadata.clone(),
-            outline: HeadingOutline::of(text),
+            places: Places::Headings(HeadingOutline::of(text)),
         }
     };
     let mut texts: Vec<Stored> = lib
@@ -280,15 +330,31 @@ pub async fn spawn(breaks: Breaks) -> Running {
         .iter()
         .map(|d| stored(&lib.corpus_id, &d.name, &d.text, &d.metadata))
         .collect();
+    let mut failed = Vec::new();
     for shelf in shelves() {
         for d in &shelf.documents {
-            texts.push(stored(&shelf.corpus_id, &d.name, &d.text, &d.metadata));
+            let mut s = stored(&shelf.corpus_id, &d.name, &d.text, &d.metadata);
+            if d.format.as_deref() == Some("transcript") {
+                match TurnOutline::read(&d.text) {
+                    Some(o) => {
+                        s.text = o.text.clone();
+                        s.places = Places::Turns(o);
+                    }
+                    None if breaks.non_transcript_stored => {}
+                    None => {
+                        failed.push((s.corpus, s.name, NOT_A_TRANSCRIPT));
+                        continue;
+                    }
+                }
+            }
+            texts.push(s);
         }
     }
     let fake = Arc::new(Fake {
         breaks,
         corpus: lib.corpus_id.clone(),
         texts,
+        failed,
         installed: Mutex::new(BTreeMap::new()),
         polls: Mutex::new(BTreeMap::new()),
     });
@@ -428,7 +494,7 @@ async fn capabilities(State(f): State<Arc<Fake>>) -> Json<Value> {
         "features": [
             "ingest:v1", "ingest:recipe_test", "ingest:recipe", "ingest:documents", "evidence:text",
             "evidence:align", "evidence:verify", "evidence:verify_corrections", "knowledge:document", "knowledge:scoped",
-            "knowledge:range", "knowledge:sentences", "knowledge:locator", "auth:named_client"
+            "knowledge:range", "knowledge:sentences", "knowledge:locator", "ingest:transcripts", "auth:named_client"
         ],
         "knowledge": {
             "corpora": [],
