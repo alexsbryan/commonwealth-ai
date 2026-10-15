@@ -94,9 +94,11 @@ impl<'a> Contract<'a> {
     ) -> Vec<&'a OntologyTypeDecl> {
         let mut names: BTreeSet<&str> = BTreeSet::new();
         for (kind, subject) in &self.kinds {
-            let attrs = read_attrs(index, kind)
-                .into_iter()
-                .chain(subject_attrs(policies, index, &subject.name).into_iter().map(Cow::Borrowed));
+            let attrs = read_attrs(index, kind).into_iter().chain(
+                subject_attrs(policies, index, &subject.name)
+                    .into_iter()
+                    .map(Cow::Borrowed),
+            );
             for attr in attrs {
                 // The target's name borrowed from its declaration: an owned
                 // field (a relation's `to`) cannot lend its own.

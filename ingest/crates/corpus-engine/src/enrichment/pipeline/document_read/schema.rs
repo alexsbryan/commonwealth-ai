@@ -164,7 +164,12 @@ pub(super) fn statement_attributes<'a>(
     decl.implied_fields()
         .into_iter()
         .map(Cow::Owned)
-        .chain(index.extracted_attributes(&decl.name).into_iter().map(Cow::Borrowed))
+        .chain(
+            index
+                .extracted_attributes(&decl.name)
+                .into_iter()
+                .map(Cow::Borrowed),
+        )
         .collect()
 }
 
