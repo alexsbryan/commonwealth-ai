@@ -416,8 +416,16 @@ the daemon's knowledge search with the `documents` scope and per-hit ranges of
 svrn search tide tables                         # every corpus you may read
 svrn search tide tables --corpus <id> ...       # only these corpora
 svrn search tide tables --document <name> ...   # only these texts
+svrn search tide tables --sentences             # sentences by meaning
 svrn search tide tables --limit 20 --json       # more hits, as JSON
 ```
+
+`--sentences` asks for sentences rather than passages (`knowledge:sentences`,
+§2.11): each hit is one sentence of a stored text with its range, ranked by the
+scorer the daemon names (`scored by cosine (<embed model>)`). A library still
+being indexed says so (`still indexing: N sentence(s) pending`) and answers
+from the sentences of its best passages meanwhile; a scope larger than the
+daemon's scan ceiling says how much of it was scanned.
 
 A text's name is the 64-hex `text` line each hit prints; pass it to
 `--document` to search within that text. A hit's range, `at [start, end)`, is

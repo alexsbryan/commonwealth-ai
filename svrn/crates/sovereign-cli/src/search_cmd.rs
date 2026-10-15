@@ -10,9 +10,15 @@
 //! `--document` is asked, never searched unscoped. Every hit prints its text's
 //! name, so a search is how a user finds the name to scope the next one by.
 //! It is the platform's own second user of scoped search (CITE_V1 §1.3).
+//!
+//! `--sentences` asks for sentences by meaning (v0.6 §2.11,
+//! `knowledge:sentences`): each hit a sentence with its range, and the reply's
+//! scorer, its route (`passages` while the library is still being indexed,
+//! with the count pending) and any ceiling the scan stopped at are printed.
+//! A host that does not advertise the feature is told so, never asked.
 
 use sovereign_contracts::oicp::{
-    features, KnowledgeResult, KnowledgeSearchResponse, ProviderManifest,
+    features, KnowledgeResult, KnowledgeSearchResponse, ProviderManifest, SentenceRoute,
 };
 
 #[derive(clap::Parser, Debug)]
@@ -27,6 +33,9 @@ struct Opts {
     /// A text, by its name, the hits must come from; repeatable.
     #[arg(long = "document")]
     documents: Vec<String>,
+    /// Sentences by meaning, not passages (`knowledge:sentences`).
+    #[arg(long)]
+    sentences: bool,
     /// How many hits.
     #[arg(long, default_value_t = 10)]
     limit: u32,
@@ -51,18 +60,20 @@ pub async fn run(args: &[String]) -> i32 {
         return 2;
     };
     let http = reqwest::Client::new();
-    let endpoint = match search_endpoint(&http, &base, !opts.documents.is_empty()).await {
-        Ok(e) => e,
-        Err(e) => {
-            eprintln!("search: {e}");
-            return 1;
-        }
-    };
+    let endpoint =
+        match search_endpoint(&http, &base, !opts.documents.is_empty(), opts.sentences).await {
+            Ok(e) => e,
+            Err(e) => {
+                eprintln!("search: {e}");
+                return 1;
+            }
+        };
     let body = serde_json::json!({
         "query": opts.query.join(" "),
         "corpora": (!opts.corpora.is_empty()).then_some(&opts.corpora),
         "documents": opts.documents,
         "limit": opts.limit,
+        "granularity": if opts.sentences { "sentence" } else { "passage" },
     });
     let resp = match http
         .post(format!("{base}{endpoint}"))
@@ -83,7 +94,16 @@ pub async fn run(args: &[String]) -> i32 {
         } else {
             ""
         };
-        eprintln!("search: {status}{why}");
+        let body: serde_json::Value = resp.json().await.unwrap_or_default();
+        match body.get("scorer").and_then(|s| s.as_str()) {
+            Some(scorer) => eprintln!(
+                "search: {status}: the daemon cannot run its sentence scorer `{scorer}` ({})",
+                body.get("detail")
+                    .and_then(|d| d.as_str())
+                    .unwrap_or("no detail")
+            ),
+            None => eprintln!("search: {status}{why}"),
+        }
         return 1;
     }
     let reply: KnowledgeSearchResponse = match resp.json().await {
@@ -109,6 +129,21 @@ pub async fn run(args: &[String]) -> i32 {
     for c in &reply.corpora_unavailable {
         println!("corpus {c} not searched: unavailable");
     }
+    if let (Some(scorer), Some(route)) = (&reply.scorer, reply.route) {
+        println!("\nscored by {} ({})", scorer.name.as_str(), scorer.model);
+        match (route, reply.sentences_pending) {
+            (SentenceRoute::Passages, Some(n)) => println!(
+                "still indexing: {n} sentence(s) pending; these are the sentences of the best passages"
+            ),
+            _ => println!("from the sentence index"),
+        }
+    }
+    if let Some(t) = reply.truncated {
+        println!(
+            "scanned {} of {} sentences in scope (the host's ceiling)",
+            t.scanned, t.in_scope
+        );
+    }
     println!(
         "\n{} hit(s) from {} corpus(es){}",
         reply.results.len(),
@@ -127,6 +162,7 @@ async fn search_endpoint(
     http: &reqwest::Client,
     base: &str,
     scoped: bool,
+    sentences: bool,
 ) -> Result<String, String> {
     let m: ProviderManifest = http
         .get(format!("{base}/oicp/v1/capabilities"))
@@ -143,6 +179,12 @@ async fn search_endpoint(
     if scoped && !m.has_feature(features::KNOWLEDGE_SCOPED) {
         return Err(
             "the daemon does not advertise `knowledge:scoped`, so --document cannot be honoured"
+                .into(),
+        );
+    }
+    if sentences && !m.has_feature(features::KNOWLEDGE_SENTENCES) {
+        return Err(
+            "the daemon does not advertise `knowledge:sentences`, so --sentences cannot be honoured"
                 .into(),
         );
     }
@@ -187,6 +229,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
             "svrn search <query>                          Every corpus you may read\n\
              svrn search <query> --corpus <id> ...        Only these corpora\n\
              svrn search <query> --document <name> ...    Only these texts\n\
+             svrn search <query> --sentences              Sentences by meaning\n\
              svrn search <query> --limit 20 --json        More hits, as JSON",
         ),
         crate::util::help::HelpSection::Notes(
