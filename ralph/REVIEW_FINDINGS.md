@@ -4758,3 +4758,43 @@ range (7cca80c67), not added.
   commonwealth-ai-partition-local. The 590 s timeout killed it at 5632
   chunks. `code dry-report` and `code converge` now refuse ("none of them was
   built from this repo"); `symbols` still answers from scip_graph.db.
+
+## REVIEW-audit-ek-verify (2026-10-15, range 60eeeb73c..b4a033039, the every-kind-finish queue)
+
+Three units (ek-waves-reasoned, ek-window-refs, ek-reader-voices), 13 commits,
++810 / -76. TESTALL 14644 pass / 4 fail, PREPUSH exit 1 (arch-gate). No
+failure is in a file the range touched. Zero model spend: the four answer
+stores' mtimes are unchanged and no replay printed `no recorded answer`.
+
+Replay `NOTE='ek verify' ASKER=replay RESTORE=particulars-all2 loop.sh ek-verify inner`:
+world-s1 16/18, world-s3 22/27, ward-story 8/14, as expected.
+
+### Findings
+
+- **ARCH 5 / 7, NEEDS_HUMAN, not fixed** · ek-window-refs' outcome is never
+  reached on saltgrass-asked. Replay extract plus recorded resolve gives
+  `attribute=speaker atoms=0` for account, sighting, verdict, motive and
+  notice; the only `"derived":"reference"` lines are `place`/nothing (account
+  10, notice 16, sighting 1). Of 39 window speaker readings, 33 are the
+  model's own particular label (`p6`, as window_prompt.md:16 has it label
+  particulars), and window.rs:431-457 (`reading`, the Ref arm) refuses each
+  one as `"pN" is neither a character this document's fields name nor words
+  it holds` before projection. The other 6 state no value. The third rule
+  in read_fields.rs `record_read` was proven on a name reading
+  (statement_refs_tests.rs), which is not what the window emits. The voices
+  half holds: no particular or subject is named "the narrator".
+- **ARCH 5 (drift), recorded, out of range** · TESTALL
+  `f26_egress_boundary_census`: desktop commands/reading.rs count 1 -> 2
+  (c4a0b8f61), with engine_conformance run.rs and server.rs (df2c8af72) and
+  llama_router/live.rs (10a8d5255) unregistered.
+- **out of range, recorded** · `a_fast_turn_survives_the_chat_round_trip`
+  (sovereign-serve, chat_round_trip.rs:257: `enable_thinking` sent None, engine
+  got Some(false); oicp-client f74bbffe5/96921a3a8 are the candidates), and
+  `a_peer_routed_turn_identifies_this_node_to_the_peer` (sovereign-stock,
+  identity_and_health.rs:211: TestProvider has no stream chunks configured).
+  The first fails again run alone; the second was not re-run. A third,
+  `a_joiner_with_a_bare_key_finds_the_founder_on_mdns` (NoIrohDial), is
+  mDNS on this host.
+- **size, out of range** · arch-gate blocks: model_slot.rs 6146 -> 6209
+  (+63 > slack 50), approach band 191 -> 196 files. None of the range's
+  files entered the 800-1200 band (decl.rs was already in it, 854 -> 882).
