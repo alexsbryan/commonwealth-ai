@@ -19,14 +19,16 @@ use axum::{Json, Router};
 use oicp_types::evidence::{reasons, texts_digest_preimage, DEFAULT_CONTEXT};
 use oicp_types::knowledge::reasons::SCORER_UNAVAILABLE;
 use oicp_types::{
-    AlignRequest, Alignment, Difference, DifferenceKind, Document, KnowledgeResult,
-    KnowledgeSearchRequest, SourceRef, Span, TextSlice,
+    AlignRequest, Alignment, Difference, DifferenceKind, Document, HeadingOutline, KnowledgeResult,
+    KnowledgeSearchRequest, SourceRef, Span, SpanLocator, TextSlice,
 };
 use serde_json::{json, Value};
 
 use crate::fixture::{code_points, sha256_hex, Library};
+use crate::shelf::{LocatedShelf, Shelf};
 
 mod ingest;
+mod verify;
 
 /// The laws a fake can break, one switch each (oicp-v0.5.md §6's table).
 #[derive(Debug, Clone, Copy, Default)]
@@ -70,6 +72,12 @@ pub struct Breaks {
     /// knowledge.sentences: advertises `rerank`, holds no rerank slot, and
     /// answers with cosine anyway (`search_with_rerank`'s quiet fallback).
     pub rerank_falls_back: bool,
+    /// knowledge.locator: a span is given the heading path of the part
+    /// before the one it stands in.
+    pub locator_previous_part: bool,
+    /// knowledge.locator: a span under no heading is given the text's first
+    /// line as its heading path.
+    pub locator_invented: bool,
     /// knowledge.sentences: each sentence's range is one code point past
     /// the sentence its `exact` and `content` carry.
     pub sentence_range_off_by_one: bool,
@@ -93,11 +101,15 @@ pub fn revoked_token() -> String {
 }
 
 struct Stored {
+    /// The corpus that holds it.
+    corpus: String,
     name: String,
     /// sha256 of the source's bytes, the fixture document's text.
     source_sha256: String,
     text: String,
     metadata: Option<Value>,
+    /// Its headings, by v0.6 §2.13's rule.
+    outline: HeadingOutline,
 }
 
 struct Fake {
@@ -143,24 +155,62 @@ impl Fake {
             || documents.contains(&sha256_hex(s.text.as_bytes()))
     }
 
+    /// The stored texts of the named corpora, or of all when none is named.
+    fn of<'a>(&'a self, corpora: &'a [String]) -> impl Iterator<Item = &'a Stored> + 'a {
+        self.texts
+            .iter()
+            .filter(move |s| corpora.is_empty() || corpora.contains(&s.corpus))
+    }
+
+    /// The corpora a request reads: those it names that the fake holds, or
+    /// every one.
+    fn searched(&self, corpora: &[String]) -> Vec<String> {
+        let mut held: Vec<String> = Vec::new();
+        for s in self.of(corpora) {
+            if !held.contains(&s.corpus) {
+                held.push(s.corpus.clone());
+            }
+        }
+        held
+    }
+
+    /// Where `start` stands in `s` (§2.13): the heading path open there.
+    /// `locator_previous_part` names the heading before that one;
+    /// `locator_invented` names the text's first line where none is open.
+    fn locator(&self, s: &Stored, start: u64) -> Option<SpanLocator> {
+        let heads = s.outline.heads();
+        let open = heads.iter().rposition(|(at, _)| *at <= start);
+        let path = |i: usize| SpanLocator::HeadingPath {
+            headings: heads[i].1.clone(),
+        };
+        match open {
+            None if self.breaks.locator_invented => Some(SpanLocator::HeadingPath {
+                headings: vec![s.text.lines().next()?.trim().to_string()],
+            }),
+            Some(i) if self.breaks.locator_previous_part => i.checked_sub(1).map(path),
+            _ => s.outline.at(start),
+        }
+    }
+
     /// A hit cut from `s` at code points `[start, end)`; `exact_off_by_one`
     /// shifts its span's `exact`.
     fn hit(&self, s: &Stored, start: u64, end: u64, score: f32) -> KnowledgeResult {
         let shift = u64::from(self.breaks.exact_off_by_one);
         let len = s.text.chars().count() as u64;
         let span = Span {
-            corpus_id: self.corpus.clone(),
+            corpus_id: s.corpus.clone(),
             document: self.record(s),
             start,
             end,
             exact: code_points(&s.text, start + shift, (end + shift).min(len)).unwrap_or_default(),
             prefix: String::new(),
             suffix: String::new(),
+            locator: self.locator(s, start),
         };
         KnowledgeResult {
             content: code_points(&s.text, start, end).unwrap_or_default(),
             title: None,
-            corpus_id: self.corpus.clone(),
+            corpus_id: s.corpus.clone(),
             url: None,
             score,
             metadata: Default::default(),
@@ -177,8 +227,13 @@ impl Fake {
         }
     }
 
-    fn digest(&self) -> String {
-        let records: Vec<Document> = self.texts.iter().map(|s| self.record(s)).collect();
+    fn digest(&self, corpus: &str) -> String {
+        let records: Vec<Document> = self
+            .texts
+            .iter()
+            .filter(|s| s.corpus == corpus)
+            .map(|s| self.record(s))
+            .collect();
         let pre = texts_digest_preimage(records.iter().map(|d| {
             (
                 d.text_sha256.as_str(),
@@ -188,6 +243,15 @@ impl Fake {
         }));
         sha256_hex(pre.as_bytes())
     }
+}
+
+/// The shelves the fake holds beside the fixture library, as if each had
+/// been installed: the v0.6 checks that install their own read them.
+fn shelves() -> Vec<Shelf> {
+    [include_str!("../fixture/headings.json")]
+        .into_iter()
+        .map(|j| LocatedShelf::load(j).expect("shelf loads").shelf)
+        .collect()
 }
 
 /// A running fake: its base URL.
@@ -200,23 +264,31 @@ pub struct Running {
 pub async fn spawn(breaks: Breaks) -> Running {
     let lib = Library::load().expect("fixture loads");
     let trims = breaks.trims_texts;
+    let stored = |corpus: &str, name: &str, source: &str, metadata: &Option<Value>| {
+        let text = if trims { source.trim_end() } else { source };
+        Stored {
+            corpus: corpus.to_string(),
+            name: name.to_string(),
+            source_sha256: sha256_hex(source.as_bytes()),
+            text: text.to_string(),
+            metadata: metadata.clone(),
+            outline: HeadingOutline::of(text),
+        }
+    };
+    let mut texts: Vec<Stored> = lib
+        .documents
+        .iter()
+        .map(|d| stored(&lib.corpus_id, &d.name, &d.text, &d.metadata))
+        .collect();
+    for shelf in shelves() {
+        for d in &shelf.documents {
+            texts.push(stored(&shelf.corpus_id, &d.name, &d.text, &d.metadata));
+        }
+    }
     let fake = Arc::new(Fake {
         breaks,
         corpus: lib.corpus_id.clone(),
-        texts: lib
-            .documents
-            .iter()
-            .map(|d| Stored {
-                name: d.name.clone(),
-                source_sha256: sha256_hex(d.text.as_bytes()),
-                text: if trims {
-                    d.text.trim_end().to_string()
-                } else {
-                    d.text.clone()
-                },
-                metadata: d.metadata.clone(),
-            })
-            .collect(),
+        texts,
         installed: Mutex::new(BTreeMap::new()),
         polls: Mutex::new(BTreeMap::new()),
     });
@@ -229,8 +301,11 @@ pub async fn spawn(breaks: Breaks) -> Running {
         .route("/v1/knowledge/search", post(search))
         .route("/oicp/v1/text/{sha}", get(text))
         .route("/oicp/v1/align", post(align))
-        .route("/oicp/v1/verify", post(verify))
-        .route("/oicp/v1/verify/correction", post(verify_correction))
+        .route("/oicp/v1/verify", post(verify::verify))
+        .route(
+            "/oicp/v1/verify/correction",
+            post(verify::verify_correction),
+        )
         .route("/oicp/v1/corpus/install", ingest::install_route(&fake))
         .route("/oicp/v1/corpus/progress", get(ingest::progress))
         .route("/oicp/v1/recipe/test", post(ingest::recipe_test))
@@ -353,7 +428,7 @@ async fn capabilities(State(f): State<Arc<Fake>>) -> Json<Value> {
         "features": [
             "ingest:v1", "ingest:recipe_test", "ingest:recipe", "ingest:documents", "evidence:text",
             "evidence:align", "evidence:verify", "evidence:verify_corrections", "knowledge:document", "knowledge:scoped",
-            "knowledge:range", "knowledge:sentences", "auth:named_client"
+            "knowledge:range", "knowledge:sentences", "knowledge:locator", "auth:named_client"
         ],
         "knowledge": {
             "corpora": [],
@@ -392,16 +467,18 @@ async fn search(State(f): State<Arc<Fake>>, Json(req): Json<Value>) -> Response 
         })
         .filter(|w| w.chars().count() >= 4)
         .collect();
-    let documents: Vec<String> = req
-        .get("documents")
-        .and_then(Value::as_array)
-        .map(|a| {
-            a.iter()
-                .filter_map(Value::as_str)
-                .map(String::from)
-                .collect()
-        })
-        .unwrap_or_default();
+    let strings = |key: &str| -> Vec<String> {
+        req.get(key)
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(Value::as_str)
+                    .map(String::from)
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let (documents, corpora) = (strings("documents"), strings("corpora"));
     if documents
         .iter()
         .any(|d| !oicp_types::evidence::is_sha256_hex(d))
@@ -411,11 +488,10 @@ async fn search(State(f): State<Arc<Fake>>, Json(req): Json<Value>) -> Response 
     if req.get("granularity").and_then(Value::as_str) == Some("sentence") {
         let limit = req.get("limit").and_then(Value::as_u64);
         let limit = limit.unwrap_or(KnowledgeSearchRequest::DEFAULT_LIMIT.into()) as usize;
-        return sentences(&f, query, &documents, limit);
+        return sentences(&f, query, &corpora, &documents, limit);
     }
     let hits: Vec<KnowledgeResult> = f
-        .texts
-        .iter()
+        .of(&corpora)
         .filter(|s| {
             let lower = s.text.to_lowercase();
             s.text.contains(query) || words.iter().any(|w| lower.contains(w.as_str()))
@@ -423,7 +499,7 @@ async fn search(State(f): State<Arc<Fake>>, Json(req): Json<Value>) -> Response 
         .filter(|s| f.in_scope(&documents, s))
         .map(|s| f.hit(s, 0, s.text.chars().count() as u64, 1.0))
         .collect();
-    Json(json!({"results": hits, "corpora_searched": [f.corpus]})).into_response()
+    Json(json!({"results": hits, "corpora_searched": f.searched(&corpora)})).into_response()
 }
 
 /// The lawful sentence search (§2.11), every sentence indexed: each scoped
@@ -431,7 +507,13 @@ async fn search(State(f): State<Arc<Fake>>, Json(req): Json<Value>) -> Response 
 /// scored by cosine over word counts, best first, at most `limit`, those
 /// sharing no word with the query left out. `rerank_without_slot` refuses by
 /// name; `rerank_falls_back` answers with cosine anyway.
-fn sentences(f: &Fake, query: &str, documents: &[String], limit: usize) -> Response {
+fn sentences(
+    f: &Fake,
+    query: &str,
+    corpora: &[String],
+    documents: &[String],
+    limit: usize,
+) -> Response {
     if f.breaks.rerank_without_slot && !f.breaks.rerank_falls_back {
         return refuse(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -440,7 +522,7 @@ fn sentences(f: &Fake, query: &str, documents: &[String], limit: usize) -> Respo
     }
     let q = word_counts(query);
     let mut found: Vec<(f32, &Stored, u64, u64)> = Vec::new();
-    for s in f.texts.iter().filter(|s| f.in_scope(documents, s)) {
+    for s in f.of(corpora).filter(|s| f.in_scope(documents, s)) {
         let chars: Vec<char> = s.text.chars().collect();
         let mut start = 0;
         for i in 0..chars.len() {
@@ -477,7 +559,7 @@ fn sentences(f: &Fake, query: &str, documents: &[String], limit: usize) -> Respo
         })
         .collect();
     Json(json!({
-        "results": hits, "corpora_searched": [f.corpus],
+        "results": hits, "corpora_searched": f.searched(corpora),
         "scorer": {"name": "cosine", "model": "fake-word-counts"}, "route": "index",
     }))
     .into_response()
@@ -566,19 +648,20 @@ fn kind(k: quote_align::QuoteEditKind) -> DifferenceKind {
 
 async fn align(State(f): State<Arc<Fake>>, Json(req): Json<AlignRequest>) -> Json<Value> {
     let cfg = quote_align::AlignConfig::shipped().expect("align.toml loads");
-    let texts: Vec<&str> = f.texts.iter().map(|s| s.text.as_str()).collect();
+    let held: Vec<&Stored> = f.of(&req.corpora).collect();
+    let texts: Vec<&str> = held.iter().map(|s| s.text.as_str()).collect();
     let found = quote_align::align(&req.quote, &texts, &cfg);
     let ctx = u64::from(req.effective_context());
     let alignments: Vec<Alignment> = found
         .alignments
         .iter()
         .map(|a| {
-            let s = &f.texts[a.text];
+            let s = held[a.text];
             let (start, end) = (a.source.start as u64, a.source.end as u64);
             let shift = u64::from(f.breaks.exact_off_by_one);
             Alignment {
                 span: Span {
-                    corpus_id: f.corpus.clone(),
+                    corpus_id: s.corpus.clone(),
                     document: f.record(s),
                     start,
                     end,
@@ -586,6 +669,7 @@ async fn align(State(f): State<Arc<Fake>>, Json(req): Json<AlignRequest>) -> Jso
                     prefix: code_points(&s.text, start.saturating_sub(ctx), start)
                         .unwrap_or_default(),
                     suffix: code_points(&s.text, end, end + ctx).unwrap_or_default(),
+                    locator: f.locator(s, start),
                 },
                 differences: a
                     .edits
@@ -600,128 +684,20 @@ async fn align(State(f): State<Arc<Fake>>, Json(req): Json<AlignRequest>) -> Jso
             }
         })
         .collect();
-    let corpus = if f.breaks.omit_texts_digest {
-        json!({"corpus_id": f.corpus})
-    } else {
-        json!({"corpus_id": f.corpus, "texts_digest": f.digest()})
-    };
+    let corpora: Vec<Value> = f
+        .searched(&req.corpora)
+        .into_iter()
+        .map(|c| {
+            if f.breaks.omit_texts_digest {
+                json!({"corpus_id": c})
+            } else {
+                json!({"corpus_id": c, "texts_digest": f.digest(&c)})
+            }
+        })
+        .collect();
     Json(json!({
         "alignments": alignments,
         "aligner": quote_align::ALIGNER_ID,
-        "corpora": [corpus],
+        "corpora": corpora,
     }))
-}
-
-/// The lawful verify: each sentence of the unit is a claim, `supported` by
-/// the stored text it appears in verbatim (that occurrence is its passage),
-/// `unsupported` otherwise; the judge tier is not served. Spans take
-/// `exact_off_by_one` like align's.
-async fn verify(
-    State(f): State<Arc<Fake>>,
-    Json(req): Json<oicp_types::verify::VerifyRequest>,
-) -> Response {
-    use oicp_types::verify::{reasons as vr, VerifyTier, UNCALIBRATED};
-    if req.tier == VerifyTier::Judge {
-        return refuse(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            json!({"error": vr::TIER_NOT_OFFERED}),
-        );
-    }
-    let unit: Vec<char> = req.unit.chars().collect();
-    let mut claims = Vec::new();
-    let mut start = 0usize;
-    for i in 0..unit.len() {
-        let stop = unit[i] == '.' && unit.get(i + 1).is_none_or(|c| c.is_whitespace());
-        if !stop {
-            continue;
-        }
-        let exact: String = unit[start..=i].iter().collect();
-        let lead = exact.len() - exact.trim_start().len();
-        let (a, b) = ((start + lead) as u64, (i + 1) as u64);
-        let exact = exact.trim_start().to_string();
-        start = i + 1;
-        let found = f.texts.iter().find_map(|s| {
-            s.text
-                .find(&exact)
-                .map(|byte| (s, s.text[..byte].chars().count() as u64))
-        });
-        let shift = u64::from(f.breaks.exact_off_by_one);
-        let (verdict, evidence) = match found {
-            Some((s, at)) => {
-                let end = at + exact.chars().count() as u64;
-                let span = Span {
-                    corpus_id: f.corpus.clone(),
-                    document: f.record(s),
-                    start: at,
-                    end,
-                    exact: code_points(&s.text, at + shift, end + shift).unwrap_or_default(),
-                    prefix: String::new(),
-                    suffix: String::new(),
-                };
-                (
-                    json!({"kind": "supported"}),
-                    json!([{"corpus_id": f.corpus, "span": span, "verdict": {"kind": "supported"}}]),
-                )
-            }
-            None => (json!({"kind": "unsupported"}), json!([])),
-        };
-        let verdict = if f.breaks.verify_unknown_verdict {
-            json!({"kind": "plausible"})
-        } else {
-            verdict
-        };
-        claims.push(json!({
-            "start": a, "end": b, "exact": exact, "class": "checkable",
-            "verdict": verdict, "evidence": evidence, "rung": "fake/verbatim",
-            "operating_point": UNCALIBRATED,
-            "episode_id": format!("00000000-0000-4000-8000-{:012x}", claims.len()),
-        }));
-    }
-    Json(json!({
-        "claims": claims,
-        "verifier": "fake-verify/1",
-        "corpora": [{"corpus_id": f.corpus, "texts_digest": f.digest()}],
-    }))
-    .into_response()
-}
-
-/// A UUID's shape: 8-4-4-4-12 hex digits.
-fn uuid_shaped(s: &str) -> bool {
-    let groups: Vec<&str> = s.split('-').collect();
-    groups.iter().map(|g| g.len()).eq([8, 4, 4, 4, 12])
-        && groups
-            .iter()
-            .all(|g| g.chars().all(|c| c.is_ascii_hexdigit()))
-}
-
-/// The lawful correction (v0.6 §2.10): a malformed episode is 400, and the
-/// witness is read back against the fake's texts. `witness_unread` calls
-/// every witness `verified`.
-async fn verify_correction(
-    State(f): State<Arc<Fake>>,
-    Json(req): Json<oicp_types::verify::VerifyCorrection>,
-) -> Response {
-    use oicp_types::verify::{reasons as vr, WitnessCheck};
-    if !uuid_shaped(&req.episode_id) {
-        return refuse(
-            StatusCode::BAD_REQUEST,
-            json!({"error": vr::NOT_AN_EPISODE}),
-        );
-    }
-    let witness = match &req.witness {
-        None => WitnessCheck::NotGiven,
-        Some(_) if f.breaks.witness_unread => WitnessCheck::Verified,
-        Some(w) => match f
-            .texts
-            .iter()
-            .find(|s| sha256_hex(s.text.as_bytes()) == w.text_sha256)
-        {
-            None => WitnessCheck::NotHeld,
-            Some(s) if w.start <= w.end && w.end <= s.text.chars().count() as u64 => {
-                WitnessCheck::Verified
-            }
-            Some(_) => WitnessCheck::OutOfRange,
-        },
-    };
-    Json(json!({"recorded": true, "witness": witness})).into_response()
 }

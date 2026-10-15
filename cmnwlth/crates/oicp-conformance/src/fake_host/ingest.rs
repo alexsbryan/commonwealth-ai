@@ -95,11 +95,11 @@ async fn install(State(f): State<Arc<Fake>>, req: Result<Json<Value>, JsonReject
 pub(super) async fn progress(State(f): State<Arc<Fake>>) -> Json<Value> {
     let installed = f.installed.lock().unwrap();
     let mut polls = f.polls.lock().unwrap();
-    let documents: Vec<Value> = if f.breaks.omit_documents {
-        Vec::new()
-    } else {
-        f.texts
-            .iter()
+    let documents = |corpus: &str| -> Vec<Value> {
+        if f.breaks.omit_documents {
+            return Vec::new();
+        }
+        f.of(&[corpus.to_string()])
             .map(|s| {
                 let text = if f.breaks.unserved_text_names {
                     s.name.as_str()
@@ -118,13 +118,13 @@ pub(super) async fn progress(State(f): State<Arc<Fake>>) -> Json<Value> {
         if f.breaks.late_listing && *n == 1 {
             continue;
         }
-        progress.insert(c, json!({"phase": "complete", "documents": documents}));
+        progress.insert(c, json!({"phase": "complete", "documents": documents(c)}));
     }
     Json(json!({"progress": progress}))
 }
 
 pub(super) async fn recipe_test(State(f): State<Arc<Fake>>) -> Json<Value> {
-    let n = f.texts.len();
+    let n = f.of(&[f.corpus.clone()]).count();
     let mut stages = vec![
         json!({"name": "validate", "docs_in": 0, "docs_out": 0}),
         json!({"name": "acquire", "docs_in": 0, "docs_out": n}),

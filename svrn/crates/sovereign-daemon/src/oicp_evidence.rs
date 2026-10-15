@@ -407,6 +407,7 @@ pub(crate) fn span_of(
         exact: slice(start..end),
         prefix: slice(start.saturating_sub(context)..start),
         suffix: slice(end..(end + context).min(len)),
+        locator: None,
     })
 }
 

@@ -22,10 +22,14 @@ mod evidence_checks;
 mod fake_host;
 mod fixture;
 mod ingest_checks;
+mod located_checks;
 mod report;
 mod search_checks;
+mod shelf;
 #[cfg(test)]
 mod v05_tests;
+#[cfg(test)]
+mod v06_tests;
 mod verify_checks;
 mod wire;
 

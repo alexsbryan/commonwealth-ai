@@ -80,6 +80,10 @@ pub mod features {
     /// answers sentences ranked by `knowledge.sentence_scorer`; requires
     /// `knowledge:range` and `knowledge:scoped`.
     pub const KNOWLEDGE_SENTENCES: &str = "knowledge:sentences";
+    /// v0.6 §2.13: every span carries `locator` where the extraction that
+    /// stored its text found one, the plain-text extractor's heading paths
+    /// by that section's rule; requires `knowledge:range`.
+    pub const KNOWLEDGE_LOCATOR: &str = "knowledge:locator";
     /// v0.5 §4: install accepts `recipe_toml`; requires `ingest:v1`.
     pub const INGEST_RECIPE: &str = "ingest:recipe";
     /// v0.5 §5.1: a presented named credential is honoured, and a bogus
@@ -172,6 +176,7 @@ pub mod features {
         KNOWLEDGE_SCOPED,
         KNOWLEDGE_RANGE,
         KNOWLEDGE_SENTENCES,
+        KNOWLEDGE_LOCATOR,
         INGEST_RECIPE,
         AUTH_NAMED_CLIENT,
     ];

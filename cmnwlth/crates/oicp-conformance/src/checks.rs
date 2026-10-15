@@ -270,8 +270,8 @@ async fn v05_checks(host: &Host, m: &ProviderManifest, args: &Args) -> Vec<Check
             }
         }
     }
-    // Reads no fixture: it runs whether or not the library loads.
-    out.push(ingest_checks::check_ingest_install_limit(host, m).await);
+    // Read no fixture library: they run whether or not it loads.
+    out.extend(crate::located_checks::own_library_checks(host, m).await);
     out.push(auth_checks::check_auth_named_client(host, m, args).await);
     out.push(auth_checks::check_auth_local_peer(host, Some(m)).await);
     out

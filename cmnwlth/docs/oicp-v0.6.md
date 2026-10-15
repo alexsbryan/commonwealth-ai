@@ -20,8 +20,10 @@ hit (where in its stored text it stands, §2.8), install progress says which
 of a library's **documents** were read (§2.9), a client can **correct** a
 verify decision so the host keeps the case it got wrong (§2.10), and search
 can answer **sentences** ranked by meaning, each an address in its stored
-text (§2.11), and a host states the **largest install** it reads, so a client
-sizes an inline library before it sends one (§2.12).
+text (§2.11), a host states the **largest install** it reads, so a client
+sizes an inline library before it sends one (§2.12), and a span says
+**where it stands** in its source, such as the headings it stands under
+(§2.13).
 
 As in v0.5, everything v0.6 adds is a serde-defaulted field, an optional
 endpoint, or a feature string, and **feature presence, not the version
@@ -41,6 +43,7 @@ string, gates behaviour**. The types are in
 | `evidence:verify_corrections` | `knowledge.evidence.verify_correction_endpoint` takes a client's correction of a verify decision (§2.10) | `evidence:verify`, `verify_correction_endpoint` |
 | `ingest:documents` | install progress lists an install from its spawn, and each document it read once it has returned (§2.9) | `ingest:v1` |
 | `knowledge:sentences` | knowledge search takes `granularity: "sentence"` and answers sentences, ranked by the scorer `knowledge.sentence_scorer` names (§2.11) | `knowledge:range`, `knowledge:scoped`, `knowledge.sentence_scorer` |
+| `knowledge:locator` | every span carries `locator` where the extraction that stored its text found one, a plain text's heading paths by §2.13's rule | `knowledge:range` |
 
 ```rust
 EvidenceEndpoints {
@@ -423,6 +426,56 @@ then bounded install too and refused an inline library of 22.6 MB `413`. It
 buffers an install whole before it reads the recipe, so the limit is also
 the memory one install may hold before it is validated.
 
+### 2.13 Where a span stands
+
+v0.5 §2.3's `Span` says where a range is by code points, which a client can
+dereference but a reader cannot cite. It gains the place the extraction
+found it: the field a citation's locator is filled from.
+
+```
+Span        { … (v0.5 fields) …,
+              locator: Option<SpanLocator> }        // absent when the extraction found none
+SpanLocator = {"kind": "page", "page": u32}                     // the 1-based page of the source
+            | {"kind": "heading_path", "headings": [String]}    // outermost first, never empty
+            | {"kind": "timestamp", "milliseconds": u64,        // a transcript turn's start
+                                    "speaker": Option<String>}  // absent when the source names none
+            | {"kind": "row", "row": u64}                       // the 1-based record of a file of many
+```
+
+- **Where its start stands.** A span's locator is where its `start` stands
+  in its text, as the extraction that stored the text found it. Every span
+  a host advertising `knowledge:locator` gives carries it: search hits and
+  sentences (§2.8, §2.11), verify's passages (§2.6), alignments (v0.5
+  §2.3). Two spans of one text that start in one place carry one locator.
+- **Absent, never invented.** A span whose extraction found no place for
+  it carries no `locator`; a heading path is never empty and a speaker is
+  never guessed. A client reads absence as "nowhere named", never as the
+  text's start.
+- **A hint beside the address.** The range stays the span's address; the
+  locator is what a reader cites it by. `SpanLocator` is a closed set: a
+  kind outside it is a decode error, never a default, and adding one is a
+  spec revision. `page` and `row` are for extractors that know them (a
+  paginated source, a file of many records).
+- **Plain text's heading path.** The plain-text extractor reads a text as
+  paragraphs (runs of lines that are not whitespace alone), each with its
+  whitespace runs read as single spaces. A paragraph is a heading when it
+  opens with a part word (`BOOK`, `PART`, `CHAPTER`, `SECTION`, `VOLUME`,
+  in capitals or with a capital initial), then a numeral (Arabic digits or
+  capital Roman numerals) and a stop right after it, is at most 300 code
+  points long, and opens no second part (a contents line names many, so it
+  is no heading). Part words nest in the order the text's headings first
+  use them: `BOOK I.` then `CHAPTER I.` then `PART I.` is three levels, and
+  `PART I.` then `CHAPTER I.` is two the other way round. A heading closes
+  every open heading at its level or deeper and opens its own, from its
+  paragraph's first code point. A span's heading path is the headings open
+  at its start, each as its paragraph reads; before a text's first
+  heading, and in a text with none, there is none.
+
+`oicp_types::locator` holds the type and the rule (`HeadingOutline`), so a
+host's extractor and a test host read headings by one implementation. The
+reference host does not advertise `knowledge:locator` yet: its spans carry
+no locator until its extractor records where each text's headings stand.
+
 ## 6. Conformance (additions)
 
 | check | holds | red against |
@@ -434,6 +487,7 @@ the memory one install may hold before it is validated.
 | `knowledge.scoped` | a query reaching several fixture texts, scoped to the second-ranked one, returns at least one hit and every hit from that text; a `documents` entry that is not a text name is `400` | a host that ignores `documents` |
 | `ingest.install_limit` | with `ingest:recipe` and `max_install_bytes` stated, an install body of exactly that many bytes, a recipe that does not load padded to the size, is read: `400`, never `413`; one byte more is `413 install too large` naming the limit. A stated limit past 256 MiB is probed at 256 MiB, with nothing sent past it | a host stating a limit whose install route reads bodies only to its surface's 8 MiB |
 | `knowledge.sentences` | each fixture signature, at `granularity: sentence` scoped to its own text, returns at least one sentence, at most `limit`, best first, every one from that text; each carries `span` whose `exact` is its `content` and whose range reads back byte-equal through `text_endpoint`; the reply names the advertised scorer and a model, and a route, with `sentences_pending` exactly on `passages`. A `503 scorer unavailable` naming the advertised scorer is could-not-judge | a sentence range one code point off; a sentence from outside the scope; a host advertising `rerank`, holding no rerank slot, that answers with cosine |
+| `knowledge.locator` | installs its own library (`fixture/headings.json`: a headed text with a contents line and a preface, and a text with no headings) and aligns each listed sentence verbatim; each span's `locator` is the heading path the rule gives, or absent where it gives none. Needs `ingest:recipe` and `evidence:align`, could-not-judge without | a span given the heading path of the part before the one it stands in; a locator invented for a span under no heading |
 
 `manifest.features` checks §2.1's co-occurrence: `evidence:verify` iff
 `verify_endpoint`, with a non-empty `verify_tiers`, and never without
@@ -442,7 +496,8 @@ the memory one install may hold before it is validated.
 `ingest:documents` never without `ingest:v1`; `evidence:verify_corrections`
 iff `verify_correction_endpoint`, and never without `evidence:verify`;
 `knowledge:sentences` iff `knowledge.sentence_scorer`, and never without
-`knowledge:range` and `knowledge:scoped`.
+`knowledge:range` and `knowledge:scoped`; `knowledge:locator` never
+without `knowledge:range`.
 
 ## 7. Backward compatibility
 
@@ -460,3 +515,6 @@ iff `verify_correction_endpoint`, and never without `evidence:verify`;
   search is the request a v0.5 host knew. A client sends `sentence` only to a
   host advertising `knowledge:sentences`; the reply's sentence fields are
   absent from every passage reply.
+- `locator` is skipped when absent, so a v0.5 span reads and writes back
+  unchanged, and a v0.6 client reads a span from a host without
+  `knowledge:locator` as one that names no place.

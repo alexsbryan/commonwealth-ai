@@ -140,6 +140,11 @@ pub struct Span {
     pub prefix: String,
     /// Up to the requested context of code points after `end`.
     pub suffix: String,
+    /// v0.6 §2.13 (`knowledge:locator`): where the extraction that stored
+    /// the text found `start` (a heading path, a transcript turn, a page, a
+    /// row). Absent when it found none, never invented.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locator: Option<crate::locator::SpanLocator>,
 }
 
 /// `GET {text_endpoint}/{text_sha256}` response: the whole text, or a range

@@ -296,6 +296,7 @@ fn wire_alignment(
             exact: slice(start..end)?,
             prefix: slice(start.saturating_sub(context)..start)?,
             suffix: slice(end..(end + context).min(len))?,
+            locator: None,
         },
         differences: a.edits.iter().map(wire_difference).collect(),
         coverage: a.coverage,

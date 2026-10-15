@@ -59,6 +59,7 @@ pub mod ingest;
 pub mod job;
 pub mod jsonrpc;
 pub mod knowledge;
+pub mod locator;
 pub mod manifest;
 pub mod mcp;
 pub mod measurements;
@@ -133,6 +134,7 @@ pub use knowledge::{
     KnowledgeSearchResponse, LandscapeDigestEntry, LandscapeDigestRequest, LandscapeDigestResponse,
     Scorer, SentenceRoute, SentenceScorer, Truncated,
 };
+pub use locator::{HeadingOutline, SpanLocator};
 pub use manifest::{
     features, CorpusDescriptor, EmbedModelInfo, FederatedMeshDescriptor, FederationManifest,
     KnowledgeManifest, ModelStatus, NormalizationStrategy, PoolingStrategy, ProviderInfo,

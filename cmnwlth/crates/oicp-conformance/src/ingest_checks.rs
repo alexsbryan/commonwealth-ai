@@ -152,7 +152,7 @@ pub async fn check_ingest_recipe(
 /// Poll progress by v0.4 §5.3 until `corpus` is terminal: `complete`, an
 /// entry that disappears after being seen, or none within the grace window
 /// (already installed). `failed` and a time-out are errors.
-async fn wait_terminal(host: &Host, progress: &str, corpus: &str) -> Result<(), String> {
+pub(crate) async fn wait_terminal(host: &Host, progress: &str, corpus: &str) -> Result<(), String> {
     let mut seen = false;
     for poll in 0..INSTALL_POLLS {
         let r = host.get(progress).await?;

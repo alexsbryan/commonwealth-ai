@@ -617,6 +617,7 @@ fn hit(targets: &[Target], texts: &Texts, c: &Candidate) -> Result<KnowledgeResu
             exact,
             prefix: text[before..bs].to_string(),
             suffix: text[be..after].to_string(),
+            locator: None,
         }),
         span_absent: None,
         document: Some(document),

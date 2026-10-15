@@ -103,6 +103,10 @@ pub fn v05_feature_failures(m: &ProviderManifest) -> Vec<String> {
             f.push(format!("knowledge:sentences requires {name}"));
         }
     }
+    // v0.6 §2.13: a locator is read off a hit's span.
+    if m.has_feature(features::KNOWLEDGE_LOCATOR) && !m.has_feature(features::KNOWLEDGE_RANGE) {
+        f.push("knowledge:locator requires knowledge:range".into());
+    }
     f
 }
 

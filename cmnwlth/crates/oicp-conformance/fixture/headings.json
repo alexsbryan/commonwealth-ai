@@ -1,0 +1,23 @@
+{
+  "shelf": {
+    "corpus_id": "oicp-conformance-headings",
+    "documents": [
+      {
+        "name": "annals",
+        "text": "Annals of a Small Port\n\nContents\n\nBOOK I. OF THE HARBOUR. CHAPTER I. OF THE TIDES. CHAPTER II. OF THE GULLS. BOOK II. OF THE TOWN. CHAPTER I. OF THE MARKET.\n\nThese annals were kept by the harbour office and copied fair each winter.\n\nBOOK I. OF THE HARBOUR.\n\nCHAPTER I. OF THE TIDES.\n\nThe spring tides reached the chapel steps twice in the year of the flood.\n\nCHAPTER II. OF THE GULLS.\n\nThe gulls nested on the old pier until the lamp was moved.\n\nBOOK II. OF THE TOWN.\n\nCHAPTER I. OF THE MARKET.\n\nThe fish market opened at first light and closed when the tide turned.\n"
+      },
+      {
+        "name": "logbook",
+        "text": "Tuesday. The mail boat waited an hour for the pilot.\n\nChapter and verse of the harbour rules were read aloud to the crew.\n\nThursday. A schooner from the north put in for water.\n"
+      }
+    ]
+  },
+  "located": [
+    {"document": "annals", "quote": "These annals were kept by the harbour office and copied fair each winter.", "locator": null},
+    {"document": "annals", "quote": "The spring tides reached the chapel steps twice in the year of the flood.", "locator": {"kind": "heading_path", "headings": ["BOOK I. OF THE HARBOUR.", "CHAPTER I. OF THE TIDES."]}},
+    {"document": "annals", "quote": "The gulls nested on the old pier until the lamp was moved.", "locator": {"kind": "heading_path", "headings": ["BOOK I. OF THE HARBOUR.", "CHAPTER II. OF THE GULLS."]}},
+    {"document": "annals", "quote": "The fish market opened at first light and closed when the tide turned.", "locator": {"kind": "heading_path", "headings": ["BOOK II. OF THE TOWN.", "CHAPTER I. OF THE MARKET."]}},
+    {"document": "logbook", "quote": "The mail boat waited an hour for the pilot.", "locator": null},
+    {"document": "logbook", "quote": "Chapter and verse of the harbour rules were read aloud to the crew.", "locator": null}
+  ]
+}

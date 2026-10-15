@@ -19,15 +19,15 @@ use crate::ingest_checks::{
 };
 use crate::report::{Check, CheckStatus};
 
-struct Bench {
-    host: Host,
-    manifest: ProviderManifest,
+pub(crate) struct Bench {
+    pub(crate) host: Host,
+    pub(crate) manifest: ProviderManifest,
     args: Args,
     lib: Library,
     fixture: FixtureState,
 }
 
-async fn bench(breaks: Breaks) -> Bench {
+pub(crate) async fn bench(breaks: Breaks) -> Bench {
     let fake = spawn(breaks).await;
     let host = Host::new(&fake.url, None);
     let manifest: ProviderManifest = reqwest::get(format!("{}/oicp/v1/capabilities", fake.url))
@@ -52,12 +52,12 @@ async fn bench(breaks: Breaks) -> Bench {
 }
 
 #[track_caller]
-fn green(c: &Check) {
+pub(crate) fn green(c: &Check) {
     assert_eq!(c.status, CheckStatus::Pass, "{}: {}", c.id, c.detail);
 }
 
 #[track_caller]
-fn red(c: &Check, says: &str) {
+pub(crate) fn red(c: &Check, says: &str) {
     assert_eq!(
         c.status,
         CheckStatus::Fail,

@@ -52,6 +52,7 @@ fn align_response_round_trips_with_every_field() {
                 exact: "the river keeps its own counsel".into(),
                 prefix: "and ".into(),
                 suffix: ".".into(),
+                locator: None,
             },
             differences: vec![Difference {
                 kind: DifferenceKind::Substituted,
