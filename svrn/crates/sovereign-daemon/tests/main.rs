@@ -127,6 +127,8 @@ mod oicp_search_e2e;
 mod oicp_sentences_e2e;
 #[path = "main/oicp_verify_e2e.rs"]
 mod oicp_verify_e2e;
+#[path = "main/oicp_verify_sentences_e2e.rs"]
+mod oicp_verify_sentences_e2e;
 #[path = "main/onprem_keys_e2e.rs"]
 mod onprem_keys_e2e;
 #[path = "main/openai_wire_fidelity.rs"]

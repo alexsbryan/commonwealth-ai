@@ -1,85 +1,92 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `POST /oicp/v1/verify` — a unit of text judged claim by claim against the
-//! stored texts the caller may read (OICP v0.6 §2.6), outside any turn.
+//! stored texts the caller may read (OICP v0.6 §2.6), by meaning (§2.15,
+//! `evidence:verify_sentences`), outside any turn.
 //!
-//! Built from what already runs (CITE_V1 §1.4, P4), never a new verifier:
-//! - claims are the unit's sentences, and a claim is checkable when it
-//!   carries a specific (`sovereign_core::runtime::sentence_specifics`);
-//! - **fast** asks, with no model, whether each specific appears in any
-//!   passage lexical search returns for the claim or for the specific itself
-//!   (`value_present_in_chunks`, the in-turn value veto's deterministic half).
-//!   A specific in no passage is `unsupported`; otherwise the tier
-//!   `abstained`, because presence is not support;
-//! - **checker** judges the claim against each passage in the gate's own
-//!   per-claim register (`claim_chunk_support`), at the faithfulness lane's
-//!   threshold. That register says support or not, so this tier never says
-//!   `contradicted`.
+//! Built from what already runs (CITE_V1 §1.4, P4), never a new verifier.
+//! The rungs, in order, each a tracing event:
+//! - **class**: claims are the unit's sentences, and a claim is checkable when
+//!   it carries a specific (`sovereign_core::runtime::sentence_specifics`:
+//!   figures, dates, quantities and names, nothing inside a citation or a
+//!   locator). Every checkable claim names them on the wire by kind;
+//! - **candidates**: the claim's sentences from sentence search
+//!   (`routes_knowledge_sentences::sentences`, the one retrieval path search
+//!   and verify share), each a sentence with its span;
+//! - **floor**: a claim no sentence scores `verify_floor` for (the data file,
+//!   `data/sentence_search.toml`, named in `verifier`) is `unsupported` with
+//!   no evidence at every tier: nothing in the library is about it;
+//! - **fast** asks, with no model, whether each specific appears in a
+//!   candidate (`value_present_in_chunks`, which finds a number by its
+//!   value). A miss is a hint in `specifics_absent`; the tier `abstained`;
+//! - **checker** judges the claim against each of the best candidates in the
+//!   gate's own per-claim register (`claim_chunk_support`), at the
+//!   faithfulness lane's threshold. A candidate it does not back that states
+//!   one of the claim's figures, dates or quantities otherwise
+//!   (`differing_specifics`) is `contradicted` and names the pair.
 //!
-//! Candidates come from each corpus's lexical index as align's do, so no
-//! embedding model is involved. A passage's span is located by finding its
-//! chunk body in the stored text (`oicp_evidence::span_of`, the locator
-//! search's hits share); a passage that is not an exact slice says so instead
-//! of carrying a range. Every operating point is `uncalibrated` until the
-//! bench has measured a cell.
+//! Every operating point is `uncalibrated` until the bench has measured a
+//! cell.
 //!
 //! A checker call the host's model queue sheds is backpressure, not a claim
 //! the checker could not judge: the unit is answered `503` with `Retry-After`
 //! and the shed body every route uses (`admission::local_queue_shed_response`),
 //! judging stops at the first shed, and nothing of the unit is journaled.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::extract::{Extension, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use corpus_index::index::CorpusIndex;
 use kernel_types::Sha256Hash;
 use oicp_types::evidence::{CorpusTexts, Span, Unavailable};
 use oicp_types::verify::{
-    reasons, Checkability, JudgedPassage, VerifiedClaim, VerifyRequest, VerifyResponse, VerifyTier,
-    VerifyVerdict, UNCALIBRATED,
+    reasons, Checkability, ClaimSpecific, ClaimSpecificKind, DifferingSpecific, JudgedPassage,
+    VerifiedClaim, VerifyRequest, VerifyResponse, VerifyTier, VerifyVerdict, UNCALIBRATED,
 };
-use quote_align::code_point_slice;
-use sovereign_contracts::principal::AttachedPrincipal;
+use oicp_types::{Granularity, KnowledgeSearchRequest};
+use sovereign_contracts::principal::{AttachedPrincipal, Principal};
 use sovereign_contracts::types::SpecificsTally;
 use sovereign_core::oicp::ShardingPrivacy;
 use sovereign_core::runtime::{
-    claim_chunk_support_checked, sentence_ranges, sentence_specifics, value_present_in_chunks,
+    claim_chunk_support_checked, differing_specifics, sentence_ranges, sentence_specifics,
+    value_present_in_chunks, Specific, SpecificKind,
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::Speed;
 use sovereign_tools::summary_verify::{EARLY_EXIT_SUPPORT, SUPPORTED_TAU};
 
-use crate::oicp_evidence::{
-    absence_reason, open_for_reading, readable_corpora, requested_corpora, span_of,
-};
+use crate::oicp_evidence::{absence_reason, open_for_reading, readable_corpora, requested_corpora};
 use crate::routes_internal::ErrorBody;
 pub use crate::routes_oicp_verify_journal::VerifyJournal;
+use crate::sentence_index::SentenceSearchConfig;
 use crate::state::AppState;
 
 /// Where the route is mounted, and what the manifest advertises.
 pub const VERIFY_ENDPOINT: &str = "/oicp/v1/verify";
 /// The tiers this host serves, as the manifest advertises them.
 pub const TIERS: [VerifyTier; 2] = [VerifyTier::Fast, VerifyTier::Checker];
-/// Lexical candidates read per query per corpus.
+/// Sentences asked of sentence search per claim; those at the floor or above
+/// are the claim's candidates.
 const CANDIDATES_K: usize = 8;
-/// Passages the checker judges per claim, best lexical candidates first. The
-/// judge reads them one at a time, so this is the tier's latency: at the
-/// gate's `MEMBER_CAP` (12, so all 8 candidates) X1's draft took 4.0-8.5 s a
-/// claim warm (n=4, 2026-10-12), over the S6 order's 5 s line; operator chose
-/// 3 the same day. With several corpora the first corpus's candidates fill it.
+/// Candidates the checker judges per claim, best first. The judge reads
+/// them one at a time, so this is the tier's latency: at the gate's
+/// `MEMBER_CAP` (12, so all 8 candidates) X1's draft took 4.0-8.5 s a claim
+/// warm (n=4, 2026-10-12), over the S6 order's 5 s line; operator chose 3
+/// the same day.
 pub const CHECKER_PASSAGES: usize = 3;
 /// The rung names on the wire: a change to what a rung does changes its name.
 const RUNG_CLASS: &str = "class/no-specifics";
+const RUNG_SEARCH: &str = "sentences/search";
+const RUNG_FLOOR: &str = "sentences/floor";
 const RUNG_FAST: &str = "fast/value-presence";
-const RUNG_CHECKER: &str = "checker/chunk-support";
+const RUNG_CHECKER: &str = "checker/sentence-support";
 
 /// The model the checker judges with: layered onto the operator listener's
 /// router only (`client_surface::operator_listener_router`). A listener
-/// without it answers every `checker` claim `could_not_judge: no checker`;
-/// `fast` needs no model and answers everywhere `verify` is mounted.
+/// without it answers every `checker` claim above the floor `could_not_judge:
+/// no checker`; `fast` needs no model and answers everywhere `verify` is
+/// mounted.
 #[derive(Clone)]
 pub struct VerifyJudge(pub Arc<dyn InferenceProvider>);
 
@@ -103,13 +110,69 @@ struct Shed {
     retry_after_secs: u64,
 }
 
-/// One passage lexical search returned.
+/// One sentence sentence search returned for a claim, with its span.
 struct Passage {
     corpus_id: String,
-    chunk_id: Option<u64>,
-    source_doc_id: Option<String>,
-    title: Option<String>,
-    content: String,
+    span: Span,
+    score: f32,
+}
+
+/// What every claim of a unit is read against: the corpora read, through
+/// sentence search under the data file's choices.
+struct Retrieval<'a> {
+    state: &'a AppState,
+    principal: Option<&'a Principal>,
+    corpora: Vec<String>,
+    cfg: SentenceSearchConfig,
+    context: usize,
+}
+
+impl Retrieval<'_> {
+    /// The claim's sentences, best first, or why sentence search refused.
+    async fn sentences(&self, claim: &str) -> Result<Vec<Passage>, String> {
+        let request = KnowledgeSearchRequest {
+            query_embedding: Vec::new(),
+            query_text: claim.to_string(),
+            corpora: Some(self.corpora.clone()),
+            limit: Some(CANDIDATES_K as u32),
+            documents: Vec::new(),
+            granularity: Granularity::Sentence,
+        };
+        let reply = crate::routes_knowledge_sentences::sentences(
+            self.state.clone(),
+            self.principal,
+            request,
+            None,
+            self.cfg.clone(),
+            self.context,
+        )
+        .await
+        .map_err(|r| r.reason())?;
+        let (mut out, mut unspanned) = (Vec::new(), 0usize);
+        for h in reply.results {
+            match h.span {
+                Some(span) => out.push(Passage {
+                    corpus_id: h.corpus_id,
+                    span,
+                    score: h.score,
+                }),
+                None => unspanned += 1,
+            }
+        }
+        if unspanned > 0 {
+            tracing::warn!(
+                unspanned,
+                "oicp verify: sentence hits with no span, not judged"
+            );
+        }
+        tracing::debug!(
+            route = ?reply.route,
+            pending = ?reply.sentences_pending,
+            found = out.len(),
+            "oicp verify: sentence candidates"
+        );
+        Ok(out)
+    }
 }
 
 /// `POST /oicp/v1/verify`.
@@ -144,24 +207,36 @@ pub async fn verify(
             format!("installed corpora unread: {e}"),
         )
     })?;
-    let readable = readable_corpora(
-        &state,
-        principal.as_ref().map(|Extension(p)| &p.0),
-        &installed,
-    );
-    let (targets, mut corpora_unavailable) = requested_corpora(&req.corpora, &readable, "verify");
+    let principal = principal.as_ref().map(|Extension(p)| &p.0);
+    let readable = readable_corpora(&state, principal, &installed);
+    let (mut targets, mut corpora_unavailable) =
+        requested_corpora(&req.corpora, &readable, "verify");
+    // Unconstrained, the scope is what sentence search reaches unasked: the
+    // corpora already sentence-indexed here, never an embedding run over
+    // every corpus the caller may read.
+    if req.corpora.is_empty() {
+        let readable = targets.len();
+        targets.retain(|id| {
+            state
+                .inner
+                .node
+                .sentences
+                .is_indexed(engine.index_dir(), id)
+        });
+        tracing::debug!(
+            readable,
+            indexed = targets.len(),
+            "oicp verify: unconstrained; the sentence-indexed corpora read"
+        );
+    }
 
     let mut corpora: Vec<CorpusTexts> = Vec::new();
-    let mut open: Vec<(String, CorpusIndex)> = Vec::new();
     for corpus_id in targets {
-        match open_with_digest(engine.as_ref(), &corpus_id).await {
-            Ok((index, digest)) => {
-                corpora.push(CorpusTexts {
-                    corpus_id: corpus_id.clone(),
-                    texts_digest: digest.to_hex(),
-                });
-                open.push((corpus_id, index));
-            }
+        match texts_digest(engine.as_ref(), &corpus_id).await {
+            Ok(digest) => corpora.push(CorpusTexts {
+                corpus_id,
+                texts_digest: digest.to_hex(),
+            }),
             Err(reason) => {
                 tracing::info!(corpus = %corpus_id, %reason, "oicp verify: corpus unavailable");
                 corpora_unavailable.push(Unavailable { corpus_id, reason });
@@ -170,18 +245,44 @@ pub async fn verify(
     }
 
     let inference = judge.map(|Extension(VerifyJudge(i))| i);
-    let verifier = verifier_identity(req.tier, inference.as_deref());
-    let mut texts = TextCache::default();
-    let context = req.effective_span_context() as usize;
+    let retrieval = state
+        .inner
+        .node
+        .sentences
+        .config()
+        .map(|cfg| Retrieval {
+            state: &state,
+            principal,
+            corpora: corpora.iter().map(|c| c.corpus_id.clone()).collect(),
+            cfg,
+            context: req.effective_span_context() as usize,
+        })
+        .map_err(|why| {
+            tracing::warn!(%why, "oicp verify: sentence search is not offered; no claim can be read");
+            format!("sentence search not offered: {why}")
+        });
+    let verifier = verifier_identity(
+        req.tier,
+        retrieval.as_ref().ok().map(|r| &r.cfg),
+        inference.as_deref(),
+    );
     let mut claims = Vec::new();
     let mut kept = Vec::new();
     for range in sentence_ranges(&req.unit) {
         // `range` is one of `sentence_ranges(&req.unit)`, so it is in range.
-        let exact = code_point_slice(&req.unit, range.clone())
+        let exact = quote_align::code_point_slice(&req.unit, range.clone())
             .unwrap_or_default()
             .to_string();
         let judged_at = std::time::Instant::now();
-        let judged = match judge_claim(&exact, req.tier, &open, inference.as_ref()).await {
+        let judged = match judge_claim(
+            &exact,
+            req.tier,
+            &retrieval,
+            !corpora.is_empty(),
+            inference.as_ref(),
+        )
+        .await
+        {
             Ok(judged) => judged,
             Err(shed) => {
                 tracing::info!(
@@ -200,20 +301,20 @@ pub async fn verify(
             }
         };
         let judged_ms = judged_at.elapsed().as_millis() as u64;
+        // Sentences name no chunk: the journal counts them unresolved.
         let refs: Vec<(String, Option<u64>)> = judged
             .evidence
             .iter()
-            .map(|(p, _, _)| (p.corpus_id.clone(), p.chunk_id))
+            .map(|e| (e.passage.corpus_id.clone(), None))
             .collect();
         let tally = judged.tally;
-        let claim = judged
-            .into_wire(range, exact, &open, &mut texts, context)
-            .await;
+        let claim = judged.into_wire(range, exact);
         tracing::debug!(
             claim = %claim.exact,
             verdict = ?claim.verdict,
             rung = %claim.rung,
             evidence = claim.evidence.len(),
+            specifics = claim.specifics.len(),
             absent = ?claim.specifics_absent,
             "oicp verify: claim judged"
         );
@@ -245,82 +346,87 @@ pub async fn verify(
     }))
 }
 
-/// Who judged: the route, its rung for the tier, and for the checker the
+/// Who judged: the route, the scorer and floor every rung reads candidates
+/// by (the data file's), the rung for the tier, and for the checker the
 /// threshold, the passages it judges and the model its slot names
 /// (`model_id_for(Slow)`, the slot the judge workload prefers; routing may
 /// serve it elsewhere, which this does not see).
-fn verifier_identity(tier: VerifyTier, inference: Option<&dyn InferenceProvider>) -> String {
+fn verifier_identity(
+    tier: VerifyTier,
+    cfg: Option<&SentenceSearchConfig>,
+    inference: Option<&dyn InferenceProvider>,
+) -> String {
+    let reading = cfg.map_or_else(
+        || "sentences=none".to_string(),
+        |c| format!("scorer={} floor={}", c.scorer.as_str(), c.verify_floor),
+    );
     match tier {
         VerifyTier::Checker => format!(
-            "verify/1 {RUNG_CHECKER} tau={SUPPORTED_TAU} passages={CHECKER_PASSAGES} model={}",
+            "verify/2 {reading} {RUNG_CHECKER} tau={SUPPORTED_TAU} passages={CHECKER_PASSAGES} model={}",
             inference.map_or_else(|| "none".to_string(), |i| i.model_id_for(Speed::Slow))
         ),
-        _ => format!("verify/1 {RUNG_FAST}"),
+        _ => format!("verify/2 {reading} {RUNG_FAST}"),
     }
 }
 
-/// A corpus's index and the digest of its texts, or why it cannot be read.
-async fn open_with_digest(
+/// The digest of a corpus's texts, or why it cannot be read.
+async fn texts_digest(
     engine: &dyn corpus_index::ingest_port::daemon::IngestPort,
     corpus_id: &str,
-) -> Result<(CorpusIndex, Sha256Hash), String> {
+) -> Result<Sha256Hash, String> {
     let index = open_for_reading(engine, corpus_id)
         .await
         .map_err(|e| format!("corpus unreadable: {e}"))?;
     match engine.texts_digest(&index).await {
-        Ok(Ok(d)) => Ok((index, d)),
+        Ok(Ok(d)) => Ok(d),
         Ok(Err(absence)) => Err(absence_reason(absence).into()),
         Err(e) => Err(format!("texts unreadable: {e}")),
     }
 }
 
-/// The lexical candidates for `query` across `open`, best first per corpus.
-async fn candidates(
-    open: &[(String, CorpusIndex)],
-    query: &str,
-    k: usize,
-) -> Result<Vec<Passage>, String> {
-    let mut out = Vec::new();
-    for (corpus_id, index) in open {
-        let hits = index
-            .search(&[], query, k)
-            .await
-            .map_err(|e| format!("lexical search failed on {corpus_id}: {e}"))?;
-        out.extend(hits.into_iter().map(|h| Passage {
-            corpus_id: corpus_id.clone(),
-            chunk_id: h.chunk_id,
-            source_doc_id: h.source_doc_id,
-            title: h.title,
-            content: h.content,
-        }));
-    }
-    Ok(out)
+/// One passage judged, with what it states otherwise where contradicted.
+struct Judgement {
+    passage: Passage,
+    verdict: VerifyVerdict,
+    score: Option<f32>,
+    /// Pairs (the claim's, the sentence's), ranges in each's own text.
+    differing: Vec<(Specific, Specific)>,
 }
 
-/// A claim's verdict before its passages are located.
+/// A claim's verdict before it is put on the wire.
 struct Judged {
     class: Checkability,
     verdict: VerifyVerdict,
     rung: &'static str,
     score: Option<f32>,
+    specifics: Vec<Specific>,
     specifics_absent: Vec<String>,
-    evidence: Vec<(Passage, VerifyVerdict, Option<f32>)>,
+    evidence: Vec<Judgement>,
     /// The claim's specifics against the passages read, for the journal.
     tally: Option<SpecificsTally>,
 }
 
 impl Judged {
-    fn could_not(class: Checkability, rung: &'static str, reason: impl Into<String>) -> Self {
+    fn new(class: Checkability, verdict: VerifyVerdict, rung: &'static str) -> Self {
         Judged {
             class,
-            verdict: VerifyVerdict::CouldNotJudge {
-                reason: reason.into(),
-            },
+            verdict,
             rung,
             score: None,
+            specifics: Vec::new(),
             specifics_absent: Vec::new(),
             evidence: Vec::new(),
             tally: None,
+        }
+    }
+
+    fn could_not(specifics: Vec<Specific>, rung: &'static str, reason: impl Into<String>) -> Self {
+        let verdict = VerifyVerdict::CouldNotJudge {
+            reason: reason.into(),
+        };
+        Judged {
+            specifics,
+            ..Judged::new(Checkability::Checkable, verdict, rung)
         }
     }
 }
@@ -328,109 +434,116 @@ impl Judged {
 async fn judge_claim(
     claim: &str,
     tier: VerifyTier,
-    open: &[(String, CorpusIndex)],
+    retrieval: &Result<Retrieval<'_>, String>,
+    any_corpus: bool,
     inference: Option<&Arc<dyn InferenceProvider>>,
 ) -> Result<Judged, Shed> {
     let specifics = sentence_specifics(claim);
     if specifics.is_empty() {
-        return Ok(Judged {
-            class: Checkability::NotCheckable,
-            verdict: VerifyVerdict::Abstained,
-            rung: RUNG_CLASS,
-            score: None,
-            specifics_absent: Vec::new(),
-            evidence: Vec::new(),
-            tally: None,
-        });
+        tracing::debug!(%claim, "oicp verify: no specifics; not checkable");
+        return Ok(Judged::new(
+            Checkability::NotCheckable,
+            VerifyVerdict::Abstained,
+            RUNG_CLASS,
+        ));
     }
-    let checkable = Checkability::Checkable;
-    if open.is_empty() {
+    if !any_corpus {
+        tracing::debug!(%claim, "oicp verify: no corpus read");
         return Ok(Judged::could_not(
-            checkable,
+            specifics,
             RUNG_CLASS,
             reasons::NO_CORPUS_READ,
         ));
     }
+    let retrieval = match retrieval {
+        Ok(r) => r,
+        Err(why) => return Ok(Judged::could_not(specifics, RUNG_SEARCH, why.clone())),
+    };
+    let found = match retrieval.sentences(claim).await {
+        Ok(found) => found,
+        Err(why) => {
+            tracing::info!(%claim, %why, "oicp verify: sentence search refused; could not judge");
+            return Ok(Judged::could_not(specifics, RUNG_SEARCH, why));
+        }
+    };
+    let floor = retrieval.cfg.verify_floor;
+    let best = found.first().map(|p| p.score);
+    let mut candidates: Vec<Passage> = found.into_iter().filter(|p| p.score >= floor).collect();
+    if candidates.is_empty() {
+        tracing::debug!(%claim, ?best, floor, "oicp verify: no sentence reaches the floor; unsupported, no evidence");
+        return Ok(Judged {
+            specifics,
+            ..Judged::new(
+                Checkability::Checkable,
+                VerifyVerdict::Unsupported,
+                RUNG_FLOOR,
+            )
+        });
+    }
+    let read: Vec<String> = candidates.iter().map(|p| p.span.exact.clone()).collect();
+    let absent: Vec<String> = specifics
+        .iter()
+        .filter(|s| !value_present_in_chunks(&s.text, &read))
+        .map(|s| s.text.clone())
+        .collect();
+    let tally = SpecificsTally {
+        checked: specifics.len() as u32,
+        absent: absent.len() as u32,
+    };
     Ok(match tier {
         VerifyTier::Fast => {
-            let shown = match candidates(open, claim, CANDIDATES_K).await {
-                Ok(p) => p,
-                Err(e) => return Ok(Judged::could_not(checkable, RUNG_FAST, e)),
-            };
-            let mut read: Vec<String> = shown.iter().map(|p| p.content.clone()).collect();
-            for s in &specifics {
-                match candidates(open, &s.text, CANDIDATES_K).await {
-                    Ok(p) => read.extend(p.into_iter().map(|p| p.content)),
-                    Err(e) => return Ok(Judged::could_not(checkable, RUNG_FAST, e)),
-                }
-            }
-            let absent: Vec<String> = specifics
-                .iter()
-                .filter(|s| !value_present_in_chunks(&s.text, &read))
-                .map(|s| s.text.clone())
-                .collect();
-            let score = 1.0 - absent.len() as f32 / specifics.len() as f32;
-            let verdict = if absent.is_empty() {
-                VerifyVerdict::Abstained
-            } else {
-                VerifyVerdict::Unsupported
-            };
+            // The literal miss is a hint the checker reads, never a verdict.
             tracing::debug!(
                 %claim,
                 specifics = specifics.len(),
-                passages_read = read.len(),
+                candidates = candidates.len(),
                 ?absent,
-                "oicp verify: fast tier"
+                "oicp verify: fast tier abstains, its misses a hint"
             );
             Judged {
-                class: checkable,
-                evidence: shown
-                    .into_iter()
-                    .map(|p| (p, verdict.clone(), None))
-                    .collect(),
-                verdict,
-                rung: RUNG_FAST,
-                score: Some(score),
-                tally: Some(SpecificsTally {
-                    checked: specifics.len() as u32,
-                    absent: absent.len() as u32,
-                }),
+                score: Some(1.0 - absent.len() as f32 / specifics.len() as f32),
+                specifics,
                 specifics_absent: absent,
+                evidence: candidates
+                    .into_iter()
+                    .map(|passage| Judgement {
+                        passage,
+                        verdict: VerifyVerdict::Abstained,
+                        score: None,
+                        differing: Vec::new(),
+                    })
+                    .collect(),
+                tally: Some(tally),
+                ..Judged::new(Checkability::Checkable, VerifyVerdict::Abstained, RUNG_FAST)
             }
         }
         VerifyTier::Checker => {
             let Some(inference) = inference else {
+                tracing::debug!(%claim, "oicp verify: no checker on this listener");
                 return Ok(Judged::could_not(
-                    checkable,
+                    specifics,
                     RUNG_CHECKER,
                     reasons::NO_CHECKER,
                 ));
             };
-            let mut shown = match candidates(open, claim, CANDIDATES_K).await {
-                Ok(p) => p,
-                Err(e) => return Ok(Judged::could_not(checkable, RUNG_CHECKER, e)),
-            };
-            shown.truncate(CHECKER_PASSAGES);
-            let read: Vec<String> = shown.iter().map(|p| p.content.clone()).collect();
-            let tally = SpecificsTally {
-                checked: specifics.len() as u32,
-                absent: specifics
-                    .iter()
-                    .filter(|s| !value_present_in_chunks(&s.text, &read))
-                    .count() as u32,
-            };
-            let mut judged = judge_with_checker(claim, shown, inference).await?;
+            candidates.truncate(CHECKER_PASSAGES);
+            let mut judged = judge_with_checker(claim, specifics, candidates, inference).await?;
             judged.tally = Some(tally);
             judged
         }
-        VerifyTier::Judge => Judged::could_not(checkable, RUNG_CLASS, reasons::TIER_NOT_OFFERED),
+        VerifyTier::Judge => Judged::could_not(specifics, RUNG_CLASS, reasons::TIER_NOT_OFFERED),
     })
 }
 
-/// The checker over each passage in turn, stopping at a clear support, or at
-/// a shed: the passages after it would only queue behind the refusal.
+/// The checker over each candidate in turn, stopping at a clear support, or
+/// at a shed: the candidates after it would only queue behind the refusal.
+/// A candidate it does not back that states one of the claim's specifics
+/// otherwise is `contradicted`; the claim is `supported` on any support, else
+/// `contradicted` on any contradiction, else `unsupported` with its
+/// candidates, nearest first.
 async fn judge_with_checker(
     claim: &str,
+    specifics: Vec<Specific>,
     shown: Vec<Passage>,
     inference: &Arc<dyn InferenceProvider>,
 ) -> Result<Judged, Shed> {
@@ -440,7 +553,7 @@ async fn judge_with_checker(
     for p in shown {
         let support = match claim_chunk_support_checked(
             inference,
-            &p.content,
+            &p.span.exact,
             claim,
             ShardingPrivacy::LocalOnly,
         )
@@ -461,24 +574,53 @@ async fn judge_with_checker(
             // Logged where it failed (`forced-choice pass failed`).
             Err(_) => None,
         };
-        let verdict = match support {
-            Some(s) if s >= SUPPORTED_TAU => VerifyVerdict::Supported,
-            Some(_) => VerifyVerdict::Unsupported,
-            None => VerifyVerdict::CouldNotJudge {
-                reason: reasons::CHECKER_DID_NOT_ANSWER.into(),
-            },
+        let (verdict, differing) = match support {
+            Some(s) if s >= SUPPORTED_TAU => (VerifyVerdict::Supported, Vec::new()),
+            Some(_) => {
+                let source = sentence_specifics(&p.span.exact);
+                let differing = differing_specifics(&specifics, &source, &p.span.exact);
+                if differing.is_empty() {
+                    (VerifyVerdict::Unsupported, differing)
+                } else {
+                    (VerifyVerdict::Contradicted, differing)
+                }
+            }
+            None => (
+                VerifyVerdict::CouldNotJudge {
+                    reason: reasons::CHECKER_DID_NOT_ANSWER.into(),
+                },
+                Vec::new(),
+            ),
         };
+        tracing::debug!(
+            %claim,
+            sentence = %p.span.exact,
+            score = p.score,
+            support,
+            verdict = ?verdict,
+            differing = differing.len(),
+            "oicp verify: a candidate judged"
+        );
         if let Some(s) = support {
             answered += 1;
             best = Some(best.map_or(s, |b| b.max(s)));
         }
-        evidence.push((p, verdict, support.map(|s| s as f32)));
+        evidence.push(Judgement {
+            passage: p,
+            verdict,
+            score: support.map(|s| s as f32),
+            differing,
+        });
         if support.is_some_and(|s| s >= EARLY_EXIT_SUPPORT) {
             break;
         }
     }
+    let contradicted = evidence
+        .iter()
+        .any(|e| e.verdict == VerifyVerdict::Contradicted);
     let verdict = match best {
         Some(b) if b >= SUPPORTED_TAU => VerifyVerdict::Supported,
+        _ if contradicted => VerifyVerdict::Contradicted,
         Some(_) => VerifyVerdict::Unsupported,
         None if evidence.is_empty() => VerifyVerdict::Unsupported,
         None => VerifyVerdict::CouldNotJudge {
@@ -490,119 +632,77 @@ async fn judge_with_checker(
         judged = evidence.len(),
         answered,
         best,
+        contradicted,
+        verdict = ?verdict,
         "oicp verify: checker tier"
     );
     Ok(Judged {
-        class: Checkability::Checkable,
-        verdict,
-        rung: RUNG_CHECKER,
         score: best.map(|b| b as f32),
-        specifics_absent: Vec::new(),
+        specifics,
         evidence,
-        tally: None,
+        ..Judged::new(Checkability::Checkable, verdict, RUNG_CHECKER)
     })
 }
 
-/// Text names and stored texts read once per request, each with the reason
-/// it could not be read.
-#[derive(Default)]
-struct TextCache {
-    by_chunk: HashMap<(String, u64), Result<Sha256Hash, String>>,
-    texts: HashMap<(String, Sha256Hash), Result<Arc<corpus_index::index::StoredText>, String>>,
+/// A specific on the wire: its kind, and its range offset into the text it
+/// is read from (`at`, code points), its exact text that range's.
+fn wire_specific(s: &Specific, text: &str, at: u64) -> ClaimSpecific {
+    ClaimSpecific {
+        kind: match s.kind {
+            SpecificKind::Figure => ClaimSpecificKind::Figure,
+            SpecificKind::Date => ClaimSpecificKind::Date,
+            SpecificKind::Quantity => ClaimSpecificKind::Quantity,
+            SpecificKind::Name => ClaimSpecificKind::Name,
+        },
+        start: at + s.range.start as u64,
+        end: at + s.range.end as u64,
+        exact: text
+            .chars()
+            .skip(s.range.start)
+            .take(s.range.len())
+            .collect(),
+    }
 }
 
 impl Judged {
-    async fn into_wire(
-        self,
-        range: std::ops::Range<usize>,
-        exact: String,
-        open: &[(String, CorpusIndex)],
-        texts: &mut TextCache,
-        context: usize,
-    ) -> VerifiedClaim {
-        let mut evidence = Vec::with_capacity(self.evidence.len());
-        for (p, verdict, score) in self.evidence {
-            let (span, span_absent) = match locate(&p, open, texts, context).await {
-                Ok(span) => (Some(span), None),
-                Err(why) => (None, Some(why)),
-            };
-            evidence.push(JudgedPassage {
-                corpus_id: p.corpus_id,
-                span,
-                span_absent,
-                verdict,
-                score,
-                differing: Vec::new(),
-            });
-        }
+    fn into_wire(self, range: std::ops::Range<usize>, exact: String) -> VerifiedClaim {
+        let at = range.start as u64;
+        let evidence = self
+            .evidence
+            .into_iter()
+            .map(|e| JudgedPassage {
+                differing: e
+                    .differing
+                    .iter()
+                    .map(|(c, s)| DifferingSpecific {
+                        claim: wire_specific(c, &exact, at),
+                        source: wire_specific(s, &e.passage.span.exact, e.passage.span.start),
+                    })
+                    .collect(),
+                corpus_id: e.passage.corpus_id,
+                span: Some(e.passage.span),
+                span_absent: None,
+                verdict: e.verdict,
+                score: e.score,
+            })
+            .collect();
         VerifiedClaim {
-            start: range.start as u64,
+            start: at,
             end: range.end as u64,
+            specifics: self
+                .specifics
+                .iter()
+                .map(|s| wire_specific(s, &exact, at))
+                .collect(),
             exact,
             class: self.class,
             verdict: self.verdict,
             evidence,
             specifics_absent: self.specifics_absent,
-            specifics: Vec::new(),
             rung: self.rung.to_string(),
             score: self.score,
             operating_point: UNCALIBRATED.to_string(),
             episode_id: None,
         }
     }
-}
-
-/// `p` as a span of its stored text, or why it is not one: the passage is
-/// not an exact slice of its text, or names no text, or its text or record
-/// could not be read, each by its own reason, never one standing for another.
-async fn locate(
-    p: &Passage,
-    open: &[(String, CorpusIndex)],
-    cache: &mut TextCache,
-    context: usize,
-) -> Result<Span, String> {
-    let names_no_text = || reasons::PASSAGE_NAMES_NO_TEXT.to_string();
-    let index = open
-        .iter()
-        .find(|(c, _)| *c == p.corpus_id)
-        .map(|(_, i)| i)
-        .ok_or_else(names_no_text)?;
-    let chunk = p.chunk_id.ok_or_else(names_no_text)?;
-    let key = (p.corpus_id.clone(), chunk);
-    if !cache.by_chunk.contains_key(&key) {
-        let name = match index.chunk_text_sha256s(&[chunk]).await {
-            Ok(n) => n.get(&chunk).copied().ok_or_else(names_no_text),
-            Err(e) => {
-                tracing::warn!(corpus = %p.corpus_id, chunk, error = %e, "oicp verify: chunk text names unread");
-                Err(format!("text names unread: {e}"))
-            }
-        };
-        cache.by_chunk.insert(key.clone(), name);
-    }
-    let name = cache.by_chunk[&key].clone()?;
-    let tkey = (p.corpus_id.clone(), name);
-    if !cache.texts.contains_key(&tkey) {
-        let stored = match index.text(&name).await {
-            Ok(Ok(s)) => Ok(Arc::new(s)),
-            Ok(Err(absence)) => {
-                tracing::debug!(corpus = %p.corpus_id, %name, reason = absence_reason(absence), "oicp verify: a passage's text is not readable");
-                Err(absence_reason(absence).to_string())
-            }
-            Err(e) => {
-                tracing::warn!(corpus = %p.corpus_id, %name, error = %e, "oicp verify: text store unreadable");
-                Err(format!("text store unreadable: {e}"))
-            }
-        };
-        cache.texts.insert(tkey.clone(), stored);
-    }
-    let stored = cache.texts[&tkey].clone()?;
-    span_of(
-        &stored,
-        &p.corpus_id,
-        p.title.as_deref(),
-        &p.content,
-        p.source_doc_id.as_deref(),
-        context,
-    )
-    .map_err(str::to_string)
 }

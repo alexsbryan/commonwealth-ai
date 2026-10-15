@@ -1,37 +1,51 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! A text's sentences and each sentence's specifics (the numbers, dates and
-//! names it asserts), found without a model: what the fast tier of
-//! `POST /oicp/v1/verify` (`cmnwlth/docs/oicp-v0.6.md`) checks for presence
-//! in the evidence, with [`super::value_present_in_chunks`] deciding.
+//! A text's sentences and each sentence's specifics (the figures, dates,
+//! quantities and names it asserts), found without a model: what
+//! `POST /oicp/v1/verify` (`cmnwlth/docs/oicp-v0.6.md` §2.15) names on every
+//! claim, hints at the fast tier with [`super::value_present_in_chunks`], and
+//! pairs against a passage's when the passage states one otherwise
+//! ([`differing_specifics`]).
 //!
 //! Both are shapes, not readings. A sentence ends at `.`, `!` or `?` before
 //! whitespace and an uppercase letter, a digit or an opening quote, unless
-//! the word before the stop is one capital (an initial, "J. S. Mill"). A
-//! number is any word of two or more code points carrying a digit; a name is
-//! a run of name-shaped words ([`super::judge::cap_name`]), less the words
-//! that are never names ([`super::judge::non_name_word`]), where a run that
-//! opens the sentence counts only once it is two words long.
+//! the word before the stop is one capital (an initial, "J. S. Mill") or a
+//! locator's or citation's abbreviation before a digit ("p. 4", "et al.
+//! 2019"). A number is a word carrying a digit, with its currency sign and
+//! percent sign; it is a `Figure` (with a unit when a percent or currency
+//! marks it), a `Date` (a year, a day beside a month), or a `Quantity` (a
+//! number before the noun it counts). A name is a run of name-shaped words
+//! ([`super::judge::cap_name`]), less the words that are never names
+//! ([`super::judge::non_name_word`]), where a run that opens the sentence
+//! counts only once it is two words long.
 //!
-//! The fast tier refuses on every specific no passage carries, so a shape
-//! that over-reaches is a false flag, and one that under-reaches is a miss
-//! the checker tier is there for. Both exclusions were measured on X1's draft
-//! over its Hume library (507 sentences, 2026-10-12): 87 of the 99 sentences
-//! the tier flagged were flagged only for a one-digit number ("Book 3":
-//! `value_present_in_chunks` reads words of two or more code points, so it can
-//! never find one) or for the capitalised first word of the sentence
-//! ("Finally", "Similarly", "Having"). The cost is a sentence that opens with
-//! a one-word name ("Hume wrote…") offering that name to no check. Ranges are
-//! code points.
+//! Nothing inside a citation or a locator is a specific (§2.15): an
+//! author-date citation (`(Okafor 2019)`, `(Okafor, 2019, p. 4)`), a citekey
+//! (`[@okafor2019]`), a numbered reference (`[12]`), a locator (`(page 14)`,
+//! `(p. 3)`, `(§ 4)`, `(chapter 2)`). A figure inside any other parentheses
+//! is one: `(against 6.1 percent the year before)` names `6.1`.
+//!
+//! Two exclusions were measured on X1's draft over its Hume library (507
+//! sentences, 2026-10-12): 87 of the 99 sentences the old fast tier flagged
+//! were flagged only for a bare one-digit number ("Book 3") or for the
+//! capitalised first word of the sentence ("Finally", "Similarly"). A bare
+//! one-digit figure is still none; one with a unit, a counted noun or a month
+//! beside it is one. The cost is a sentence that opens with a one-word name
+//! ("Hume wrote…") offering that name to no check. Ranges are code points.
 
+use std::collections::HashSet;
 use std::ops::Range;
 
 use super::judge::{cap_name, non_name_word};
 
-/// What a specific is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// What a specific is (§2.15's closed set).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SpecificKind {
-    /// A word carrying a digit: a count, a year, a date, a figure.
-    Number,
+    /// A number with or without a unit, a percentage, a currency amount.
+    Figure,
+    /// A year, or a day beside a month.
+    Date,
+    /// A number with the noun it counts.
+    Quantity,
     /// A run of name-shaped words: a person, a place, a work.
     Name,
 }
@@ -39,12 +53,18 @@ pub enum SpecificKind {
 /// One specific a sentence asserts, as it is written there.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Specific {
-    /// Number or name.
+    /// Figure, date, quantity or name.
     pub kind: SpecificKind,
-    /// The specific as written, its surrounding punctuation trimmed.
+    /// The specific as written: a number with its currency and percent
+    /// signs, a name's words joined by one space.
     pub text: String,
     /// Code points of `text` in the sentence.
     pub range: Range<usize>,
+    /// What a figure or a quantity counts in: a figure's `percent` or
+    /// currency sign, a quantity's noun (lower-case, singular). `None` for a
+    /// bare figure, a date and a name. Two specifics differ only when their
+    /// kinds and units agree ([`differing_specifics`]).
+    pub unit: Option<String>,
 }
 
 /// The sentences of `text`, as code-point ranges with their surrounding
@@ -99,10 +119,29 @@ fn ends_sentence(chars: &[char], i: usize) -> bool {
     while j < chars.len() && chars[j].is_whitespace() {
         j += 1;
     }
+    if j < chars.len() && chars[j].is_ascii_digit() && cites_before(chars, i) {
+        return false;
+    }
     j == chars.len()
         || chars[j].is_uppercase()
         || chars[j].is_ascii_digit()
         || matches!(chars[j], '"' | '\u{201c}' | '(' | '[')
+}
+
+/// Abbreviations a locator or a citation puts before a number: "p. 4",
+/// "Vol. 2", "et al. 2019". Lower-case, without the stop.
+const CITING_ABBREVIATIONS: &[&str] = &[
+    "p", "pp", "ch", "chap", "vol", "fig", "sec", "no", "art", "para", "al", "ed", "eds", "cf",
+];
+
+/// Whether the word ending at the stop `i` is one of [`CITING_ABBREVIATIONS`].
+fn cites_before(chars: &[char], i: usize) -> bool {
+    let mut a = i;
+    while a > 0 && chars[a - 1].is_alphabetic() {
+        a -= 1;
+    }
+    let word: String = chars[a..i].iter().collect::<String>().to_lowercase();
+    CITING_ABBREVIATIONS.contains(&word.as_str())
 }
 
 fn push_trimmed(chars: &[char], r: Range<usize>, out: &mut Vec<Range<usize>>) {
@@ -118,7 +157,8 @@ fn push_trimmed(chars: &[char], r: Range<usize>, out: &mut Vec<Range<usize>>) {
     }
 }
 
-/// The specifics `sentence` asserts, in reading order.
+/// The specifics `sentence` asserts, in reading order. Nothing inside a
+/// citation or a locator ([`cited_ranges`]) is one.
 pub fn sentence_specifics(sentence: &str) -> Vec<Specific> {
     /// A name being built, and whether the sentence's first word opened it:
     /// a one-word run there is a capitalised first word, not a name.
@@ -136,29 +176,52 @@ pub fn sentence_specifics(sentence: &str) -> Vec<Specific> {
                 kind: SpecificKind::Name,
                 text: r.words.join(" "),
                 range: r.range,
+                unit: None,
             });
         }
     }
+    let cited = cited_ranges(sentence);
+    let words = words_with_offsets(sentence);
     let mut out = Vec::new();
     let mut run: Option<Run> = None;
     let mut first = true;
-    for (word, at) in words_with_offsets(sentence) {
+    for (n, &(word, at)) in words.iter().enumerate() {
         let Some((trimmed, lead)) = trim_word(word) else {
             flush(&mut run, &mut out);
             continue;
         };
         let opens_sentence = std::mem::replace(&mut first, false);
         let a = at + lead;
+        let within = |r: &Range<usize>| r.start <= a && a + trimmed.chars().count() <= r.end;
+        if cited.iter().any(within) || word.trim_start_matches(['[', '(']).starts_with('@') {
+            flush(&mut run, &mut out);
+            continue;
+        }
         let bare = strip_possessive(trimmed);
         if bare.chars().any(|c| c.is_ascii_digit()) {
             flush(&mut run, &mut out);
-            if bare.chars().count() >= 2 {
-                out.push(Specific {
-                    kind: SpecificKind::Number,
-                    text: bare.to_string(),
-                    range: a..a + bare.chars().count(),
-                });
+            let around = Around {
+                word,
+                lead,
+                possessive: bare.len() != trimmed.len(),
+                before: n.checked_sub(1).and_then(|i| words.get(i)).map(|w| w.0),
+                after: words.get(n + 1).map(|w| w.0),
+                after2: words.get(n + 2).map(|w| w.0),
+            };
+            if let Some(s) = number_specific(bare, a, &around) {
+                out.push(s);
             }
+            continue;
+        }
+        // A month beside a number is part of a written date, never a name.
+        let has_digit = |i: Option<&(&str, usize)>| {
+            i.is_some_and(|w| w.0.contains(|c: char| c.is_ascii_digit()))
+        };
+        if is_month(&bare.to_lowercase())
+            && (has_digit(n.checked_sub(1).and_then(|i| words.get(i)))
+                || has_digit(words.get(n + 1)))
+        {
+            flush(&mut run, &mut out);
             continue;
         }
         match cap_name(bare).filter(|w| !non_name_word(w)) {
@@ -189,6 +252,360 @@ pub fn sentence_specifics(sentence: &str) -> Vec<Specific> {
     }
     flush(&mut run, &mut out);
     out
+}
+
+/// A number word and its neighbours, as written.
+struct Around<'a> {
+    word: &'a str,
+    /// Code points trimmed from the word's front.
+    lead: usize,
+    possessive: bool,
+    before: Option<&'a str>,
+    after: Option<&'a str>,
+    after2: Option<&'a str>,
+}
+
+/// Words that follow a number without being what it counts.
+const NOT_COUNTED: &[&str] = &[
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "been",
+    "but",
+    "by",
+    "for",
+    "from",
+    "in",
+    "into",
+    "is",
+    "it",
+    "its",
+    "more",
+    "less",
+    "of",
+    "on",
+    "or",
+    "out",
+    "than",
+    "that",
+    "the",
+    "their",
+    "them",
+    "then",
+    "these",
+    "this",
+    "those",
+    "to",
+    "was",
+    "were",
+    "which",
+    "who",
+    "with",
+    "per",
+    "percent",
+    "percentage",
+    "pct",
+    "times",
+];
+
+const MONTHS: &[&str] = &[
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+    "jan",
+    "feb",
+    "mar",
+    "apr",
+    "jun",
+    "jul",
+    "aug",
+    "sep",
+    "sept",
+    "oct",
+    "nov",
+    "dec",
+];
+
+const CURRENCY: &[char] = &['$', '£', '€', '¥'];
+
+/// A neighbouring word, lower-case, its punctuation trimmed.
+fn plain(w: Option<&str>) -> String {
+    w.and_then(trim_word)
+        .map_or_else(String::new, |(t, _)| t.to_lowercase())
+}
+
+fn is_month(w: &str) -> bool {
+    MONTHS.contains(&w)
+}
+
+/// A year: four digits from 1000 to 2999, or a decade ("1990s").
+fn is_year(t: &str) -> bool {
+    let digits = t.strip_suffix('s').unwrap_or(t);
+    digits.len() == 4
+        && digits.bytes().all(|b| b.is_ascii_digit())
+        && (b'1'..=b'2').contains(&digits.as_bytes()[0])
+}
+
+/// The specific a number word `bare` (at code point `a`) asserts, with its
+/// currency and percent signs, or none: a bare one-digit figure.
+fn number_specific(bare: &str, a: usize, w: &Around<'_>) -> Option<Specific> {
+    // The signs `trim_word` cut from the word, taken back.
+    let front: Vec<char> = w.word.chars().take(w.lead).collect();
+    let currency = front.last().filter(|c| CURRENCY.contains(c)).copied();
+    let back = w.word.chars().nth(w.lead + bare.chars().count());
+    let percent_sign = back == Some('%') && !w.possessive;
+    let start = a - usize::from(currency.is_some());
+    let mut text: String = currency.into_iter().collect();
+    text.push_str(bare);
+    if percent_sign {
+        text.push('%');
+    }
+    let range = start..start + text.chars().count();
+    let (next, next2, prev) = (plain(w.after), plain(w.after2), plain(w.before));
+    let percent_word = matches!(next.as_str(), "percent" | "percentage" | "pct")
+        || (next == "per" && next2 == "cent");
+    let (kind, unit) = if percent_sign || percent_word {
+        (SpecificKind::Figure, Some("percent".to_string()))
+    } else if let Some(c) = currency {
+        (SpecificKind::Figure, Some(c.to_string()))
+    } else if is_year(bare) {
+        (SpecificKind::Date, None)
+    } else if bare.len() <= 2 && (is_month(&next) || is_month(&prev)) {
+        (SpecificKind::Date, None)
+    } else if !w.possessive
+        && !bare.contains('.')
+        && !next.is_empty()
+        && next.chars().all(char::is_lowercase)
+        && !NOT_COUNTED.contains(&next.as_str())
+        && w.after
+            .is_some_and(|x| x.starts_with(|c: char| c.is_lowercase()))
+    {
+        (SpecificKind::Quantity, Some(singular(&next)))
+    } else {
+        (SpecificKind::Figure, None)
+    };
+    if kind == SpecificKind::Figure && unit.is_none() && text.chars().count() < 2 {
+        return None;
+    }
+    Some(Specific {
+        kind,
+        text,
+        range,
+        unit,
+    })
+}
+
+/// A counted noun's singular, by shape: "sailings" and "sailing" count one thing.
+fn singular(noun: &str) -> String {
+    match noun.strip_suffix('s') {
+        Some(stem) if stem.len() >= 3 && !stem.ends_with('s') => stem.to_string(),
+        _ => noun.to_string(),
+    }
+}
+
+/// Code-point ranges of `sentence` that are citations or locators, brackets
+/// included: parentheses holding an author-date citation or a locator, and
+/// square brackets holding a citekey (`@`) or reference numbers.
+pub(crate) fn cited_ranges(sentence: &str) -> Vec<Range<usize>> {
+    let chars: Vec<char> = sentence.chars().collect();
+    let mut open: Vec<(char, usize)> = Vec::new();
+    let mut out = Vec::new();
+    for (i, &c) in chars.iter().enumerate() {
+        match c {
+            '(' | '[' => open.push((c, i)),
+            ')' | ']' => {
+                let Some(at) = open.iter().rposition(|(o, _)| (*o == '(') == (c == ')')) else {
+                    continue;
+                };
+                let (o, start) = open[at];
+                open.truncate(at);
+                let inner: String = chars[start + 1..i].iter().collect();
+                let cites = if o == '(' {
+                    is_locator(&inner) || is_author_date(&inner)
+                } else {
+                    inner.contains('@')
+                        || (inner.chars().any(|c| c.is_ascii_digit())
+                            && inner
+                                .chars()
+                                .all(|c| c.is_ascii_digit() || " ,;-\u{2013}".contains(c)))
+                };
+                if cites {
+                    out.push(start..i + 1);
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// Words that open a locator: "(page 14)", "(p. 3)", "(§ 4)", "(chapter 2)".
+const LOCATORS: &[&str] = &[
+    "p",
+    "pp",
+    "page",
+    "pages",
+    "§",
+    "§§",
+    "section",
+    "sections",
+    "sec",
+    "chapter",
+    "chapters",
+    "chap",
+    "ch",
+    "vol",
+    "volume",
+    "book",
+    "part",
+    "fig",
+    "figure",
+    "table",
+    "line",
+    "lines",
+    "para",
+    "paragraph",
+    "art",
+    "article",
+    "note",
+    "n",
+    "col",
+    "column",
+    "folio",
+    "fol",
+];
+
+/// A locator: an opening word of [`LOCATORS`] and then only numbers, roman
+/// numerals and range marks.
+fn is_locator(inner: &str) -> bool {
+    let inner = inner.trim();
+    let (head, rest) = match inner.strip_prefix('§') {
+        Some(rest) => ("§", rest),
+        None => inner.split_at(
+            inner
+                .find(|c: char| !c.is_alphabetic())
+                .unwrap_or(inner.len()),
+        ),
+    };
+    let numbered = |t: &str| {
+        t.chars()
+            .any(|c| c.is_ascii_digit() || "ivxlcIVXLC".contains(c))
+            && t.chars()
+                .all(|c| c.is_ascii_alphanumeric() || " .,-\u{2013}§".contains(c))
+            && t.split_whitespace().all(|w| {
+                w.chars().any(|c| c.is_ascii_digit())
+                    || w.trim_matches(|c: char| !c.is_alphanumeric())
+                        .chars()
+                        .all(|c| "ivxlcIVXLC".contains(c))
+            })
+    };
+    LOCATORS.contains(&head.to_lowercase().as_str()) && numbered(rest.trim_start_matches('.'))
+}
+
+/// Words an author-date citation may hold beside names and years.
+const CITATION_WORDS: &[&str] = &[
+    "et", "al", "and", "&", "see", "cf", "also", "e.g", "eg", "p", "pp", "ed", "eds", "in", "nd",
+    "n.d",
+];
+
+/// An author-date citation: each `;`-separated part holds a name-shaped word
+/// that is not a month, and a year (`2019`, `2019a`, `n.d.`), and nothing
+/// else but [`CITATION_WORDS`] and page numbers.
+fn is_author_date(inner: &str) -> bool {
+    inner.split(';').all(|part| {
+        let mut name = false;
+        let mut year = false;
+        for t in part.split([' ', ',']).filter(|t| !t.is_empty()) {
+            let t = t.trim_matches(|c: char| !c.is_alphanumeric() && c != '&');
+            let lower = t.to_lowercase();
+            let digits = t.trim_end_matches(|c: char| c.is_ascii_lowercase());
+            if is_year(digits) || lower == "n.d" || lower == "nd" {
+                year = true;
+            } else if t.starts_with(|c: char| c.is_uppercase()) && !is_month(&lower) {
+                name = true;
+            } else if !(CITATION_WORDS.contains(&lower.as_str())
+                || t.is_empty()
+                || t.chars()
+                    .all(|c| c.is_ascii_digit() || c == '-' || c == '\u{2013}'))
+            {
+                return false;
+            }
+        }
+        name && year
+    })
+}
+
+/// The specifics of `claim` that a passage holding `passage` (its
+/// specifics, found in `passage_text`) states otherwise, each paired with
+/// the passage's specific of the same kind and unit (§2.15, "contradicted
+/// names what differs"). Read by value (`3.2%` is `3.2 per cent`), so a
+/// claim's figure the passage carries in any form is never a difference.
+///
+/// A difference in a figure or a quantity counts only where the claim's
+/// dates are not also stated otherwise: two periods' figures differing is
+/// not a contradiction. A date stated otherwise counts only beside something
+/// of the claim the passage does carry (a name, a figure): "Mill wrote On
+/// Liberty in 1858" against "On Liberty appeared in 1859".
+pub fn differing_specifics(
+    claim: &[Specific],
+    passage: &[Specific],
+    passage_text: &str,
+) -> Vec<(Specific, Specific)> {
+    let value = |s: &Specific| {
+        super::number_presence::numeric_value(&s.text).unwrap_or_else(|| s.text.to_lowercase())
+    };
+    let counted = |s: &&Specific| s.kind != SpecificKind::Name;
+    let passage_values: HashSet<String> = passage.iter().filter(counted).map(value).collect();
+    let claim_values: HashSet<String> = claim.iter().filter(counted).map(value).collect();
+    let held = |s: &Specific| match s.kind {
+        SpecificKind::Name => passage_text.to_lowercase().contains(&s.text.to_lowercase()),
+        _ => passage_values.contains(&value(s)),
+    };
+    let pairs: Vec<(Specific, Specific)> = claim
+        .iter()
+        .filter(counted)
+        .filter(|s| !held(*s))
+        .filter_map(|s| {
+            let other = passage.iter().find(|p| {
+                p.kind == s.kind && p.unit == s.unit && !claim_values.contains(&value(*p))
+            })?;
+            Some((s.clone(), other.clone()))
+        })
+        .collect();
+    let (dates, values): (Vec<_>, Vec<_>) = pairs
+        .into_iter()
+        .partition(|(s, _)| s.kind == SpecificKind::Date);
+    if !values.is_empty() {
+        if dates.is_empty() {
+            return values;
+        }
+        tracing::debug!(target: "grounding_gate", event = "differing_other_period", values = values.len(), dates = dates.len(), "a figure and a date both differ: another period's figure, not a contradiction");
+        return Vec::new();
+    }
+    if dates.is_empty() {
+        return Vec::new();
+    }
+    let anchored = claim
+        .iter()
+        .any(|s| s.kind != SpecificKind::Date && held(s));
+    if !anchored {
+        tracing::debug!(target: "grounding_gate", event = "differing_date_unanchored", dates = dates.len(), "only a date differs and nothing else of the claim is carried: not about the same thing");
+        return Vec::new();
+    }
+    dates
 }
 
 /// Whitespace-separated words with the code point each starts at.
@@ -229,91 +646,8 @@ fn strip_possessive(w: &str) -> &str {
         .unwrap_or(w)
 }
 
+// The finder's tests live in a sibling file, keeping this one under its
+// size ceiling. `#[path]`, so the names are unchanged.
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn texts(s: &str) -> Vec<(SpecificKind, String)> {
-        sentence_specifics(s)
-            .into_iter()
-            .map(|x| (x.kind, x.text))
-            .collect()
-    }
-
-    #[test]
-    fn sentences_split_at_stops_before_an_opener_and_not_after_an_initial() {
-        let t = "J. S. Mill wrote in 1859. It sold well!  \"Then\" it ended? no stop here";
-        let got: Vec<String> = sentence_ranges(t)
-            .into_iter()
-            .map(|r| t.chars().skip(r.start).take(r.len()).collect())
-            .collect();
-        assert_eq!(
-            got,
-            vec![
-                "J. S. Mill wrote in 1859.",
-                "It sold well!",
-                "\"Then\" it ended? no stop here",
-            ]
-        );
-        assert!(sentence_ranges("  \n ").is_empty());
-    }
-
-    #[test]
-    fn numbers_and_name_runs_are_specifics_and_function_words_are_not() {
-        assert_eq!(
-            texts("The survey by Adaeze Okafor covered 14 agreements in 2019."),
-            vec![
-                (SpecificKind::Name, "Adaeze Okafor".into()),
-                (SpecificKind::Number, "14".into()),
-                (SpecificKind::Number, "2019".into()),
-            ]
-        );
-        assert_eq!(
-            texts("Hamilton, Madison and Jay wrote; Hume's Treatise followed."),
-            vec![
-                (SpecificKind::Name, "Madison".into()),
-                (SpecificKind::Name, "Jay".into()),
-                (SpecificKind::Name, "Hume".into()),
-                (SpecificKind::Name, "Treatise".into()),
-            ]
-        );
-        assert!(texts("it rained on the river all week.").is_empty());
-    }
-
-    /// The two shapes measured as false flags on X1 (see the module doc): a
-    /// one-digit number, and a lone capitalised word opening the sentence. A
-    /// name of two words opening it still counts, at its own range.
-    #[test]
-    fn a_one_digit_number_and_a_capitalised_first_word_are_not_specifics() {
-        assert_eq!(
-            texts("Finally, Book 3 of the Treatise turns to morals."),
-            vec![
-                (SpecificKind::Name, "Book".into()),
-                (SpecificKind::Name, "Treatise".into()),
-            ]
-        );
-        assert_eq!(texts("Section 2's argument fails."), vec![]);
-        let s = "\"Adam Smith read it in 1740.";
-        let got = sentence_specifics(s);
-        assert_eq!(got[0].text, "Adam Smith");
-        assert_eq!(got[0].range, 1..11, "the range skips the opening quote");
-        assert_eq!(got[1].text, "1740");
-    }
-
-    #[test]
-    fn a_specifics_range_names_it_in_the_sentence() {
-        let s = "Ce café, dit Émile Zola en 1898.";
-        for x in sentence_specifics(s) {
-            let at: String = s.chars().skip(x.range.start).take(x.range.len()).collect();
-            assert!(at.starts_with(x.text.split(' ').next().unwrap()), "{x:?}");
-            assert_eq!(at.chars().count(), x.range.len());
-        }
-        assert_eq!(
-            texts(s),
-            vec![
-                (SpecificKind::Name, "Émile Zola".into()),
-                (SpecificKind::Number, "1898".into()),
-            ]
-        );
-    }
-}
+#[path = "specifics_tests.rs"]
+mod tests;

@@ -6,9 +6,11 @@
 //! way any OICP client reaches it: the manifest names the endpoint and the
 //! tiers, and a host that advertises no `evidence:verify` is said so, never
 //! guessed at. Each paragraph of the file is one unit; every claim comes back
-//! with its line, its verdict, the rung that decided and, for `unsupported`,
-//! what no passage carried. It is the platform's own second user of `verify`
-//! (CITE_V1 §1.3), so it reads nothing the wire does not carry.
+//! with its line, its verdict, the specifics no candidate sentence carried
+//! (the fast tier's hint), the sentence that backs it and, for
+//! `contradicted`, what the source states otherwise (v0.6 §2.15). It is the
+//! platform's own second user of `verify` (CITE_V1 §1.3), so it reads nothing
+//! the wire does not carry.
 
 use std::io::Read;
 
@@ -215,7 +217,26 @@ fn print_unit(line: usize, unit: &str, reply: &VerifyResponse) {
         }
         println!("{at:>5}  {:<28} {head}", verdict_word(&c.verdict));
         if !c.specifics_absent.is_empty() {
-            println!("       in no passage: {}", c.specifics_absent.join(", "));
+            println!(
+                "       in no sentence read: {}",
+                c.specifics_absent.join(", ")
+            );
+        }
+        for p in c
+            .evidence
+            .iter()
+            .filter(|p| matches!(p.verdict, VerifyVerdict::Contradicted))
+        {
+            let source = p.span.as_ref().map_or_else(
+                || p.corpus_id.clone(),
+                |s| format!("{} [{}, {})", s.document.source.id, s.start, s.end),
+            );
+            for d in &p.differing {
+                println!(
+                    "       {source} says {} where this says {}",
+                    d.source.exact, d.claim.exact
+                );
+            }
         }
         if let Some(s) = c
             .evidence
@@ -285,10 +306,13 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
              svrn verify <file> --json                  One reply per paragraph, as JSON",
         ),
         crate::util::help::HelpSection::Notes(
-            "Each paragraph is sent as one unit. `fast` uses no model: a claim is \
-             `unsupported` when a number, date or name in it appears in no passage, and \
-             `abstained` otherwise. `checker` asks the daemon's judge. Every verdict is \
-             uncalibrated: read `unsupported` as \"nothing backs this\", not \"this is false\".",
+            "Each paragraph is sent as one unit. Each claim is read against the sentences \
+             of your corpora that are about it; a claim nothing in them is about is \
+             `unsupported` at either tier. `fast` uses no model: it `abstained`, naming the \
+             figures, dates and names no sentence carries. `checker` asks the daemon's \
+             judge, and a sentence stating a figure otherwise is `contradicted`. Every \
+             verdict is uncalibrated: read `unsupported` as \"nothing backs this\", not \
+             \"this is false\".",
         ),
     ],
 };

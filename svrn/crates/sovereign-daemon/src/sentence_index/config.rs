@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The platform's data file for sentence search
 //! (`svrn/crates/sovereign-daemon/data/sentence_search.toml`): the scorer, its
-//! candidate count, the scan's ceiling and the indexer's pace. Data, not
-//! program: every number sentence search acts on is read from here.
+//! candidate count, the scan's ceiling, verify's relevance floor and the
+//! indexer's pace. Data, not program: every number sentence search and
+//! verify by meaning act on is read from here.
 
 use oicp_types::SentenceScorer;
 use serde::Deserialize;
@@ -12,7 +13,7 @@ pub const DATA_FILE: &str = include_str!("../../data/sentence_search.toml");
 
 /// What the data file says. Every key is required and an unknown key is an
 /// error, so a typo never reads as a default.
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct SentenceSearchConfig {
     /// The scorer every reply is ranked by and names.
@@ -25,6 +26,9 @@ pub struct SentenceSearchConfig {
     pub index_ceiling_chunks: u64,
     /// Passage hits whose sentences the passages route scores.
     pub passage_hits: usize,
+    /// Verify's relevance floor (OICP v0.6 §2.15), on the scorer's scale: a
+    /// claim no sentence reaches is `unsupported` with no evidence.
+    pub verify_floor: f32,
     /// Sentences per background embed call.
     pub embed_batch: usize,
     /// Seconds between a corpus's progress writes while it embeds.
@@ -45,6 +49,9 @@ impl SentenceSearchConfig {
             return Err(
                 "embed_batch, passage_hits and scan_ceiling must each be at least 1".into(),
             );
+        }
+        if !c.verify_floor.is_finite() {
+            return Err("verify_floor must be a finite score".into());
         }
         if c.scorer == SentenceScorer::Rerank && c.rerank_candidates == 0 {
             return Err("rerank names no candidates: rerank_candidates is 0".into());
@@ -68,5 +75,8 @@ mod tests {
         assert!(SentenceSearchConfig::parse(&bm25).is_err());
         let typo = format!("{DATA_FILE}\nscan_cieling = 3\n");
         assert!(SentenceSearchConfig::parse(&typo).is_err());
+        assert!((0.0..1.0).contains(&c.verify_floor));
+        let unbounded = DATA_FILE.replace("verify_floor = 0.5", "verify_floor = nan");
+        assert!(SentenceSearchConfig::parse(&unbounded).is_err());
     }
 }

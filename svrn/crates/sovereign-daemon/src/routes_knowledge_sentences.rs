@@ -38,14 +38,49 @@ use crate::sentence_index::store::{same_embedder, unit, PROBE_TEXT};
 use crate::sentence_index::{read, Entry, SentenceSearchConfig, TARGET};
 use crate::state::AppState;
 
-/// `503 {"error": "scorer unavailable", "scorer": <name>}`: §2.11's refusal.
-fn refuse(scorer: SentenceScorer, why: &str) -> Response {
+/// Why a sentence search was not answered.
+pub(crate) enum Refused {
+    /// §2.11's refusal by name: `503 {"error": "scorer unavailable",
+    /// "scorer": <name>}`.
+    Scorer { scorer: SentenceScorer, why: String },
+    /// No query text and no vector: `400` with an empty reply.
+    EmptyQuery,
+}
+
+impl Refused {
+    fn into_response(self) -> Response {
+        match self {
+            Refused::Scorer { scorer, why } => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({"error": SCORER_UNAVAILABLE, "scorer": scorer.as_str(), "detail": why})),
+            )
+                .into_response(),
+            Refused::EmptyQuery => (
+                StatusCode::BAD_REQUEST,
+                Json(KnowledgeSearchResponse::default()),
+            )
+                .into_response(),
+        }
+    }
+
+    /// The refusal as one line, for a caller that answers it by name
+    /// (verify's `could_not_judge`).
+    pub(crate) fn reason(&self) -> String {
+        match self {
+            Refused::Scorer { scorer, why } => {
+                format!("{SCORER_UNAVAILABLE} ({}): {why}", scorer.as_str())
+            }
+            Refused::EmptyQuery => "empty query".into(),
+        }
+    }
+}
+
+fn refuse(scorer: SentenceScorer, why: &str) -> Refused {
     tracing::warn!(target: TARGET, scorer = scorer.as_str(), %why, "sentence search: the scorer cannot run; refused by name");
-    (
-        StatusCode::SERVICE_UNAVAILABLE,
-        Json(serde_json::json!({"error": SCORER_UNAVAILABLE, "scorer": scorer.as_str(), "detail": why})),
-    )
-        .into_response()
+    Refused::Scorer {
+        scorer,
+        why: why.to_string(),
+    }
 }
 
 /// One scoped corpus, ready to scan or not.
@@ -77,11 +112,37 @@ pub(crate) async fn search(
     scope: Option<Vec<Sha256Hash>>,
     cfg: SentenceSearchConfig,
 ) -> Response {
+    match sentences(
+        state,
+        principal,
+        request,
+        scope,
+        cfg,
+        DEFAULT_CONTEXT as usize,
+    )
+    .await
+    {
+        Ok(reply) => Json(reply).into_response(),
+        Err(refused) => refused.into_response(),
+    }
+}
+
+/// The sentences for `request`, best first, each span carrying `context`
+/// code points either side, or why there are none: the one retrieval path
+/// sentence search and verify by meaning (§2.15) share.
+pub(crate) async fn sentences(
+    state: AppState,
+    principal: Option<&Principal>,
+    request: KnowledgeSearchRequest,
+    scope: Option<Vec<Sha256Hash>>,
+    cfg: SentenceSearchConfig,
+    context: usize,
+) -> Result<KnowledgeSearchResponse, Refused> {
     let admitted_at = Instant::now();
     let limit = request.effective_limit() as usize;
     let scorer = cfg.scorer;
     let Some(local) = state.inner.serving.local_inference.clone() else {
-        return refuse(scorer, "no local inference on this host");
+        return Err(refuse(scorer, "no local inference on this host"));
     };
     // `rerank` runs on the rerank slot, and names its model from it.
     let rerank_model = local
@@ -90,17 +151,17 @@ pub(crate) async fn search(
         .find(|s| s.role == "rerank")
         .map(|s| s.model_id);
     if scorer == SentenceScorer::Rerank && rerank_model.is_none() {
-        return refuse(scorer, "this host holds no rerank slot");
+        return Err(refuse(scorer, "this host holds no rerank slot"));
     }
     // The query prefix and the embedder's name, as the passage route reads
     // them (the manifest's source); a host that names none is not guessed at.
     let (prefix, embed_model_id) = match state.local_embed_model().await {
         Ok(Some(m)) => (m.query_instruction_prefix, m.model_id),
         Ok(None) => (String::new(), local.embed_model_id()),
-        Err(e) => return refuse(scorer, &format!("the embed model is unread: {e}")),
+        Err(e) => return Err(refuse(scorer, &format!("the embed model is unread: {e}"))),
     };
     if embed_model_id.trim().is_empty() || embed_model_id == "unknown" {
-        return refuse(scorer, "this host's embedder names no model");
+        return Err(refuse(scorer, "this host's embedder names no model"));
     }
 
     // The query's vector and the embedder's identity, in one call.
@@ -109,11 +170,7 @@ pub(crate) async fn search(
     let mut inputs = Vec::new();
     if !caller_vector {
         if request.query_text.trim().is_empty() {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(KnowledgeSearchResponse::default()),
-            )
-                .into_response();
+            return Err(Refused::EmptyQuery);
         }
         inputs.push(format!("{prefix}{}", request.query_text));
     }
@@ -121,16 +178,16 @@ pub(crate) async fn search(
     let mut vectors = match local.embed_batch(&inputs).await {
         Ok(v) if v.len() == inputs.len() => v,
         Ok(v) => {
-            return refuse(
+            return Err(refuse(
                 scorer,
                 &format!("{} vectors for {} inputs", v.len(), inputs.len()),
-            )
+            ))
         }
-        Err(e) => return refuse(scorer, &format!("the embed slot refused: {e}")),
+        Err(e) => return Err(refuse(scorer, &format!("the embed slot refused: {e}"))),
     };
     // `vectors` holds one per input (checked above), the probe's last.
     let Some(probe) = vectors.pop().map(unit) else {
-        return refuse(scorer, "the embed slot answered no probe");
+        return Err(refuse(scorer, "the embed slot answered no probe"));
     };
     let query = unit(
         vectors
@@ -143,7 +200,7 @@ pub(crate) async fn search(
     let (targets, unavailable, unhosted) =
         match admit(&state, principal, &request, scope.as_deref(), &cfg, &probe).await {
             Ok(t) => t,
-            Err(resp) => return resp,
+            Err(refused) => return Err(refused),
         };
     SearchStage::Admission.emit(
         admitted_at.elapsed().saturating_sub(embedding),
@@ -161,7 +218,7 @@ pub(crate) async fn search(
     let (route, mut found, truncated, scored) = if pending == 0 {
         let (found, scanned) = match scan_index(&targets, &query, want, cfg.scan_ceiling).await {
             Ok(f) => f,
-            Err(why) => return refuse(scorer, &why),
+            Err(why) => return Err(refuse(scorer, &why)),
         };
         let truncated = (scanned < in_scope).then_some(Truncated {
             scanned: scanned as u64,
@@ -174,7 +231,7 @@ pub(crate) async fn search(
                 .await
             {
                 Ok(f) => f,
-                Err(why) => return refuse(scorer, &why),
+                Err(why) => return Err(refuse(scorer, &why)),
             };
         let n = found.len();
         (SentenceRoute::Passages, found, None, n)
@@ -219,17 +276,17 @@ pub(crate) async fn search(
                         found.iter_mut().zip(scores).for_each(|(c, s)| c.score = s);
                     }
                     Ok(s) => {
-                        return refuse(
+                        return Err(refuse(
                             scorer,
                             &format!("{} scores for {} sentences", s.len(), docs.len()),
-                        )
+                        ))
                     }
-                    Err(e) => return refuse(scorer, &format!("the rerank slot refused: {e}")),
+                    Err(e) => return Err(refuse(scorer, &format!("the rerank slot refused: {e}"))),
                 }
             }
             match rerank_model {
                 Some(m) => m,
-                None => return refuse(scorer, "this host holds no rerank slot"),
+                None => return Err(refuse(scorer, "this host holds no rerank slot")),
             }
         }
     };
@@ -242,7 +299,7 @@ pub(crate) async fn search(
 
     let mut results = Vec::with_capacity(found.len());
     for c in &found {
-        match hit(&targets, &texts, c) {
+        match hit(&targets, &texts, c, context) {
             Ok(h) => results.push(h),
             Err(why) => {
                 tracing::warn!(target: TARGET, corpus = %targets[c.target].corpus, text = %c.text, row = c.row, %why, "sentence search: a hit's text does not read; dropped")
@@ -250,7 +307,7 @@ pub(crate) async fn search(
         }
     }
     tracing::debug!(target: TARGET, route = ?route, hits = results.len(), scorer = scorer.as_str(), %model, "sentence search: answered");
-    Json(KnowledgeSearchResponse {
+    Ok(KnowledgeSearchResponse {
         results,
         corpora_searched: targets.iter().map(|t| t.corpus.clone()).collect(),
         corpora_unavailable: unavailable,
@@ -264,7 +321,6 @@ pub(crate) async fn search(
         sentences_pending: (route == SentenceRoute::Passages).then_some(pending as u64),
         truncated,
     })
-    .into_response()
 }
 
 type Admitted = (Vec<Target>, Vec<String>, Vec<String>);
@@ -280,7 +336,7 @@ async fn admit(
     scope: Option<&[Sha256Hash]>,
     cfg: &SentenceSearchConfig,
     probe: &[f32],
-) -> Result<Admitted, Response> {
+) -> Result<Admitted, Refused> {
     let Some(engine) = state.inner.node.corpus_engine.as_ref() else {
         tracing::debug!(target: TARGET, "sentence search: no corpus engine; nothing searched");
         return Ok((
@@ -569,8 +625,14 @@ fn sentence(targets: &[Target], texts: &Texts, c: &Candidate) -> Result<String, 
         .ok_or_else(|| "the address is outside its text".into())
 }
 
-/// A candidate as a hit: its sentence, its text's record, its range.
-fn hit(targets: &[Target], texts: &Texts, c: &Candidate) -> Result<KnowledgeResult, String> {
+/// A candidate as a hit: its sentence, its text's record, its range with
+/// `ctx` code points either side.
+fn hit(
+    targets: &[Target],
+    texts: &Texts,
+    c: &Candidate,
+    ctx: usize,
+) -> Result<KnowledgeResult, String> {
     let t = &targets[c.target];
     let stored = texts
         .get(&(c.target, c.text))
@@ -584,12 +646,11 @@ fn hit(targets: &[Target], texts: &Texts, c: &Candidate) -> Result<KnowledgeResu
         .get(bs..be)
         .ok_or("the address is outside its text")?
         .to_string();
-    let ctx = DEFAULT_CONTEXT as usize;
-    let before = text[..bs]
-        .char_indices()
-        .rev()
-        .nth(ctx.saturating_sub(1))
-        .map_or(0, |(b, _)| b);
+    // `ctx` 0 is no prefix, not the one code point `nth(0)` would give.
+    let before = match ctx.checked_sub(1) {
+        Some(n) => text[..bs].char_indices().rev().nth(n).map_or(0, |(b, _)| b),
+        None => bs,
+    };
     let after = text[be..]
         .char_indices()
         .nth(ctx)

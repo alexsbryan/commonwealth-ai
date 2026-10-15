@@ -210,6 +210,9 @@ async fn apply_v04_enrichment(
         // advertised beside it below; not offered when the file does not read.
         if state.inner.node.sentences.config().is_ok() {
             feats.push(features::KNOWLEDGE_SENTENCES.to_string());
+            // v0.6 §2.15: verify reads its candidates through that sentence
+            // search, under the same data file's floor (`routes_oicp_verify`).
+            feats.push(features::EVIDENCE_VERIFY_SENTENCES.to_string());
         }
         EvidenceEndpoints {
             text_endpoint: crate::routes_oicp_text::TEXT_ENDPOINT.into(),
