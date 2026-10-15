@@ -8,7 +8,8 @@ use serde_json::{Map, Value};
 
 use super::Described;
 
-/// Each claim's description of its subject: its supported values of the type's
+/// Each claim's description of its subject: the name its window read gave it
+/// (`names_of`), and its supported values of the type's
 /// attributes outside `carried` (the keys and necessary attributes, which
 /// travel as keys and reads). A window read's
 /// claims about one chapter subject all get the union over that subject, so
@@ -16,10 +17,17 @@ use super::Described;
 /// its documents RESOLVE meets first.
 pub(super) fn of_claims(
     fields_of: &HashMap<usize, Map<String, Value>>,
+    names_of: &HashMap<usize, String>,
     chapter_subject_of: &HashMap<usize, String>,
     carried: &BTreeSet<&str>,
 ) -> HashMap<usize, Described> {
     let mut out = HashMap::<usize, Described>::new();
+    for (&i, name) in names_of {
+        out.entry(i).or_default().names.insert(name.clone());
+    }
+    for &i in chapter_subject_of.keys() {
+        out.entry(i).or_default();
+    }
     for (&i, fields) in fields_of {
         let d = out.entry(i).or_default();
         for (attr, value) in fields.iter().filter(|(a, _)| !carried.contains(a.as_str())) {

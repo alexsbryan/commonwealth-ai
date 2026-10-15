@@ -774,8 +774,8 @@ question the pipeline asks about a type is a method on the resolved
   it is as written (a seeded record's identity values, name and the records
   whose refs point at it, `mentions::card`) and the values its statements
   were read with and what its statements' readers read it to be (`Described`:
-  their supported values of its other declared attributes, folded; shown, never
-  compared), never its folded comparison keys or its documents' stamps,
+  the names a window read gave it and their supported values of its other
+  declared attributes, folded; shown, never compared), never its folded comparison keys or its documents' stamps,
   and up to four of
   its statements' cited lines from other documents (`passage::lines_of`: a
   span widened to its whole line, or the reader's lines as they stand on the

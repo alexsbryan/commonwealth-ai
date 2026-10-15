@@ -76,7 +76,8 @@ pub const WORDS_ATTRIBUTE: &str = "__document_read_words";
 /// The name a window read ([`SubjectScope::Chapter`]) gave a statement's
 /// subject: a reference reading of that name in the same document lands on
 /// the record RESOLVE put the statement on (`resolution_derived/read_fields.rs`).
-/// Stays on the claim after RESOLVE, which never reads it.
+/// Stays on the claim after RESOLVE, which shows it beside the statement and on
+/// the record's card (`resolve_records::Described`) and never compares it.
 pub const SUBJECT_NAME_ATTRIBUTE: &str = "__document_read_subject_name";
 
 /// The type a claim projected from a [`DocumentReadParticular`] is about.

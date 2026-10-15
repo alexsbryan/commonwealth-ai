@@ -93,3 +93,50 @@ async fn an_undescribed_statement_is_asked_without_a_description() {
     assert!(!u.contains("Its reader read"), "{u}");
     assert!(u.contains("no declared value"), "{u}");
 }
+
+/// The names a reader gave each side are shown beside its values: on the
+/// statement's line and on the record's card. Shown, never compared.
+#[tokio::test]
+async fn a_question_shows_what_readers_called_each_side() {
+    let mut res = Resolver::default();
+    let a = "The book lay open on the bench.";
+    let mut first = stmt("x", a, "The book lay open", 0, &[]);
+    first.described.names.insert("the harbor book".into());
+    res.resolve_document(
+        &criterion(&[]),
+        doc("d0", a),
+        &[first],
+        &[],
+        Answerer::Proposed,
+    )
+    .await;
+    let (infer, seen) = scripted(vec![json!({"A": 0.2, "0": 0.8})]);
+    let b = "The fifth entry was not hers.";
+    let mut reply = stmt("z", b, "The fifth entry was not hers", 0, &[]);
+    reply.described.names.insert("the tide ledger".into());
+    reply.described = {
+        let mut d = reply.described.clone();
+        d.values
+            .insert("kept_by".into(), BTreeSet::from(["the keeper".to_string()]));
+        d
+    };
+    res.resolve_document(
+        &criterion(&[]),
+        doc("d1", b),
+        &[reply],
+        &[prop("x")],
+        Answerer::Select(&infer),
+    )
+    .await;
+    let u = &seen.lock().unwrap()[0].user;
+    assert!(
+        u.contains(
+            "Its reader read what it is about as: named: the tide ledger; kept_by: the keeper\n"
+        ),
+        "{u}"
+    );
+    assert!(
+        u.contains("named: the harbor book\n"),
+        "the candidate's card: {u}"
+    );
+}

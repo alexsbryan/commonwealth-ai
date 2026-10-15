@@ -32,7 +32,7 @@ fn a_window_subjects_claims_share_everything_the_window_read_of_it() {
         (3, "sec_1/p2".to_string()),
     ]);
     let carried = BTreeSet::from(["term"]);
-    let d = of_claims(&fields_of, &chapter_subject_of, &carried);
+    let d = of_claims(&fields_of, &HashMap::new(), &chapter_subject_of, &carried);
     let reply = &d[&2];
     assert_eq!(
         reply.values["product"],
@@ -53,4 +53,38 @@ fn a_window_subjects_claims_share_everything_the_window_read_of_it() {
     assert_eq!(d[&3].values.len(), 1);
     assert_eq!(d[&4].values["product"], BTreeSet::from(["storage".into()]));
     assert_eq!(d[&4].values.len(), 1);
+}
+
+/// Failing input, named: a novel's reader named the subject of each passage
+/// ("the old ledger", "the tide ledger"), and RESOLVE's question showed none of
+/// it: an object no field is declared for reached RESOLVE described by
+/// nothing, and the model judged the passage's topic instead of its subject
+/// (five wrong RESOLVE answers, saltgrass, 2026-10-15). The names a window
+/// gave a subject travel with its description, shared across its claims like
+/// its values; a claim of no chapter subject keeps its own.
+#[test]
+fn a_window_subjects_names_travel_with_its_description() {
+    let fields_of = HashMap::from([(0, fields(json!({"craft": "dinghy"})))]);
+    let names_of = HashMap::from([
+        (0, "the old ledger".to_string()),
+        (1, "the tide ledger".to_string()),
+        (3, "the boat-hook".to_string()),
+        (5, "a lantern".to_string()),
+    ]);
+    let chapter_subject_of = HashMap::from([
+        (0, "sec_1/p1".to_string()),
+        (1, "sec_1/p1".to_string()),
+        (2, "sec_1/p1".to_string()),
+        (3, "sec_1/p2".to_string()),
+    ]);
+    let d = of_claims(&fields_of, &names_of, &chapter_subject_of, &BTreeSet::new());
+    let both = BTreeSet::from(["the old ledger".to_string(), "the tide ledger".to_string()]);
+    assert_eq!(
+        d[&2].names, both,
+        "a claim of the subject with no name of its own"
+    );
+    assert_eq!(d[&1].names, both);
+    assert_eq!(d[&1].values["craft"], BTreeSet::from(["dinghy".into()]));
+    assert_eq!(d[&3].names, BTreeSet::from(["the boat-hook".to_string()]));
+    assert_eq!(d[&5].names, BTreeSet::from(["a lantern".to_string()]));
 }

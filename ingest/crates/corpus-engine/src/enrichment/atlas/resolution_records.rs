@@ -42,8 +42,8 @@ use crate::enrichment::ontology::{
 };
 use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType, EventType};
 use crate::enrichment::pipeline::document_read::{
-    about_type, field_readings, mention_words, supported_values, ABOUT_ATTRIBUTE,
-    CHAPTER_SUBJECT_ATTRIBUTE, LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE,
+    about_type, field_readings, mention_words, supported_values, window_subject_name,
+    ABOUT_ATTRIBUTE, CHAPTER_SUBJECT_ATTRIBUTE, LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE,
     SUBJECT_FIELDS_ATTRIBUTE,
 };
 use crate::enrichment::pipeline::types::{PhaseFailure, PhaseFailureKind};
@@ -322,9 +322,13 @@ async fn resolve_type(
     let mut read_local_ref_of = HashMap::<usize, String>::new();
     let mut chapter_subject_of = HashMap::<usize, String>::new();
     let mut read_subject_fields_of = HashMap::<usize, Map<String, Value>>::new();
+    let mut subject_name_of = HashMap::<usize, String>::new();
     for (i, claim) in atoms.claims.iter_mut().enumerate() {
         if !of_kinds(claim) {
             continue;
+        }
+        if let Some(name) = window_subject_name(&claim.attributes) {
+            subject_name_of.insert(i, name.to_string());
         }
         claim.subject = None;
         if let Some(Value::String(document)) = claim.attributes.remove(SOURCE_DOCUMENT_ATTRIBUTE) {
@@ -397,8 +401,13 @@ async fn resolve_type(
         .chain(t.identity_necessary.iter())
         .map(String::as_str)
         .collect();
-    let described_of = described::of_claims(&read_subject_fields_of, &chapter_subject_of, &carried);
-    debug!(r#type = %t.name, claims = described_of.len(), "atlas/resolve: what readers read each subject to be is shown on both sides of its question");
+    let described_of = described::of_claims(
+        &read_subject_fields_of,
+        &subject_name_of,
+        &chapter_subject_of,
+        &carried,
+    );
+    debug!(r#type = %t.name, claims = described_of.len(), named = subject_name_of.len(), "atlas/resolve: what readers read each subject to be is shown on both sides of its question");
     let declared: Vec<(DocumentStamp, &str)> = policies
         .change
         .document
