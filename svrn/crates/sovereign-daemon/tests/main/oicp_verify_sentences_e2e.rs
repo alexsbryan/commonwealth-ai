@@ -380,9 +380,14 @@ async fn sentence_search_is_asked_the_claim_without_its_citations() {
         let (c, _, _) = verify_asking(&state, &fx, unit, "checker").await;
         assert_eq!(c.exact, unit, "{c:?}");
         let asked = log.lock().unwrap().clone();
-        assert!(asked.iter().any(|q| q == bare), "{unit} searched as {asked:?}");
         assert!(
-            !asked.iter().any(|q| q.contains("2019 (") || q.contains("2019 [")),
+            asked.iter().any(|q| q == bare),
+            "{unit} searched as {asked:?}"
+        );
+        assert!(
+            !asked
+                .iter()
+                .any(|q| q.contains("2019 (") || q.contains("2019 [")),
             "{unit} searched with its citation: {asked:?}"
         );
     }
@@ -390,5 +395,9 @@ async fn sentence_search_is_asked_the_claim_without_its_citations() {
     log.lock().unwrap().clear();
     let (c, _, _) = verify_asking(&state, &fx, kept, "checker").await;
     assert_eq!(c.exact, kept, "{c:?}");
-    assert!(log.lock().unwrap().iter().any(|q| q == kept), "{:?}", log.lock().unwrap());
+    assert!(
+        log.lock().unwrap().iter().any(|q| q == kept),
+        "{:?}",
+        log.lock().unwrap()
+    );
 }
