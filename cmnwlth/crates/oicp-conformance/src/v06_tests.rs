@@ -7,6 +7,7 @@ use crate::claim_checks::check_evidence_verify_sentences;
 use crate::evidence_checks::v05_feature_failures;
 use crate::fake_host::Breaks;
 use crate::located_checks::{check_ingest_transcript, check_knowledge_locator};
+use crate::record_checks::check_ingest_lookups;
 use crate::v05_tests::{bench, green, red};
 
 /// v0.6 §2.13's two failing inputs: a span given the heading path of the
@@ -146,6 +147,50 @@ async fn evidence_verify_sentences_is_red_against_a_fast_verdict_a_cited_year_an
     assert!(
         f.iter()
             .any(|x| x == "evidence:verify_sentences requires knowledge:sentences"),
+        "{f:?}"
+    );
+}
+
+/// v0.6 §2.16's three failing inputs: a field invented for an identifier
+/// that did not resolve; a declared title overwritten by the looked-up one;
+/// a lookup sent for an install that did not allow it.
+#[tokio::test]
+async fn ingest_lookups_is_red_against_an_invented_field_an_overwritten_title_and_an_unallowed_lookup(
+) {
+    let b = bench(Breaks::default()).await;
+    green(&check_ingest_lookups(&b.host, &b.manifest).await);
+    for (breaks, says) in [
+        (
+            Breaks {
+                lookup_invents_unresolved: true,
+                ..Breaks::default()
+            },
+            "a field (`title`) from `crossref` for `no-such-doi`'s DOI, which did not resolve",
+        ),
+        (
+            Breaks {
+                lookup_overwrites_declared: true,
+                ..Breaks::default()
+            },
+            "declared `title` of `fair-principles` is not kept",
+        ),
+        (
+            Breaks {
+                lookup_without_allowance: true,
+                ..Breaks::default()
+            },
+            "`fair-principles`'s DOI was looked up (Resolved) for an install that did not allow it",
+        ),
+    ] {
+        let b = bench(breaks).await;
+        red(&check_ingest_lookups(&b.host, &b.manifest).await, says);
+    }
+    let mut m = b.manifest.clone();
+    m.features.retain(|f| f != "ingest:documents");
+    let f = v05_feature_failures(&m);
+    assert!(
+        f.iter()
+            .any(|x| x == "ingest:lookups requires ingest:documents"),
         "{f:?}"
     );
 }

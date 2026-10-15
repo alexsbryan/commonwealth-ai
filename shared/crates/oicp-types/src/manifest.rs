@@ -50,6 +50,11 @@ pub mod features {
     /// has returned, each document it read, ready or failed; requires
     /// `ingest:v1`.
     pub const INGEST_DOCUMENTS: &str = "ingest:documents";
+    /// v0.6 §2.16: for an install that allows it, a document's DOI or ISBN
+    /// is looked up and the record merged under its declared metadata,
+    /// listed on progress and on its hits; requires `ingest:documents` and
+    /// `ingest:recipe`.
+    pub const INGEST_LOOKUPS: &str = "ingest:lookups";
     /// §6 fingerprints are populated on manifest models and echoed in
     /// response metadata.
     pub const MODEL_FINGERPRINT: &str = "model_fingerprint";
@@ -176,6 +181,7 @@ pub mod features {
         INGEST_V1,
         INGEST_RECIPE_TEST,
         INGEST_DOCUMENTS,
+        INGEST_LOOKUPS,
         MODEL_FINGERPRINT,
         EVIDENCE_TEXT,
         EVIDENCE_ALIGN,

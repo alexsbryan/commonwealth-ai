@@ -75,6 +75,7 @@ pub mod peer_preference;
 /// a `sovereign-contracts → serving-policy` edge (domains
 /// `REVIEW-build-middleware-seam`).
 pub mod pipeline_context;
+pub mod record;
 pub mod registry;
 pub mod requirements;
 pub mod response;
@@ -143,6 +144,7 @@ pub use manifest::{
 };
 pub use model_aliases::{AliasResolution, ModelAlias, ModelAliasConfig, ModelAliasTable};
 pub use pipeline_context::PipelineContextConfig;
+pub use record::{LookupOutcome, MergedRecord, RecordLookup};
 pub use registry::{ExtensionRegistry, ExtensionStats};
 pub use requirements::{InferenceRequirements, PrivacyRequirements, ShardingPrivacy};
 pub use response::{MatchQuality, OicpResponseMeta};

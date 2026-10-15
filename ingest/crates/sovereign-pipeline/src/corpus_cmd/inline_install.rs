@@ -55,6 +55,7 @@ pub(super) async fn install_inline(
         corpus_id: corpus_id.clone(),
         parameters,
         recipe_toml: Some(recipe_toml),
+        allow_lookups: false,
     };
     let body = match serde_json::to_vec(&req) {
         Ok(b) => b,

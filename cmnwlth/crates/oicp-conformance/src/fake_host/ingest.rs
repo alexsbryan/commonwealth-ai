@@ -76,12 +76,25 @@ async fn install(State(f): State<Arc<Fake>>, req: Result<Json<Value>, JsonReject
         );
     }
     let sha = sha256_hex(recipe.as_bytes());
+    // v0.6 §2.16: the allowance is part of the install, so the same recipe
+    // with another allowance is a new install.
+    let allow = req.get("allow_lookups").and_then(Value::as_bool) == Some(true);
+    let held = {
+        let mut allowed = f.allowed.lock().unwrap();
+        let same = allowed.contains(&corpus) == allow;
+        if allow {
+            allowed.insert(corpus.clone());
+        } else {
+            allowed.remove(&corpus);
+        }
+        same.then_some(sha.as_str())
+    };
     let previous = f
         .installed
         .lock()
         .unwrap()
         .insert(corpus.clone(), sha.clone());
-    let spawned = previous.as_deref() != Some(sha.as_str());
+    let spawned = previous.as_deref() != held;
     if spawned {
         f.polls.lock().unwrap().remove(&corpus);
     }
@@ -107,8 +120,12 @@ pub(super) async fn progress(State(f): State<Arc<Fake>>) -> Json<Value> {
                     } else {
                         s.text.as_str()
                     };
-                    json!({"source": s.name, "state": "ready",
-                       "text_sha256": sha256_hex(text.as_bytes())})
+                    let mut entry = json!({"source": s.name, "state": "ready",
+                                           "text_sha256": sha256_hex(text.as_bytes())});
+                    if let Some(r) = f.merged(s) {
+                        entry["record"] = json!(r);
+                    }
+                    entry
                 })
                 .chain(f.failed.iter().filter(|(c, ..)| c == corpus).map(
                     |(_, name, why)| json!({"source": name, "state": "failed", "reason": why}),

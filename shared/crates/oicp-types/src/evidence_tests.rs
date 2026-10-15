@@ -13,6 +13,7 @@ fn document(metadata: Option<serde_json::Value>) -> Document {
             sha256: Some(SHA.into()),
         },
         metadata,
+        record: None,
     }
 }
 

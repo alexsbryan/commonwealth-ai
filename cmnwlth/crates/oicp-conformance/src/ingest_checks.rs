@@ -447,7 +447,7 @@ pub async fn check_ingest_documents(
                     doc.name
                 ))
             }
-            Some(oicp_types::IngestDocumentState::Ready { text_sha256 }) => text_sha256,
+            Some(oicp_types::IngestDocumentState::Ready { text_sha256, .. }) => text_sha256,
         };
         let (Some(endpoint), Some(sha)) = (text, sha) else {
             continue;

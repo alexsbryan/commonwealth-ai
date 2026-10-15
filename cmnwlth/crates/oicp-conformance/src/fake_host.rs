@@ -7,7 +7,7 @@
 //! decides locality by the rule of §5.2, so a green run against it is the
 //! checks agreeing with the spec, not with a lookup table.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
 
 use axum::extract::{Path, Query, Request, State};
@@ -28,6 +28,7 @@ use crate::fixture::{code_points, sha256_hex, Library};
 use crate::shelf::Shelf;
 
 mod ingest;
+mod records;
 mod sentences;
 mod verify;
 
@@ -99,6 +100,12 @@ pub struct Breaks {
     /// evidence.verify_sentences: a contradicted passage names no differing
     /// specific.
     pub contradicted_unnamed: bool,
+    /// ingest.lookups: an install that did not allow lookups is looked up.
+    pub lookup_without_allowance: bool,
+    /// ingest.lookups: a resolver's field replaces a declared one.
+    pub lookup_overwrites_declared: bool,
+    /// ingest.lookups: an identifier that did not resolve is given a title.
+    pub lookup_invents_unresolved: bool,
     /// knowledge.sentences: each sentence's range is one code point past
     /// the sentence its `exact` and `content` carry.
     pub sentence_range_off_by_one: bool,
@@ -148,6 +155,10 @@ struct Fake {
     /// Documents an install read and could not store: corpus, name, why.
     failed: Vec<(String, String, &'static str)>,
     installed: Mutex<BTreeMap<String, String>>,
+    /// The corpora whose last install allowed lookups (v0.6 §2.16).
+    allowed: Mutex<BTreeSet<String>>,
+    /// The fake resolver's answers, by identifier.
+    resolved: BTreeMap<String, Value>,
     /// Polls of progress since each corpus's last install.
     polls: Mutex<BTreeMap<String, u32>>,
 }
@@ -166,6 +177,7 @@ impl Fake {
             } else {
                 s.metadata.clone()
             },
+            record: self.merged(s),
         }
     }
 
@@ -311,11 +323,17 @@ fn shelves() -> Vec<Shelf> {
         include_str!("../fixture/headings.json"),
         include_str!("../fixture/transcripts.json"),
         include_str!("../fixture/claims.json"),
+        include_str!("../fixture/records.json"),
     ]
     .into_iter()
-    .map(|j| {
+    .flat_map(|j| {
         let fixture: Value = serde_json::from_str(j).expect("shelf fixture parses");
-        serde_json::from_value(fixture["shelf"].clone()).expect("shelf loads")
+        let shelf: Shelf = serde_json::from_value(fixture["shelf"].clone()).expect("shelf loads");
+        let closed = fixture["closed_corpus_id"].as_str().map(|c| Shelf {
+            corpus_id: c.to_string(),
+            ..shelf.clone()
+        });
+        std::iter::once(shelf).chain(closed)
     })
     .collect()
 }
@@ -372,6 +390,8 @@ pub async fn spawn(breaks: Breaks) -> Running {
         texts,
         failed,
         installed: Mutex::new(BTreeMap::new()),
+        allowed: Mutex::new(BTreeSet::new()),
+        resolved: records::resolver_table(),
         polls: Mutex::new(BTreeMap::new()),
     });
     let app = Router::new()
@@ -508,7 +528,7 @@ async fn capabilities(State(f): State<Arc<Fake>>) -> Json<Value> {
         "oicp_version": "0.4.0",
         "models": [],
         "features": [
-            "ingest:v1", "ingest:recipe_test", "ingest:recipe", "ingest:documents", "evidence:text",
+            "ingest:v1", "ingest:recipe_test", "ingest:recipe", "ingest:documents", "ingest:lookups", "evidence:text",
             "evidence:align", "evidence:verify", "evidence:verify_corrections", "evidence:verify_sentences", "knowledge:document", "knowledge:scoped",
             "knowledge:range", "knowledge:sentences", "knowledge:locator", "ingest:transcripts", "auth:named_client"
         ],

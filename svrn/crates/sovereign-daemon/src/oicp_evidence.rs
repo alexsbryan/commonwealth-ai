@@ -44,6 +44,7 @@ pub(crate) fn wire_document(rec: &DocumentRecord) -> Result<Document, String> {
             sha256: rec.source_sha256.map(|s| s.to_hex()),
         },
         metadata,
+        record: None,
     })
 }
 

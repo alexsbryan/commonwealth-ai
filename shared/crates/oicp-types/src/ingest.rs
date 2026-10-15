@@ -56,6 +56,11 @@ pub struct CorpusInstallRequest {
     /// the host advertises `ingest:recipe`; an invalid recipe is a `400`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recipe_toml: Option<String>,
+    /// v0.6 §2.16 (`ingest:lookups`): the installing client allows the host
+    /// to look its documents' identifiers up with resolvers off the host.
+    /// `false`, the default, is never written and sends no lookup.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub allow_lookups: bool,
 }
 
 /// Response to [`CorpusInstallRequest`] (§5.1).
@@ -142,6 +147,10 @@ pub enum IngestDocumentState {
     Ready {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         text_sha256: Option<String>,
+        /// v0.6 §2.16 (`ingest:lookups`): the document's merged record,
+        /// listed whether or not a search has hit it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        record: Option<crate::record::MergedRecord>,
     },
     /// Not stored, and why.
     Failed { reason: String },
@@ -222,6 +231,7 @@ mod tests {
             corpus_id: "acme-emails".into(),
             parameters: params,
             recipe_toml: None,
+            allow_lookups: false,
         };
         let back: CorpusInstallRequest =
             serde_json::from_str(&serde_json::to_string(&req).unwrap()).unwrap();
@@ -233,9 +243,14 @@ mod tests {
             corpus_id: "x".into(),
             parameters: BTreeMap::new(),
             recipe_toml: None,
+            allow_lookups: false,
         };
         let v = serde_json::to_value(&bare).unwrap();
         assert!(v.get("parameters").is_none(), "empty parameters omitted");
+        assert!(
+            v.get("allow_lookups").is_none(),
+            "the default is never written"
+        );
 
         let prog = CorpusProgressResponse {
             progress: BTreeMap::from([(

@@ -236,6 +236,7 @@ fn wire_document(d: &corpus_index::ingest_port::daemon::DocumentOutcome) -> Inge
         state: match &d.state {
             DocumentState::Ready { text_sha256 } => IngestDocumentState::Ready {
                 text_sha256: text_sha256.map(|h| h.to_hex()),
+                record: None,
             },
             DocumentState::Failed { reason } => IngestDocumentState::Failed {
                 reason: reason.clone(),

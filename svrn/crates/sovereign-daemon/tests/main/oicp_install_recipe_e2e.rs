@@ -340,7 +340,8 @@ async fn an_install_is_listed_from_its_spawn_and_then_lists_each_document() {
     assert_eq!(
         docs[0].state,
         IngestDocumentState::Ready {
-            text_sha256: Some(Sha256Hash::of_str("okafor").to_hex())
+            text_sha256: Some(Sha256Hash::of_str("okafor").to_hex()),
+            record: None,
         }
     );
     assert_eq!(docs[1].source.as_deref(), Some("scans/broken.pdf"));

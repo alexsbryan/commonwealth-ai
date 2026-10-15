@@ -107,6 +107,11 @@ pub struct Document {
     /// verbatim. `None` when neither declared any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<serde_json::Value>,
+    /// v0.6 §2.16 (`ingest:lookups`): `metadata` merged with what a
+    /// resolver returned for an identifier it carries, each field's origin
+    /// named; the same record progress lists beside the document.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub record: Option<crate::record::MergedRecord>,
 }
 
 /// The source of a stored text.

@@ -116,6 +116,15 @@ pub fn v05_feature_failures(m: &ProviderManifest) -> Vec<String> {
             f.push(format!("evidence:verify_sentences requires {name}"));
         }
     }
+    // v0.6 §2.16: a record is listed beside a document a recipe installed.
+    for (feat, name) in [
+        (features::INGEST_DOCUMENTS, "ingest:documents"),
+        (features::INGEST_RECIPE, "ingest:recipe"),
+    ] {
+        if m.has_feature(features::INGEST_LOOKUPS) && !m.has_feature(feat) {
+            f.push(format!("ingest:lookups requires {name}"));
+        }
+    }
     // v0.6 §2.14: a transcript is declared in a recipe and located by turn.
     for (feat, name) in [
         (features::KNOWLEDGE_LOCATOR, "knowledge:locator"),

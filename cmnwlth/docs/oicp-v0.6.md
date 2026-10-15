@@ -26,7 +26,8 @@ sizes an inline library before it sends one (§2.12), and a span says
 (§2.13) or the turn of a recipe document declared a **transcript** it was
 spoken in (§2.14). Verify can find a claim's candidates **by meaning**,
 name its specifics by kind, and say which figure a source states otherwise
-(§2.15).
+(§2.15). For an install that allows it, a document's DOI or ISBN fills in
+its **record**, under what the recipe declared (§2.16).
 
 As in v0.5, everything v0.6 adds is a serde-defaulted field, an optional
 endpoint, or a feature string, and **feature presence, not the version
@@ -48,6 +49,7 @@ string, gates behaviour**. The types are in
 | `knowledge:sentences` | knowledge search takes `granularity: "sentence"` and answers sentences, ranked by the scorer `knowledge.sentence_scorer` names (§2.11) | `knowledge:range`, `knowledge:scoped`, `knowledge.sentence_scorer` |
 | `knowledge:locator` | every span carries `locator` where the extraction that stored its text found one, a plain text's heading paths by §2.13's rule | `knowledge:range` |
 | `evidence:verify_sentences` | verify's candidates are §2.11's sentences, each claim names its specifics by kind, the fast tier's literal miss is a hint, and a contradicted passage names what differs (§2.15) | `evidence:verify`, `knowledge:sentences` |
+| `ingest:lookups` | for an install that allows it, a document's identifiers are looked up and its record merged under its declared metadata, listed on progress and on its hits (§2.16) | `ingest:documents`, `ingest:recipe` |
 | `ingest:transcripts` | a recipe `[[document]]` takes `format = "transcript"`, read by turn, each turn's start and speaker the locator of its spans (§2.14) | `knowledge:locator`, `ingest:recipe` |
 
 ```rust
@@ -598,6 +600,56 @@ its specifics finder (`sentence_specifics`, in
 `svrn/crates/sovereign-core/src/runtime/grounding/specifics.rs`) splits its
 numbers into the three kinds and leaves citations and locators out.
 
+### 2.16 Records by identifier
+
+A library's documents often declare no more than an identifier: a DOI, an
+ISBN. A host can fill in the rest from a resolver, but a lookup tells the
+resolver what the client is reading, so it asks only for an install that
+allows it, and never lets a resolver overrule what the recipe declared.
+
+```
+CorpusInstallRequest { … (v0.4 fields) …,
+                       allow_lookups: bool }               // default false, never written at the default
+IngestDocument (ready) { …, record: Option<MergedRecord> }  // §2.9
+Document               { …, record: Option<MergedRecord> }  // v0.5's record of a text, on hits and spans
+MergedRecord { csl: {String: Value},          // CSL-JSON: the declared fields, then the looked-up ones
+               origins: {String: String},     // each field of csl: "declared", or the resolver's name
+               lookups: [RecordLookup] }
+RecordLookup { identifier: String,            // the CSL variable: "DOI", "ISBN"
+               value: String,
+               resolver: String,              // the resolver the host's data file names for it
+               outcome: "resolved" | "unresolved" | "unreachable" | "not_allowed" }
+```
+
+- **Which documents.** A document whose declared metadata (its
+  `metadata`, as the recipe or extractor declared it) carries an identifier the host has a resolver for has a `record`; any
+  other has none. The host's data file maps each CSL variable to its
+  resolver, so another resolver is a row there, not a code change.
+- **Only when allowed.** A host sends a lookup only for an install whose
+  request says `allow_lookups: true`. For any other install every lookup
+  is `not_allowed`, nothing leaves the host, and the record is the
+  declared metadata. The allowance is part of the install: the same
+  recipe installed with the other allowance is a new install (`spawned:
+  true`).
+- **Declared wins.** Every declared field is in `csl` unchanged, its
+  origin `declared`. A looked-up field enters only where the metadata
+  declares none, its origin the resolver's name. `origins` names exactly
+  the fields of `csl`.
+- **Named, never invented.** `unresolved` (the resolver does not know the
+  identifier) and `unreachable` (it could not be asked, or did not answer)
+  add no field. A client may install again later; the host may ask again
+  then.
+- **Listed.** The record is on progress beside its document once the
+  install has returned (§2.9), whether or not a search has hit it, and on
+  the document's `Document` wherever the host gives it (hits, spans): the
+  same record in both places. It is kept with the install's document list.
+- **Not identity.** The record is no part of a text's name or of a
+  corpus's `texts_digest`; a lookup never changes a stored text.
+
+The reference host does not advertise `ingest:lookups` yet. When it does,
+its data file maps `DOI` to Crossref and `ISBN` to Open Library, and its
+records keep CSL-JSON field names as the resolvers return them.
+
 ## 6. Conformance (additions)
 
 | check | holds | red against |
@@ -611,6 +663,7 @@ numbers into the three kinds and leaves citations and locators out.
 | `knowledge.sentences` | each fixture signature, at `granularity: sentence` scoped to its own text, returns at least one sentence, at most `limit`, best first, every one from that text; each carries `span` whose `exact` is its `content` and whose range reads back byte-equal through `text_endpoint`; the reply names the advertised scorer and a model, and a route, with `sentences_pending` exactly on `passages`. A `503 scorer unavailable` naming the advertised scorer is could-not-judge | a sentence range one code point off; a sentence from outside the scope; a host advertising `rerank`, holding no rerank slot, that answers with cosine |
 | `knowledge.locator` | installs its own library (`fixture/headings.json`: a headed text with a contents line and a preface, and a text with no headings) and aligns each listed sentence verbatim; each span's `locator` is the heading path the rule gives, or absent where it gives none. Needs `ingest:recipe` and `evidence:align`, could-not-judge without | a span given the heading path of the part before the one it stands in; a locator invented for a span under no heading |
 | `evidence.verify_sentences` | installs its own library (`fixture/claims.json`, a ledger of figure sentences) and verifies five units at each served tier: every specific is an exact range of the unit inside its claim; each listed figure, date or quantity is covered, a parenthesised one too; nothing inside `(Okafor 2019)` or `(page 14)` is a specific; the fast tier never says `supported` or `contradicted` and says `unsupported` only with no evidence; a unit restating the library's figure in another form is `abstained` at `fast` and `supported` at `checker`; another figure is `contradicted`, naming the pair, each side read back; a concept the library lacks is `unsupported` with no evidence. A checker that answers `could_not_judge` is could-not-judge | a claim settled from the fast tier's literal miss; a citation's year made a specific; a figure inside parentheses left out; a contradiction that names no differing specific |
+| `ingest.lookups` | installs its own library (`fixture/records.json`: a document declaring a title and a DOI that resolves, one declaring a DOI that does not, one declaring none) allowing lookups, and again as another corpus not allowing them; reads each record off progress: every field has an origin, every declared field kept as `declared`, the resolving DOI `resolved`, the other `unresolved` with nothing taken, the undeclared document no looked-up field; every lookup of the second install `not_allowed` with nothing taken; with `knowledge:document`, a hit carries the record progress lists. A resolver `unreachable` is could-not-judge | a field invented for an identifier that did not resolve; a declared title overwritten by the looked-up one; a lookup sent for an install that did not allow it |
 | `ingest.transcript` | installs its own library (`fixture/transcripts.json`: a paragraph transcript with three header shapes and an opening, Whisper's JSON with a sentence across segments, and a declared transcript in neither shape) and aligns each listed quotation verbatim; each span's `locator` is its turn's start and speaker, a Whisper segment's with none; with `ingest:documents`, the one in neither shape is listed `failed: not a transcript` and the others `ready`. Needs `evidence:align`, could-not-judge without | a header line read into the turn before it (the turn given the previous speaker); a speaker invented for a Whisper segment; a document in neither shape stored as plain text |
 
 `manifest.features` checks §2.1's co-occurrence: `evidence:verify` iff
@@ -623,7 +676,8 @@ iff `verify_correction_endpoint`, and never without `evidence:verify`;
 `knowledge:range` and `knowledge:scoped`; `knowledge:locator` never
 without `knowledge:range`; `ingest:transcripts` never without
 `knowledge:locator` and `ingest:recipe`; `evidence:verify_sentences` never
-without `evidence:verify` and `knowledge:sentences`.
+without `evidence:verify` and `knowledge:sentences`; `ingest:lookups` never
+without `ingest:documents` and `ingest:recipe`.
 
 ## 7. Backward compatibility
 
@@ -647,6 +701,10 @@ without `evidence:verify` and `knowledge:sentences`.
 - `specifics` and `differing` are skipped when empty, so a §2.6 reply
   reads and writes back unchanged; a client reads their absence from a
   host without `evidence:verify_sentences` as "not named", not as none.
+- `allow_lookups` is never written at its default and `record` is skipped
+  when absent, so a v0.5 install request and a v0.5 document read and write
+  back unchanged; a host without `ingest:lookups` ignores the allowance
+  and sends no lookup.
 - A client sends `format = "transcript"` only to a host advertising
   `ingest:transcripts`; a host without it may refuse the recipe or read the
   document as plain text, its spans then carrying no turn.
