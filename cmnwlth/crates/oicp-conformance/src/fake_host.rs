@@ -76,6 +76,10 @@ pub struct Breaks {
     /// ingest.install_limit: the manifest states `max_install_bytes` and the
     /// install route reads bodies only to the surface's 8 MiB.
     pub install_at_surface_limit: bool,
+    /// A configuration, not a break: the extractor trims each text's
+    /// trailing whitespace, as the reference host's does, so a text's name
+    /// is not the sha256 of its source's bytes.
+    pub trims_texts: bool,
 }
 
 /// The fake's live named credential.
@@ -90,6 +94,8 @@ pub fn revoked_token() -> String {
 
 struct Stored {
     name: String,
+    /// sha256 of the source's bytes, the fixture document's text.
+    source_sha256: String,
     text: String,
     metadata: Option<Value>,
 }
@@ -105,13 +111,12 @@ struct Fake {
 
 impl Fake {
     fn record(&self, s: &Stored) -> Document {
-        let sha = sha256_hex(s.text.as_bytes());
         Document {
-            text_sha256: sha.clone(),
+            text_sha256: sha256_hex(s.text.as_bytes()),
             extractor: "plaintext@fake".into(),
             source: SourceRef {
                 id: s.name.clone(),
-                sha256: Some(sha),
+                sha256: Some(s.source_sha256.clone()),
             },
             metadata: if self.breaks.empty_metadata {
                 None
@@ -194,6 +199,7 @@ pub struct Running {
 /// Start a fake that breaks `breaks`.
 pub async fn spawn(breaks: Breaks) -> Running {
     let lib = Library::load().expect("fixture loads");
+    let trims = breaks.trims_texts;
     let fake = Arc::new(Fake {
         breaks,
         corpus: lib.corpus_id.clone(),
@@ -202,7 +208,12 @@ pub async fn spawn(breaks: Breaks) -> Running {
             .iter()
             .map(|d| Stored {
                 name: d.name.clone(),
-                text: d.text.clone(),
+                source_sha256: sha256_hex(d.text.as_bytes()),
+                text: if trims {
+                    d.text.trim_end().to_string()
+                } else {
+                    d.text.clone()
+                },
                 metadata: d.metadata.clone(),
             })
             .collect(),

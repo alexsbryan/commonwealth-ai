@@ -398,8 +398,45 @@ pub async fn check_knowledge_sentences(
     let limit = 20;
     let mut texts: BTreeMap<String, String> = BTreeMap::new();
     let (mut read_back, mut scorer, mut route) = (0usize, String::new(), String::new());
-    for doc in &lib.documents {
-        let scope = sha256_hex(doc.text.as_bytes());
+    // A text's name is the sha256 of the text the host stored, which need not
+    // be the fixture's bytes (the reference host's extractor trims a trailing
+    // newline). Each document's name is learned from its own record, whose
+    // `source.sha256` is the fixture text's (§3), as knowledge.scoped learns
+    // its target from the host.
+    let signatures = lib
+        .signatures
+        .values()
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let named: BTreeMap<String, String> = match hits(
+        host,
+        m,
+        &json!({"query": signatures, "corpora": [corpus], "limit": 20}),
+    )
+    .await
+    {
+        Ok(all) => all
+            .iter()
+            .filter_map(|h| h.document.as_ref())
+            .filter_map(|d| {
+                let doc = lib.documents.iter().find(|f| {
+                    d.source.sha256.as_deref() == Some(sha256_hex(f.text.as_bytes()).as_str())
+                })?;
+                Some((doc.name.clone(), d.text_sha256.clone()))
+            })
+            .collect(),
+        Err(e) => return fail(e),
+    };
+    if named.is_empty() {
+        return Check::skip(
+            id,
+            Level::Feature,
+            "could not judge: no hit named a fixture document's record, so no text could be scoped",
+        );
+    }
+    for doc in lib.documents.iter().filter(|d| named.contains_key(&d.name)) {
+        let scope = named[&doc.name].clone();
         let query = lib.signatures.get(&doc.name).map_or("", String::as_str);
         let body = json!({"query": query, "corpora": [corpus], "documents": [scope],
                           "limit": limit, "granularity": "sentence"});

@@ -332,6 +332,22 @@ async fn sentences(b: &Bench) -> Check {
     crate::search_checks::check_knowledge_sentences(&b.host, &b.manifest, &b.lib, &b.fixture).await
 }
 
+/// A host whose text names are its own (its extractor trims each text, as
+/// the reference host's does) is judged by those names, learned from each
+/// document's record. Failing input: the check scoping each search by the
+/// sha256 of the fixture's bytes, which such a host holds no text by, so
+/// every scoped search finds nothing (watched live: "`okafor2019`'s
+/// signature, scoped to its own text, found no sentence").
+#[tokio::test]
+async fn knowledge_sentences_scopes_by_the_host_s_own_text_names() {
+    let b = bench(Breaks {
+        trims_texts: true,
+        ..Breaks::default()
+    })
+    .await;
+    green(&sentences(&b).await);
+}
+
 /// v0.6 §2.11's three failing inputs, and the lawful refusal beside the
 /// third: a host whose `rerank` cannot run refuses by name, which the check
 /// cannot judge, and never passes.
