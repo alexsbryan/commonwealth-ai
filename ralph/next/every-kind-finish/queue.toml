@@ -1,0 +1,19 @@
+# every-kind-finish — the ontology-layer reader's code queue (operator 2026-10-15: finish the code
+# before any token spend). Frame: `sovereign session frames 5b0b2c65`.
+#
+#   nohup python3 scripts/ralph.py supervise --workdir . --queue every-kind-finish \
+#     -- python3 scripts/ralph.py run --workdir . --queue every-kind-finish --max-stall 3 \
+#     >> ralph/log-every-kind-finish.txt 2>&1 &
+#
+# Control files: ralph/next/every-kind-finish/ctl/{STOP,DONE,NEEDS_HUMAN.md}.
+label = "every-kind-finish"
+session_timeout = 7200
+audit_every = 6          # units; the last row is the audit, so none comes due
+worker_bin = "scripts/ralph-claude-shim.sh"
+settings = "ralph/claude-settings.json"
+
+[models]
+worker = "claude-opus-5"
+review = "claude-opus-5"
+resolve = "claude-opus-5"
+variant = "high"
