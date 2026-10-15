@@ -3783,6 +3783,7 @@ impl ModelSlot {
 
         let mut output = String::new();
         let mut decoder = encoding_rs::UTF_8.new_decoder();
+        let mut think = super::think_budget::ThinkBudget::new(request, &turn_opener);
         // Streaming bookkeeping. `finish_reason` defaults to Length —
         // the `while` condition exiting means max_tokens was hit; every
         // break overwrites it with the specific reason (same idiom as
@@ -3808,6 +3809,7 @@ impl ModelSlot {
         }
         if let Ok(piece) = model.token_to_piece(last_token, &mut decoder, true, None) {
             output.push_str(&piece);
+            think.observe(&piece);
             if let Some(s) = sink {
                 match s.send_piece(&piece) {
                     StreamSend::Sent => {}
@@ -3920,16 +3922,27 @@ impl ModelSlot {
             // exclusively here since on the MTP path we need the
             // full run length to make the threshold call.
             const MIN_FORCED_RUN_FOR_MTP: usize = 3;
-            let forced_peek: Vec<LlamaToken> =
-                if jump_fwd_enabled && jump_fwd_t2_enabled && n_generated < max_tokens {
-                    sampler.forced_next_run(MAX_FORCED_BYTES)
-                } else {
+            // A spent think block is closed by writing CLOSE as a forced
+            // run (think_budget.rs), so the model answers from what it has.
+            let think_close = think.due().then(|| {
+                tracing::info!(think_tokens = think.tokens(), think_budget = think.budget(), n_generated, "mtp: think budget spent, closing the think block");
+                model.str_to_token(super::think_budget::CLOSE, AddBos::Never).unwrap_or_else(|e| {
+                    tracing::warn!(error = %e, "mtp: the think close did not tokenize; the block runs on");
                     Vec::new()
-                };
+                })
+            });
+            let closing = think_close.is_some();
+            let forced_peek: Vec<LlamaToken> = if let Some(close) = think_close {
+                close
+            } else if jump_fwd_enabled && jump_fwd_t2_enabled && n_generated < max_tokens {
+                sampler.forced_next_run(MAX_FORCED_BYTES)
+            } else {
+                Vec::new()
+            };
             // Commit only when the run clears the threshold. Cap at
             // MAX_JUMP_FWD_RUN so the verify batch stays bounded.
             let mut forced_run: Vec<LlamaToken> = Vec::new();
-            if forced_peek.len() >= MIN_FORCED_RUN_FOR_MTP {
+            if closing || forced_peek.len() >= MIN_FORCED_RUN_FOR_MTP {
                 let cap = forced_peek.len().min(MAX_JUMP_FWD_RUN);
                 for &ftok in &forced_peek[..cap] {
                     if model.is_eog_token(ftok) {
@@ -3940,7 +3953,8 @@ impl ModelSlot {
                         .token_to_piece(ftok, &mut decoder, true, None)
                         .unwrap_or_default();
                     output.push_str(&piece);
-                    jump_fwd_bytes_n += piece.len();
+                    think.observe(&piece);
+                    jump_fwd_bytes_n += piece.len() * usize::from(!closing);
                     forced_run.push(ftok);
                     n_generated += 1;
                     if let Some(s) = sink {
@@ -3961,7 +3975,7 @@ impl ModelSlot {
                         break;
                     }
                 }
-                if !forced_run.is_empty() {
+                if !forced_run.is_empty() && !closing {
                     jump_fwd_runs += 1;
                     jump_fwd_n += forced_run.len();
                     if forced_run.len() > jump_fwd_max {
@@ -4035,6 +4049,7 @@ impl ModelSlot {
                         .token_to_piece(next_token, &mut decoder, true, None)
                         .unwrap_or_default();
                     output.push_str(&piece);
+                    think.observe(&piece);
                     if let Some(s) = sink {
                         match s.send_piece(&piece) {
                             StreamSend::Sent => {}
@@ -4185,6 +4200,7 @@ impl ModelSlot {
                     .token_to_piece(tok, &mut decoder, true, None)
                     .unwrap_or_default();
                 output.push_str(&piece);
+                think.observe(&piece);
                 n_generated += 1;
                 if let Some(s) = sink {
                     match s.send_piece(&piece) {
@@ -4215,6 +4231,7 @@ impl ModelSlot {
                 .token_to_piece(next_token, &mut decoder, true, None)
                 .unwrap_or_default();
             output.push_str(&piece);
+            think.observe(&piece);
             n_generated += 1;
             if let Some(s) = sink {
                 match s.send_piece(&piece) {
