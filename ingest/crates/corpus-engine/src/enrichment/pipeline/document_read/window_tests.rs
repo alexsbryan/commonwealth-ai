@@ -328,3 +328,91 @@ fn the_window_names_every_decided_type_a_statement_is_about_or_not() {
         "{shown}"
     );
 }
+
+/// Failing input, named: saltgrass-asked's window wrote `speaker: "p6"`, the
+/// label it gave a particular, and every such reading was unknown. A label of
+/// a particular of the reference's type reads as that particular's name; a
+/// label naming no particular, or one of another type, stays unknown.
+#[tokio::test]
+async fn a_window_ref_label_reads_as_its_particulars_name() {
+    let ontology: crate::enrichment::ontology::OntologyV1 = toml::from_str(
+        r#"
+[[types]]
+name = "case"
+kind = "entity"
+identity_criterion = "same issue number"
+identity = ["number"]
+
+[[types.attributes]]
+name = "number"
+type = "text"
+
+[[types]]
+name = "person"
+kind = "entity"
+
+[[types]]
+name = "firm"
+kind = "entity"
+
+[[types]]
+name = "remark"
+kind = "claim"
+force = "assertive"
+subject = "case"
+attributes = [{ name = "speaker", type = "ref", of = "person" }]
+"#,
+    )
+    .unwrap();
+    let policies = ontology.into_policies();
+    let chapter = input_chapter(&[
+        row(1, "doc-a", "Issue 42 is open, she said.", "{}"),
+        row(2, "doc-b", "Issue 42 is still open.", "{}"),
+        row(3, "doc-c", "Issue 42 stays open.", "{}"),
+    ]);
+    let remark = |document: &str, quote: &str, speaker: &str| {
+        json!({"kind": "remark", "about": "p1", "document": document, "quote": quote,
+               "fields": {"speaker": speaker}})
+    };
+    let answer = json!({
+        "particulars": [
+            {"ref": "p1", "type": "case", "name": "issue 42", "fields": {}},
+            {"ref": "p2", "type": "person", "name": "Mara Vell", "fields": {}},
+            {"ref": "p3", "type": "firm", "name": "Acme", "fields": {}}],
+        "claims": [
+            remark("d1", "Issue 42 is open, she said.", "p2"),
+            remark("d2", "Issue 42 is still open.", "p9"),
+            remark("d3", "Issue 42 stays open.", "p3")]});
+    let (infer, _) = scripted(vec![answer]);
+    let raw = read(&chapter, &policies, &Default::default(), &infer)
+        .await
+        .unwrap();
+    let mut extraction = parse_response(&raw, &policies)
+        .unwrap()
+        .section_extraction
+        .unwrap();
+    validate_and_stamp(&chapter, &policies, &mut extraction).unwrap();
+
+    let read = extraction.document_read.as_ref().unwrap();
+    let speakers: Vec<&DocumentReadField> = read
+        .documents
+        .iter()
+        .map(|d| &d.claims[0].fields["speaker"])
+        .collect();
+    let [named, none, firm] = speakers.as_slice() else {
+        panic!("{:?}", read.documents)
+    };
+    assert!(
+        matches!(named, DocumentReadField::Supported { value, evidence, .. }
+            if value == &json!("Mara Vell") && evidence == "Issue 42 is open, she said."),
+        "{named:?}"
+    );
+    assert!(
+        matches!(none, DocumentReadField::Unknown { reason } if reason.contains("\"p9\" is neither a person")),
+        "{none:?}"
+    );
+    assert!(
+        matches!(firm, DocumentReadField::Unknown { reason } if reason.contains("\"p3\" is neither a person")),
+        "{firm:?}"
+    );
+}

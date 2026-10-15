@@ -15,6 +15,7 @@ use tracing::{debug, trace};
 use super::super::pick::Candidate;
 use super::super::{DocumentReadOutcome, DocumentReadParticular};
 use super::{particular_fields, text, Contract};
+use crate::enrichment::atlas::SourceDocument;
 use crate::enrichment::ontology::{OntologyPolicies, TypeIndex};
 use crate::enrichment::pipeline::types::ChapterInput;
 
@@ -62,7 +63,8 @@ pub(super) fn unstated(
         };
         let document = &chapter.source_documents[k];
         let (outcome, named) = &mut outcomes[k];
-        let subject_fields = particular_fields(policies, index, subject, p, document, named);
+        let subject_fields =
+            particular_fields(policies, index, subject, p, document, named, particulars);
         trace!(document = %outcome.document_id, particular = %local, %name, %evidence, "document_read/window: an unstated particular sent as its own statement");
         outcome.particulars.push(DocumentReadParticular {
             subject_type: ty,
@@ -73,6 +75,29 @@ pub(super) fn unstated(
             words: None,
         });
     }
+}
+
+/// The name of the particular whose `ref` label is `words`, when it is an `of`
+/// (or `is_a` one) and has a name: the window prompt has the model label its
+/// particulars and refer to them by label (`window_prompt.md`).
+pub(super) fn label_name(
+    particulars: &[Value],
+    index: &TypeIndex<'_>,
+    of: &str,
+    words: &str,
+    document: &SourceDocument,
+) -> Option<String> {
+    let name = particulars
+        .iter()
+        .find(|p| text(&p["ref"]) == words)
+        .filter(|p| {
+            let ty = text(&p["type"]);
+            ty == of || index.is_a(&ty, of)
+        })
+        .map(|p| text(&p["name"]))
+        .filter(|name| !name.is_empty())?;
+    debug!(document = %document.key(), particular = %words, %name, "document_read/window: a ref label read as its particular's name");
+    Some(name)
 }
 
 /// The first line of `own` holding `cue`, case and whitespace aside.

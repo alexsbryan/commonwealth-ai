@@ -414,13 +414,16 @@ fn unknown(reason: impl Into<String>) -> DocumentReadField {
 
 /// One field's reading in `document`: `value` as the model wrote it, cited by
 /// `evidence` when that is in the document. A reference is a candidate the
-/// document's fields name, or words it holds; nothing else is supported.
+/// document's fields name, words it holds, or a `particulars` label read as
+/// its name, cited by `evidence` (`label_name`); nothing else is supported.
 fn reading(
     attr: &AttrDecl,
     value: Option<&Value>,
     evidence: Option<&str>,
     document: &SourceDocument,
     named: &[(String, Vec<Candidate>)],
+    particulars: &[Value],
+    index: &TypeIndex<'_>,
 ) -> DocumentReadField {
     let Some(value) = value.filter(|v| !v.is_null() && !text(v).is_empty()) else {
         return unknown("the window read states no value");
@@ -429,6 +432,9 @@ fn reading(
     let cited = evidence.filter(|e| field_evidence_exists(document, e));
     match &attr.family {
         AttrFamily::Ref { of } => {
+            let label = particulars::label_name(particulars, index, of, &words, document);
+            let cite = cited.filter(|_| label.is_some());
+            let words = label.unwrap_or(words);
             let wanted = fold_identity_value(&words);
             let candidate = named
                 .iter()
@@ -448,8 +454,8 @@ fn reading(
                     let (value, scalar) = c.answer();
                     supported(Value::String(value), &scalar)
                 }
-                None if field_evidence_exists(document, &words) => {
-                    supported(Value::String(words.clone()), &words)
+                None if cite.is_some() || field_evidence_exists(document, &words) => {
+                    supported(Value::String(words.clone()), cite.unwrap_or(&words))
                 }
                 None => unknown(format!(
                     "{words:?} is neither a {of} this document's fields name nor words it holds"
@@ -594,6 +600,7 @@ fn particular_fields(
     particular: &Value,
     document: &SourceDocument,
     named: &[(String, Vec<Candidate>)],
+    particulars: &[Value],
 ) -> std::collections::BTreeMap<String, DocumentReadField> {
     subject_attrs(policies, index, &subject.name)
         .into_iter()
@@ -606,7 +613,8 @@ fn particular_fields(
                 Value::Null => (None, None),
                 other => (Some(other), None),
             };
-            let mut r = reading(a, value, evidence.as_deref(), document, named);
+            let cite = evidence.as_deref();
+            let mut r = reading(a, value, cite, document, named, particulars, index);
             if matches!(r, DocumentReadField::Unknown { .. }) {
                 r = sourced_identity(subject, a, &particular["name"], index, named).unwrap_or(r);
             }
@@ -714,12 +722,21 @@ fn envelope(
                     Some(&quote),
                     document,
                     named,
+                    particulars,
+                    index,
                 );
                 (a.name.clone(), r)
             })
             .collect();
-        let subject_fields =
-            particular_fields(policies, index, subject, particular, document, named);
+        let subject_fields = particular_fields(
+            policies,
+            index,
+            subject,
+            particular,
+            document,
+            named,
+            particulars,
+        );
         let name = Some(text(&particular["name"]))
             .filter(|n| !n.is_empty())
             .unwrap_or_else(|| about.clone());

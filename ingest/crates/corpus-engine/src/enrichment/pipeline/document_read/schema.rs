@@ -18,7 +18,9 @@ use crate::enrichment::pipeline::types::{ChapterInput, ChatPrompt};
 /// so it is not reused.
 /// v7: a window read's statements and particulars carry their subject's name
 /// (`SUBJECT_NAME_ATTRIBUTE`); a v6 section lacks it, so it is not reused.
-const CONTRACT_VERSION: u32 = 7;
+/// v8: a window reference written as a particular's label reads as its name;
+/// a v7 section left it unknown, so it is not reused.
+const CONTRACT_VERSION: u32 = 8;
 
 /// The Phase-1 prompt of a declared reading: the plan this chapter will be read
 /// by, never dispatched. The passes reader asks its own small questions
