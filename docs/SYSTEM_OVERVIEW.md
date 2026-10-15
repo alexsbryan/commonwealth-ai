@@ -1094,7 +1094,9 @@ constant and the file and stops.
 declarative). `runtime/grounding/` is the production gate: per-claim fail-open
 accounting, a concurrent bounded claim fan-out, an audit pass with a plan and
 an outcome, a citation stage whose support decider is the gate's own judge,
-and a value-presence veto. Every fail-open exit names WHY at one site. Judges
+and a value-presence veto (a value that is a number is found by its value among
+a passage's numbers, `grounding::number_presence`, never by its word pieces;
+OICP verify's fast tier reads the same check). Every fail-open exit names WHY at one site. Judges
 run against ONE register, enforced by `cargo xtask judge-funnel-gate`, and a
 register change is priced in both directions or it is not judged. The
 forced-choice body itself is built in one place for every subsystem,
