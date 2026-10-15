@@ -30,7 +30,9 @@ use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::AppState;
 use tower::ServiceExt;
 
-use crate::common::concept_embedder::{sentences_indexed, state_with_concepts};
+use crate::common::concept_embedder::{
+    sentences_indexed, state_with_concepts, state_with_concepts_logged, AskedLog,
+};
 use crate::common::fixture_library::{install, Doc};
 
 const CLAIMS: &str =
@@ -349,4 +351,44 @@ async fn the_checker_judges_the_claim_without_its_citations() {
     assert_eq!(c.exact, kept, "{c:?}");
     assert!(!asked.is_empty(), "{kept} reached no checker: {c:?}");
     assert!(asked.iter().all(|a| a == kept), "asked as {asked:?}");
+}
+
+/// The same exposure one step earlier: sentence search embedded the claim
+/// with its citations, which can sink a backed claim under `verify_floor`.
+/// The test embedder scores by concept words so it cannot be sunk, but it
+/// records what it is asked: the search query is the claim less its
+/// citations and locators, the text the checker judges, and a figure in
+/// other parentheses is searched unchanged.
+#[tokio::test]
+async fn sentence_search_is_asked_the_claim_without_its_citations() {
+    let fx = fixture();
+    let tmp = tempfile::tempdir().unwrap();
+    let indexes = tmp.path().join("indexes");
+    std::fs::create_dir_all(&indexes).unwrap();
+    install(&indexes, &fx.shelf.corpus_id, &fx.shelf.documents, true).await;
+    let log = AskedLog::default();
+    let state = state_with_concepts_logged(indexes, Some(log.clone())).await;
+    sentences_indexed(&state, &fx.shelf.corpus_id).await;
+    let bare = "The port recorded 412 sailings in 2019.";
+    for unit in [
+        "The port recorded 412 sailings in 2019 (Okafor 2019).",
+        "The port recorded 412 sailings in 2019 [@okafor2019].",
+        "The port recorded 412 sailings in 2019 (p. 12).",
+        "The port recorded 412 sailings in 2019 [3].",
+    ] {
+        log.lock().unwrap().clear();
+        let (c, _, _) = verify_asking(&state, &fx, unit, "checker").await;
+        assert_eq!(c.exact, unit, "{c:?}");
+        let asked = log.lock().unwrap().clone();
+        assert!(asked.iter().any(|q| q == bare), "{unit} searched as {asked:?}");
+        assert!(
+            !asked.iter().any(|q| q.contains("2019 (") || q.contains("2019 [")),
+            "{unit} searched with its citation: {asked:?}"
+        );
+    }
+    let kept = "Late sailings rose to 7.5 percent of the total in 2020 (against 6.1 percent the year before).";
+    log.lock().unwrap().clear();
+    let (c, _, _) = verify_asking(&state, &fx, kept, "checker").await;
+    assert_eq!(c.exact, kept, "{c:?}");
+    assert!(log.lock().unwrap().iter().any(|q| q == kept), "{:?}", log.lock().unwrap());
 }

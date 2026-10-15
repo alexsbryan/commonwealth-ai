@@ -74,7 +74,11 @@ pub fn concepts(text: &str) -> Vec<f32> {
     v
 }
 
-pub struct Concepts;
+/// Every text an embedder was asked for, in order (test-only record).
+pub type AskedLog = Arc<std::sync::Mutex<Vec<String>>>;
+
+#[derive(Default)]
+pub struct Concepts(pub Option<AskedLog>);
 
 #[async_trait::async_trait]
 impl InferenceProvider for Concepts {
@@ -95,6 +99,9 @@ impl InferenceProvider for Concepts {
     }
 
     async fn embed(&self, text: &str) -> sovereign_core::error::Result<Vec<f32>> {
+        if let Some(log) = &self.0 {
+            log.lock().unwrap().push(text.to_string());
+        }
         Ok(concepts(text))
     }
 
@@ -110,7 +117,20 @@ impl InferenceProvider for Concepts {
 /// A host over the corpora installed under `indexes`, embedding by
 /// [`Concepts`] on its local inference.
 pub async fn state_with_concepts(indexes: std::path::PathBuf) -> AppState {
-    let embed: corpus_index::types::EmbedFn = Arc::new(|t: &str| {
+    state_with_concepts_logged(indexes, None).await
+}
+
+/// [`state_with_concepts`], every text either embedder is asked for pushed
+/// onto `log`.
+pub async fn state_with_concepts_logged(
+    indexes: std::path::PathBuf,
+    log: Option<AskedLog>,
+) -> AppState {
+    let seen = log.clone();
+    let embed: corpus_index::types::EmbedFn = Arc::new(move |t: &str| {
+        if let Some(log) = &seen {
+            log.lock().unwrap().push(t.to_string());
+        }
         let v = concepts(t);
         Box::pin(async move { Ok(v) })
     });
@@ -119,7 +139,7 @@ pub async fn state_with_concepts(indexes: std::path::PathBuf) -> AppState {
         NodeId::from_u128(1),
         Some(Arc::new(engine)),
         sovereign_daemon::state::serving::ServingSeed {
-            local_inference: Some(ProviderService::new(Arc::new(Concepts))),
+            local_inference: Some(ProviderService::new(Arc::new(Concepts(log)))),
         },
     )
 }

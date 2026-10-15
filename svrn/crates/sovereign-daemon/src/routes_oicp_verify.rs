@@ -131,10 +131,10 @@ struct Retrieval<'a> {
 
 impl Retrieval<'_> {
     /// The claim's sentences, best first, or why sentence search refused.
-    async fn sentences(&self, claim: &str) -> Result<Vec<Passage>, String> {
+    async fn sentences(&self, asked: &str) -> Result<Vec<Passage>, String> {
         let request = KnowledgeSearchRequest {
             query_embedding: Vec::new(),
-            query_text: claim.to_string(),
+            query_text: asked.to_string(),
             corpora: Some(self.corpora.clone()),
             limit: Some(CANDIDATES_K as u32),
             documents: Vec::new(),
@@ -461,7 +461,17 @@ async fn judge_claim(
         Ok(r) => r,
         Err(why) => return Ok(Judged::could_not(specifics, RUNG_SEARCH, why.clone())),
     };
-    let found = match retrieval.sentences(claim).await {
+    // One cut, read by the search and the checker alike; the specifics, the
+    // contradiction check and the wire span stay on the unit's own text.
+    let (asked, cut) = without_citations(claim);
+    if cut > 0 {
+        tracing::debug!(
+            %claim,
+            citations = cut,
+            "oicp verify: citations and locators removed from what is searched and judged"
+        );
+    }
+    let found = match retrieval.sentences(&asked).await {
         Ok(found) => found,
         Err(why) => {
             tracing::info!(%claim, %why, "oicp verify: sentence search refused; could not judge");
@@ -529,7 +539,7 @@ async fn judge_claim(
                 ));
             };
             candidates.truncate(CHECKER_PASSAGES);
-            let mut judged = judge_with_checker(claim, specifics, candidates, inference).await?;
+            let mut judged = judge_with_checker(&asked, specifics, candidates, inference).await?;
             judged.tally = Some(tally);
             judged
         }
@@ -542,22 +552,14 @@ async fn judge_claim(
 /// A candidate it does not back that states one of the claim's specifics
 /// otherwise is `contradicted`; the claim is `supported` on any support, else
 /// `contradicted` on any contradiction, else `unsupported` with its
-/// candidates, nearest first. The judge reads the claim less its citations
-/// and locators; the claim's specifics and wire span stay the unit's.
+/// candidates, nearest first. `asked` is the claim less its citations
+/// and locators, cut once by the caller; the claim's specifics and wire span stay the unit's.
 async fn judge_with_checker(
-    claim: &str,
+    asked: &str,
     specifics: Vec<Specific>,
     shown: Vec<Passage>,
     inference: &Arc<dyn InferenceProvider>,
 ) -> Result<Judged, Shed> {
-    let (asked, cut) = without_citations(claim);
-    if cut > 0 {
-        tracing::debug!(
-            %claim,
-            citations = cut,
-            "oicp verify: citations and locators removed from what the checker judges"
-        );
-    }
     let mut evidence = Vec::new();
     let mut best: Option<f64> = None;
     let mut answered = 0usize;
@@ -565,7 +567,7 @@ async fn judge_with_checker(
         let support = match claim_chunk_support_checked(
             inference,
             &p.span.exact,
-            &asked,
+            asked,
             ShardingPrivacy::LocalOnly,
         )
         .await
@@ -604,7 +606,7 @@ async fn judge_with_checker(
             ),
         };
         tracing::debug!(
-            %claim,
+            claim = %asked,
             sentence = %p.span.exact,
             score = p.score,
             support,
@@ -639,7 +641,7 @@ async fn judge_with_checker(
         },
     };
     tracing::debug!(
-        %claim,
+        claim = %asked,
         judged = evidence.len(),
         answered,
         best,
