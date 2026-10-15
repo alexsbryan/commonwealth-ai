@@ -920,13 +920,21 @@ struct ChatMessage {
     /// responses reached every caller as an EMPTY completion and the loop that
     /// asked for the tool saw no call at all — silently, since the empty string
     /// is a valid answer. [`ChatMessage::as_text`] is where the two shapes
-    /// become one.
-    #[serde(default)]
+    /// become one. An explicit `null` (MiMo's API) is no calls, like absence.
+    #[serde(default, deserialize_with = "null_as_empty")]
     tool_calls: Vec<WireToolCall>,
     /// The thinking, which llama-server's default reasoning format moves out
     /// of `content`. [`ChatMessage::answer`] writes it back inline.
     #[serde(default)]
     reasoning_content: Option<String>,
+}
+
+fn null_as_empty<'de, D, T>(d: D) -> std::result::Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Ok(Option::<Vec<T>>::deserialize(d)?.unwrap_or_default())
 }
 
 #[derive(Deserialize)]
@@ -1980,6 +1988,19 @@ mod tests {
         };
         assert_eq!(v["name"], "knowledge_lookup");
         assert_eq!(v["arguments"]["query"], "mesh retry policy");
+    }
+
+    /// MiMo's API sends `"tool_calls": null`; before this it failed to parse
+    /// ("invalid type: null, expected a sequence") and every call errored.
+    #[test]
+    fn a_null_tool_calls_is_no_calls() {
+        let body = r#"{"choices":[{"index":0,"message":{"role":"assistant",
+            "content":"ok","tool_calls":null},"finish_reason":"stop"}]}"#;
+        let parsed: ChatCompletionResponse = serde_json::from_str(body).unwrap();
+        assert_eq!(
+            parsed.choices.first().map(|c| c.message.as_text()).unwrap(),
+            "ok"
+        );
     }
 
     #[test]
