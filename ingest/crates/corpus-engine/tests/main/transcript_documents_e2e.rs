@@ -95,9 +95,17 @@ async fn a_declared_transcript_is_stored_as_its_words_with_its_turns_kept_beside
             .at(at)
     };
 
-    let interview = index.text(&read("harbour-interview")).await.unwrap().unwrap();
+    let interview = index
+        .text(&read("harbour-interview"))
+        .await
+        .unwrap()
+        .unwrap();
     assert!(!interview.text.contains("00:00:04"), "{}", interview.text);
-    assert!(!interview.text.contains("Interviewer"), "{}", interview.text);
+    assert!(
+        !interview.text.contains("Interviewer"),
+        "{}",
+        interview.text
+    );
     let locators = interview.locators.as_deref().expect("locators kept");
     for (quote, ms, speaker) in [
         ("The ferry has run late", 4000, Some("HARBOUR MASTER")),
@@ -123,7 +131,11 @@ async fn a_declared_transcript_is_stored_as_its_words_with_its_turns_kept_beside
     let quay = index.text(&read("quay-recording")).await.unwrap().unwrap();
     assert!(!quay.text.contains("segments"), "{}", quay.text);
     assert_eq!(
-        locator_of(&quay.text, quay.locators.as_deref().unwrap(), "Nobody on the quay"),
+        locator_of(
+            &quay.text,
+            quay.locators.as_deref().unwrap(),
+            "Nobody on the quay"
+        ),
         Some(SpanLocator::Timestamp {
             milliseconds: 3500,
             speaker: None
@@ -139,6 +151,7 @@ async fn a_declared_transcript_is_stored_as_its_words_with_its_turns_kept_beside
 
 #[test]
 fn a_format_outside_the_closed_set_is_a_recipe_that_does_not_load() {
-    let bad = recipe(&[("x".into(), "y".into())]).replace("transcript\"\ntext", "subtitles\"\ntext");
+    let bad =
+        recipe(&[("x".into(), "y".into())]).replace("transcript\"\ntext", "subtitles\"\ntext");
     assert!(corpus_engine::recipe::Recipe::from_toml(&bad).is_err());
 }

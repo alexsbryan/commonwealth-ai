@@ -115,16 +115,14 @@ mod corpus_read_port_parity;
 mod daemon_port_parity;
 #[path = "main/document_outcomes_e2e.rs"]
 mod document_outcomes_e2e;
+#[path = "main/heading_paths_e2e.rs"]
+mod heading_paths_e2e;
 #[path = "main/install_lifecycle_port_parity.rs"]
 mod install_lifecycle_port_parity;
 #[path = "main/local_corpus_port_parity.rs"]
 mod local_corpus_port_parity;
 #[path = "main/recipe_install_port.rs"]
 mod recipe_install_port;
-#[path = "main/transcript_documents_e2e.rs"]
-mod transcript_documents_e2e;
-#[path = "main/heading_paths_e2e.rs"]
-mod heading_paths_e2e;
 #[path = "main/source_tree.rs"]
 mod source_tree;
 #[path = "main/svrn_recipe_shapes.rs"]
@@ -133,6 +131,8 @@ mod svrn_recipe_shapes;
 mod text_store_e2e;
 #[path = "main/tiered_entity_extractor_seam.rs"]
 mod tiered_entity_extractor_seam;
+#[path = "main/transcript_documents_e2e.rs"]
+mod transcript_documents_e2e;
 #[path = "main/watcher_e2e.rs"]
 mod watcher_e2e;
 #[path = "main/wiki_snapshot_roundtrip.rs"]

@@ -618,7 +618,9 @@ mod tests {
             documents: vec![rec("notes", 0)],
         };
         let at = |s: &StoredText, body: &str| span_of(s, "c", None, body, None, 4);
-        let s = located(Some(r#"[{"at":0,"locator":{"kind":"timestamp","milliseconds":4000,"speaker":"HARBOUR MASTER"}},{"at":20,"locator":{"kind":"timestamp","milliseconds":11000}}]"#));
+        let s = located(Some(
+            r#"[{"at":0,"locator":{"kind":"timestamp","milliseconds":4000,"speaker":"HARBOUR MASTER"}},{"at":20,"locator":{"kind":"timestamp","milliseconds":11000}}]"#,
+        ));
         assert_eq!(
             at(&s, "The ferry ran late.").unwrap().locator,
             Some(SpanLocator::Timestamp {
