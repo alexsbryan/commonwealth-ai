@@ -1,0 +1,73 @@
+# The GVC probe recipe of particulars-prereg.md (H1, H2, H3), written before the probe read any document.
+# The decided type is the whole occurrence a report is about; the happenings of the existing recipe
+# (cdcr/recipe-gvc-e2e.toml) are its parts, declared here as a reference to their whole until part-of
+# exists. Stated without a word of the domain, as the existing recipe is.
+
+[corpus]
+id = "cdcr-gvc-incident"
+name = "Gun Violence Corpus (GVC), read for the occurrences its reports are about"
+description = "particulars-prereg.md: the occurrence as the decided type, its happenings as parts."
+license = "CC-BY-4.0"
+schema_version = 1
+mesh_sharing = false
+
+[acquire]
+type = "local_file"
+path = "~/.svrnmesh/bench-corpora/gvc/raw/documents.jsonl"
+
+[extract]
+type = "jsonl"
+content_field = "body"
+title_field = "title"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 0
+
+[index]
+fts = true
+vector = false
+
+[enrichment]
+enabled = true
+type = "atlas"
+
+[enrichment.ontology]
+version = 1
+
+[[enrichment.ontology.types]]
+name = "incident"
+kind = "event"
+description = "one occurrence at one place and time, with the people it involved, together with the acts and outcomes that were part of it"
+identity_criterion = "Two mentions are one incident when they refer to the same real-world occurrence: the same place and time and the same people involved, however differently it is worded and whoever reports it. Two occurrences of the same kind at different places or times, or involving different people, are different incidents."
+attributes = [
+  { name = "place", type = "text", description = "where it happened" },
+  { name = "time", type = "time", description = "when it happened" },
+  { name = "people", type = "text", description = "the people it involved, by name or description" },
+]
+
+[[enrichment.ontology.types]]
+name = "happening"
+kind = "event"
+description = "something that happens within an incident: an action, an occurrence, or a change of state"
+identity_criterion = "Two mentions are one happening when they refer to the same act or change within the same incident, by or to the same participants, however differently it is worded."
+attributes = [
+  { name = "within", type = "ref", of = "incident", description = "the incident it is part of" },
+  { name = "kind", type = "text", values = [
+    "the firing of a gun: shots fired, a gun going off",
+    "a person being hit by a bullet",
+    "a wound, an injury, or a person's medical condition after being hurt",
+    "a death or a killing",
+  ] },
+]
+
+[[enrichment.ontology.types]]
+name = "report"
+kind = "claim"
+description = "a statement that a happening took place: that someone fired, was hit, was hurt or died"
+force = "assertive"
+subject = "happening"
+
+[enrichment.ontology.change]
+document = { date = "created_at", id = "id" }

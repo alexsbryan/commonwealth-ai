@@ -1111,6 +1111,8 @@ flags = [
   { name = "--depth", takes_value = true },
   { name = "--callers" },
   { name = "--json" },
+  { name = "--typed", takes_value = true },
+  { name = "--typed-file", takes_value = true },
 ]
 [[command]]
 path = "enrich schema-report"
@@ -2719,13 +2721,16 @@ experience = "knowledge-corpora"
 tier = 3
 doc = "svrn/docs/ENRICH_A_CORPUS.md#records-from-a-declaration"
 # D1 of campaign ontology-layer: the same default commands give typed records
-# on any system. The fixture is a mail-shaped recipe in a neutral domain
-# (ingest/crates/sovereign-enrichment-build/tests/fixtures/layer/mail/): sourced
-# people and companies, one type RESOLVE decides (`order`, an identity_criterion
-# and no source), one claim kind about it, `change.document` stamps, and a
+# on any system. The fixture is a raw mailbox in a neutral domain
+# (ingest/crates/sovereign-enrichment-build/tests/fixtures/layer/mailraw/: six
+# RFC 5322 messages read by the mail extractor; its recipe tells the story and
+# the answers a reader gives): sourced people and companies, one type RESOLVE
+# decides (`order`), one claim kind about it, `change.document` stamps, and a
 # protocol fold. No step names a phase or a reader: until 2026-10-09 the bare
 # resolve ran 3a alone and wrote no claims, so the layer was reachable only
-# through `--phase all`.
+# through `--phase all`. The last steps ask the delivery journey's three
+# questions of the records with the live model's reads (slice 1, 2026-10-12):
+# each expected fragment is the fixture's own fact, written before any run.
 [[journey.step]]
 run = "corpus install {layer_recipe} --wait"
 mutates = true
@@ -2759,6 +2764,42 @@ records and the protocol fold ran. `--phase 3a` prints none of it (watched \
 [journey.step.expect]
 exit = 0
 stdout_contains = "derived order.stage (AfterResolve)"
+[[journey.step]]
+run = "enrich atlas-query {layer_corpus} --typed-file {layer_q1} --json"
+note = "Which orders is birchhall.example the client of: the note names Birch Hall Trust before its mail, so this holds only if that mention is the seeded record."
+[journey.step.expect]
+exit = 0
+stdout_contains = "\"key\": \"birchhall.example\""
+[[journey.step]]
+run = "enrich atlas-query {layer_corpus} --typed-file {layer_q1} --json"
+note = "One order: the request, the quote, the confirmation and the new price are one piece of work for one customer. Red at c8a31329a: RESOLVE answered none (0.84) when 03's quote was offered the request's record, so 02 and 03-06 are two orders."
+[journey.step.expect]
+exit = 0
+stdout_contains = "\"matched\": 1"
+[[journey.step]]
+run = "enrich atlas-query {layer_corpus} --typed-file {layer_q1} --json"
+note = "Its stage is confirmed (05's \"please go ahead\")."
+[journey.step.expect]
+exit = 0
+stdout_contains = "\"stage\": \"confirmed\""
+[[journey.step]]
+run = "enrich atlas-query {layer_corpus} --typed-file {layer_q1} --json"
+note = "Its price is a conflict between 2,400 (03, 05) and 2,250 (06), shown as itself with each reading cited, never a value."
+[journey.step.expect]
+exit = 0
+stdout_contains = "\"outcome\": \"conflict\""
+[[journey.step]]
+run = "enrich atlas-query {layer_corpus} --typed-file {layer_q2} --json"
+note = "The confirmed order, its stage cited to the words that confirmed it."
+[journey.step.expect]
+exit = 0
+stdout_contains = "please go ahead with the six oak chairs"
+[[journey.step]]
+run = "enrich atlas-query {layer_corpus} --typed-file {layer_q3} --json"
+note = "Exactly one company is any order's client: birchhall.example, no company a mention opened."
+[journey.step.expect]
+exit = 0
+stdout_contains = "\"matched\": 1"
 
 [[journey]]
 id = "meshapp-author"

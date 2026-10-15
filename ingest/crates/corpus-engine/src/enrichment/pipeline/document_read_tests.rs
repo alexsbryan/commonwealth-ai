@@ -83,7 +83,12 @@ pub(super) fn scripted(
             })
         },
     );
-    (f, seen)
+    // A wave is answered question by question, in order, as a port that
+    // cannot batch answers one (`resolve_records::one_by_one`).
+    (
+        crate::enrichment::atlas::resolve_records::one_by_one(f),
+        seen,
+    )
 }
 
 pub(super) fn row(
@@ -161,7 +166,7 @@ fn passes_model(
     calls: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     prompts: std::sync::Arc<std::sync::Mutex<Vec<crate::enrichment::pipeline::types::ChatPrompt>>>,
 ) -> crate::types::InferenceFn {
-    std::sync::Arc::new(move |prompt, _| {
+    crate::enrichment::atlas::resolve_records::one_by_one(std::sync::Arc::new(move |prompt, _| {
         calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         prompts.lock().unwrap().push(prompt.clone());
         let labels: Vec<String> = prompt.response_schema.as_ref().unwrap()["enum"]
@@ -192,7 +197,7 @@ fn passes_model(
             .collect();
         let answer = Value::Object(dist).to_string();
         Box::pin(async move { Ok(answer) })
-    })
+    }))
 }
 
 fn counted(
@@ -270,7 +275,7 @@ async fn the_passes_reader_reads_a_section_under_the_body_word_floor() {
         .await
         .unwrap();
     assert!(result.failures.is_empty(), "{:?}", result.failures);
-    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 4);
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 7);
 }
 
 #[tokio::test]
@@ -302,9 +307,10 @@ async fn production_phase1_uses_the_mock_provider_with_actual_document_context()
         .await
         .unwrap();
 
-    // One Locate per line, then per field the located kind and its subject
-    // declare: `number` (open) pointed at, start and end; `project` chosen.
-    assert_eq!(calls.load(Ordering::SeqCst), 4);
+    // One Locate per line; About: one case, first named on line 1, its
+    // words pointed at, start and end ("Issue"); then the case's fields, at
+    // those words: `number` (open) pointed at among one word, `project` chosen.
+    assert_eq!(calls.load(Ordering::SeqCst), 7);
     assert!(result.output.questions_by_chapter[0].questions.is_empty());
     let read = result.output.questions_by_chapter[0]
         .section_extraction
@@ -333,7 +339,10 @@ async fn production_phase1_uses_the_mock_provider_with_actual_document_context()
         phases,
         [
             "document_passes_locate",
-            "document_passes_point",
+            "document_passes_about",
+            "document_passes_about",
+            "document_passes_about",
+            "document_passes_about",
             "document_passes_point",
             "document_passes_choose"
         ]

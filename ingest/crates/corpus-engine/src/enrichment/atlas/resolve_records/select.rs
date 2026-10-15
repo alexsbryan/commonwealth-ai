@@ -6,11 +6,15 @@
 //! of this document opened is a candidate for the ones after it, so grouping
 //! within a document needs no second question.
 //!
-//! Ring 0 of the identity plan (`research/ontology-apps/resolve-prereg.md`):
-//! unmeasured, the most probable label decides, so the information the choice
-//! carries can be measured. Measured, its argmax is one source the decider
-//! weighs with the rest (Ring 2, `weigh.rs`); the full distribution is kept on
-//! every outcome.
+//! The model is asked whenever a record is offered, and its most probable
+//! label decides: a record it picks over every other and over none
+//! (`Decision::Chosen`), or none, which opens one. The sources `weigh.rs`
+//! weighs at their corpus-estimated weights are kept beside the choice, never
+//! over it: a statement no candidate was offered for is the only one they
+//! decide. Operator delivery review, 2026-10-12: on Ward the weighed decider
+//! overrode 36 of the model's 39 picks of an offered company and linked 42
+//! statements no model was asked about, so it earns no authority it has not
+//! shown in the workflow. The full distribution is kept on every outcome.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::Instant;
@@ -70,6 +74,58 @@ pub(super) fn necessary_compatible(
     left: &BTreeMap<String, BTreeSet<String>>,
     right: &BTreeMap<String, BTreeSet<String>>,
 ) -> bool {
+    values_compatible(criterion, left, right)
+        && chapters_compatible(
+            left.get(super::CHAPTER_SUBJECT_KEY),
+            right.get(super::CHAPTER_SUBJECT_KEY),
+        )
+}
+
+/// What forbids a record a question offers or a forced choice joins: a
+/// differing declared necessary value, or the record being wholly another
+/// particular of the asked statement's own window (`read_apart`). A record
+/// that holds another reference of that window AND another window's is
+/// offered, marked (`question`), and the model decides: the window reader's
+/// distinction meets another window's reading there, and as a veto it made a
+/// reader's in-window split permanent (world-s1 coyoteville-d1, 2026-10-14).
+/// Code's own joins, by key or field, keep `necessary_compatible`.
+pub(super) fn offerable(
+    criterion: &Criterion,
+    left: &BTreeMap<String, BTreeSet<String>>,
+    right: &BTreeMap<String, BTreeSet<String>>,
+) -> bool {
+    values_compatible(criterion, left, right)
+        && !read_apart(
+            left.get(super::CHAPTER_SUBJECT_KEY),
+            right.get(super::CHAPTER_SUBJECT_KEY),
+        )
+}
+
+/// The record is wholly other particulars of the statement's own window, as
+/// that window's one reading gave them: a distinction made first-hand, with
+/// the whole window in view, which no later question overturns. Measured
+/// 2026-10-14 (arm chapter-shown): asked to override it, RESOLVE joined
+/// rightly 4 times and wrongly 5 (Ward's three TEP master agreements folded
+/// into one), against 31 to 4 where the record also held another window's.
+pub(super) fn read_apart(
+    left: Option<&BTreeSet<String>>,
+    right: Option<&BTreeSet<String>>,
+) -> bool {
+    let (Some(left), Some(right)) = (left, right) else {
+        return false;
+    };
+    let chapter = |s: &str| s.split_once('/').map_or(s, |(c, _)| c).to_string();
+    let mine: BTreeSet<String> = left.iter().map(|a| chapter(a)).collect();
+    !chapters_compatible(Some(left), Some(right))
+        && right.iter().all(|b| mine.contains(&chapter(b)))
+}
+
+/// The declared necessary values alone.
+pub(super) fn values_compatible(
+    criterion: &Criterion,
+    left: &BTreeMap<String, BTreeSet<String>>,
+    right: &BTreeMap<String, BTreeSet<String>>,
+) -> bool {
     criterion.necessary.iter().all(|attr| {
         let Some(left) = left.get(&attr.name).filter(|values| !values.is_empty()) else {
             return true;
@@ -79,6 +135,24 @@ pub(super) fn necessary_compatible(
         };
         left.len() == 1 && right.len() == 1 && left.first() == right.first()
     })
+}
+
+/// Two references one window's reader gave are two particulars as it read
+/// them: a statement never joins a record holding another reference of its
+/// chapter. References of other chapters say nothing here.
+pub(super) fn chapters_compatible(
+    left: Option<&BTreeSet<String>>,
+    right: Option<&BTreeSet<String>>,
+) -> bool {
+    let (Some(left), Some(right)) = (left, right) else {
+        return true;
+    };
+    let chapter = |s: &str| {
+        s.split_once('/')
+            .map_or(s.to_string(), |(c, _)| c.to_string())
+    };
+    left.iter()
+        .all(|a| right.iter().all(|b| a == b || chapter(a) != chapter(b)))
 }
 
 /// Prior records matching a statement's declared sufficient keys.
@@ -197,9 +271,10 @@ pub(super) fn gate_plans(
     for (j, mut plan) in decided.into_iter().enumerate() {
         let i = asked[j];
         let target = match &plan {
-            Plan::Key { record, .. } | Plan::Join { record, .. } | Plan::Weighed { record, .. } => {
-                Some(*record)
-            }
+            Plan::Key { record, .. }
+            | Plan::Join { record, .. }
+            | Plan::Weighed { record, .. }
+            | Plan::Chosen { record, .. } => Some(*record),
             Plan::Open { .. } | Plan::Held(_) | Plan::Refuse(_) => None,
         };
         if let Some(record) = target {
@@ -208,7 +283,15 @@ pub(super) fn gate_plans(
             } else {
                 &records[record].fields
             };
-            if !necessary_compatible(criterion, &supplied[i], held) {
+            // A forced choice's question showed the reader's other reference
+            // (`question`), so only declared values gate it; a partition
+            // answerer is shown no such mark and keeps the window's references.
+            let compatible = if reads_weighed {
+                offerable(criterion, &supplied[i], held)
+            } else {
+                necessary_compatible(criterion, &supplied[i], held)
+            };
+            if !compatible {
                 *vetoed += 1;
                 debug!(
                     document,
@@ -329,9 +412,10 @@ impl Candidate<'_> {
 /// Where an earlier asked statement's plan put it; `None` when held or refused.
 fn alt_of(plan: &Plan) -> Option<Alt> {
     match plan {
-        Plan::Key { record, .. } | Plan::Join { record, .. } | Plan::Weighed { record, .. } => {
-            Some(Alt::Record(*record))
-        }
+        Plan::Key { record, .. }
+        | Plan::Join { record, .. }
+        | Plan::Weighed { record, .. }
+        | Plan::Chosen { record, .. } => Some(Alt::Record(*record)),
         Plan::Open { group, .. } => Some(Alt::Opened(*group)),
         Plan::Held(_) | Plan::Refuse(_) => None,
     }
@@ -418,7 +502,7 @@ pub(super) async fn choose(
             continue;
         }
         let compatible = |a: Alt| match a {
-            Alt::Record(r) => necessary_compatible(criterion, &w.supplied[j], &records[r].supplied),
+            Alt::Record(r) => offerable(criterion, &w.supplied[j], &records[r].supplied),
             Alt::Opened(g) => necessary_compatible(criterion, &w.supplied[j], &w.supplied[g]),
         };
         let mut candidates: Vec<Candidate> = opened.iter().map(|&g| Candidate::Opened(g)).collect();
@@ -486,9 +570,11 @@ pub(super) async fn choose(
         let raised = |comps: &[Comparison]| -> Vec<bool> {
             comps.iter().map(|c| estimate.supports(c)).collect()
         };
-        let before = weigh(&evidence(&comps), &raised(&comps), prior, criterion.bar);
         let mut choice: Option<Choice> = None;
-        if !matches!(before.zone, Zone::Link(..)) && !candidates.is_empty() {
+        // The model is asked whenever a record is offered, so no statement
+        // links on fitted weights alone; what it picks is `picked`.
+        let mut picked: Option<Option<Alt>> = None;
+        if !candidates.is_empty() {
             let Some(same_when) = criterion.same_when.as_deref() else {
                 plans.push(Plan::Refuse(Refusal::NoCriterion));
                 choices.push(None);
@@ -566,22 +652,39 @@ pub(super) async fn choose(
             for (k, c) in comps.iter_mut().enumerate().take(candidates.len()) {
                 c.insert(model_source.into(), best == Some(alts[k]));
             }
+            picked = Some(best);
         }
         let weighed = weigh(&evidence(&comps), &raised(&comps), prior, criterion.bar);
-        tally(
-            &mut carried,
-            &comps,
-            estimate,
-            prior,
-            criterion.bar,
-            weighed.zone,
-        );
+        // The model's forced choice decides an asked statement, its pick or
+        // none (operator delivery review, 2026-10-12: fitted weights are not
+        // an authority; on Ward they overrode 36 of the model's 39 picks of an
+        // offered company). The weighed posterior is kept beside it.
+        let zone = match picked {
+            Some(Some(alt)) => {
+                let at = alts
+                    .iter()
+                    .position(|&a| a == alt)
+                    .expect("the model picks among the alternatives it was shown");
+                Zone::Link(at, weighed.posterior[at])
+            }
+            Some(None) => Zone::NoLink,
+            None => weighed.zone,
+        };
+        tally(&mut carried, &comps, estimate, prior, criterion.bar, zone);
         // Each alternative by its record id beside its comparison, so the
         // estimate can be read against gold pair by pair (layer-estimator).
         let named: Vec<String> = alts.iter().map(|&a| id_of(a)).collect();
         debug!(document = doc.id, statement = %statements[i].id, alternatives = ?named, comparisons = ?comps, zone = ?weighed.zone, "atlas/resolve: the sources weighed");
-        let decided = match weighed.zone {
+        if picked.is_some() {
+            debug!(document = doc.id, statement = %statements[i].id, decided = ?zone, weighed = ?weighed.zone, "atlas/resolve: the model's choice decides; the weighed zone is kept beside it");
+        }
+        let decided = match zone {
             Zone::Link(at, posterior) => match alts[at] {
+                Alt::Record(record) if picked.is_some() => Plan::Chosen {
+                    record,
+                    posterior,
+                    votes: fields::votes_for(&comps[at], &records[record].id, estimate),
+                },
                 Alt::Record(record) => Plan::Weighed {
                     record,
                     posterior,
@@ -655,24 +758,46 @@ pub(super) fn question(
         },
         doc.body
     ));
+    let mut offered = Vec::with_capacity(candidates.len());
+    let mine: Option<BTreeSet<String>> = s
+        .keys
+        .get(super::CHAPTER_SUBJECT_KEY)
+        .map(|v| BTreeSet::from([v.clone()]));
     for (c, label) in candidates.iter().zip(LABELS) {
         let line = match *c {
-            Candidate::Record(r, p) => describe(&records[r], &reasons(p), doc.id),
+            Candidate::Record(r, p) => {
+                let mut why = reasons(p);
+                if !chapters_compatible(
+                    mine.as_ref(),
+                    records[r].supplied.get(super::CHAPTER_SUBJECT_KEY),
+                ) {
+                    why.push_str(
+                        "; the window's reader read this record's particular as another than this statement's",
+                    );
+                }
+                describe(&records[r], &why, doc.id)
+            }
             Candidate::Opened(g) => {
                 let o = &statements[asked[g]];
                 // Asked spans were checked readable in `resolve_document`.
                 describe_opened(
                     &doc.body[o.start..o.end],
                     &context(doc.body, o.start, o.end),
+                    &o.described.render(),
                 )
             }
         };
         u.push_str(&format!("{label} {line}"));
+        offered.push(format!("{label} {}", line.trim_end()));
     }
-    u.push_str(&format!(
-        "\nStatement, its words in [[ ]]: \"…{}…\"\n\n",
-        marked_context(doc.body, s.start, s.end)
-    ));
+    let shown = marked_context(doc.body, s.start, s.end);
+    let read_as = s.described.render();
+    debug!(document = doc.id, statement = %s.id, offered = ?offered, shown = %shown, read_as = %read_as, "atlas/resolve: the records a question offers");
+    u.push_str(&format!("\nStatement, its words in [[ ]]: \"…{shown}…\"\n"));
+    if !read_as.is_empty() {
+        u.push_str(&format!("Its reader read what it is about as: {read_as}\n"));
+    }
+    u.push('\n');
     match ask {
         Ask::Reason => {
             u.push_str(&format!("Which record is the statement about? Reason it through under the rule, then end with its letter, or {NONE} if none of them."));
@@ -720,11 +845,14 @@ pub(super) async fn reason_call(
     let ms = started.elapsed().as_millis() as u64;
     match out {
         Ok(text) if !text.trim().is_empty() => {
+            // The reasoning itself, escaped onto one line: why a statement was
+            // joined or opened is read from it, not inferred from the choice.
             debug!(
                 document,
                 statement,
                 ms,
                 chars = text.len(),
+                reasoning = ?text,
                 "atlas/resolve: reasoning call"
             );
             Ok(text)

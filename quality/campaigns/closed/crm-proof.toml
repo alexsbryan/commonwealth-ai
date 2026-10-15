@@ -6,7 +6,15 @@ id        = "crm-proof"
 objective = "A small business gets people, companies, contacts' accounts, deals, stages and commitments from its mailbox as typed records with citations, read directly from the atlas, at a cost that fits a 50k-message mailbox in a day of GPU. Re-scoped 2026-10-05 (operator): this campaign is the first CHECK of the ontology and extraction layer (svrn/docs/specs/ONTOLOGY_METHOD.md), beside uv-support (research/ontology-apps/support/GOLD_SPEC.md); the layer is the job, the mailbox an example"
 spec      = "svrn-docs ontology-apps/README.md (The story; Where it converges: one gold set); research/ontology-apps/ward/GOLD_SPEC.md (the gold)"
 declared  = "2026-10-03"
-status    = "active"
+status    = "closed"
+# ── CLOSED 2026-10-10, SUPERSEDED ───────────────────────────────────────────
+#
+# Superseded on 2026-10-09 by ontology-layer (quality/campaigns/closed/ontology-layer.toml), which kept these
+# bars as lagging checks and closes the same day with its objective not met. Their last rows stand (2026-10-08,
+# Ward holdout through the production interface): people .801, companies .769, contacts .578, deals .232,
+# stage 0, commitments .125, cost 17.86 s per message, each read met-floor, none at target. They were not
+# re-measured at close: a held-out fold is opened once per adopted design, and no design was adopted for it
+# after 10-08. The layer's final reading, on the tune folds, is research/ontology-apps/CLOSING_BRIEF.md.
 
 # All bars are scored by research/ontology-apps/ward/score.py over the ten
 # customer folders of research/ontology-apps/ward/prepare.py's sample (286

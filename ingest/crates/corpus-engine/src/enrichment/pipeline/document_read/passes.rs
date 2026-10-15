@@ -10,7 +10,8 @@
 //! (`prefill.rs`). **Locate** asks every line no line class keeps out
 //! (`line_classes.rs`), off the document with its numbered lines, which
 //! declared claim kind it states; consecutive lines of one kind are one
-//! statement of at most [`MAX_STATEMENT_LINES`]. **Mention** asks the same
+//! statement of at most [`MAX_STATEMENT_LINES`]. A kind a protocol rule names
+//! is not located: it is asked of the whole document (**Act**, `act.rs`). **Mention** asks the same
 //! lines which entity type a read reference targets they name, and points at
 //! the words (`mention.rs`). Then per statement, each field of the claim and
 //! of its subject by its declared family (`ask.rs`): **Choose** a closed value
@@ -24,39 +25,28 @@
 //! RESOLVE's Ring 0 does, so it can be measured; "none of them" or a refused
 //! call leaves the field unknown with its distribution in the reason.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::ops::Range;
 
-use oicp_types::forced_choice;
 use serde_json::{json, Value};
 use tracing::{debug, info};
 
 use super::ask::Ask;
+use super::folded::Folded;
 use super::line_classes::{LineClass, LineClasses};
-use super::{mention, pick, point, prefill};
+use super::locate::{locate, locate_question, statements, MAX_STATEMENT_LINES};
+use super::{about, act, mention, pick, point, prefill};
 use super::{DocumentReadClaim, DocumentReadOutcome, DocumentReadStatus};
-use crate::enrichment::atlas::resolve_records::{
-    choice_question, decision_call, ClosedAttr, LABELS, NONE,
-};
+use crate::enrichment::atlas::resolution_records::decides;
+use crate::enrichment::atlas::resolve_records::{choice_question, ClosedAttr, LABELS, NONE};
 use crate::enrichment::atlas::SourceDocument;
 use crate::enrichment::ontology::{
     AttrDecl, AttrFamily, OntologyPolicies, OntologyTypeDecl, SourceDecl, TypeIndex,
 };
-use crate::enrichment::pipeline::types::{ChapterInput, ChatPrompt};
+use crate::enrichment::pipeline::types::ChapterInput;
 use crate::error::{Error, Result};
 use crate::InferenceFn;
 
-const LOCATE_SYSTEM: &str = include_str!("passes_locate_prompt.md");
-/// What `{values}` in [`LOCATE_SYSTEM`] becomes when some kind in the question
-/// shows closed values; nothing otherwise, so the prompt never describes lines
-/// it does not show (a declaration with none asks the pre-E4 question).
-const LOCATE_SHOWS_VALUES: &str = ", followed by the values its fields can take";
-
-/// A statement is one kind and at most this many verified lines
-/// (ONTOLOGY_METHOD §Reading).
-pub(super) const MAX_STATEMENT_LINES: usize = 3;
-
-const LOCATE_PHASE: &str = "document_passes_locate";
 pub(super) const CHOOSE_PHASE: &str = "document_passes_choose";
 
 /// Read every supplied document of `chapter` by the plan the contract
@@ -67,6 +57,12 @@ pub async fn read(
     classes: &LineClasses,
     infer: &InferenceFn,
 ) -> Result<String> {
+    if super::window::chosen() {
+        return super::window::read(chapter, policies, classes, infer).await;
+    }
+    if super::waves::chosen() {
+        return super::waves::read(chapter, policies, classes, infer).await;
+    }
     let plan = Plan::of(policies);
     if plan.kinds.is_empty() {
         return Err(Error::InvalidInput(
@@ -101,6 +97,14 @@ pub(super) struct Plan<'a> {
     pub(super) kinds: Vec<KindPlan<'a>>,
     /// Every type a read reference (a Pick field) targets, each once.
     pub(super) picked: Vec<&'a OntologyTypeDecl>,
+    /// Every type whose identity RESOLVE decides (`resolution_records::
+    /// decides`), each once, a statement kind about it or not: what About
+    /// asks for. A kind's subjects first, in the kinds' order, then the rest
+    /// in declaration order.
+    pub(super) decided: Vec<&'a OntologyTypeDecl>,
+    /// Per decided type, the fields that identify a particular of it
+    /// (`schema::subject_read_attributes`), read of each one About finds.
+    identifying: BTreeMap<&'a str, Vec<FieldPlan<'a>>>,
 }
 
 pub(super) struct KindPlan<'a> {
@@ -108,6 +112,9 @@ pub(super) struct KindPlan<'a> {
     pub(super) subject: &'a OntologyTypeDecl,
     pub(super) fields: Vec<FieldPlan<'a>>,
     pub(super) subject_fields: Vec<FieldPlan<'a>>,
+    /// The fields asked of the whole document (`act::keys`); empty for a kind
+    /// Locate asks line by line.
+    pub(super) keys: Vec<String>,
 }
 
 /// One non-derived field, asked by the pass its declared family names.
@@ -115,20 +122,34 @@ pub(super) enum FieldPlan<'a> {
     /// A closed set of 1..=25 values: one forced choice over them.
     Choose(ClosedAttr),
     /// Open text, a quantity or a time: a span of the statement's words.
-    Point(&'a AttrDecl),
-    /// A reference: one choice among the candidates code proposes.
-    Pick(&'a AttrDecl, &'a str),
+    /// Owned when composed rather than declared (a state's value,
+    /// `schema::statement_attributes`).
+    Point(Cow<'a, AttrDecl>),
+    /// A reference: one choice among the candidates code proposes (owned for
+    /// a relation's `to`).
+    Pick(Cow<'a, AttrDecl>, &'a str),
+    /// The subject of a claim kind (the first), when its type (the second)
+    /// has a metadata source: one Pick among the records that source reads
+    /// from the document, written as the readings of the identity fields (the
+    /// third), which the statement's words rarely hold.
+    Subject(&'a OntologyTypeDecl, &'a str, Vec<&'a AttrDecl>),
     /// A closed set wider than one forced choice shows: not asked, said why.
-    Unasked(&'a AttrDecl),
+    Unasked(Cow<'a, AttrDecl>),
 }
 
 impl<'a> FieldPlan<'a> {
-    fn of(attr: &'a AttrDecl) -> Self {
-        if let Some(closed) = ClosedAttr::of(attr) {
+    fn of(attr: Cow<'a, AttrDecl>, policies: &'a OntologyPolicies) -> Self {
+        if let Some(closed) = ClosedAttr::of(&attr) {
             return FieldPlan::Choose(closed);
         }
         match &attr.family {
-            AttrFamily::Ref { of } => FieldPlan::Pick(attr, of.as_str()),
+            // The target's name, borrowed from its declaration (an owned
+            // attribute cannot lend it): a reference to an undeclared type
+            // is refused at parse, so the declaration is there.
+            AttrFamily::Ref { of } => match policies.type_decl(of) {
+                Some(target) => FieldPlan::Pick(attr, target.name.as_str()),
+                None => FieldPlan::Unasked(attr),
+            },
             AttrFamily::Text { values } if !values.is_empty() => FieldPlan::Unasked(attr),
             AttrFamily::Text { .. } | AttrFamily::Quantity { .. } | AttrFamily::Time { .. } => {
                 FieldPlan::Point(attr)
@@ -141,15 +162,17 @@ impl<'a> FieldPlan<'a> {
         match self {
             FieldPlan::Choose(_) => Some("Choose"),
             FieldPlan::Point(_) => Some("Point"),
-            FieldPlan::Pick(..) => Some("Pick"),
+            FieldPlan::Pick(..) | FieldPlan::Subject(..) => Some("Pick"),
             FieldPlan::Unasked(_) => None,
         }
     }
 
-    pub(super) fn name(&self) -> &str {
+    /// The fields it reads: one, or a subject's identity fields.
+    pub(super) fn names(&self) -> Vec<&str> {
         match self {
-            FieldPlan::Choose(c) => &c.name,
-            FieldPlan::Point(a) | FieldPlan::Pick(a, _) | FieldPlan::Unasked(a) => &a.name,
+            FieldPlan::Choose(c) => vec![&c.name],
+            FieldPlan::Point(a) | FieldPlan::Pick(a, _) | FieldPlan::Unasked(a) => vec![&a.name],
+            FieldPlan::Subject(_, _, keys) => keys.iter().map(|a| a.name.as_str()).collect(),
         }
     }
 }
@@ -157,29 +180,35 @@ impl<'a> FieldPlan<'a> {
 impl<'a> Plan<'a> {
     pub(super) fn of(policies: &'a OntologyPolicies) -> Self {
         let index = TypeIndex::from_policies(policies);
-        let fields = |attrs: Vec<&'a AttrDecl>| -> Vec<FieldPlan<'a>> {
+        let fields = |attrs: Vec<Cow<'a, AttrDecl>>| -> Vec<FieldPlan<'a>> {
             attrs
                 .into_iter()
                 .filter(|attr| attr.derived.is_none())
-                .map(FieldPlan::of)
+                .map(|attr| FieldPlan::of(attr, policies))
                 .collect()
         };
         let kinds = policies
             .shape
             .types
             .iter()
-            .filter(|ty| super::schema::eligible_claim(ty, policies))
+            .filter(|ty| super::schema::read_kind(ty, policies))
             .filter_map(|decl| {
-                let subject = policies.type_decl(decl.subject.as_deref()?)?;
+                let subject = policies.type_decl(decl.read_subject()?)?;
+                let keys = super::schema::subject_read_attributes(policies, &index, &subject.name);
+                let subject_fields = match &subject.source {
+                    Some(SourceDecl::Metadata(_)) if !keys.is_empty() => {
+                        vec![FieldPlan::Subject(decl, subject.name.as_str(), keys)]
+                    }
+                    _ => fields(keys.into_iter().map(Cow::Borrowed).collect()),
+                };
+                let fields = fields(super::schema::statement_attributes(&index, decl));
+                let keys = act::keys(policies, &index, decl, subject, &fields);
                 Some(KindPlan {
                     decl,
                     subject,
-                    fields: fields(index.extracted_attributes(&decl.name)),
-                    subject_fields: fields(super::schema::subject_read_attributes(
-                        policies,
-                        &index,
-                        &subject.name,
-                    )),
+                    fields,
+                    subject_fields,
+                    keys,
                 })
             })
             .collect::<Vec<KindPlan<'a>>>();
@@ -195,7 +224,68 @@ impl<'a> Plan<'a> {
                 }
             }
         }
-        Self { kinds, picked }
+        let mut decided: Vec<&'a OntologyTypeDecl> = Vec::new();
+        for t in kinds
+            .iter()
+            .map(|k| k.subject)
+            .chain(policies.shape.types.iter())
+        {
+            if decides(&index, &t.name) && !decided.iter().any(|d| d.name == t.name) {
+                decided.push(t);
+            }
+        }
+        let identifying = decided
+            .iter()
+            .map(|t| {
+                let keys = super::schema::subject_read_attributes(policies, &index, &t.name);
+                (
+                    t.name.as_str(),
+                    fields(keys.into_iter().map(Cow::Borrowed).collect()),
+                )
+            })
+            .collect();
+        Self {
+            kinds,
+            picked,
+            decided,
+            identifying,
+        }
+    }
+
+    /// The fields that identify a particular of the decided type `of`. Every
+    /// type in `decided` has an entry, built from it in `of`; any other is a
+    /// caller's error, never "no fields".
+    pub(super) fn identifying(&self, of: &str) -> &[FieldPlan<'a>] {
+        &self.identifying[of]
+    }
+
+    /// The kinds Locate asks line by line: every kind but an act's.
+    pub(super) fn located(&self) -> Vec<usize> {
+        (0..self.kinds.len())
+            .filter(|&k| self.kinds[k].keys.is_empty())
+            .collect()
+    }
+
+    /// The subject types statements of `kinds` pick (`FieldPlan::Subject`),
+    /// each once.
+    pub(super) fn subjects_for(
+        &self,
+        kinds: &[usize],
+        policies: &'a OntologyPolicies,
+    ) -> Vec<&'a OntologyTypeDecl> {
+        let mut out: Vec<&'a OntologyTypeDecl> = Vec::new();
+        for k in kinds {
+            for f in &self.kinds[*k].subject_fields {
+                if let FieldPlan::Subject(_, of, _) = f {
+                    if let Some(t) = policies.type_decl(of) {
+                        if !out.iter().any(|o| o.name == t.name) {
+                            out.push(t);
+                        }
+                    }
+                }
+            }
+        }
+        out
     }
 
     /// The types the Pick fields of statements of `kinds` target.
@@ -252,52 +342,6 @@ pub(super) fn lines(body: &str) -> Vec<Line> {
     out
 }
 
-/// The Locate question for `line`: the whole document with its lines
-/// numbered (a prefix every line of the document shares), then the line and
-/// the declared kinds, each with its description and, under it, each of its
-/// closed-valued fields with the declared values and the field's description.
-/// The values are the words a line uses to state the kind: a recipe that put
-/// them only in a field's description went unseen here (order 8, abfe32a14:
-/// 14 uv states read by a blind recipe that put them in its kind's text).
-pub(super) fn locate_question(
-    facts: &str,
-    body: &str,
-    lines: &[Line],
-    line: &Line,
-    plan: &Plan<'_>,
-    labels: &[&str],
-) -> ChatPrompt {
-    let mut u = format!("{facts}{}", numbered(body, lines));
-    u.push_str(&format!(
-        "\n\nLine {}: \"{}\"\n\nWhich kind of claim does line {} state?\n",
-        line.n,
-        &body[line.start..line.end],
-        line.n
-    ));
-    for (kind, label) in plan.kinds.iter().zip(labels) {
-        u.push_str(&format!("{label} {}", kind.decl.name));
-        if !kind.decl.description.is_empty() {
-            u.push_str(&format!(" ({})", kind.decl.description));
-        }
-        u.push('\n');
-        for field in &kind.fields {
-            let FieldPlan::Choose(attr) = field else {
-                continue;
-            };
-            u.push_str(&format!("   {}: {}", attr.name, attr.values.join(", ")));
-            if !attr.description.is_empty() {
-                u.push_str(&format!(" ({})", attr.description));
-            }
-            u.push('\n');
-        }
-    }
-    u.push_str(&format!("{NONE} none of them\nAnswer with its letter."));
-    ChatPrompt::new(locate_system(plan), u)
-        .with_response_schema("read", forced_choice::schema(labels))
-        .with_phase_id(LOCATE_PHASE)
-        .with_temperature(0.0)
-}
-
 /// The document with its lines numbered: the prefix every line question of a
 /// document shares (Locate's, Mention's).
 pub(super) fn numbered(body: &str, lines: &[Line]) -> String {
@@ -311,42 +355,6 @@ pub(super) fn numbered(body: &str, lines: &[Line]) -> String {
     }
     u.push_str(">>>");
     u
-}
-
-/// The Locate system prompt for `plan`: a pure function of the declaration.
-pub(super) fn locate_system(plan: &Plan<'_>) -> String {
-    let shows_values = plan
-        .kinds
-        .iter()
-        .any(|k| k.fields.iter().any(|f| matches!(f, FieldPlan::Choose(_))));
-    LOCATE_SYSTEM.replace(
-        "{values}",
-        if shows_values {
-            LOCATE_SHOWS_VALUES
-        } else {
-            ""
-        },
-    )
-}
-
-/// Runs of consecutive located lines of one kind, each cut into statements
-/// of at most `MAX_STATEMENT_LINES`: (kind index, line indices).
-pub(super) fn statements(located: &[Option<usize>]) -> Vec<(usize, Range<usize>)> {
-    let mut out = Vec::new();
-    let mut i = 0;
-    while i < located.len() {
-        let Some(kind) = located[i] else {
-            i += 1;
-            continue;
-        };
-        let mut j = i;
-        while j < located.len() && located[j] == Some(kind) && j - i < MAX_STATEMENT_LINES {
-            j += 1;
-        }
-        out.push((kind, i..j));
-        i = j;
-    }
-    out
 }
 
 /// The most probable label's index and its probability. The census funnel
@@ -397,6 +405,7 @@ async fn read_document(
         reason: Some(reason),
         claims: Vec::new(),
         refused: Vec::new(),
+        particulars: Vec::new(),
     };
     if lines.is_empty() {
         return (
@@ -407,56 +416,31 @@ async fn read_document(
             0,
         );
     }
-    let labels: Vec<&str> = LABELS[..plan.kinds.len()]
-        .iter()
-        .copied()
-        .chain([NONE])
-        .collect();
     let facts = prefill::facts(document, policies);
     let mut calls = 0u32;
-    let mut refused = 0usize;
     let mut classed: BTreeMap<LineClass, usize> = BTreeMap::new();
-    let mut located = Vec::with_capacity(lines.len());
     let mut asked_lines = vec![true; lines.len()];
-    let texts: Vec<&str> = lines.iter().map(|l| &raw[l.start..l.end]).collect();
-    for (line, carried) in lines.iter().zip(classes.classes(&id, &texts)) {
+    let mut headers = vec![false; lines.len()];
+    let mut asking: Vec<usize> = Vec::with_capacity(lines.len());
+    for (i, (line, carried)) in lines
+        .iter()
+        .zip(classes.classes(&id, &raw, &lines))
+        .enumerate()
+    {
         let text = &raw[line.start..line.end];
         if let Some(carried) = carried {
             debug!(document = %id, line = line.n, class = carried.class.label(), from = carried.from, text = %excerpt(text), "document_read/passes: line not asked");
             *classed.entry(carried.class).or_default() += 1;
-            located.push(None);
             asked_lines[line.n - 1] = false;
+            headers[i] = carried.class == LineClass::Field;
             continue;
         }
-        let prompt = locate_question(&facts, &raw, &lines, line, plan, &labels);
-        calls += 1;
-        let item = format!("line {}", line.n);
-        match decision_call(infer, &prompt, &labels, &id, &item).await {
-            Ok(dist) => {
-                let (best, p) = argmax(&labels, &dist);
-                let kind = (best < plan.kinds.len()).then_some(best);
-                // Every line's answer, located or not, so a missed statement
-                // shows how near it came (crm-proof baseline, 2026-10-09).
-                debug!(
-                    document = %id,
-                    line = line.n,
-                    kind = kind.map_or("none", |k| plan.kinds[k].decl.name.as_str()),
-                    p,
-                    dist = %render(&dist),
-                    text = %excerpt(&raw[line.start..line.end]),
-                    "document_read/passes: located"
-                );
-                located.push(kind);
-            }
-            Err(refusal) => {
-                debug!(document = %id, line = line.n, ?refusal, "document_read/passes: locate refused");
-                refused += 1;
-                located.push(None);
-            }
-        }
+        asking.push(i);
     }
-    let asked = lines.len() - classed.values().sum::<usize>();
-    if asked > 0 && refused == asked {
+    let located = locate((infer, &facts, &id, &raw), &lines, &asking, plan).await;
+    calls += located.asked as u32;
+    let refused = located.refused;
+    if located.asked > 0 && refused == located.asked {
         return (
             outcome(
                 DocumentReadStatus::CouldNotJudge,
@@ -465,23 +449,45 @@ async fn read_document(
             calls,
         );
     }
-    let found = statements(&located);
+    let found = statements(&located.kinds);
     debug!(document = %id, lines = lines.len(), refused, classed = ?classed, statements = found.len(), "document_read/passes: statements");
-    if found.is_empty() {
+    let folded = Folded::of(&raw);
+    let view = numbered(&raw, &lines);
+    let doc = about::Doc {
+        infer,
+        facts: &facts,
+        document: &id,
+        body: &raw,
+        lines: &lines,
+        headers: &headers,
+        view: &view,
+    };
+    let abouts = about::about(&doc, &plan.decided, &mut calls).await;
+    let acts = act::acts(&doc, plan, &abouts, &asked_lines, &mut calls).await;
+    if found.is_empty() && acts.is_empty() && abouts.iter().all(|a| a.particulars.is_empty()) {
         return (
             outcome(
                 DocumentReadStatus::NothingApplicable,
                 format!(
-                    "no line of {} was located as a declared claim kind ({refused} refused, \
-                     {} not asked: {classed:?})",
+                    "no line of {} was located as a declared claim kind and no act was read \
+                     ({refused} refused, {} not asked: {classed:?})",
                     lines.len(),
-                    lines.len() - asked
+                    classed.values().sum::<usize>()
                 ),
             ),
             calls,
         );
     }
-    let kinds: Vec<usize> = found.iter().map(|(k, _)| *k).collect();
+    // The kinds located or read as acts, and those about a type a particular
+    // was found of: its identifying fields are asked as theirs are, from the
+    // same candidates.
+    let mut kinds: Vec<usize> = found.iter().map(|(k, _)| *k).collect();
+    kinds.extend(acts.iter().map(|a| a.kind));
+    for (of, a) in plan.decided.iter().zip(&abouts) {
+        if !a.particulars.is_empty() {
+            kinds.extend((0..plan.kinds.len()).filter(|&k| plan.kinds[k].subject.name == of.name));
+        }
+    }
     let picked = plan.picked_for(&kinds);
     let targets: Vec<&OntologyTypeDecl> = picked.iter().copied().filter(|t| mentioned(t)).collect();
     let mentions = mention::mentions(
@@ -495,16 +501,40 @@ async fn read_document(
         &mut calls,
     )
     .await;
-    let candidates = pick::per_type(document, policies, &picked, &mentions);
-    let folded = Folded::of(&raw);
+    let mut candidates = pick::per_type(document, policies, &picked, &mentions);
+    // A picked subject is one of the records its source reads from the
+    // document; a mention of it names no record, so none is asked for it.
+    for t in plan.subjects_for(&kinds, policies) {
+        candidates
+            .entry(t.name.clone())
+            .or_insert_with(|| pick::candidates(document, policies, t, &[]));
+    }
+    let said: Vec<(&str, &str, (usize, usize))> = found
+        .iter()
+        .map(|(kind, span)| {
+            let (first, last) = (&lines[span.start], &lines[span.end - 1]);
+            (
+                plan.kinds[*kind].subject.name.as_str(),
+                &folded.text[folded.span(first.start..last.end)],
+                (first.n, last.n),
+            )
+        })
+        .collect();
+    let particular_of = about::particular_of(&doc, &plan.decided, &abouts, &said, &mut calls).await;
+    let identities = about::identities(&doc, plan, &abouts, &folded, &candidates, &mut calls).await;
     let mut claims = Vec::with_capacity(found.len());
-    for (kind, span) in &found {
+    for ((kind, span), &particular) in found.iter().zip(&particular_of) {
         let kind = &plan.kinds[*kind];
         let (first, last) = (&lines[span.start], &lines[span.end - 1]);
         let evidence = raw[first.start..last.end].to_string();
-        // The statement's own lines, never its place among what was located:
-        // RESOLVE keys a statement by its document, span and this reference.
-        let local_ref = format!("l{}-{}", first.n, last.n);
+        // The particular the statement is about, by where it is first named;
+        // a statement about none is its own lines, never its place among what
+        // was located. RESOLVE keys a statement by its document, span and
+        // this reference, and joins one reference's spans (`local_subjects`).
+        let local_ref = match particular {
+            Some((t, p)) => abouts[t].particulars[p].local_ref(),
+            None => format!("l{}-{}", first.n, last.n),
+        };
         let at = folded.span(first.start..last.end);
         let ask = Ask {
             infer,
@@ -512,20 +542,20 @@ async fn read_document(
             document: &id,
             statement: &local_ref,
             body: &folded.text,
+            view: &view,
+            lines: (first.n, last.n),
             at,
             evidence: &evidence,
             candidates: &candidates,
         };
         let mut fields = BTreeMap::new();
         for field in &kind.fields {
-            let (name, read) = ask.field(kind.decl, field, &mut calls).await;
-            fields.insert(name, read);
+            fields.extend(ask.field(kind.decl, field, &mut calls).await);
         }
-        let mut subject_fields = BTreeMap::new();
-        for field in &kind.subject_fields {
-            let (name, read) = ask.field(kind.subject, field, &mut calls).await;
-            subject_fields.insert(name, read);
-        }
+        let subject_fields = match particular {
+            Some(key) => identities[&key].clone(),
+            None => ask.subject_fields(kind, &mut calls).await,
+        };
         claims.push(DocumentReadClaim {
             kind: kind.decl.name.clone(),
             content: folded.text[folded.span(first.start..last.end)].to_string(),
@@ -538,6 +568,28 @@ async fn read_document(
             subject_fields,
         });
     }
+    claims.extend(
+        act::claims(
+            &doc,
+            plan,
+            &abouts,
+            &acts,
+            &folded,
+            &candidates,
+            &identities,
+            &mut calls,
+        )
+        .await,
+    );
+    let stated: Vec<Option<(usize, usize)>> = particular_of
+        .iter()
+        .copied()
+        .chain(acts.iter().map(|a| a.particular))
+        .collect();
+    let mut particulars = about::unstated(&doc, &plan.decided, &abouts, &stated, identities);
+    particulars.extend(mention::particulars(
+        document, policies, &raw, &lines, &targets, &mentions,
+    ));
     (
         DocumentReadOutcome {
             document_id: id,
@@ -545,48 +597,10 @@ async fn read_document(
             reason: None,
             claims,
             refused: Vec::new(),
+            particulars,
         },
         calls,
     )
-}
-
-/// The body whitespace-folded as RESOLVE reads it (`SourceDocument::body`),
-/// with each word's raw span, so a statement located on raw lines is asked
-/// over the folded text its question was measured on.
-struct Folded {
-    text: String,
-    /// (raw start, raw end, folded start) per word.
-    words: Vec<(usize, usize, usize)>,
-}
-
-impl Folded {
-    fn of(raw: &str) -> Self {
-        let mut text = String::with_capacity(raw.len());
-        let mut words = Vec::new();
-        for word in raw.split_whitespace() {
-            // A word is a subslice of `raw`: its offset is exact, never searched for.
-            let start = word.as_ptr() as usize - raw.as_ptr() as usize;
-            if !text.is_empty() {
-                text.push(' ');
-            }
-            words.push((start, start + word.len(), text.len()));
-            text.push_str(word);
-        }
-        Self { text, words }
-    }
-
-    /// The folded span of the words a raw span covers.
-    fn span(&self, raw: Range<usize>) -> Range<usize> {
-        let inside: Vec<&(usize, usize, usize)> = self
-            .words
-            .iter()
-            .filter(|(s, e, _)| *s >= raw.start && *e <= raw.end)
-            .collect();
-        match (inside.first(), inside.last()) {
-            (Some(first), Some(last)) => first.2..last.2 + (last.1 - last.0),
-            _ => 0..0,
-        }
-    }
 }
 
 /// Every field the plan asks, as `(claim kind, type, attribute, pass)`: the
@@ -611,12 +625,18 @@ pub fn read_fields(
         for (owner, fields) in sides {
             for field in fields.iter() {
                 if let Some(pass) = field.pass() {
-                    out.push((
-                        kind.decl.name.clone(),
-                        owner.name.clone(),
-                        field.name().to_string(),
-                        pass,
-                    ));
+                    for name in field.names() {
+                        // A key of an act is read with the act, not by Choose.
+                        let keyed =
+                            owner.name == kind.decl.name && kind.keys.iter().any(|k| k == name);
+                        let pass = if keyed { "Act" } else { pass };
+                        out.push((
+                            kind.decl.name.clone(),
+                            owner.name.clone(),
+                            name.to_string(),
+                            pass,
+                        ));
+                    }
                 }
             }
         }
@@ -628,10 +648,16 @@ pub fn read_fields(
 /// question's wording changes this value, and so the contract fingerprint
 /// that keys cached reads (`schema::contract_value`).
 pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
+    if super::window::chosen() {
+        return super::window::contract_value(policies);
+    }
+    if super::waves::chosen() {
+        return super::waves::contract_value(policies);
+    }
     let plan = Plan::of(policies);
     let body = "first line\nsecond line";
     let lines = lines(body);
-    let labels: Vec<&str> = LABELS[..plan.kinds.len().min(LABELS.len())]
+    let labels: Vec<&str> = LABELS[..plan.located().len().min(LABELS.len())]
         .iter()
         .copied()
         .chain([NONE])
@@ -649,7 +675,17 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
         description: String::new(),
         values: vec!["value".into()],
     };
-    let choose = choice_question("type", "", &probe, &["A", NONE], body, 0..10, CHOOSE_PHASE);
+    let choose = prefill::carrying(
+        choice_question(
+            "type",
+            "",
+            &probe,
+            &["A", NONE],
+            &super::ask::statement_words(&body[0..10], (1, 1)),
+            CHOOSE_PHASE,
+        ),
+        &super::ask::opening(prefill::FACTS_HEADER, &numbered(body, &lines)),
+    );
     json!({
         "reader": "passes",
         "max_statement_lines": MAX_STATEMENT_LINES,
@@ -658,6 +694,8 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
         "mention": mention::contract_sample(body, &lines),
         "point": point::contract_sample(),
         "pick": pick::contract_sample(),
+        "about": about::contract_sample(body, &lines),
+        "act": act::contract_sample(body, &lines),
     })
 }
 

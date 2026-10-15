@@ -15,7 +15,7 @@ maximum-cardinality matching. It measures evidence coverage, not descriptor-leve
 identity proof. Gold denominators are selected by gold source files, independent of extraction
 coverage; coverage remains a separate diagnostic.
 
-Per bar (quality/campaigns/crm-proof.toml), read on the holdout (files outside the smoke sections)
+Per bar (quality/campaigns/closed/crm-proof.toml), read on the holdout (files outside the smoke sections)
 with the full set beside:
   people       gold people with an email held by exactly ONE person atom carrying that email
   companies    gold companies matched by a domain or the folded name

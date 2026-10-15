@@ -29,25 +29,34 @@ use super::resolution::Trajectory;
 use super::resolution_documents::{
     failure, fold_ws, locate, read_stamp, SectionDocuments, SourceDocument,
 };
+use super::resolution_sources::{Participants, SOURCE_EXTRACTOR_ID};
 use super::resolve_records::propose::{
     Proposers, SimilarDocuments, MAX_CANDIDATES, MIN_SIMILARITY, NEIGHBOURS,
 };
 use super::resolve_records::{
-    resolve_in_clock_order, Answerer, Criterion, Document, DocumentResolution, ProposalRule,
-    Resolver, Statement,
+    resolve_in_clock_order, Answerer, Choice, Criterion, Described, Document, DocumentResolution,
+    ProposalRule, Resolver, Statement, CHAPTER_SUBJECT_KEY,
 };
 use crate::enrichment::ontology::{
-    DocumentStamp, OntologyPolicies, OntologyTypeDecl, TypeIndex, TypeKind,
+    DocumentStamp, OntologyPolicies, OntologyTypeDecl, SourceDecl, TypeIndex, TypeKind,
 };
 use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType, EventType};
 use crate::enrichment::pipeline::document_read::{
-    field_readings, supported_values, LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE,
+    about_type, field_readings, mention_words, supported_values, ABOUT_ATTRIBUTE,
+    CHAPTER_SUBJECT_ATTRIBUTE, LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE,
     SUBJECT_FIELDS_ATTRIBUTE,
 };
 use crate::enrichment::pipeline::types::{PhaseFailure, PhaseFailureKind};
+use crate::EmbedFn;
 
+#[path = "resolution_records/described.rs"]
+mod described;
 #[path = "resolution_records/local_subjects.rs"]
 mod local_subjects;
+#[path = "resolution_records/mentions.rs"]
+mod mentions;
+#[path = "resolution_records/nearest.rs"]
+mod nearest;
 #[path = "resolution_records/retire.rs"]
 mod retire;
 use local_subjects::{Assigned, Spot};
@@ -69,11 +78,32 @@ pub fn decides(index: &TypeIndex<'_>, type_name: &str) -> bool {
     })
 }
 
-/// The types RESOLVE decides ([`decides`]) that no declared claim kind names as
-/// its `subject`: RESOLVE would have no statement of them, and their Phase-1
+/// Whether RESOLVE decides the identity of `type_name`'s *mentions*: an
+/// entity or event type with an `identity_criterion` whose source names only
+/// who took part (a metadata source), so the text names particulars the
+/// source never read. Its records are the source's, seeded under their own
+/// ids, and those its mentions open (`mentions.rs`); a claim about it keeps
+/// 3b's exact binding by its source's key.
+pub fn decides_mentions(index: &TypeIndex<'_>, type_name: &str) -> bool {
+    index.get(type_name).is_some_and(|t| {
+        matches!(t.kind, TypeKind::Entity | TypeKind::Event)
+            && t.identity_criterion.is_some()
+            && matches!(t.source, Some(SourceDecl::Metadata(_)))
+    })
+}
+
+/// The types RESOLVE decides ([`decides`]) that no declared statement kind is
+/// about (a claim's `subject`, a state's `of`, a relation's `from`,
+/// `OntologyTypeDecl::read_subject`), when the general extractor reads the
+/// declaration: RESOLVE would have no statement of them, and their Phase-1
 /// atoms would be decided by 3a's merge instead. The build refuses such a
-/// declaration (`enrich extract`); `recipe validate` names it.
+/// declaration (`enrich extract`); `recipe validate` names it. None when the
+/// document reader reads it: it reads every type RESOLVE decides (About, the
+/// window's particulars), and each particular is a statement of its type.
 pub fn types_without_statements(policies: &OntologyPolicies) -> Vec<String> {
+    if policies.reads_documents() {
+        return Vec::new();
+    }
     let index = TypeIndex::from_policies(policies);
     policies
         .shape
@@ -85,7 +115,7 @@ pub fn types_without_statements(policies: &OntologyPolicies) -> Vec<String> {
                 .shape
                 .types
                 .iter()
-                .any(|c| c.kind == TypeKind::Claim && c.subject.as_deref() == Some(t.name.as_str()))
+                .any(|c| c.read_subject() == Some(t.name.as_str()))
         })
         .map(|t| t.name.clone())
         .collect()
@@ -129,6 +159,8 @@ pub struct RecordsReport {
     pub calls: u32,
     /// The type's atoms 3a made from Phase-1 sketches, retired.
     pub retired: usize,
+    /// A mentioned type's source records RESOLVE started with (`decides_mentions`).
+    pub seeded: usize,
     /// References to them dropped, by what held each.
     pub dropped: BTreeMap<&'static str, usize>,
     /// Each source's weight as estimated on this corpus and what it carried,
@@ -161,7 +193,11 @@ impl RecordsReport {
             self.settled,
             self.retired,
             fold(&self.dropped),
-        ) + &self
+        ) + &if self.seeded > 0 {
+            format!("; {} source record(s) seeded", self.seeded)
+        } else {
+            String::new()
+        } + &self
             .sources
             .iter()
             .map(|l| format!("\n    source {l}"))
@@ -179,12 +215,18 @@ struct Placed<'d> {
 
 /// Decide the identity of every type RESOLVE decides, in declaration order.
 /// `on_document` sees each document's resolution as it is made, so the caller
-/// can keep the decisions beside the atlas.
+/// can keep the decisions beside the atlas. With the run's embedder, each
+/// statement is also offered the records nearest it in meaning
+/// (`propose::Nearest`); without one, only declared structure and similar
+/// documents offer records, and the run says so.
+#[allow(clippy::too_many_arguments)]
 pub async fn resolve_declared_types(
     atoms: &mut BuildAtoms<'_>,
     documents: &SectionDocuments,
+    participants: &Participants,
     policies: &OntologyPolicies,
     corpus_id: &str,
+    embed: Option<&EmbedFn>,
     answerer: Answerer<'_>,
     on_document: &mut (dyn FnMut(&str, &DocumentResolution) + Send),
 ) -> (Vec<RecordsReport>, Vec<PhaseFailure>) {
@@ -194,9 +236,9 @@ pub async fn resolve_declared_types(
         if t.identity_criterion.is_none() {
             continue;
         }
-        if !decides(&index, &t.name) {
+        if !decides(&index, &t.name) && !decides_mentions(&index, &t.name) {
             let why = if t.source.is_some() {
-                "it declares a metadata source".to_string()
+                "it declares a table source".to_string()
             } else {
                 format!("it is a {:?} type", t.kind)
             };
@@ -206,8 +248,8 @@ pub async fn resolve_declared_types(
                 PhaseFailureKind::Other,
                 format!(
                     "`{}` declares an identity_criterion, but {why}: RESOLVE decides only entity \
-                     and event types with no source in the atlas build, so its atoms are decided \
-                     as before",
+                     and event types with no source, or the mentions of one with a metadata \
+                     source, so its atoms are decided as before",
                     t.name
                 ),
             ));
@@ -218,8 +260,10 @@ pub async fn resolve_declared_types(
             t,
             &index,
             documents,
+            participants,
             policies,
             corpus_id,
+            embed,
             answerer,
             on_document,
             &mut failures,
@@ -231,7 +275,9 @@ pub async fn resolve_declared_types(
     // The subject's readings stay on each claim, cited.
     for claim in atoms.claims.iter_mut() {
         claim.attributes.remove(LOCAL_REF_ATTRIBUTE);
+        claim.attributes.remove(CHAPTER_SUBJECT_ATTRIBUTE);
         claim.attributes.remove(SOURCE_DOCUMENT_ATTRIBUTE);
+        claim.attributes.remove(ABOUT_ATTRIBUTE);
     }
     (reports, failures)
 }
@@ -242,8 +288,10 @@ async fn resolve_type(
     t: &OntologyTypeDecl,
     index: &TypeIndex<'_>,
     documents: &SectionDocuments,
+    participants: &Participants,
     policies: &OntologyPolicies,
     corpus_id: &str,
+    embed: Option<&EmbedFn>,
     answerer: Answerer<'_>,
     on_document: &mut (dyn FnMut(&str, &DocumentResolution) + Send),
     failures: &mut Vec<PhaseFailure>,
@@ -257,13 +305,20 @@ async fn resolve_type(
         .shape
         .types
         .iter()
-        .filter(|c| c.kind == TypeKind::Claim && c.subject.as_deref() == Some(t.name.as_str()))
+        .filter(|c| c.read_subject() == Some(t.name.as_str()))
         .map(|c| c.name.as_str())
         .collect();
-    let of_kinds = |c: &Claim| c.claim_kind.as_deref().is_some_and(|k| kinds.contains(k));
+    // A statement of a kind about the type (a claim, a state of it, a relation
+    // from it), or a particular of it no claim is
+    // about (`about_type`): each is a statement of the type.
+    let of_kinds = |c: &Claim| {
+        c.claim_kind.as_deref().is_some_and(|k| kinds.contains(k))
+            || about_type(&c.attributes) == Some(t.name.as_str())
+    };
     // Reader-local references are transient handoff data. The subject's
     // readings stay on the claim: RESOLVE keys on their supported values.
     let mut read_local_ref_of = HashMap::<usize, String>::new();
+    let mut chapter_subject_of = HashMap::<usize, String>::new();
     let mut read_subject_fields_of = HashMap::<usize, Map<String, Value>>::new();
     for (i, claim) in atoms.claims.iter_mut().enumerate() {
         if !of_kinds(claim) {
@@ -277,6 +332,9 @@ async fn resolve_type(
         }
         if let Some(Value::String(local_ref)) = claim.attributes.remove(LOCAL_REF_ATTRIBUTE) {
             read_local_ref_of.insert(i, local_ref);
+        }
+        if let Some(Value::String(subject)) = claim.attributes.remove(CHAPTER_SUBJECT_ATTRIBUTE) {
+            chapter_subject_of.insert(i, subject);
         }
         if let Some(readings) = claim.attributes.get(SUBJECT_FIELDS_ATTRIBUTE) {
             match field_readings(readings) {
@@ -297,11 +355,13 @@ async fn resolve_type(
 
     // One decider: the Phase-1 atoms of the type go first, whatever follows,
     // in either kind a sketch may have named it. The passes reader sketches
-    // no subject, so these come from the general extractor's sketches.
+    // no subject, so these come from the general extractor's sketches. A
+    // source's records are not Phase-1 sketches: they stay, and are seeded.
     let retired: BTreeSet<AtomId> = atoms
         .entities
         .iter()
         .filter(|e| e.entity_type.as_str_repr() == t.name)
+        .filter(|e| e.provenance.extractor_id != SOURCE_EXTRACTOR_ID)
         .map(|e| e.id.clone())
         .chain(
             atoms
@@ -314,7 +374,7 @@ async fn resolve_type(
     report.retired = retired.len();
     report.dropped = retire(atoms, &retired, &t.name, failures);
 
-    let criterion = match Criterion::of(t, index.effective_identity(&t.name).to_vec()) {
+    let mut criterion = match Criterion::of(t, index.effective_identity(&t.name).to_vec()) {
         Ok(c) => c,
         Err(why) => {
             failures.push(failure(
@@ -325,6 +385,18 @@ async fn resolve_type(
             return report;
         }
     };
+    if !chapter_subject_of.is_empty() {
+        debug!(r#type = %t.name, claims = chapter_subject_of.len(), "atlas/resolve: a window read's chapter subjects are a sufficient key");
+        criterion.keys.push(CHAPTER_SUBJECT_KEY.to_string());
+    }
+    let carried: BTreeSet<&str> = criterion
+        .keys
+        .iter()
+        .chain(t.identity_necessary.iter())
+        .map(String::as_str)
+        .collect();
+    let described_of = described::of_claims(&read_subject_fields_of, &chapter_subject_of, &carried);
+    debug!(r#type = %t.name, claims = described_of.len(), "atlas/resolve: what readers read each subject to be is shown on both sides of its question");
     let declared: Vec<(DocumentStamp, &str)> = policies
         .change
         .document
@@ -348,9 +420,10 @@ async fn resolve_type(
     let mut spots: Vec<Spot> = Vec::new();
     let mut spot_claims: Vec<(usize, Option<String>)> = Vec::new();
     for (i, claim) in atoms.claims.iter().enumerate() {
-        let Some(kind) = claim.claim_kind.as_deref().filter(|k| kinds.contains(k)) else {
+        if !of_kinds(claim) {
             continue;
-        };
+        }
+        let kind = claim.claim_kind.as_deref().unwrap_or("(about)");
         report.claims += 1;
         // The claim's own document (its read's, stamped on the evidence),
         // or the one its anchor lands in (`locate`).
@@ -395,12 +468,23 @@ async fn resolve_type(
             });
             placed.len() - 1
         });
-        let Some(start) = placed[k].body.find(&anchor) else {
+        let Some(mut start) = placed[k].body.find(&anchor) else {
             let why = format!("anchor {anchor:?} is not in document `{}`", doc.key);
             unplaced(&mut report, failures, claim, kind, &t.name, why);
             continue;
         };
-        let end = start + anchor.len();
+        let mut end = start + anchor.len();
+        // A mention's statement is its words on its line, so two named on one
+        // line are two statements the question tells apart.
+        if let Some(words) = mention_words(&claim.attributes).map(fold_ws) {
+            let Some(at) = placed[k].body[start..end].find(&words) else {
+                let why = format!("mention {words:?} is not on its line {anchor:?}");
+                unplaced(&mut report, failures, claim, kind, &t.name, why);
+                continue;
+            };
+            start += at;
+            end = start + words.len();
+        }
         let mut keys = BTreeMap::new();
         if let Some(fields) = read_subject_fields_of.get(&i) {
             for key in criterion.keys.iter().chain(t.identity_necessary.iter()) {
@@ -413,6 +497,9 @@ async fn resolve_type(
                     keys.insert(key.clone(), value);
                 }
             }
+        }
+        if let Some(subject) = chapter_subject_of.get(&i) {
+            keys.insert(CHAPTER_SUBJECT_KEY.to_string(), subject.clone());
         }
         spots.push(Spot {
             placed: k,
@@ -437,8 +524,12 @@ async fn resolve_type(
                 end,
                 keys,
                 read: BTreeMap::new(),
+                described: described_of.get(&i).cloned().unwrap_or_default(),
             });
         } else if let Some(statement) = placed[k].statements.iter_mut().find(|s| s.id == id) {
+            if let Some(d) = described_of.get(&i) {
+                statement.described.extend(d);
+            }
             for (key, value) in keys {
                 let conflict = (id.clone(), key.clone());
                 if conflicting_keys.contains(&conflict) {
@@ -502,8 +593,26 @@ async fn resolve_type(
         declares_thread,
         SimilarDocuments::new(NEIGHBOURS, MAX_CANDIDATES, MIN_SIMILARITY),
     );
+    let seeded = if decides_mentions(index, &t.name) {
+        let seeded = mentions::seed(&mut resolver, atoms, t, index, participants);
+        report.seeded = seeded.atoms.len();
+        proposer = proposer.with_named(seeded.named());
+        seeded
+    } else {
+        mentions::Seeded::default()
+    };
+    match embed {
+        Some(embed) => {
+            proposer = proposer
+                .with_nearest(nearest::nearest(embed, &t.name, &placed, &seeded.cards).await);
+        }
+        None => {
+            info!(r#type = %t.name, "atlas/resolve: no embedder; records are offered by declared structure and similar documents only")
+        }
+    }
     let mut record_of: HashMap<String, String> = HashMap::new();
     let mut refused: HashMap<String, &'static str> = HashMap::new();
+    let mut links: HashMap<String, (&'static str, Option<Choice>)> = HashMap::new();
     let mut documents: Vec<(Document<'_>, &[Statement])> = placed
         .iter()
         .map(|p| {
@@ -537,6 +646,7 @@ async fn resolve_type(
                     report.settled += 1;
                 }
                 *report.outcomes.entry(o.outcome.label()).or_default() += 1;
+                links.insert(o.statement.clone(), (o.outcome.label(), o.choice.clone()));
                 match o.outcome.record() {
                     Some(rec) => {
                         refused.remove(&o.statement);
@@ -556,9 +666,15 @@ async fn resolve_type(
         info!(r#type = %t.name, source = %line, "atlas/resolve: source weight estimated on this corpus");
     }
 
-    // Records become the type's atoms, in the type's own kind.
+    // Records become the type's atoms, in the type's own kind; a seeded
+    // record is its source's atom already.
     let mut atom_of: HashMap<&str, AtomId> = HashMap::new();
     for rec in resolver.records() {
+        if let Some(id) = seeded.atoms.get(&rec.id) {
+            debug!(r#type = %t.name, record = %rec.id, statements = rec.statements.len(), "atlas/resolve: a seeded record keeps its source's atom");
+            atom_of.insert(rec.id.as_str(), id.clone());
+            continue;
+        }
         // A record is opened by a placed statement, so both are there; one
         // that is not is refused, never named or placed by a default.
         let (Some(e), Some(section)) = (rec.evidence.first(), section_of.get(&rec.id)) else {
@@ -625,6 +741,18 @@ async fn resolve_type(
             .get(&id)
             .and_then(|r| atom_of.get(r.as_str()))
             .cloned();
+        match (record_of.get(&id), links.get(&id)) {
+            (Some(record), Some((how, choice))) => {
+                claim.attributes.insert(
+                    RESOLVE_LINK_ATTRIBUTE.to_string(),
+                    resolve_link(how, choice.as_ref(), record, &atom_of),
+                );
+            }
+            (Some(_), None) => {
+                debug!(statement = %id, "atlas/resolve: a placed statement with no outcome recorded; no link is written for it");
+            }
+            _ => {}
+        }
         if claim.subject.is_none() {
             let label = refused.get(&id).copied().unwrap_or("undecided");
             failures.push(failure(
@@ -638,6 +766,48 @@ async fn resolve_type(
         }
     }
     report
+}
+
+/// The claim attribute that keeps how RESOLVE decided the claim's subject
+/// (`resolve_link`). Reserved: the query grammar never offers it.
+pub const RESOLVE_LINK_ATTRIBUTE: &str = "__resolve_link";
+
+/// How a statement's subject was decided: by key, by the model's choice, or
+/// opened; and, when a forced choice was asked, the model's choice scores
+/// over what it was shown: the decided record's (none's, for a record the
+/// statement opened), the best other candidate's, and none's. They are the
+/// model's uncalibrated distribution over the candidates of that one
+/// question, kept for inspection; no code reads them as the chance a link is
+/// right.
+fn resolve_link(
+    how: &str,
+    choice: Option<&Choice>,
+    record: &str,
+    atom_of: &HashMap<&str, AtomId>,
+) -> Value {
+    let mut link = serde_json::json!({ "decided_by": how });
+    let Some(c) = choice else {
+        return link;
+    };
+    let chosen = c
+        .candidates
+        .iter()
+        .find(|(id, _)| id == record)
+        .map_or(c.none, |(_, p)| *p);
+    link["choice_score"] = serde_json::json!(chosen);
+    link["none_score"] = serde_json::json!(c.none);
+    if let Some((id, p)) = c
+        .candidates
+        .iter()
+        .filter(|(id, _)| id != record)
+        .max_by(|a, b| a.1.total_cmp(&b.1))
+    {
+        link["runner_up"] = serde_json::json!({
+            "record": atom_of.get(id.as_str()).map(|a| a.as_str()),
+            "score": p,
+        });
+    }
+    link
 }
 
 fn unplaced(
@@ -664,3 +834,7 @@ mod tests;
 #[cfg(test)]
 #[path = "resolution_records/declared_document_read_tests.rs"]
 mod declared_document_read_tests;
+
+#[cfg(test)]
+#[path = "resolution_records/mentions_tests.rs"]
+mod mentions_tests;

@@ -9,6 +9,10 @@
 //!   corpus's answer store, keyed by the question's content;
 //! - `replay`: the store answers; a question it holds no answer for is
 //!   refused, never sent to the daemon;
+//! - `recorded`: the store answers what the model this run asks gave it
+//!   (each answer is stamped with the model that gave it); the model answers
+//!   the rest, recorded, so a run asks only the questions no earlier run of
+//!   that model asked;
 //! - `gold`: a store written from labels answers, refusing the same way.
 //!
 //! A question's key is the hash of everything that makes it that question:
@@ -27,6 +31,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::{debug, info, warn};
 
+use crate::enrichment::atlas::resolve_records::{compose_wave, wave_singles, wave_text};
 use crate::enrichment::pipeline::types::ChatPrompt;
 use crate::error::{Error, Result};
 use crate::types::EmbedFn;
@@ -41,6 +46,9 @@ pub enum Asker {
     Daemon,
     /// The recorded answers of earlier runs answer; nothing reaches a model.
     Replay,
+    /// The recorded answers the model this run asks gave answer; the model
+    /// answers the rest, and every new answer is recorded.
+    Recorded,
     /// Answers written from labels answer; nothing reaches a model.
     Gold,
 }
@@ -52,9 +60,10 @@ impl Asker {
         match value {
             "daemon" => Ok(Self::Daemon),
             "replay" => Ok(Self::Replay),
+            "recorded" => Ok(Self::Recorded),
             "gold" => Ok(Self::Gold),
             other => Err(format!(
-                "unknown asker `{other}`; expected daemon, replay or gold"
+                "unknown asker `{other}`; expected daemon, replay, recorded or gold"
             )),
         }
     }
@@ -63,19 +72,25 @@ impl Asker {
         match self {
             Self::Daemon => "daemon",
             Self::Replay => "replay",
+            Self::Recorded => "recorded",
             Self::Gold => "gold",
         }
     }
 
     /// Whether answering needs the model reachable.
     pub fn needs_daemon(self) -> bool {
-        self == Self::Daemon
+        matches!(self, Self::Daemon | Self::Recorded)
+    }
+
+    /// Whether earlier answers in the store answer this run's questions.
+    fn reads_store(self) -> bool {
+        self != Self::Daemon
     }
 
     /// The store this source reads (`replay`, `gold`) or writes (`daemon`).
     pub fn store_path(self, enrichment_dir: &Path) -> PathBuf {
         enrichment_dir.join(match self {
-            Self::Daemon | Self::Replay => ANSWERS_FILE,
+            Self::Daemon | Self::Replay | Self::Recorded => ANSWERS_FILE,
             Self::Gold => GOLD_FILE,
         })
     }
@@ -95,6 +110,10 @@ pub struct Answer {
     /// The question's phase id, for reading a store by eye.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phase: Option<String>,
+    /// The model that gave the answer (`AnsweredBy`); none in a store written
+    /// from labels or recorded before answers were stamped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
     /// Chat: the text answered. Embed: the vector.
     pub answer: Value,
 }
@@ -111,21 +130,32 @@ pub fn embed_key(text: &str) -> String {
     ContentHash::of_str(&format!("embed\0{text}")).to_hex()
 }
 
+/// Which model answers a question, by its port (`chat`, `embed`) and phase
+/// id: the model the daemon client routes it to. A new answer is stamped with
+/// it, and under `recorded` a stored answer is reused only when it gave it.
+pub type AnsweredBy = Arc<dyn Fn(&str, Option<&str>) -> String + Send + Sync>;
+
 /// The answers this run has given or been given, and where new ones go.
 struct Store {
     source: Asker,
     path: PathBuf,
+    by: AnsweredBy,
     answers: Mutex<HashMap<String, Value>>,
     out: Option<Mutex<std::io::BufWriter<std::fs::File>>>,
 }
 
 impl Store {
-    fn open(source: Asker, path: PathBuf) -> Result<Self> {
+    fn open(source: Asker, path: PathBuf, by: AnsweredBy) -> Result<Self> {
         let mut answers = HashMap::new();
-        // A recording run starts from nothing it has not asked: an answer from
+        let mut other_model = 0usize;
+        // A `daemon` run starts from nothing it has not asked: an answer from
         // an earlier run is never reused, so the model answers every question
-        // this run asks and the store records it. Replay and gold read all.
-        if !source.needs_daemon() {
+        // this run asks and the store records it. Replay and gold read all; a
+        // `recorded` run reads what this run's model gave, and a store not
+        // yet written is an empty one.
+        if source == Asker::Recorded && !path.exists() {
+            info!(asker = source.label(), store = %path.display(), "asker: no store yet; every question goes to the model");
+        } else if source.reads_store() {
             let text = std::fs::read_to_string(&path).map_err(|e| {
                 Error::InvalidInput(format!(
                     "the {} asker reads {}: {e}",
@@ -141,6 +171,12 @@ impl Store {
                 let a: Answer = serde_json::from_str(line).map_err(|e| {
                     Error::Serialization(format!("{} line {}: {e}", path.display(), n + 1))
                 })?;
+                if source == Asker::Recorded
+                    && a.model.as_deref() != Some(by(&a.port, a.phase.as_deref()).as_str())
+                {
+                    other_model += 1;
+                    continue;
+                }
                 // The latest recording of a question is the one a replay gives.
                 answers.insert(a.key, a.answer);
             }
@@ -157,10 +193,11 @@ impl Store {
         } else {
             None
         };
-        info!(asker = source.label(), store = %path.display(), answers = answers.len(), "asker: answering");
+        info!(asker = source.label(), store = %path.display(), answers = answers.len(), other_model, "asker: answering");
         Ok(Self {
             source,
             path,
+            by,
             answers: Mutex::new(answers),
             out,
         })
@@ -193,6 +230,7 @@ impl Store {
                 key,
                 port: port.to_string(),
                 phase: phase.map(str::to_string),
+                model: Some((self.by)(port, phase)),
                 answer: answer.clone(),
             };
             let mut out = out.lock().expect("the store writer is never poisoned");
@@ -227,17 +265,28 @@ impl Store {
 }
 
 /// Put the Asker in front of a build's two model ports. `chat` and `embed` are
-/// the daemon's; under `replay` and `gold` they are never called.
+/// the daemon's, `by` the models they route each question to; under `replay`
+/// and `gold` they are never called.
 pub fn answering(
     source: Asker,
     enrichment_dir: &Path,
+    by: AnsweredBy,
     embed: EmbedFn,
     chat: InferenceFn,
 ) -> Result<(EmbedFn, InferenceFn)> {
-    let store = Arc::new(Store::open(source, source.store_path(enrichment_dir))?);
+    let store = Arc::new(Store::open(source, source.store_path(enrichment_dir), by)?);
     let chat_store = Arc::clone(&store);
     let asked_chat: InferenceFn = Arc::new(move |prompt: &ChatPrompt, max_tokens| {
         let store = Arc::clone(&chat_store);
+        if let Some(split) = wave_singles(prompt) {
+            return ask_wave(
+                store,
+                Arc::clone(&chat),
+                prompt.phase_id.clone(),
+                split,
+                max_tokens,
+            );
+        }
         let key = chat_key(prompt, max_tokens);
         let phase = prompt.phase_id.clone();
         let recorded = store.get(&key);
@@ -282,6 +331,83 @@ pub fn answering(
         })
     });
     Ok((asked_embed, asked_chat))
+}
+
+/// A forced-choice wave, answered question by question: each by its single
+/// prompt's key, so a wave and its single questions share one store and a run
+/// recorded either way replays the other. The questions the store holds no
+/// answer for go to the daemon as one smaller wave (`daemon`), or are refused
+/// one by one (`replay`, `gold`); every new answer is recorded under its own
+/// question's key. A refused question is that question's alone.
+fn ask_wave(
+    store: Arc<Store>,
+    chat: InferenceFn,
+    phase: Option<String>,
+    split: std::result::Result<Vec<ChatPrompt>, String>,
+    max_tokens: Option<u32>,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send>> {
+    Box::pin(async move {
+        let singles = split.map_err(|e| Error::InvalidInput(format!("forced_choice wave: {e}")))?;
+        let keys: Vec<String> = singles.iter().map(|s| chat_key(s, max_tokens)).collect();
+        let text = |v: Value| match v {
+            Value::String(t) => Ok(t),
+            other => Err(format!("the store holds a non-text chat answer: {other}")),
+        };
+        let mut answers: Vec<Option<std::result::Result<String, String>>> =
+            keys.iter().map(|k| store.get(k).map(text)).collect();
+        let missing: Vec<usize> = (0..keys.len()).filter(|&i| answers[i].is_none()).collect();
+        debug!(
+            asker = store.source.label(),
+            ?phase,
+            questions = keys.len(),
+            recorded = keys.len() - missing.len(),
+            "asker: a wave"
+        );
+        if !missing.is_empty() && !store.source.needs_daemon() {
+            for &i in &missing {
+                answers[i] = Some(Err(store
+                    .missing("chat", phase.as_deref(), &keys[i])
+                    .to_string()));
+            }
+        } else if !missing.is_empty() {
+            let ask: Vec<ChatPrompt> = missing.iter().map(|&i| singles[i].clone()).collect();
+            let asked: Vec<std::result::Result<String, String>> = match compose_wave(&ask) {
+                Ok(wave) if ask.len() > 1 => match chat(&wave, max_tokens).await {
+                    Ok(raw) => match oicp_types::forced_choice::wave_texts(&raw) {
+                        Some(texts) if texts.len() == ask.len() => texts,
+                        _ => {
+                            let head: String = raw.chars().take(120).collect();
+                            vec![Err(format!("not a wave answer: {head:?}")); ask.len()]
+                        }
+                    },
+                    Err(e) => vec![Err(e.to_string()); ask.len()],
+                },
+                _ => {
+                    let mut out = Vec::with_capacity(ask.len());
+                    for single in &ask {
+                        out.push(chat(single, max_tokens).await.map_err(|e| e.to_string()));
+                    }
+                    out
+                }
+            };
+            for (&i, answer) in missing.iter().zip(asked) {
+                answers[i] = Some(match answer {
+                    Ok(t) => text(store.keep(
+                        keys[i].clone(),
+                        "chat",
+                        phase.as_deref(),
+                        Value::String(t),
+                    )?),
+                    Err(why) => Err(why),
+                });
+            }
+        }
+        let answers: Vec<std::result::Result<String, String>> = answers
+            .into_iter()
+            .map(|a| a.expect("every question answered or refused"))
+            .collect();
+        Ok(wave_text(&answers))
+    })
 }
 
 #[cfg(test)]

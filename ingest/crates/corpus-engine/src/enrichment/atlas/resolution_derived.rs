@@ -15,7 +15,6 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use serde::Serialize;
 use serde_json::Value;
 use tracing::{debug, info};
 
@@ -29,139 +28,36 @@ use crate::enrichment::ontology::derived::{
 use crate::enrichment::ontology::{DocumentStamp, OntologyPolicies, TypeIndex};
 use crate::enrichment::reconciliation::identity_signals::fold_identity_value;
 
+#[path = "resolution_derived/membership.rs"]
+pub mod membership;
+#[path = "resolution_derived/outcome.rs"]
+mod outcome;
 #[path = "resolution_derived/protocol.rs"]
 mod protocol;
+#[path = "resolution_derived/protocol_moves.rs"]
+mod protocol_moves;
+#[path = "resolution_derived/protocol_support.rs"]
+mod protocol_support;
 #[path = "resolution_derived/read_fields.rs"]
 mod read_fields;
+#[path = "resolution_derived/statement_refs.rs"]
+mod statement_refs;
+
+pub use outcome::{
+    protocol_readings, write_fold, DeriveStage, DerivedOutcome, DerivedProtocolAudit,
+    DerivedReport, DerivedTally, DerivedValue, UnresolvedReading, FOLDS_ATTRIBUTE,
+};
 
 /// Whether `policies` derive anything in the atlas build: a declared path or
-/// fold, or a field whose readings a record folds (`AttrDecl::by`).
+/// fold, a field whose readings a record folds (`AttrDecl::by`), a read
+/// statement's own reference (`statement_refs`), or a thread that places
+/// documents on records (`membership`).
 pub fn derives(policies: &OntologyPolicies) -> bool {
-    !policies.derivation.derived.is_empty() || !read_fields::declared(policies).is_empty()
+    !policies.derivation.derived.is_empty()
+        || !read_fields::declared(policies).is_empty()
+        || !statement_refs::declared(policies).is_empty()
+        || membership::applies(policies)
 }
-
-/// Which side of RESOLVE a derivation runs on.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DeriveStage {
-    BeforeResolve,
-    AfterResolve,
-}
-
-/// What a derivation gave one atom. Closed: an absence says which kind.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(tag = "outcome", rename_all = "snake_case")]
-pub enum DerivedOutcome {
-    Decided {
-        values: Vec<String>,
-        /// The `from` entry that decided, for a fold whose order matters.
-        #[serde(skip_serializing_if = "Option::is_none")]
-        input: Option<usize>,
-        /// The documents the decided values came through.
-        documents: Vec<String>,
-        /// Other values later inputs reached, which the decision outranked.
-        #[serde(skip_serializing_if = "Vec::is_empty")]
-        superseded: Vec<String>,
-    },
-    /// No input reached a value.
-    Nothing,
-    /// Every input that reached anything reached several values.
-    Ambiguous { values: Vec<String> },
-    /// `agree`: the inputs reached different values.
-    Conflict { values: Vec<String> },
-    /// `most`, `earliest`, `latest`: several values share the top place.
-    Tie { values: Vec<String> },
-    /// `earliest`, `latest`: values were reached, none through a dated document.
-    Unordered,
-    /// A declared protocol could apply, but a requested qualification or a
-    /// total report-time order is unavailable.
-    Pending {
-        values: Vec<String>,
-        reasons: Vec<String>,
-    },
-}
-
-impl DerivedOutcome {
-    pub fn label(&self) -> &'static str {
-        match self {
-            DerivedOutcome::Decided { .. } => "decided",
-            DerivedOutcome::Nothing => "nothing",
-            DerivedOutcome::Ambiguous { .. } => "ambiguous",
-            DerivedOutcome::Conflict { .. } => "conflict",
-            DerivedOutcome::Tie { .. } => "tie",
-            DerivedOutcome::Unordered => "unordered",
-            DerivedOutcome::Pending { .. } => "pending",
-        }
-    }
-}
-
-/// Replayable provenance for one recipe-declared scalar protocol projection.
-#[derive(Debug, Clone, Serialize)]
-pub struct DerivedProtocolAudit {
-    /// Content identity of the fold, its paths, qualifications and rule data.
-    pub rule_fingerprint: String,
-    /// Report time that selected the current state; never the transition's effective time.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub as_of_report_time: Option<String>,
-    /// Effective-time values on the selected reports, retained without ordering them.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub effective_times: Vec<String>,
-    /// Rules that matched or remained possible under missing qualifications.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub rule_ids: Vec<String>,
-    /// Every claim reached through the assigned-subject path, including excluded inputs.
-    pub basis_claims: Vec<String>,
-    /// The input claim → resolved record assignment used by this projection.
-    pub assignment_dependencies: BTreeMap<String, String>,
-    /// Supported states that remain possible when the fold is pending or conflicting.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub alternatives: Vec<String>,
-    /// Every reached claim, its source document, citation, field evidence and disposition.
-    pub history: Vec<Value>,
-    /// Why no unique state was projected, if applicable.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub reasons: Vec<String>,
-}
-
-/// One atom's derivation, as the build keeps it beside the atlas.
-#[derive(Debug, Clone, Serialize)]
-pub struct DerivedValue {
-    pub stage: DeriveStage,
-    #[serde(rename = "type")]
-    pub type_name: String,
-    pub attribute: String,
-    pub atom: String,
-    pub derived: String,
-    #[serde(flatten)]
-    pub outcome: DerivedOutcome,
-    /// Atoms a `[!set]` filter dropped on the way.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub excluded: Vec<String>,
-    /// The value the atom held before, when the derivation changed it.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub replaced: Option<Value>,
-    /// Rule, source, and assignment lineage for a protocol fold.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub protocol: Option<DerivedProtocolAudit>,
-    /// The derivation as the value's source (C3). Code computes it from the
-    /// declared path and fold, over inputs whose own precisions they carry;
-    /// no precision of the fold's output is declared or estimated yet.
-    pub by: crate::enrichment::atlas::precision::SourcePrecision,
-}
-
-/// Per attribute, what one stage did.
-#[derive(Debug, Clone, Default, Serialize)]
-pub struct DerivedTally {
-    pub atoms: usize,
-    pub outcomes: BTreeMap<&'static str, usize>,
-    /// Atoms a `[!set]` filter dropped, over every derivation of the attribute.
-    pub excluded: usize,
-    /// Atoms of a set's type lacking an attribute it reads: in no set, out of no set.
-    pub unjudged: usize,
-}
-
-/// `(type.attribute, tally)` for each attribute one stage derived.
-pub type DerivedReport = BTreeMap<String, DerivedTally>;
 
 /// Derive every attribute of `stage`, in the declared order; `sink` sees each
 /// atom's derivation. Refuses a declaration whose order cannot be computed.
@@ -178,9 +74,18 @@ pub fn derive_attributes(
     let order = declared.order(&policies.shape.types)?;
     let mut report = DerivedReport::new();
     // First, so a declared derivation after RESOLVE reads a record's folded
-    // fields as it reads any attribute.
+    // fields and a statement's references as it reads any attribute.
     if stage == DeriveStage::AfterResolve {
         read_fields::derive(
+            atoms,
+            documents,
+            participants,
+            policies,
+            &index,
+            &mut report,
+            sink,
+        )?;
+        statement_refs::resolve(
             atoms,
             documents,
             participants,
@@ -242,6 +147,8 @@ pub fn derive_attributes(
                 };
                 attributes.insert(attr.to_string(), value);
             }
+            let readings = protocol.as_ref().map(protocol_readings);
+            write_fold(attributes, attr, &outcome, readings, &[]);
             let replaced = previous.filter(|p| attributes.get(attr) != Some(p));
             tally.atoms += 1;
             *tally.outcomes.entry(outcome.label()).or_default() += 1;
@@ -254,6 +161,8 @@ pub fn derive_attributes(
                 derived: id.to_string(),
                 outcome,
                 excluded: excluded.into_iter().collect(),
+                unresolved: Vec::new(),
+                unjudged: Vec::new(),
                 replaced,
                 protocol,
                 by: crate::enrichment::atlas::precision::SourcePrecision::new(
@@ -299,6 +208,8 @@ struct Graph<'a> {
     clock: HashMap<&'a str, String>,
     /// Attribute → target atom → the atoms naming it there, for `^attribute`.
     named_by: HashMap<String, HashMap<String, Vec<Node>>>,
+    /// Atom → the (field, document) pairs whose field names it, for `^field`.
+    named_in: HashMap<&'a str, Vec<(&'a str, &'a str)>>,
     policies: &'a OntologyPolicies,
     index: &'a TypeIndex<'a>,
     parsed: HashMap<&'a str, Vec<PathExpr>>,
@@ -353,6 +264,15 @@ impl<'a> Graph<'a> {
                 }
             }
         }
+        let mut named_in: HashMap<&str, Vec<(&str, &str)>> = HashMap::new();
+        for (doc, named) in participants {
+            for (field, id) in named.iter().filter(|(f, _)| inverted.contains(f)) {
+                named_in
+                    .entry(id.as_str())
+                    .or_default()
+                    .push((field.as_str(), doc.as_str()));
+            }
+        }
         let mut about: HashMap<&str, Vec<usize>> = HashMap::new();
         for (j, c) in claims.iter().enumerate() {
             if let Some(s) = &c.subject {
@@ -401,6 +321,7 @@ impl<'a> Graph<'a> {
             participants,
             clock,
             named_by,
+            named_in,
             policies,
             index,
             parsed,
@@ -591,6 +512,15 @@ impl<'a> Graph<'a> {
                         _ => doc.clone(),
                     };
                     out.insert((n.clone(), d));
+                }
+                for (_, k) in self
+                    .named_in
+                    .get(id)
+                    .into_iter()
+                    .flatten()
+                    .filter(|(f, _)| *f == attr)
+                {
+                    out.insert((Node::Document(k.to_string()), Some(k.to_string())));
                 }
             }
             _ => {}
@@ -785,3 +715,7 @@ fn scalars(v: Option<&Value>) -> Vec<String> {
 #[cfg(test)]
 #[path = "resolution_derived/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "resolution_derived/statement_refs_tests.rs"]
+mod statement_refs_tests;

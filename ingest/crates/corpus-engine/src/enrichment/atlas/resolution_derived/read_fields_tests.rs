@@ -180,3 +180,322 @@ fn a_record_folds_what_its_statements_read_by_the_declared_policy() {
     assert_eq!(line("event-h2", "size").outcome, DerivedOutcome::Nothing);
     assert_eq!(line("event-h1", "kind").derived, "by agree");
 }
+
+const REFERENCES: &str = r#"
+[[types]]
+name = "company"
+kind = "entity"
+attributes = [{ name = "domain", type = "text" }]
+identity = ["domain"]
+source = { metadata = ["from", "to"], attributes = { domain = "domain" } }
+
+[[types]]
+name = "deal"
+kind = "entity"
+identity_criterion = "the same transaction"
+attributes = [{ name = "counterparty", type = "ref", of = "company", by = "most" }]
+
+[[types]]
+name = "stage"
+kind = "claim"
+force = "assertive"
+subject = "deal"
+
+[change]
+document = { date = "date" }
+
+[[sets]]
+id = "ours"
+type = "company"
+where = { domain = { suffix = "enron.com" } }
+
+[[paths]]
+id = "outside"
+path = "document / (from | to) [!ours]"
+"#;
+
+/// A statement `id` in document `doc` about `deal`, reading its counterparty as
+/// `read` (what a Pick gave: a listed company's identity value, or a mention).
+fn stage(id: &str, doc: &str, deal: &str, read: &str) -> Claim {
+    serde_json::from_value(json!({
+        "id": id, "content": "a stage", "discourse_act": "assert",
+        "epistemic_status": "attributed", "scope": "universal", "subject": deal,
+        "evidence": [{"chunk_id": "s1", "passage_preview": "Report", "source_doc_id": doc}],
+        "claim_kind": "stage", "enrichment_depth": "extracted",
+        "attributes": {"__document_read_subject_fields": {"counterparty":
+            {"status": "supported", "value": read, "evidence": read}}},
+    }))
+    .unwrap()
+}
+
+fn deal(id: &str) -> Entity {
+    serde_json::from_value(json!({
+        "id": id, "canonical_name": id, "entity_type": "deal", "first_appearance": {"chunk_id": "s1"},
+        "description": "", "salience": 0.0, "enrichment_depth": "extracted",
+    }))
+    .unwrap()
+}
+
+/// A reference holds a record or nothing: a reading that folds equal to a
+/// company the statement's own message names in its fields counts as that
+/// company's record, never its words, and is dropped when the company is in
+/// the exclusion set `ours`; a mention, or a company only another message
+/// names, is never held and stays on the derivation line, cited.
+#[test]
+fn a_record_holds_the_record_its_statements_pick_or_nothing() {
+    let p = OntologyBlock {
+        version: 1,
+        body: toml::from_str(REFERENCES).unwrap(),
+    }
+    .policies()
+    .unwrap();
+    let row = |i: u64, from: &str, to: &str| EnrichmentChunkRow {
+        id: i,
+        content: "Report.".into(),
+        title: None,
+        url: None,
+        metadata_raw: Some(
+            json!({"date": format!("2001-01-0{i}T10:00:00Z"), "from": from, "to": to}).to_string(),
+        ),
+        source_doc_id: Some(format!("m{i}")),
+    };
+    let rows = [
+        row(1, "Ann Lee <ann@city.gov>", "kim@enron.com"),
+        row(2, "kim@enron.com", "Ann Lee <ann@city.gov>"),
+        row(3, "kim@enron.com", "carl@pge.com, dana@sdge.com"),
+        row(4, "kim@enron.com", "ed@enron.com"),
+    ];
+    let docs = SectionDocuments::from_chunk_rows([("s1", &[1u64, 2, 3, 4][..])], &rows);
+    let projection = crate::enrichment::atlas::project_source_atoms(&docs, &p, "c").unwrap();
+    let company = |domain: &str| {
+        projection
+            .atoms
+            .iter()
+            .find(|e| e.attributes.get("domain").and_then(Value::as_str) == Some(domain))
+            .unwrap_or_else(|| panic!("no company {domain}"))
+            .id
+            .as_str()
+            .to_string()
+    };
+    let (city, pge) = (company("city.gov"), company("pge.com"));
+    let mut entities = projection.atoms.clone();
+    let enron = company("enron.com");
+    entities.extend(["entity-d1", "entity-d2", "entity-d3", "entity-d4"].map(deal));
+    let mut claims = vec![
+        stage("claim-1", "m1", "entity-d1", "city.gov"),
+        stage("claim-2", "m2", "entity-d1", "city.gov"),
+        stage("claim-3", "m3", "entity-d1", "Tucson"),
+        stage("claim-4", "m3", "entity-d1", "Tucson"),
+        stage("claim-5", "m3", "entity-d2", "pge.com"),
+        stage("claim-6", "m4", "entity-d3", "pge.com"),
+        stage("claim-7", "m2", "entity-d4", "enron.com"),
+    ];
+    let mut events = Vec::new();
+    let (mut states, mut relations, mut ars) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut positions, mut oppositions, mut edges) = (Vec::new(), Vec::new(), Vec::new());
+    let mut trajectories = BTreeMap::new();
+    let mut atoms = BuildAtoms {
+        entities: &mut entities,
+        events: &mut events,
+        states: &mut states,
+        relations: &mut relations,
+        claims: &mut claims,
+        argument_reconstructions: &mut ars,
+        positions: &mut positions,
+        oppositions: &mut oppositions,
+        edges: &mut edges,
+        trajectories: &mut trajectories,
+    };
+    let mut lines = Vec::new();
+    derive_attributes(
+        &mut atoms,
+        &docs,
+        &projection.participants,
+        &p,
+        DeriveStage::AfterResolve,
+        &mut |v| lines.push(v.clone()),
+    )
+    .unwrap();
+    let held = |id: &str| {
+        entities
+            .iter()
+            .find(|e| e.id.as_str() == id)
+            .unwrap()
+            .attributes
+            .get("counterparty")
+            .cloned()
+    };
+    let line = |id: &str| lines.iter().find(|l| l.atom == id).unwrap();
+    assert_eq!(held("entity-d1"), Some(json!(city)));
+    let d1 = line("entity-d1");
+    assert!(
+        matches!(&d1.outcome, DerivedOutcome::Decided { values, documents, .. }
+            if values == &[city.clone()] && documents == &["m1", "m2"]),
+        "{d1:?}"
+    );
+    let cited: Vec<(&str, Option<&str>, &Value)> = d1
+        .unresolved
+        .iter()
+        .map(|u| (u.claim.as_str(), u.document.as_deref(), &u.words))
+        .collect();
+    assert_eq!(
+        cited,
+        [
+            ("claim-3", Some("m3"), &json!("Tucson")),
+            ("claim-4", Some("m3"), &json!("Tucson"))
+        ],
+        "the mention is kept, cited, and never counted"
+    );
+    assert_eq!(held("entity-d2"), Some(json!(pge)));
+    assert_eq!(held("entity-d3"), None, "m4's fields name no pge.com");
+    let d3 = line("entity-d3");
+    assert_eq!(d3.outcome, DerivedOutcome::Nothing);
+    assert_eq!(d3.unresolved.len(), 1, "{d3:?}");
+    assert_eq!(d3.unresolved[0].claim, "claim-6");
+    assert_eq!(held("entity-d4"), None, "our own side is never held");
+    let d4 = line("entity-d4");
+    assert_eq!(d4.outcome, DerivedOutcome::Nothing);
+    assert_eq!(d4.excluded, [enron]);
+    assert!(d4.unresolved.is_empty(), "{d4:?}");
+}
+
+/// What RESOLVE left of a mention particular (`decides_mentions`): a statement
+/// in `doc` that declares no claim kind, on `record`, naming it by `words`.
+fn mention(id: &str, doc: &str, record: &str, words: &str) -> Claim {
+    let mut c: Claim = serde_json::from_value(json!({
+        "id": id, "content": words, "discourse_act": "assert",
+        "epistemic_status": "attributed", "scope": "universal", "subject": record,
+        "evidence": [{"chunk_id": "s1", "passage_preview": words, "source_doc_id": doc}],
+        "enrichment_depth": "extracted",
+    }))
+    .unwrap();
+    c.attributes.insert(
+        crate::enrichment::pipeline::document_read::WORDS_ATTRIBUTE.into(),
+        json!(words),
+    );
+    c
+}
+
+/// A reading that names no record the message's fields list is a mention's
+/// words: it holds the record RESOLVE put that message's mention of them on,
+/// keyed by the message, never by the words across messages. A record no
+/// exclusion set can judge (no domain) is held and the line says it is
+/// unjudged (D3); one in `ours` is dropped as a header record is; words two
+/// records hold in one message name neither.
+#[test]
+fn a_mention_reading_holds_the_record_its_message_put_the_mention_on() {
+    let p = OntologyBlock {
+        version: 1,
+        body: toml::from_str(REFERENCES).unwrap(),
+    }
+    .policies()
+    .unwrap();
+    let row = |i: u64, from: &str, to: &str| EnrichmentChunkRow {
+        id: i,
+        content: "Report.".into(),
+        title: None,
+        url: None,
+        metadata_raw: Some(
+            json!({"date": format!("2001-01-0{i}T10:00:00Z"), "from": from, "to": to}).to_string(),
+        ),
+        source_doc_id: Some(format!("m{i}")),
+    };
+    let rows = [
+        row(1, "kim@enron.com", "carl@pge.com"),
+        row(2, "kim@enron.com", "ed@enron.com"),
+        row(3, "kim@enron.com", "ed@enron.com"),
+    ];
+    let docs = SectionDocuments::from_chunk_rows([("s1", &[1u64, 2, 3][..])], &rows);
+    let projection = crate::enrichment::atlas::project_source_atoms(&docs, &p, "c").unwrap();
+    let company = |domain: &str| {
+        projection
+            .atoms
+            .iter()
+            .find(|e| e.attributes.get("domain").and_then(Value::as_str) == Some(domain))
+            .unwrap_or_else(|| panic!("no company {domain}"))
+            .id
+            .as_str()
+            .to_string()
+    };
+    let (enron, pge) = (company("enron.com"), company("pge.com"));
+    let tucson = "entity-tucson";
+    let mut entities = projection.atoms.clone();
+    entities.push(
+        serde_json::from_value(json!({
+            "id": tucson, "canonical_name": "Tucson Electric", "entity_type": "company",
+            "first_appearance": {"chunk_id": "s1"}, "description": "", "salience": 0.0,
+            "enrichment_depth": "extracted",
+        }))
+        .unwrap(),
+    );
+    entities.extend(["entity-d1", "entity-d2", "entity-d3", "entity-d4"].map(deal));
+    let mut claims = vec![
+        mention("mention-1", "m2", tucson, "Tucson Electric"),
+        stage("claim-1", "m2", "entity-d1", "Tucson Electric"),
+        stage("claim-2", "m3", "entity-d2", "Tucson Electric"),
+        mention("mention-2", "m3", &enron, "Enron Corp"),
+        stage("claim-3", "m3", "entity-d3", "Enron Corp"),
+        mention("mention-3", "m1", tucson, "Acme"),
+        mention("mention-4", "m1", &pge, "Acme"),
+        stage("claim-4", "m1", "entity-d4", "Acme"),
+    ];
+    let mut events = Vec::new();
+    let (mut states, mut relations, mut ars) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut positions, mut oppositions, mut edges) = (Vec::new(), Vec::new(), Vec::new());
+    let mut trajectories = BTreeMap::new();
+    let mut atoms = BuildAtoms {
+        entities: &mut entities,
+        events: &mut events,
+        states: &mut states,
+        relations: &mut relations,
+        claims: &mut claims,
+        argument_reconstructions: &mut ars,
+        positions: &mut positions,
+        oppositions: &mut oppositions,
+        edges: &mut edges,
+        trajectories: &mut trajectories,
+    };
+    let mut lines = Vec::new();
+    derive_attributes(
+        &mut atoms,
+        &docs,
+        &projection.participants,
+        &p,
+        DeriveStage::AfterResolve,
+        &mut |v| lines.push(v.clone()),
+    )
+    .unwrap();
+    let held = |id: &str| {
+        entities
+            .iter()
+            .find(|e| e.id.as_str() == id)
+            .unwrap()
+            .attributes
+            .get("counterparty")
+            .cloned()
+    };
+    let line = |id: &str| lines.iter().find(|l| l.atom == id).unwrap();
+
+    assert_eq!(held("entity-d1"), Some(json!(tucson)));
+    let d1 = line("entity-d1");
+    assert_eq!(d1.unjudged, [tucson], "{d1:?}");
+    assert!(d1.unresolved.is_empty(), "{d1:?}");
+
+    assert_eq!(held("entity-d2"), None, "m3 mentions no Tucson Electric");
+    let d2 = line("entity-d2");
+    assert_eq!(d2.unresolved.len(), 1, "{d2:?}");
+    assert_eq!(d2.unresolved[0].claim, "claim-2");
+
+    assert_eq!(held("entity-d3"), None, "our own side is never held");
+    let d3 = line("entity-d3");
+    assert_eq!(d3.excluded, [enron], "{d3:?}");
+    assert!(d3.unjudged.is_empty() && d3.unresolved.is_empty(), "{d3:?}");
+
+    assert_eq!(held("entity-d4"), None, "two records hold m1's \"Acme\"");
+    let d4 = line("entity-d4");
+    assert_eq!(d4.unresolved.len(), 1, "{d4:?}");
+    assert!(
+        d4.unresolved[0].why.contains("2 `company` records"),
+        "{d4:?}"
+    );
+}

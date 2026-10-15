@@ -86,23 +86,27 @@ def baseline(kind, docs):
     return {d["id"]: root(str(d["thread"])) for d in docs}
 
 
-def atlas_pred(corpus, claim_kind="case_state"):
-    """{document id: case record} from a built atlas, as an app reads it: each claim of `claim_kind` puts the
-    document its evidence landed in (the `document_id` stamp) into the record it is about. Partition scoring
-    leaves a document naming several records unplaced and counts it; it never chooses one by vote."""
-    if isinstance(corpus, list):  # the atoms themselves (a ladder's view of a run, ladder.atlas_view)
-        atoms = corpus
-    else:
-        path = pathlib.Path(corpus)
-        if not path.is_file():
-            path = pathlib.Path.home() / ".svrnmesh/indexes" / corpus / "atlas/atoms.json"
-        atoms = json.loads(path.read_text())["atoms"]
-    records = {a["data"]["id"] for a in atoms if a.get("atom_type") == "Entity"
-               and (a.get("data") or {}).get("entity_type") == "case"}
-    votes, counts = collections.defaultdict(collections.Counter), collections.Counter()
+# The record attribute a declared thread writes (THREAD_DOCUMENTS_ATTR, resolution_derived/membership.rs).
+THREAD_DOCUMENTS = "thread_documents"
+RECORD_TYPE_FIELD = {"Entity": "entity_type", "Event": "event_type"}
+
+
+def record_documents(atoms, record_type, claim_kind=None):
+    """The one reading of the documents a record holds, for this scorer and the ladders: ({document id: {record ids
+    of `record_type`}}, counts). A claim about such a record puts the document its `document_id` stamp names into it
+    (with `claim_kind` named, only a claim of that kind does, and one on no such record is counted); each id in a
+    record's `thread_documents` (a document the run read that states nothing of the type, placed by its declared
+    thread) puts that document into it. A document in several records is counted, never decided by vote."""
+    records = {d["id"]: d for a in atoms for d in [a.get("data") or {}]
+               if d.get(RECORD_TYPE_FIELD.get(a.get("atom_type"), "")) == record_type}
+    held, counts = collections.defaultdict(set), collections.Counter()
     for a in atoms:
         d = a.get("data") or {}
-        if a.get("atom_type") != "Claim" or d.get("claim_kind") != claim_kind:
+        if a.get("atom_type") != "Claim":
+            continue
+        if claim_kind is None and d.get("subject") not in records:
+            continue
+        if claim_kind is not None and d.get("claim_kind") != claim_kind:
             continue
         counts["claims"] += 1
         doc = (d.get("attributes") or {}).get("document_id")
@@ -111,12 +115,31 @@ def atlas_pred(corpus, claim_kind="case_state"):
         elif doc is None:
             counts["claims_unstamped"] += 1
         elif d["subject"] not in records:
-            counts["claims_without_case_record"] += 1
+            counts["claims_without_record"] += 1
         else:
-            votes[str(doc)][d["subject"]] += 1
-    counts["documents_in_several_records"] = sum(len(c) > 1 for c in votes.values())
-    counts["records"] = len({r for c in votes.values() for r in c})
-    return {doc: next(iter(c)) for doc, c in votes.items() if len(c) == 1}, dict(counts)
+            held[str(doc)].add(d["subject"])
+    for record, d in records.items():
+        for doc in (d.get("attributes") or {}).get(THREAD_DOCUMENTS) or []:
+            counts["documents_by_thread"] += 1
+            held[str(doc)].add(record)
+    counts["documents_in_several_records"] = sum(len(rs) > 1 for rs in held.values())
+    counts["records"] = len({r for rs in held.values() for r in rs})
+    return dict(held), dict(counts)
+
+
+def atlas_pred(corpus, claim_kind="case_state"):
+    """{document id: case record} from a built atlas, as an app reads it (record_documents): each claim of
+    `claim_kind` puts the document its `document_id` stamp names into the record it is about, and a case's
+    thread_documents put theirs. Partition scoring leaves a document in several records unplaced and counts it."""
+    if isinstance(corpus, list):  # the atoms themselves (a ladder's view of a run, ladder.atlas_view)
+        atoms = corpus
+    else:
+        path = pathlib.Path(corpus)
+        if not path.is_file():
+            path = pathlib.Path.home() / ".svrnmesh/indexes" / corpus / "atlas/atoms.json"
+        atoms = json.loads(path.read_text())["atoms"]
+    held, counts = record_documents(atoms, "case", claim_kind)
+    return {doc: next(iter(rs)) for doc, rs in held.items() if len(rs) == 1}, counts
 
 
 def er_score(pred, gold):

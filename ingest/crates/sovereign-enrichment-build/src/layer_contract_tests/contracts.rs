@@ -73,6 +73,10 @@ async fn c1_questions_ask_only_what_declared_structure_leaves_open() {
                         | "document_passes_choose"
                         | "document_passes_point"
                         | "document_passes_pick"
+                        | "document_passes_about"
+                        | "document_passes_act"
+                        | "document_passes_cite"
+                        | "resolve_reason"
                         | "resolve_select"
                 ),
                 "{shape}: a question the plan does not generate: `{phase}`"
@@ -86,7 +90,8 @@ async fn c1_questions_ask_only_what_declared_structure_leaves_open() {
             }
         }
         assert!(
-            kinds.contains_key("document_passes_locate"),
+            kinds.contains_key("document_passes_locate")
+                || kinds.contains_key("document_passes_act"),
             "{shape}: {kinds:?}"
         );
     }
@@ -166,7 +171,8 @@ async fn c2_a_read_turn_holds_one_document_and_a_resolve_turn_adds_only_marked_q
         let (mut asked_resolve, mut quoted) = (0, 0);
         for p in &run.prompts {
             let phase = p.phase_id.as_deref().unwrap_or("-");
-            if phase != "resolve_select" {
+            // A reasoning turn is the RESOLVE question it reasons about.
+            if !matches!(phase, "resolve_select" | "resolve_reason") {
                 let held = codes(&format!("{}\n{}", p.system, p.user), n);
                 assert!(
                     held.len() <= 1,
@@ -492,7 +498,7 @@ async fn a_line_written_in_two_documents_is_two_occurrences() {
         for (line, docs) in &repeated {
             for doc in docs {
                 assert!(
-                    super::reader::locates(&run).iter().any(|p| {
+                    super::reader::line_questions(&run).iter().any(|p| {
                         super::reader::in_doc(p, doc)
                             && folded(super::reader::asked_line(p)) == folded(line)
                     }),
@@ -590,6 +596,7 @@ pub(super) fn renamed(f: &Fixture) -> (Fixture, BTreeMap<String, String>) {
         Fixture {
             recipe: head + &recipe,
             documents: f.documents.clone(),
+            ingested: f.ingested.clone(),
         },
         names,
     )

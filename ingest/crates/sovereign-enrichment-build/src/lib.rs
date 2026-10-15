@@ -66,6 +66,7 @@ pub mod inference_client;
 pub mod pipeline_map;
 pub mod pipeline_resolve;
 pub mod source_loader;
+pub mod window_manifest;
 
 /// End-to-end tests for the build: a scaffolded corpus, deterministic embed
 /// and canned chat closures, run through the real extract path. They came down

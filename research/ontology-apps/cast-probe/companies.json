@@ -1,0 +1,96 @@
+{
+ "ours-ward": {
+  "units": 49,
+  "F": [
+   10,
+   49
+  ],
+  "M": [
+   5,
+   49
+  ],
+  "M_partly_diagnostic": [
+   15,
+   49
+  ],
+  "F_or_M": [
+   15,
+   49
+  ],
+  "link_units": 2,
+  "mean_records_open": 146.0,
+  "ours_mentions": 38,
+  "ours_mentions_F_offers": 38,
+  "N@1": [
+   1,
+   2
+  ],
+  "N@3": [
+   2,
+   2
+  ],
+  "N@10": [
+   2,
+   2
+  ],
+  "E@1": [
+   1,
+   2
+  ],
+  "E@3": [
+   1,
+   2
+  ],
+  "E@10": [
+   1,
+   2
+  ]
+ },
+ "blind-ward": {
+  "units": 49,
+  "F": [
+   10,
+   49
+  ],
+  "M": [
+   0,
+   49
+  ],
+  "M_partly_diagnostic": [
+   0,
+   49
+  ],
+  "F_or_M": [
+   10,
+   49
+  ],
+  "link_units": 0,
+  "mean_records_open": 0.0,
+  "ours_mentions": 0,
+  "ours_mentions_F_offers": 0,
+  "N@1": [
+   0,
+   0
+  ],
+  "N@3": [
+   0,
+   0
+  ],
+  "N@10": [
+   0,
+   0
+  ],
+  "E@1": [
+   0,
+   0
+  ],
+  "E@3": [
+   0,
+   0
+  ],
+  "E@10": [
+   0,
+   0
+  ]
+ }
+}

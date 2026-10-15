@@ -597,14 +597,19 @@ pub(super) async fn cmd_corpus_remove(args: &[String]) -> i32 {
         use std::io::BufRead;
         let stdin = std::io::stdin();
         let mut line = String::new();
-        if stdin.lock().read_line(&mut line).is_err() {
-            eprintln!("aborted (could not read stdin)");
-            return 1;
-        }
-        let answer = line.trim().to_lowercase();
-        if answer != "y" && answer != "yes" {
-            println!("aborted.");
-            return 0;
+        let read = stdin.lock().read_line(&mut line);
+        match removal_answer(read, &line) {
+            Answer::Yes => {}
+            Answer::No => {
+                println!("aborted.");
+                return 0;
+            }
+            Answer::Unanswered(why) => {
+                eprintln!(
+                    "aborted: {why}; nothing was removed (pass --yes to remove without asking)"
+                );
+                return 1;
+            }
         }
     }
 
@@ -650,4 +655,44 @@ pub(super) async fn cmd_corpus_remove(args: &[String]) -> i32 {
          hosted_corpora gossip will drop '{corpus_id}' shortly."
     );
     0
+}
+
+/// What the removal prompt was told. A closed or failed stdin is no answer,
+/// never a "no": a script that forgot `--yes` must not read as a clean exit.
+#[derive(Debug, PartialEq)]
+enum Answer {
+    Yes,
+    No,
+    Unanswered(&'static str),
+}
+
+fn removal_answer(read: std::io::Result<usize>, line: &str) -> Answer {
+    match read {
+        Err(_) => Answer::Unanswered("could not read stdin"),
+        Ok(0) => Answer::Unanswered("stdin closed before an answer"),
+        Ok(_) => match line.trim().to_lowercase().as_str() {
+            "y" | "yes" => Answer::Yes,
+            _ => Answer::No,
+        },
+    }
+}
+
+#[cfg(test)]
+mod removal_answer_tests {
+    use super::*;
+
+    #[test]
+    fn a_closed_stdin_is_no_answer_and_a_typed_no_is_a_no() {
+        assert_eq!(
+            removal_answer(Ok(0), ""),
+            Answer::Unanswered("stdin closed before an answer")
+        );
+        assert_eq!(
+            removal_answer(Err(std::io::Error::other("x")), ""),
+            Answer::Unanswered("could not read stdin")
+        );
+        assert_eq!(removal_answer(Ok(2), "n\n"), Answer::No);
+        assert_eq!(removal_answer(Ok(1), "\n"), Answer::No);
+        assert_eq!(removal_answer(Ok(4), "Yes\n"), Answer::Yes);
+    }
 }

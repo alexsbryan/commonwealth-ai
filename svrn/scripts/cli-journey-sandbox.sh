@@ -293,7 +293,7 @@ fi
 
 # ── the layer-default-path fixture ───────────────────────────────────────
 # Left uninstalled for the same reason as the ontology fixture above.
-LAYER_RECIPE="${SOVEREIGN_JOURNEY_LAYER_RECIPE:-$REPO_ROOT/ingest/crates/sovereign-enrichment-build/tests/fixtures/layer/mail/recipe.toml}"
+LAYER_RECIPE="${SOVEREIGN_JOURNEY_LAYER_RECIPE:-$REPO_ROOT/ingest/crates/sovereign-enrichment-build/tests/fixtures/layer/mailraw/recipe.toml}"
 if [ ! -f "$LAYER_RECIPE" ]; then
   echo "sandbox: layer fixture recipe missing ($LAYER_RECIPE) — layer-default-path cannot run" >&2
   LAYER_RECIPE=""

@@ -108,6 +108,13 @@ pub enum ClearKvPhase {
     /// that follows owns correctness. Distinct variant so triage can
     /// tell keystroke-path clears from chat-path clears.
     FimPrefixCacheSetup,
+    /// A forced-choice wave (`decide_wave.rs`): before decoding the shared
+    /// prefix, and before restoring it for each branch. Legal because the
+    /// wave empties `cached_tokens` before its first clear and leaves it
+    /// empty, so no later request plans against a KV the bookkeeping does
+    /// not describe; and the restore REPLACES the sequence state, which is
+    /// what keeps one branch's tail out of the next.
+    DecisionWave,
 }
 
 /// One load-bearing FFI call, as recorded by the slot code.
@@ -354,6 +361,7 @@ mod tests {
     // `set_embeddings(true)`.
 
     const MODEL_SLOT_SRC: &str = include_str!("model_slot.rs");
+    const DECIDE_WAVE_SRC: &str = include_str!("decide_wave.rs");
     const EMBED_SLOT_SRC: &str = include_str!("embed_slot.rs");
 
     fn is_code_line(line: &str) -> bool {
@@ -372,26 +380,33 @@ mod tests {
             "PrefixStateRestore",
             "PrefixStateLearn",
             "FimPrefixCacheSetup",
+            "DecisionWave",
         ];
         let mut undeclared = Vec::new();
         let mut unknown_phase = Vec::new();
-        for (n, line) in MODEL_SLOT_SRC.lines().enumerate() {
+        let lines = [
+            ("model_slot.rs", MODEL_SLOT_SRC),
+            ("decide_wave.rs", DECIDE_WAVE_SRC),
+        ]
+        .into_iter()
+        .flat_map(|(file, src)| src.lines().enumerate().map(move |(n, l)| (file, n, l)));
+        for (file, n, line) in lines {
             if !is_code_line(line) || !line.contains(".clear_kv_cache()") {
                 continue;
             }
             match line.split("// kv-phase:").nth(1) {
-                None => undeclared.push(n + 1),
+                None => undeclared.push(format!("{file}:{}", n + 1)),
                 Some(tag) => {
                     let tag = tag.trim();
                     if !known.contains(&tag) {
-                        unknown_phase.push(format!("line {}: `{tag}`", n + 1));
+                        unknown_phase.push(format!("{file}:{}: `{tag}`", n + 1));
                     }
                 }
             }
         }
         assert!(
             undeclared.is_empty(),
-            "model_slot.rs lines {undeclared:?}: `clear_kv_cache()` without a trailing \
+            "{undeclared:?}: `clear_kv_cache()` without a trailing \
              `// kv-phase: <variant>` marker. Every KV clear must declare WHY it is \
              legal — an undeclared end-of-generation clear on the prefix-cached sync \
              path is exactly how the 2026-05 KV/cached_tokens desync shipped (garbage \
@@ -401,7 +416,7 @@ mod tests {
         );
         assert!(
             unknown_phase.is_empty(),
-            "model_slot.rs kv-phase markers naming unknown variants: {unknown_phase:?} \
+            "kv-phase markers naming unknown variants: {unknown_phase:?} \
              — keep markers in sync with ffi_trace::ClearKvPhase."
         );
     }

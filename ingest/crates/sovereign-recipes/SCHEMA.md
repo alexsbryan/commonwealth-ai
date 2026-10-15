@@ -573,7 +573,7 @@ Runtime-registered per-file extractor. The engine walks `source_path` collecting
 
 ### `type = "email"`
 
-RFC-5322 / MIME email extractor. Walks `source_path` recursively (maildir layout, raw `.eml` files), parses each through `mailparse`, and emits one [`ExtractedDoc`](crate::extractors::ExtractedDoc) per message. Metadata fields: `message_id`, `thread_id` (derived from In-Reply-To / References), `from`, `to`, `cc`, `bcc`, `date`, `subject`, `in_reply_to`, `references`, `doc_type`, `body_was_truncated`, `attachments`, `source_path`. When the engine has an [`crate::asset_store::AssetStore`] + an [`crate::extractors::described_asset::AssetSubExtractorRegistry`] installed (the default after Phase 1), attachments dispatch through the described-asset substrate — raw bytes + parsed caches + Asset atom + Attaches edge land per attachment.
+RFC-5322 / MIME email extractor. Walks `source_path` recursively (maildir layout, raw `.eml` files), parses each through `mailparse`, and emits one [`ExtractedDoc`](crate::extractors::ExtractedDoc) per message. Metadata fields: `message_id`, `thread_id` (derived from In-Reply-To / References; a message carrying neither is its own thread), `from`, `to`, `cc`, `bcc`, `date`, `subject`, `base_subject` (RFC 5256 §2.1: the subject without its reply and forward marks, case-folded, absent when nothing is left; a mailbox with no reply headers can declare it as its thread), `in_reply_to`, `references`, `doc_type`, `body_was_truncated`, `attachments`, `source_path`. When the engine has an [`crate::asset_store::AssetStore`] + an [`crate::extractors::described_asset::AssetSubExtractorRegistry`] installed (the default after Phase 1), attachments dispatch through the described-asset substrate — raw bytes + parsed caches + Asset atom + Attaches edge land per attachment.
 
 | TOML key | Type | Required | Default | Description |
 |---|---|---|---|---|
@@ -1046,6 +1046,7 @@ Data for a qualified scalar fold over already-assigned, cited claims.
 | `identity` | `String` | **yes** | — | A source-supported, stable identity for one reported transition. |
 | `effective_time` | `Option<String>` | no | type default | A source-supported transition effective time; never used as report order. |
 | `rules` | `Vec<ProtocolRuleDecl>` | no | type default | Explicit claim qualifications map to application state values. |
+| `initial` | `Option<String>` | no | type default | The state a record holds before any move, for the rules' `from` alone: a record no cited move reaches still holds nothing. |
 
 ## `ProtocolRuleDecl`
 
@@ -1058,6 +1059,8 @@ One application-data mapping from a qualified claim to a scalar state.
 | `state` | `String` | **yes** | — | A value in the derived attribute's closed text set. |
 | `when` | `BTreeMap<String, String>` | no | type default | Every named field must be source-supported at the exact declared value. |
 | `corrects` | `Option<String>` | no | type default | An optional field whose supported identity must name a prior transition. |
+| `by` | `Option<String>` | no | type default | Who may make this move: a declared path walked from the claim, the move counting only when it reaches something. Absent: anyone. |
+| `from` | `Vec<String>` | no | type default | The states this move may leave. Empty: any state, and none. |
 
 ## `FoldBy`
 

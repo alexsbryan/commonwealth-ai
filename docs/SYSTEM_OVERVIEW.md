@@ -224,7 +224,8 @@ thing), [`ENRICHMENT_V2.md`](../ingest/crates/corpus-engine/ENRICHMENT_V2.md),
   as a cited table with a count line. An unset attribute sets the atom
   aside as unjudged and says so. `svrn enrich atlas-query <corpus> --typed
   '<json>'` runs one as written (`--json`: rows `{name, atom_id,
-  attributes, evidence}`). `typed_prompt::query_grammar` renders a declared
+  attributes, evidence, record}`, `record` the row `atoms_lookup` shows,
+  from the one builder `corpus_engine_atlas_reader::records::RecordView`). `typed_prompt::query_grammar` renders a declared
   ontology as the documentation and per-type JSON Schema a model writes one
   against (the query-layer probe's, byte for byte); `AtlasGraph::typed_answer`
   runs the same executor over a loaded graph.
@@ -634,8 +635,18 @@ question the pipeline asks about a type is a method on the resolved
   subject fields flow to RESOLVE. A claim carries its subject's readings whole
   (`SUBJECT_FIELDS_ATTRIBUTE`, each a `DocumentReadField` like its own fields),
   RESOLVE keys on their supported values and keeps them on the claim, and the
-  projection sketches no subject (RESOLVE alone makes those records). One reader asks: the passes reader
-  (`document_read/passes.rs`, ONTOLOGY_METHOD §Reading). Every question about a
+  projection sketches no subject (RESOLVE alone makes those records). The passes reader asks by default
+  (`document_read/passes.rs`, ONTOLOGY_METHOD §Reading); `SOVEREIGN_READER=waves` (experiment, DEFAULTS_LEDGER)
+  reads with the compiled reader instead (`document_read/waves.rs`): the declaration compiled into levels,
+  each declared target counted and its particulars pointed at first, then per particular its fields and acts,
+  then per claim its fields, every question opening with one document prefix and each round of a level one
+  forced-choice wave (`waves_jobs.rs`). `SOVEREIGN_READER=window` (experiment, DEFAULTS_LEDGER) reads each
+  chapter in one call (`document_read/window.rs`, prompt `window_prompt.md`), and `enrich init` then cuts the
+  corpus into windows: every document in declared-clock order, cut by size only where a document ends
+  (`sovereign-enrichment-build/src/window_manifest.rs`, `WINDOW_CHARS`). The window reader names each
+  particular once across its chapter; its envelope says so (`DocumentRead.subjects = Chapter`), the projection
+  carries the reference (`CHAPTER_SUBJECT_ATTRIBUTE`), and RESOLVE links a chapter's statements by it as a
+  sufficient key (`resolution_records.rs::CHAPTER_SUBJECT_KEY`), deciding only across windows. Every question about a
   document opens with its declared facts (`prefill.rs`: the metadata fields the
   declaration names and the declared sets they put the document or a sourced
   record in, read through the projection's own field readers,
@@ -644,15 +655,54 @@ question the pipeline asks about a type is a method on the resolved
   holds in order, or its line under a mark it lacks there), is never asked;
   a line that only repeats another's words is (`line_classes.rs`, indexed
   once per run over every chapter's documents and part of the section cache
-  key). Locate asks every remaining
-  numbered line which declared claim kind it states, and Mention which entity
-  type a read reference targets it names, pointing at the words (`mention.rs`;
-  no type a table source holds). Per statement each field is asked by its
-  declared family (`ask.rs`): Choose a closed value with RESOLVE's READ question,
+  key). Two more classes come from what the extractor wrote, never from the
+  words: a header line before the document's `body_start` and a line inside
+  one of its `segments`, an embedded reply or forward
+  (`extractors/email_segments.rs`). Both are offsets into the canonical text
+  the reader reads: `SourceDocument::raw_body` prefers the text store's text
+  (`corpus_io::document_texts`, attached by `SectionDocuments::with_texts`),
+  so no chunk title or overlap is read; a document the store cannot give is
+  read from its chunks with those two classes not applied, and the trace says
+  so. A pointed span is trimmed to its first and last letter or digit
+  (`point::trimmed`). Locate (`locate.rs`) asks every remaining
+  numbered line which declared claim kind it states, among the kinds no
+  protocol rule names; a kind a rule names, about a type RESOLVE decides, is an
+  act (`act.rs`, `KindPlan::keys`): after About, each field the rules qualify
+  on is asked of the whole document per particular in two wordings off one
+  wave (a disagreement held, no statement), and an agreed value is cited by one
+  forced choice among the sentence units touching asked lines, with no "none"
+  label (one candidate is cited by code); the statement is the lines that
+  sentence touches, its key `Supported` by `reader_act`. Mention asks each
+  remaining line which entity type a read reference targets it names, pointing at the words (`mention.rs`;
+  no type a table source holds); each of the two asks a document's lines as one
+  forced-choice wave (`decision_wave`, below), since no line's question needs
+  another's answer. About (`about.rs`) asks, per document and per subject type
+  RESOLVE decides (`resolution_records::decides`), whether the document is
+  about none, one or more than one, points at where each particular is first
+  named (a line, then its words; at most five; never a header line, of the
+  document or of an embedded message, `Doc::headers`), and with several asks each
+  statement of the type which it is about; a statement's local reference is its
+  particular's (`l{line}:{words}`), so `local_subjects.rs` joins one
+  particular's statements, and the particular's identifying fields are read
+  once, at its words. A statement about none keeps its own lines as its
+  reference (`l{a}-{b}`). A particular no statement is about is carried on the
+  outcome (`DocumentReadParticular`, citing the whole line that first names it;
+  validation refuses one of a type RESOLVE does not decide or cited off its
+  document) and projected as a claim of no kind whose type rides on
+  `ABOUT_ATTRIBUTE` (`document_read::about_type`, read by 3b's subject binding,
+  which leaves it to RESOLVE, and by `resolve_type`, which makes it a statement
+  of the type), so a document is a member of what it is about whether or not a
+  line states a claim kind; the marker is removed after RESOLVE. Per statement each field is asked by its
+  declared family (`ask.rs`), every such question showing the whole document,
+  numbered as Locate shows it, with the statement named by its lines (never a
+  window around it): Choose a closed value with RESOLVE's READ question,
   Point at an open one's start and end words and read the value by the family
   (`point.rs`), Pick a reference among the records the target's metadata source
   reads from this document plus its mentions, less declared exclusion sets
-  (`pick.rs`); every question goes through the census funnel (`decision_call`)
+  (`pick.rs`), and Pick a subject whose type has a metadata source among that
+  source's records in this document, written as the subject's identity readings
+  (`pick_subject`; the words of a statement rarely hold an address); every
+  question goes through the census funnel (`decision_call`)
   and every read value carries `reader_choose` / `reader_point` / `reader_pick`
   at `Precision::Unmeasured`. A closed set wider than one forced choice is
   Unknown with that reason. Its
@@ -666,9 +716,17 @@ question the pipeline asks about a type is a method on the resolved
   one place (`DaemonInferenceClient::into_asked_closures`): `--asker daemon`
   (default) records every answer in `enrichment/<id>/answers.jsonl` keyed by the
   hash of the whole prompt and per-call budget (or the text embedded), one answer
-  per question per run; `replay` answers from that store and never calls (or
-  probes) the daemon; `gold` reads `answers.gold.jsonl`. A question with no stored
-  answer is refused, never defaulted.
+  per question per run, each stamped with the model the client routes it to
+  (`AnsweredBy`); `replay` answers from that store and never calls (or probes)
+  the daemon; `recorded` answers from it what the run's own model gave and asks
+  the daemon only the rest, recording them, so an iteration pays for the
+  questions it changed; `gold` reads `answers.gold.jsonl`. Under `replay` and
+  `gold` a question with no stored answer is refused, never defaulted. A forced-choice wave
+  (`resolve_records/wave.rs`) is split into its single questions, each answered
+  and recorded under its own single prompt's key, the ones the store lacks sent
+  to the daemon as one smaller wave, so a run recorded with or without waves
+  replays either way; `SOVEREIGN_WAVES_ONE_BY_ONE=1` sends each question alone
+  (A/B valve).
   `change.document` names per-document metadata fields; resolution stamps each
   claim with `document_date` (ISO 8601), `document_thread` and `document_id`
   from its ONE document (`locate`: the document its evidence names, stamped from
@@ -706,10 +764,19 @@ question the pipeline asks about a type is a method on the resolved
   answerer the fields alone are weighed and link where they reach
   `identity_bar`; otherwise ONE grammar-constrained call per document, given the type's
   `identity_criterion`, the candidates the proposers offered
-  (`resolve_records/propose.rs`: the records of the document's declared
-  thread, `change.document.thread`, then TF-IDF over documents already
-  resolved; each candidate shown with its `Reason`s, its statement and
-  document counts, the values declared structure gave it, and up to four of
+  (`resolve_records/propose.rs`: the records the document's fields name,
+  the records of its declared thread, `change.document.thread`, the `k`
+  records nearest each statement by the run's embedder (`Nearest`: a
+  statement's words and surroundings against each seeded record's card and
+  each opened record's opening statement, `resolution_records/nearest.rs`;
+  `k` a cost knob), then TF-IDF over documents already resolved; each
+  candidate shown with its `Reason`s, its statement and document counts, what
+  it is as written (a seeded record's identity values, name and the records
+  whose refs point at it, `mentions::card`) and the values its statements
+  were read with and what its statements' readers read it to be (`Described`:
+  their supported values of its other declared attributes, folded; shown, never
+  compared), never its folded comparison keys or its documents' stamps,
+  and up to four of
   its statements' cited lines from other documents (`passage::lines_of`: a
   span widened to its whole line, or the reader's lines as they stand on the
   folded default-path text), one line each marked
@@ -724,7 +791,15 @@ question the pipeline asks about a type is a method on the resolved
   `--answer select` (`resolve_records/select.rs`) asks instead one forced
   choice per statement, in document order, over the shown candidates and the
   records this document opened, read as a distribution in one forward pass and
-  kept on the outcome (`Choice`); the argmax is one source among the rest.
+  kept on the outcome (`Choice`); its argmax decides whenever a record was
+  shown, the record it picks (`Decision::Chosen`) or none, which opens one
+  (operator delivery review 2026-10-12: on Ward the weighed decider overrode
+  36 of the model's 39 picks of an offered company). The asked statement is
+  shown beside what its reader read its subject to be, gathered over every
+  claim of its window subject (`resolution_records/described.rs`). The default
+  path, `enrich resolve` (`atlas_resolve_documents.rs`), asks the reasoned
+  choice (`Answerer::Reason`): the model reasons, bounded by `REASON_TOKENS`,
+  and its choice is read after (ONTOLOGY_METHOD §Identity, amended 2026-10-14).
   A type's `identity_necessary` attributes (each with declared `values`) are READ
   per asked statement as one forced choice over those values
   (`resolve_records/read.rs`), unless the document reader already chose it
@@ -742,7 +817,10 @@ question the pipeline asks about a type is a method on the resolved
   as evidence against, and sources identical on every pair count once), refitted after every
   document in clock order, so a document is weighed at what the documents
   before it estimate; the recipe declares no precision (`identity_evidential`
-  is a retired key, warned and ignored). The decider (`resolve_records/weigh.rs`)
+  is a retired key, warned and ignored). The weighed posterior is kept beside
+  every model choice; it decides only a statement no record was shown to the
+  model for (a field-named or proposed record alone) and every statement under a
+  partition answerer. That decider (`resolve_records/weigh.rs`)
   sums each alternative's weights with the pair prior into its log odds
   against none: one an agreeing source raised and whose posterior reaches
   `identity_bar` links (`Decision::Weighed`, with the sources that agreed);
@@ -753,13 +831,14 @@ question the pipeline asks about a type is a method on the resolved
   settled (`resolve_records/settle.rs`, E3, called by `drive.rs` for both
   drivers): weighed again against the records it was held between as they
   stand, at the whole corpus's weights, with the model asked once more over
-  those records only (one more `model_choice` or `reasoned_choice`); at the bar
-  it links, with no source raising a record it opens its own, and still
-  unsettled the most probable decides, so nothing is left held. Each settled
+  those records only (`model_choice` or `reasoned_choice`), whose choice
+  decides as in a document; with no model, at the bar it links, with no source
+  raising a record it opens its own, and still unsettled the most probable
+  decides, so nothing is left held. Each settled
   document reaches `on_document` again as a resolution with `settles`, its
   outcomes replacing the held ones (`RecordsReport::settled` is the held count
   before; `outcomes["held"]` after). The model
-  is asked only where the other sources do not already link. The resolve step
+  is asked whenever a record is offered. The resolve step
   prints, per source, its estimated precision, weights and the links and
   vetoes it carried (`Resolver::sources_summary`).
   `--answer reason` reads the same choice after the model's own bounded
@@ -774,9 +853,11 @@ question the pipeline asks about a type is a method on the resolved
   is the only opt-out) (`enrichment/atlas/resolution_records.rs`, from `atlas_resolve_documents::apply`)
   as the ONE decider of every entity or event type that declares an
   `identity_criterion` and no `source` (`decides`; an event type's records are
-  event atoms); a decided type no claim kind names as its subject has no
-  statements, so `enrich extract` refuses it (`types_without_statements`) rather
-  than leave it to 3a's merge: its statements are the claims of each kind whose
+  event atoms); under the general extractor a decided type no claim kind names
+  as its subject has no statements, so `enrich extract` refuses it
+  (`types_without_statements`) rather than leave it to 3a's merge, while the
+  document reader asks About of every decided type and the window names its
+  particulars, a kind about it or not (2026-10-15): its statements are the claims of each kind whose
   `subject` is the type, placed by their anchor in the one document `locate`
   finds (derivation's `document` step uses the same). Claims the reader gave one `subject_local_ref` in one document are one
   statement at the earliest span (`resolution_records/local_subjects.rs`), unless
@@ -789,15 +870,39 @@ question the pipeline asks about a type is a method on the resolved
   statement, and each claim's subject its statement's record. 3b leaves such a
   subject unresolved, and the type's atoms 3a merged from Phase-1 sketches are
   retired with every reference to them, dropped and recorded, never repointed.
-  Decisions land in `atlas/resolve_decisions.jsonl`. Around it run the declared
+  Decisions land in `atlas/resolve_decisions.jsonl`, and each placed claim keeps
+  how its subject was decided under `__resolve_link` (`resolve_link`: key,
+  chosen or opened, with the model's uncalibrated choice scores for the decided
+  record, the best other candidate and none). Around it run the declared
   derived attributes (`enrichment/atlas/resolution_derived.rs`; ONTOLOGY_PRIMITIVES
   §8): paths over `subject`, `document`, source fields (the `Participants` the
   source projection records) and refs, filtered by sets, combined by a fold from a
   closed registry; claim attributes before RESOLVE, a decided type's after, each
-  outcome typed in `atlas/derived_decisions.jsonl`. A decided type's read field
+  outcome typed in `atlas/derived_decisions.jsonl` and kept on the atom itself
+  under `__folds` (`outcome::write_fold`: every outcome, decided or not, with the
+  readings it folded, each cited by statement, document and words; a
+  non-decided outcome leaves the attribute unset, so no filter matches it). A decided type's read field
   that declares `by` is folded onto each record first, over what its statements
   read of it, by the same decider (`resolution_derived/read_fields.rs`, entity
-  and event records alike); RESOLVE itself writes no record value. **Both tension axes degrade by REPORTING, never by
+  and event records alike); a `ref` reading counts as the record of the
+  referenced type that its statement's document names in its fields and whose
+  identity values it folds equal to (`key_name`, the projection's own naming),
+  is dropped (`excluded`) when that record is in an exclusion set over the type
+  (`DerivedPolicy::exclusions_of`, the one Pick reads too), and otherwise is
+  never held: it stays on the derivation line under `unresolved`, cited by its
+  statement, document, words and evidence, so a served reference is a record of
+  its type or nothing; RESOLVE itself writes no record value. A read
+  statement's own `ref` field (a claim kind's declared one, a relation's
+  `to`) follows the same rule next (`read_fields::held`,
+  `resolution_derived/statement_refs.rs`, added 2026-10-15): it holds the
+  record its reading names or is removed, its reading kept on the statement
+  and an unresolved one on the derivation line. When
+  `change.document` declares a thread and an id, a record also holds each
+  document the run read that states nothing of its type and whose thread's
+  statements all sit on it, by declared id under `thread_documents`
+  (`resolution_derived/membership.rs`, after the folds); every document read is
+  counted by how it came to be held or not, and a document the reader could not
+  judge is never placed. **Both tension axes degrade by REPORTING, never by
   enforcing a criterion the extraction did not fill.** The optional `by = "protocol"`
   fold projects a closed text state only after RESOLVE, from cited claims assigned
   through `^subject`. Each rule requires source-supported `DocumentRead` fields;
@@ -805,7 +910,14 @@ question the pipeline asks about a type is a method on the resolved
   pointer remain pending. `change.document.date` orders state reports, while a
   configured claim `effective_time` is retained separately and never orders them.
   Undated, mixed-precision or unsupported partial report times remain alternatives;
-  incompatible states at the same report time conflict. The existing decision line
+  incompatible states at the same report time conflict. A protocol whose rules
+  declare `by` (a declared path walked from the claim: who may make the move) or
+  `from` (the states it may leave, from the protocol's `initial`) is a state
+  machine: reports are replayed in report-time order and one no move admits stays
+  in history as `unauthorized` or `not_from_state`, evidence and never the state
+  (`resolution_derived/protocol_moves.rs`); a path may walk a document field
+  backwards (`^author`: the documents a party wrote), so an event's actor takes a
+  role from their other posts. A protocol declaring neither folds as before. The existing decision line
   retains rule fingerprint, claim basis, assignment, source document, field evidence
   and history, including duplicates, corrections and superseded reports. Existing
   ref-valued folds keep their semantics. Every pipeline writes
@@ -988,6 +1100,14 @@ register change is priced in both directions or it is not judged. The
 forced-choice body itself is built in one place for every subsystem,
 `oicp_types::forced_choice::schema` beside its detector, and each caller issues
 it through a census (`gate_call` here, RESOLVE's `decision_call` in ingest).
+A WAVE (`forced_choice::wave`, advertised `x:forced_choice_wave`, routed only
+to hosts that advertise it) carries several closed questions over one shared
+prompt as branches; the engine renders each branch as the single request it
+stands for, decodes the shared token prefix once, restores that sequence state
+before each branch and reads each distribution as a single forced choice does
+(`embedded/decide_wave.rs`), so every answer equals its single request's.
+Ingest issues waves through `decision_wave`, a census funnel beside
+`decision_call` that the judge-funnel gate counts.
 
 **Retrieval** is `runtime/retrieval_pipeline.rs`, a step ledger where every
 step accounts for what it did to the pool. `apply_atlas_grounding` is a CALLER

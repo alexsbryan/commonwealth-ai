@@ -69,4 +69,5 @@ pub use understanding_vocab::ontology::{
     AssertionPolicy, ChangePolicy, DerivationPolicy, DocumentStamp, IdentityPolicy,
     NavigationPolicy, OntologyPolicies, ProsePolicy, QuestionKind, SeedPolicy, ShapePolicy,
     WalkPolicy, DOCUMENT_COUNT_ATTR, DOCUMENT_DATE_ATTR, DOCUMENT_ID_ATTR, DOCUMENT_THREAD_ATTR,
+    THREAD_DOCUMENTS_ATTR,
 };

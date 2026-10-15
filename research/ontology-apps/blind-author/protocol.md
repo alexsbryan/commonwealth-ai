@@ -47,8 +47,8 @@ remains of the harness context is the account email the client attaches. Default
 > write TOML with your file tools instead. Do not look for other recipes or for anything about this
 > material beyond general knowledge.
 >
-> 1. Ask the skill's five interview questions (shape, assertion, identity, change, derivation) in
->    order, plus any follow-up the schema needs, and answer each one. In `transcript.md` record each
+> 1. Ask the skill's six interview questions (shape, assertion, identity, change, derivation, questions)
+>    in order, plus any follow-up the schema needs, and answer each one. In `transcript.md` record each
 >    question, your answer, and its source: `description` (quote the words) or `assumption`.
 > 2. Write ONE recipe, `recipe.toml`, with a version-1 `[enrichment.ontology]` (`type = "atlas"`).
 >    For acquire and extract: `acquire.type = "local_file"` with `path = "SOURCE_PATH"` (a placeholder

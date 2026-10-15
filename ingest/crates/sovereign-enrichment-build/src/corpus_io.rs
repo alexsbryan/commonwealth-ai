@@ -13,7 +13,7 @@ use std::sync::Arc;
 use corpus_engine::chunkers::sectioned::{
     ChapterRegexDetector, SectionDetector, SectionedChunker, TocAnchoredDetector,
 };
-use corpus_engine::enrichment::atlas::SectionDocuments;
+use corpus_engine::enrichment::atlas::{DocumentTexts, SectionDocuments};
 use corpus_engine::enrichment::pipeline::{
     is_placeholder_literal, ChapterInput, ChapterManifest, ChapterManifestWrite, ChunkRecord,
     CorpusContext,
@@ -210,6 +210,78 @@ fn read_corpus_chunks(
     })
 }
 
+/// Each document's canonical text from the source corpus's text store
+/// ([`document_texts`]), the index opened as [`read_corpus_chunks`] opens it.
+pub(crate) fn fetch_document_texts(source_corpus_id: &str) -> Result<DocumentTexts> {
+    let noop_embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(Vec::<f32>::new()) }));
+    let engine = CorpusEngine::new(paths::recipes_dir(), paths::indexes_dir(), noop_embed);
+    let source_corpus = source_corpus_id.to_string();
+    std::thread::scope(|s| {
+        s.spawn(move || -> Result<DocumentTexts> {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| Error::Database(format!("fetch_document_texts: tokio build: {e}")))?;
+            rt.block_on(async {
+                let index = engine
+                    .open_index_for_corpus(&source_corpus)
+                    .await
+                    .map_err(|e| {
+                        Error::Database(format!("open source corpus `{source_corpus}`: {e}"))
+                    })?;
+                document_texts(&index).await
+            })
+        })
+        .join()
+        .map_err(|_| Error::Database("fetch_document_texts: worker panicked".into()))?
+    })
+}
+
+/// Each document's canonical text, keyed by its `source_doc_id`: the one text
+/// its record names, as the text store holds it. What the store cannot give
+/// is named and left out, and the reader then reads that document from its
+/// chunks (`SourceDocument::raw_body`): a corpus with no text store (written
+/// before it existed), a document whose records name several texts, a text
+/// not held or not stored.
+pub(crate) async fn document_texts(
+    index: &corpus_index::index::CorpusIndex,
+) -> Result<DocumentTexts> {
+    let corpus = index.corpus_id().to_string();
+    let records = match index.documents().await? {
+        Ok((_, records)) => records,
+        Err(absence) => {
+            tracing::warn!(%corpus, ?absence, "enrich: no stored texts; every document is read from its chunks");
+            return Ok(DocumentTexts::new());
+        }
+    };
+    let mut names: std::collections::BTreeMap<String, Vec<_>> = std::collections::BTreeMap::new();
+    for r in records {
+        let held = names.entry(r.source_id).or_default();
+        if !held.contains(&r.text_sha256) {
+            held.push(r.text_sha256);
+        }
+    }
+    let (documents, mut out, mut absent) = (names.len(), DocumentTexts::new(), 0usize);
+    for (document, held) in names {
+        let [name] = held.as_slice() else {
+            absent += 1;
+            tracing::warn!(%corpus, %document, texts = held.len(), "enrich: the document names several stored texts; it is read from its chunks");
+            continue;
+        };
+        match index.text(name).await? {
+            Ok(stored) => {
+                out.insert(document, stored.text);
+            }
+            Err(absence) => {
+                absent += 1;
+                tracing::warn!(%corpus, %document, ?absence, "enrich: the document's text is not in the store; it is read from its chunks");
+            }
+        }
+    }
+    tracing::info!(%corpus, documents, stored = out.len(), from_chunks = absent, "enrich: canonical document texts read");
+    Ok(out)
+}
+
 /// Every chunk id the manifest's chapters list, sorted and deduplicated —
 /// the one bound every manifest-driven LanceDB read uses.
 fn manifest_chunk_ids(manifest: &ChapterManifest) -> Vec<u64> {
@@ -253,7 +325,8 @@ pub fn section_documents(cfg: &EnrichConfig) -> Result<SectionDocuments> {
             .iter()
             .map(|c| (c.id.as_str(), c.chunk_ids.as_slice())),
         &rows,
-    );
+    )
+    .with_texts(&fetch_document_texts(&src)?);
     tracing::info!(
         corpus = %cfg.corpus_id,
         sections = manifest.chapters.len(),
@@ -283,17 +356,20 @@ fn rebuild_corpus_state_from_corpus(
     // source corpus (see `chunks_by_ids`); subset runs still materialise
     // every chapter — the selection filter runs downstream.
     let chunks = fetch_enrichment_chunks(source_corpus_id, &manifest_chunk_ids(&manifest))?;
-    let inputs = hydrate_corpus_chapters_from_rows(&manifest, &chunks);
+    let texts = fetch_document_texts(source_corpus_id)?;
+    let inputs = hydrate_corpus_chapters_from_rows(&manifest, &chunks, &texts);
 
     // The manifest is already authoritative on this path; return as-is.
     Ok((inputs, manifest))
 }
 
 /// Hydrate chapter text and accountable source documents from the same index
-/// rows. `SectionDocuments` is the single document assembler used by RESOLVE.
+/// rows, each document given its canonical text from `texts`.
+/// `SectionDocuments` is the single document assembler used by RESOLVE.
 pub(crate) fn hydrate_corpus_chapters_from_rows(
     manifest: &ChapterManifest,
     chunks: &[corpus_index::index::EnrichmentChunkRow],
+    texts: &DocumentTexts,
 ) -> Vec<ChapterInput> {
     let documents = SectionDocuments::from_chunk_rows(
         manifest
@@ -301,7 +377,8 @@ pub(crate) fn hydrate_corpus_chapters_from_rows(
             .iter()
             .map(|chapter| (chapter.id.as_str(), chapter.chunk_ids.as_slice())),
         chunks,
-    );
+    )
+    .with_texts(texts);
     let chunk_text: std::collections::HashMap<u64, String> = chunks
         .iter()
         .map(|row| (row.id, row.content.clone()))

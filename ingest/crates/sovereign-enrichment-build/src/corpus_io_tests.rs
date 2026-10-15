@@ -42,7 +42,7 @@ fn corpus_hydration_keeps_same_title_text_documents_and_typed_context_distinct()
         }],
     };
 
-    let inputs = hydrate_corpus_chapters_from_rows(&manifest, &rows);
+    let inputs = hydrate_corpus_chapters_from_rows(&manifest, &rows, &Default::default());
     assert_eq!(inputs.len(), 1);
     assert_eq!(inputs[0].text, format!("{body}\n\n{body}"));
     assert_eq!(inputs[0].source_documents.len(), 2);

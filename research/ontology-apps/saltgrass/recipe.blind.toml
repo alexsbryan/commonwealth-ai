@@ -1,0 +1,182 @@
+# The Saltgrass Ledger — a novel manuscript (sixteen chapters), read as a
+# murder mystery: who was where, what they say, what the tide ledger recorded,
+# and where those disagree.
+
+[corpus]
+id = "saltgrass-ledger"
+name = "The Saltgrass Ledger"
+description = "The manuscript of The Saltgrass Ledger, a mystery in sixteen chapters set in the salvage port of Glasswater Stave: its people and vessels, what happens at the lock basin, what each character claims, what the tide ledger records, and where those disagree."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# One markdown manuscript, one `#`/`##` heading per chapter, chapters in
+# reading order (the clock is narrative order, not the calendar).
+[acquire]
+type = "local_file"
+path = "/Users/alexsbryan/.svrnmesh/bench-corpora/chaos-saltgrass/saltgrass-ledger.txt"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "mystery-novel"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is one novel, The Saltgrass Ledger: sixteen chapters of a village mystery
+in Glasswater Stave, a salvage port on the Hethering coast, where the harbormaster
+Corwin Pellow is found floating in the lock basin at dawn. Characters are the things,
+with the vessels that pass the lock gates. What happens — the death, a gate opening,
+a vessel through the gates, the harbormaster's crossing of the cobbles — are incidents.
+The tide ledger Maren Ashquill keeps records every opening of the gates, every vessel
+through them and every height of water against the painted gauge; it is a record kept
+inside the story, not the narrator. Everything a character says is an account, true or
+not: the village is sure of things it cannot have seen, and people lie. Suspicions and
+motives — everyone has a reason — are claims made inside the story, never facts. Read
+everything in chapter order; what a character knows depends on where in the book it is.
+The narrator speaks but is not a character.
+"""
+must_not = [
+  "present a character's account, a suspicion or village talk as what actually happened; say who holds it and where",
+  "invent clues, events or a solution the manuscript does not contain",
+]
+
+# ── Shape ────────────────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "character"
+kind = "entity"
+description = "A person in Glasswater Stave or who comes through it: villagers, the harbormaster, the ledger keeper, crews, outsiders."
+attributes = [
+  { name = "occupation", type = "text", by = "most", description = "Trade or office in the village (harbormaster, ledger keeper, salvager)." },
+  { name = "tenure", type = "quantity", unit = "years", by = "most", description = "How long they have held that office or trade, as the text gives it." },
+]
+identity_criterion = "Two mentions are one character when they name the same individual: full name, surname, given name, nickname or an office title ('the harbormaster') that points at that individual at that point in the story. An office title passes to whoever holds it next; two different holders of one title are two characters."
+
+[[enrichment.ontology.types]]
+name = "vessel"
+kind = "entity"
+description = "A boat or ship that uses the port and passes the lock gates, named by her vessel name."
+
+[[enrichment.ontology.types]]
+name = "incident"
+kind = "event"
+description = "Something that happened at a time and place in or around the port that a character, the ledger or the narration can be right or wrong about: Pellow's death, a gate opening, a vessel through the gates, someone crossing the cobbles, a meeting on the quay."
+participants = { involved = "character", vessel = "vessel", place = "place" }
+attributes = [
+  { name = "at", type = "time", description = "When it happened, as the text gives it (an hour, 'at dawn', 'the night before')." },
+  { name = "what", type = "text", values = ["death", "gate opening", "vessel passage", "crossing", "meeting", "sighting", "other"], by = "agree" },
+]
+identity_criterion = "Two mentions are one incident when they describe the same occurrence: the same kind of happening, at the same place, at the same time or the same point in the tides, involving the same people or vessel. Two gate openings on different tides are two incidents, however alike."
+
+[[enrichment.ontology.types]]
+name = "condition"
+kind = "state"
+of = "character"
+description = "A condition a character is in at a point in the story — afraid, grieving, under suspicion, keeping a secret, starting to doubt — that changes in chapter order."
+
+# ── Assertion ────────────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "account"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "incident"
+description = "What a character says or writes about an incident: testimony, an alibi, a story told in the tavern, a denial. True or false inside the story."
+grades = ["saw-it-themself", "told-by-another", "village-talk"]
+attributes = [
+  { name = "speaker", type = "ref", of = "character", description = "Who gives the account." },
+  { name = "where_they_were", type = "text", description = "Where the speaker says they were." },
+]
+
+[[enrichment.ontology.types]]
+name = "ledger_entry"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "incident"
+description = "What the tide ledger records about a gate opening or a vessel through the gates, as read in the story."
+attributes = [
+  { name = "vessel", type = "ref", of = "vessel" },
+  { name = "water_height", type = "quantity", description = "Height of water against the painted gauge, in the gauge's own marks." },
+  { name = "keeper", type = "ref", of = "character", description = "Who made the entry." },
+]
+
+[[enrichment.ontology.types]]
+name = "suspicion"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "incident"
+description = "A character's belief, spoken or thought, about who is responsible for an incident or what really happened — including what the village has 'decided by breakfast'."
+grades = ["evidence-in-hand", "motive-only", "rumour"]
+attributes = [
+  { name = "holder", type = "ref", of = "character", description = "Who holds the suspicion; leave empty for the village at large." },
+  { name = "suspect", type = "ref", of = "character", description = "Who is suspected." },
+]
+
+[[enrichment.ontology.types]]
+name = "motive"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "character"
+description = "A reason a character had to want the harbormaster gone, or to hide what happened, as the story shows or someone alleges it."
+grades = ["shown-in-narration", "admitted", "alleged"]
+attributes = [
+  { name = "reason", type = "text", description = "The reason, in a phrase (a debt, a smuggled cargo, something Pellow wrote down)." },
+  { name = "toward", type = "ref", of = "character", description = "Whom the reason concerns." },
+]
+
+[[enrichment.ontology.types]]
+name = "connection"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "character"
+description = "A standing connection between a character and another that could give one a reason: kin, marriage, debt, employment, rivalry, friendship, a shared secret — as the story shows or someone says it."
+attributes = [
+  { name = "other", type = "ref", of = "character", description = "The other character in the connection." },
+  { name = "nature", type = "text", values = ["kin", "marriage", "romance", "friendship", "employment", "debt", "rivalry", "secret", "other"] },
+]
+
+[enrichment.ontology.voices]
+not_entities = ["the narrator"]
+attributed_to = ["character", "the tide ledger", "the village", "the narrator"]
+
+# ── Change ───────────────────────────────────────────────────────────────
+# Narrative clock; nothing supersedes. A changed story is a tension to keep,
+# not a correction that retires the earlier account.
+[enrichment.ontology.change]
+clock = "narrative"
+
+# ── Derivation ───────────────────────────────────────────────────────────
+# Accounts, ledger entries and suspicions about the same incident, from any
+# chapter: a lie told in chapter 3 and exposed by the ledger in chapter 12.
+[enrichment.ontology.tension]
+label = "discrepancy"
+between = ["account", "ledger_entry", "suspicion"]
+same = ["subject"]
+not_conflicts = [
+  "Two ledger entries for different tides or different gate openings are two incidents, not a contradiction.",
+  "Suspicions of different people about the same death are rival theories inside the story; flag them only when one rests on something another account or the ledger contradicts.",
+  "An office title ('the harbormaster') naming a new holder after Pellow's death is a change of holder, not a contradiction.",
+]
+
+[enrichment.ontology.derive]
+configurations = true
+arguments = false

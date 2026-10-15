@@ -27,15 +27,30 @@ pub fn bind_claim_subject<'a>(
     typed_pools: &mut TypedSubjectPools,
     failures: &mut Vec<PhaseFailure>,
 ) -> BoundClaimSubject<'a> {
-    let declared_subject = super::declared_subject_type(policy, sketch.claim_kind.as_deref());
-    let left = declared_subject
-        .is_some_and(|ty| super::super::resolution_records::decides(policy.index(), ty));
+    // A particular no claim is about declares no claim kind; its type rides
+    // on the sketch (`document_read::about_type`).
+    let declared_subject = super::declared_subject_type(policy, sketch.claim_kind.as_deref())
+        .or_else(|| {
+            crate::enrichment::pipeline::document_read::about_type(&sketch.attributes)
+                .and_then(|of| policy.index().get(of))
+                .map(|decl| decl.name.as_str())
+        });
+    // A particular of a type whose mentions RESOLVE decides is a mention, not
+    // a claim about a source's record: RESOLVE links it, keeping its reference.
+    let mention = sketch.claim_kind.is_none()
+        && declared_subject.is_some_and(|ty| {
+            super::super::resolution_records::decides_mentions(policy.index(), ty)
+        });
+    let left = mention
+        || declared_subject
+            .is_some_and(|ty| super::super::resolution_records::decides(policy.index(), ty));
     let document_read = sketch
         .attributes
         .contains_key(crate::enrichment::pipeline::document_read::LOCAL_REF_ATTRIBUTE);
-    let metadata_subject = declared_subject
-        .and_then(|type_name| policy.index().get(type_name))
-        .is_some_and(|decl| decl.source.is_some());
+    let metadata_subject = !mention
+        && declared_subject
+            .and_then(|type_name| policy.index().get(type_name))
+            .is_some_and(|decl| decl.source.is_some());
     let source_document = sketch
         .attributes
         .get(crate::enrichment::pipeline::document_read::SOURCE_DOCUMENT_ATTRIBUTE)

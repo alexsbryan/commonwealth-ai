@@ -11,6 +11,7 @@ use tracing::debug;
 
 use super::super::resolution_documents::fold_ws;
 use super::{Criterion, Document, Plan, Proposal, Record, Refusal, Statement};
+use crate::enrichment::ontology::DocumentStamp;
 use crate::enrichment::pipeline::types::ChatPrompt;
 
 const SYSTEM: &str = include_str!("../resolve_records_prompt.md");
@@ -169,11 +170,20 @@ pub(super) fn prompt(
 /// Why a candidate was offered, as the model is shown it.
 pub(super) fn reasons(proposal: &Proposal) -> String {
     let mut why: Vec<String> = Vec::new();
+    for field in proposal.named_in() {
+        why.push(format!("named in this document's field `{field}`"));
+    }
     if proposal.same_thread() {
         why.push("same thread".into());
     }
     if proposal.similarity() > 0.0 {
         why.push(format!("document similarity {:.2}", proposal.similarity()));
+    }
+    if proposal.nearness() > 0.0 {
+        why.push(format!(
+            "close in meaning to a statement here, {:.2}",
+            proposal.nearness()
+        ));
     }
     why.join("; ")
 }
@@ -187,8 +197,9 @@ const SHOWN_SURFACES: usize = 4;
 pub const QUOTE_LABEL: &str = "quoted from another document";
 
 /// A candidate record as every RESOLVE question shows it: why it was
-/// offered, how many statements of how many documents it holds, the values
-/// declared structure gave it, and up to `SHOWN_SURFACES` of its distinct
+/// offered, how many statements of how many documents it holds, what it is
+/// as written (`Record::shown`) and the values its statements were read with,
+/// and up to `SHOWN_SURFACES` of its distinct
 /// statements' quotes from other documents, one line each, marked as quoted
 /// from that document. A quote is the whole lines its statement's span lies
 /// on (`passage::lines_of`), the lines the statement cites, so nothing else of
@@ -199,19 +210,29 @@ pub const QUOTE_LABEL: &str = "quoted from another document";
 /// forced choice, so the two arms differ only in the question.
 pub(super) fn describe(rec: &Record, why: &str, this_document: &str) -> String {
     let documents: BTreeSet<&str> = rec.evidence.iter().map(|e| e.document.as_str()).collect();
+    // What the record is as written, then the values its statements were
+    // read with. Its folded comparison keys are code's, and a document stamp
+    // says where a statement was read, never what the record is: neither is
+    // shown as one of its attributes.
     let values: Vec<String> = rec
-        .keys
+        .shown
         .iter()
-        .chain(rec.fields.iter())
-        .map(|(k, vs)| {
-            format!(
-                "{k}: {}",
-                vs.iter()
-                    .map(String::as_str)
-                    .collect::<Vec<_>>()
-                    .join(" | ")
-            )
-        })
+        .cloned()
+        .chain(
+            rec.fields
+                .iter()
+                .filter(|(k, _)| DocumentStamp::from_attr(k).is_none())
+                .map(|(k, vs)| {
+                    format!(
+                        "{k}: {}",
+                        vs.iter()
+                            .map(String::as_str)
+                            .collect::<Vec<_>>()
+                            .join(" | ")
+                    )
+                }),
+        )
+        .chain(Some(rec.described.render()).filter(|d| !d.is_empty()))
         .collect();
     let mut out = format!(
         "({why}), {} statement(s) in {} document(s); {}\n",
@@ -251,10 +272,16 @@ pub(super) fn describe(rec: &Record, why: &str, this_document: &str) -> String {
 }
 
 /// A record this document opened earlier, shown by its own words in this
-/// document: the one document the question holds.
-pub(super) fn describe_opened(surface: &str, context: &str) -> String {
+/// document, the one document the question holds, and what its reader read
+/// it to be.
+pub(super) fn describe_opened(surface: &str, context: &str, described: &str) -> String {
+    let read_as = if described.is_empty() {
+        String::new()
+    } else {
+        format!("; {described}")
+    };
     format!(
-        "(opened earlier in this document), said as {:?}\n    \"…{context}…\"\n",
+        "(opened earlier in this document), said as {:?}{read_as}\n    \"…{context}…\"\n",
         fold_ws(surface)
     )
 }

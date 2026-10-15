@@ -558,6 +558,21 @@ document = { date = "sent" }"#,
         e.contains("`deal_act` declares attribute `document_date`"),
         "{e}"
     );
+    let e = first_error_containing(
+        r#"version = 1
+[[enrichment.ontology.types]]
+name = "case"
+kind = "entity"
+identity_criterion = "the same problem"
+attributes = [{ name = "thread_documents", type = "text" }]
+[enrichment.ontology.change]
+document = { thread = "thread", id = "id" }"#,
+        "Rename the attribute",
+    );
+    assert!(
+        e.contains("`case` declares attribute `thread_documents`"),
+        "{e}"
+    );
 }
 
 #[test]

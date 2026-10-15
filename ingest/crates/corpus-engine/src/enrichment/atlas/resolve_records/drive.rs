@@ -43,7 +43,7 @@ pub async fn resolve_in_clock_order<'a>(
     );
     let mut held = Vec::new();
     for (k, (doc, statements)) in documents.iter().enumerate() {
-        let candidates = proposers.propose(*doc);
+        let candidates = proposers.propose(*doc, statements);
         let r = resolver
             .resolve_document(criterion, *doc, statements, &candidates, answerer)
             .await;

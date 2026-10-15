@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The ontology-layer campaign's bar instruments: one reader per bar (quality/campaigns/ontology-layer.toml).
+"""The ontology-layer campaign's bar instruments: one reader per bar (quality/campaigns/closed/ontology-layer.toml).
 
     bars.py <bar-id>
 

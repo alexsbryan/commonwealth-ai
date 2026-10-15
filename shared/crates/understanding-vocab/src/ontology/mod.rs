@@ -159,6 +159,11 @@ pub const DOCUMENT_ID_ATTR: &str = "document_id";
 /// The entity attribute a metadata `source` writes on each atom it projects:
 /// how many documents carry its identity value.
 pub const DOCUMENT_COUNT_ATTR: &str = "document_count";
+/// The record attribute RESOLVE's records carry when `change.document`
+/// declares a thread and an id: the ids of the documents read in the run that
+/// hold no statement of the record's type and whose thread's statements all
+/// sit on that record. A record's other documents are its statements'.
+pub const THREAD_DOCUMENTS_ATTR: &str = "thread_documents";
 
 /// One stamp `change.document` can declare. Closed: the declaration's three
 /// keys, each mapped to the reserved claim attribute it writes — the one

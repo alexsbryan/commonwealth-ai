@@ -1885,7 +1885,11 @@ def cmd_result(args):
 # The loop.
 
 TICK_S = 30
-MERGE_CHECK_TIMEOUT_S = 900    # a pre-merge check is the fast rows; a slow one is a finding
+# A pre-merge check is the fast rows; a slow one is a finding. 1800, not 900:
+# ersilia's check (lint, layers, branch-lint, starters) ran 462-766 s on a
+# machine shared with other projects' builds at load 36-46, and was cut at
+# 900 s three times running, the third inside its last row (2026-10-14).
+MERGE_CHECK_TIMEOUT_S = 1800
 MERGE_CHECK_RETRY_S = 600      # a check the host could not finish is retried after this
 DEFAULT_SESSION_TIMEOUT = 3600
 MAX_STRIKES = 3

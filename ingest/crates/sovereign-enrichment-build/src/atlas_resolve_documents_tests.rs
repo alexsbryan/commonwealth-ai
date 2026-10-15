@@ -285,13 +285,18 @@ async fn replay(declaration: &str, inputs: &[Input]) -> Vec<Value> {
     let inference: InferenceFn = Arc::new(|_, _| {
         Box::pin(async { panic!("pure protocol replay attempted model inference") })
     });
+    // Retrieval, not a decision: RESOLVE's nearest proposer embeds, and any
+    // fixed vector serves a replay that asks the model nothing.
+    let embed: corpus_engine::EmbedFn = Arc::new(|_| Box::pin(async { Ok(vec![1.0, 0.0]) }));
     let directory = tempfile::tempdir().unwrap();
     let failures = apply(
         atoms,
         &input,
+        &[],
         &policies,
         "protocol-test",
         &inference,
+        &embed,
         directory.path(),
     )
     .await

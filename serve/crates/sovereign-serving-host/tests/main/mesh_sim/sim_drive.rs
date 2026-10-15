@@ -323,7 +323,7 @@ impl Sim {
                     now_unix: self.now_ms / 1000,
                     oicp_request_id: &oicp_request_id,
                     req: &req,
-                    needs_forced_choice: false,
+                    forced_choice_feature: None,
                     objective: self.arm.objective(),
                     tier_floor: self.arm.tier_floor(&req),
                     local: LocalCandidateView {

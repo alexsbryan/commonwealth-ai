@@ -2,14 +2,14 @@
 
 use serde_json::json;
 
-use super::super::settle::held_in;
+use super::super::settle::HeldStatement;
 use super::*;
 
-/// Records x ("Fire downtown") and y ("Flood uptown"), then statement z,
-/// held between them in d1 (the model's choice on y split against the
-/// proposed answer on x at equal weight). Returns the resolver and d1's
-/// resolution.
-async fn held_between_x_and_y() -> (Resolver, DocumentResolution) {
+/// Records x ("Fire downtown") and y ("Flood uptown"), then statement z of
+/// d1, held between them. A statement the model was asked about is never
+/// held (its choice decides, `select.rs`), so the hold is the one a
+/// statement no candidate was offered for gets when its sources split.
+async fn held_between_x_and_y() -> (Resolver, Vec<HeldStatement>) {
     let mut res = fire_downtown(weights(&[
         ("model_choice", 0.6, 0.3),
         ("proposed_answer", 0.6, 0.3),
@@ -24,18 +24,18 @@ async fn held_between_x_and_y() -> (Resolver, DocumentResolution) {
         Answerer::Proposed,
     )
     .await;
-    let (infer, _) = scripted(vec![json!({"A": 0.1, "B": 0.8, "0": 0.1})]);
-    let r = res
-        .resolve_document(
-            &barred(),
-            doc("d1", B),
-            &[stmt("z", B, "Fire downtown", 0, &[])],
-            &[similar("x", 0.6), similar("y", 0.5)],
-            Answerer::Select(&infer),
-        )
-        .await;
-    assert_eq!(labels(&r), ["held"]);
-    (res, r)
+    let held = HeldStatement {
+        document: 0,
+        statement: "z".into(),
+        held: Held {
+            alternatives: vec![("x".into(), 0.4), ("y".into(), 0.4)],
+            none: 0.2,
+            sources: Vec::new(),
+            read: BTreeMap::new(),
+            supplied: BTreeMap::new(),
+        },
+    };
+    (res, vec![held])
 }
 
 const B: &str = "Fire downtown, again.";
@@ -45,13 +45,11 @@ fn statements() -> Vec<Statement> {
 }
 
 /// Asked once more over the records it was held between, the model's choice
-/// is weighed again with the whole corpus's weights; unsettled at the bar,
-/// the most probable decides, so it is not left held.
+/// decides, the posterior the whole corpus's weights give it kept beside it,
+/// so it is not left held.
 #[tokio::test]
-async fn a_held_statement_is_settled_after_the_last_document_by_the_most_probable() {
-    let (mut res, r) = held_between_x_and_y().await;
-    let mut held = Vec::new();
-    held_in(0, &r, &mut held);
+async fn a_held_statement_is_settled_after_the_last_document_by_the_models_choice() {
+    let (mut res, held) = held_between_x_and_y().await;
     assert_eq!(held.len(), 1);
     let s = statements();
     let documents = [(doc("d1", B), s.as_slice())];
@@ -65,12 +63,12 @@ async fn a_held_statement_is_settled_after_the_last_document_by_the_most_probabl
     let o = &r.outcomes[0];
     assert_eq!(
         (o.outcome.label(), o.outcome.record()),
-        ("weighed", Some("y"))
+        ("chosen", Some("y"))
     );
-    let Outcome::Decided(Decision::Weighed { posterior, .. }) = &o.outcome else {
+    let Outcome::Decided(Decision::Chosen { posterior, .. }) = &o.outcome else {
         unreachable!()
     };
-    // Below the bar of .5: no later evidence can come, so the most probable decides.
+    // The model's choice decides; the weighed posterior, below the bar of .5, is kept beside it.
     assert!(*posterior < 0.5, "{posterior}");
     assert!(o.choice.is_some() && !o.by.is_empty());
     assert!(res
@@ -88,9 +86,7 @@ async fn a_held_statement_is_settled_after_the_last_document_by_the_most_probabl
 /// A settled statement no source raises any record for opens its own.
 #[tokio::test]
 async fn a_held_statement_the_model_puts_in_none_opens_its_own_record() {
-    let (mut res, r) = held_between_x_and_y().await;
-    let mut held = Vec::new();
-    held_in(0, &r, &mut held);
+    let (mut res, held) = held_between_x_and_y().await;
     let s = statements();
     let documents = [(doc("d1", B), s.as_slice())];
     let (infer, _) = scripted(vec![json!({"A": 0.05, "B": 0.05, "0": 0.9})]);
@@ -111,9 +107,7 @@ async fn a_held_statement_the_model_puts_in_none_opens_its_own_record() {
 /// A call that answers no distribution refuses the statement, never a default.
 #[tokio::test]
 async fn a_refused_settling_call_refuses_the_statement() {
-    let (mut res, r) = held_between_x_and_y().await;
-    let mut held = Vec::new();
-    held_in(0, &r, &mut held);
+    let (mut res, held) = held_between_x_and_y().await;
     let s = statements();
     let documents = [(doc("d1", B), s.as_slice())];
     let (infer, _) = scripted(vec![json!("B")]);
