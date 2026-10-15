@@ -249,3 +249,77 @@ fn a_reference_read_beside_is_one_of_the_documents_own() {
     );
     assert_eq!(read_beside(None, &set(&["sec_2/p1"]), &doc), None);
 }
+
+/// A statement follows its own particular. Once a question joined a window's
+/// particular to a record that also holds another particular of that window
+/// (offered, marked, and chosen: they were read in different documents), the
+/// particular's later statements join that record by their window key; the
+/// window rule does not veto it. Failing input, named: a deal's updates in
+/// later documents, refused as contradictions because the record already
+/// held a sibling, so the deal's won and lost reached no record (arm
+/// particulars-all2, 2026-10-15).
+#[tokio::test]
+async fn a_statement_follows_its_own_particular() {
+    let (infer, _) = scripted(vec![
+        json!({"A": 0.9, "0": 0.1}),
+        json!({"A": 0.9, "0": 0.1}),
+    ]);
+    let mut res = weights(&[("proposed_answer", 0.5, 0.4)]);
+    let c = criterion(&[CHAPTER_SUBJECT_KEY]);
+    let mut last = None;
+    for (id, body, chapter) in [
+        ("a", "The storage deal is proposed.", "sec_1/p1"),
+        ("b", "The storage deal is off.", "sec_2/p1"),
+        ("c", "The storage deal is back on.", "sec_2/p2"),
+        ("d", "The storage deal is booked.", "sec_2/p2"),
+    ] {
+        let proposals = if id == "a" {
+            vec![]
+        } else {
+            vec![similar("a", 0.5)]
+        };
+        last = Some(
+            res.resolve_document(
+                &c,
+                doc(id, body),
+                &[stmt(
+                    id,
+                    body,
+                    "storage deal",
+                    0,
+                    &[(CHAPTER_SUBJECT_KEY, chapter)],
+                )],
+                &proposals,
+                Answerer::Select(&infer),
+            )
+            .await,
+        );
+    }
+    let d = last.expect("d was resolved");
+    assert_eq!(d.outcomes[0].outcome.record(), Some("a"), "{d:?}");
+    assert_eq!(res.records()[0].statements, ["a", "b", "c", "d"]);
+}
+
+#[test]
+fn a_necessary_conflict_is_named() {
+    use super::super::apart::{necessary_compatible, necessary_conflict};
+    let c = criterion(&[]);
+    let of = |values: &[&str]| {
+        BTreeMap::from([(
+            CHAPTER_SUBJECT_KEY.to_string(),
+            values
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<BTreeSet<_>>(),
+        )])
+    };
+    let p2 = of(&["sec_2/p2"]);
+    assert!(necessary_compatible(
+        &c,
+        &p2,
+        &of(&["sec_1/p1", "sec_2/p1", "sec_2/p2"])
+    ));
+    let why = necessary_conflict(&c, &p2, &of(&["sec_1/p1", "sec_2/p1"])).expect("a conflict");
+    assert!(why.contains("sec_2/p1"), "{why}");
+    assert_eq!(necessary_conflict(&c, &p2, &of(&["sec_1/p1"])), None);
+}

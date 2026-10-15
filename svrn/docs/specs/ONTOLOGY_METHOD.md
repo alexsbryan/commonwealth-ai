@@ -236,7 +236,8 @@ the claim's own document, and a claim whose words are not in its document refuse
 particular reaches RESOLVE as a sufficient key over its chapter (`CHAPTER_SUBJECT_KEY`), so RESOLVE decides
 identity only across windows, statement by statement against bounded candidates. Two particulars the reader read
 in one document stay two: a record holding one is never offered the other (`apart.rs::read_beside`); whether
-particulars of different documents are one is RESOLVE's to decide. If it wins through the
+particulars of different documents are one is RESOLVE's to decide, and once it lets two share a record, each
+particular's later statements follow it there by key. If it wins through the
 default commands it becomes the one reader and the passes and waves readers are deleted (operator,
 2026-10-13); if it loses, it is deleted.
 

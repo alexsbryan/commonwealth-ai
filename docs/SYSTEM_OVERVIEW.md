@@ -644,7 +644,9 @@ question the pipeline asks about a type is a method on the resolved
   carries the reference (`CHAPTER_SUBJECT_ATTRIBUTE`), and RESOLVE links a chapter's statements by it as a
   sufficient key (`resolution_records.rs::CHAPTER_SUBJECT_KEY`), deciding only across windows. Two particulars the reader
   read in one document stay two: a record holding one is never offered the other, folded or joined earlier in the
-  same document (`resolve_records/apart.rs::read_beside`, tracked in `select::choose`). Every question about a
+  same document (`resolve_records/apart.rs::read_beside`, tracked in `select::choose`); and a statement follows its
+  own particular, joining by key the record that already holds its reference whatever sibling a question let it
+  share (`apart.rs::chapter_conflict`). Every veto event names its conflict. Every question about a
   document opens with its declared facts (`prefill.rs`: the metadata fields the
   declaration names and the declared sets they put the document or a sourced
   record in, read through the projection's own field readers,

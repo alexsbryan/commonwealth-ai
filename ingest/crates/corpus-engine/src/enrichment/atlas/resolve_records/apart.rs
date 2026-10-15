@@ -22,11 +22,26 @@ pub(super) fn necessary_compatible(
     left: &BTreeMap<String, BTreeSet<String>>,
     right: &BTreeMap<String, BTreeSet<String>>,
 ) -> bool {
-    values_compatible(criterion, left, right)
-        && chapters_compatible(
+    necessary_conflict(criterion, left, right).is_none()
+}
+
+/// Why `necessary_compatible` forbids, for the veto's trace: the first
+/// declared necessary attribute whose values differ, or the other reference
+/// of the statement's window the record holds. `None` when compatible.
+pub(super) fn necessary_conflict(
+    criterion: &Criterion,
+    left: &BTreeMap<String, BTreeSet<String>>,
+    right: &BTreeMap<String, BTreeSet<String>>,
+) -> Option<String> {
+    values_conflict(criterion, left, right).or_else(|| {
+        chapter_conflict(
             left.get(super::CHAPTER_SUBJECT_KEY),
             right.get(super::CHAPTER_SUBJECT_KEY),
         )
+        .map(|other| {
+            format!("the record holds {other}, another particular of the statement's window")
+        })
+    })
 }
 
 /// What forbids a record a question offers or a forced choice joins: a
@@ -42,11 +57,22 @@ pub(super) fn offerable(
     left: &BTreeMap<String, BTreeSet<String>>,
     right: &BTreeMap<String, BTreeSet<String>>,
 ) -> bool {
-    values_compatible(criterion, left, right)
-        && !read_apart(
+    offer_conflict(criterion, left, right).is_none()
+}
+
+/// Why `offerable` forbids, for the veto's trace. `None` when offerable.
+pub(super) fn offer_conflict(
+    criterion: &Criterion,
+    left: &BTreeMap<String, BTreeSet<String>>,
+    right: &BTreeMap<String, BTreeSet<String>>,
+) -> Option<String> {
+    values_conflict(criterion, left, right).or_else(|| {
+        read_apart(
             left.get(super::CHAPTER_SUBJECT_KEY),
             right.get(super::CHAPTER_SUBJECT_KEY),
         )
+        .then(|| "the record is wholly other particulars of the statement's window".to_string())
+    })
 }
 
 /// The record is wholly other particulars of the statement's own window, as
@@ -96,39 +122,54 @@ fn chapter_of(reference: &str) -> &str {
     reference.split_once('/').map_or(reference, |(c, _)| c)
 }
 
-/// The declared necessary values alone.
-pub(super) fn values_compatible(
+/// The first declared necessary attribute whose values differ, named with
+/// both sides' values: both evidenced, and not one shared value each.
+fn values_conflict(
     criterion: &Criterion,
     left: &BTreeMap<String, BTreeSet<String>>,
     right: &BTreeMap<String, BTreeSet<String>>,
-) -> bool {
-    criterion.necessary.iter().all(|attr| {
-        let Some(left) = left.get(&attr.name).filter(|values| !values.is_empty()) else {
-            return true;
-        };
-        let Some(right) = right.get(&attr.name).filter(|values| !values.is_empty()) else {
-            return true;
-        };
-        left.len() == 1 && right.len() == 1 && left.first() == right.first()
+) -> Option<String> {
+    criterion.necessary.iter().find_map(|attr| {
+        let left = left.get(&attr.name).filter(|values| !values.is_empty())?;
+        let right = right.get(&attr.name).filter(|values| !values.is_empty())?;
+        let agree = left.len() == 1 && right.len() == 1 && left.first() == right.first();
+        (!agree).then(|| format!("{}: {left:?} against {right:?}", attr.name))
     })
 }
 
 /// Two references one window's reader gave are two particulars as it read
 /// them: a statement never joins a record holding another reference of its
-/// chapter. References of other chapters say nothing here.
+/// chapter, unless the record already holds its own (`chapter_conflict`).
+/// References of other chapters say nothing here.
 pub(super) fn chapters_compatible(
     left: Option<&BTreeSet<String>>,
     right: Option<&BTreeSet<String>>,
 ) -> bool {
-    let (Some(left), Some(right)) = (left, right) else {
-        return true;
-    };
-    let chapter = |s: &str| {
-        s.split_once('/')
-            .map_or(s.to_string(), |(c, _)| c.to_string())
-    };
-    left.iter()
-        .all(|a| right.iter().all(|b| a == b || chapter(a) != chapter(b)))
+    chapter_conflict(left, right).is_none()
+}
+
+/// The other reference of the statement's window that the record holds;
+/// none when it already holds the statement's own. A statement follows its
+/// particular: once a question let the particular share a record with a
+/// sibling read in another document (`offerable`), its later statements join
+/// that record by their key, never refused against the sibling.
+fn chapter_conflict<'a>(
+    left: Option<&BTreeSet<String>>,
+    right: Option<&'a BTreeSet<String>>,
+) -> Option<&'a String> {
+    let (left, right) = (left?, right?);
+    if left.is_subset(right) {
+        return None;
+    }
+    sibling_held(left, right)
+}
+
+/// A reference of the statement's window, other than its own, that `right` holds.
+fn sibling_held<'a>(left: &BTreeSet<String>, right: &'a BTreeSet<String>) -> Option<&'a String> {
+    right.iter().find(|b| {
+        left.iter()
+            .any(|a| a != *b && chapter_of(a) == chapter_of(b))
+    })
 }
 
 /// Prior records matching a statement's declared sufficient keys.
@@ -163,24 +204,38 @@ pub(super) fn key_plan(
     match (held.len(), hits.first()) {
         (0, _) | (_, None) => None,
         (1, Some((record, key, value))) => {
-            if necessary_compatible(criterion, supplied, &records[*record].supplied) {
-                Some(Plan::Key {
-                    record: *record,
-                    key: key.clone(),
-                    value: value.clone(),
-                })
-            } else {
+            if let Some(conflict) =
+                necessary_conflict(criterion, supplied, &records[*record].supplied)
+            {
                 *vetoed += 1;
                 debug!(
                     document,
                     statement = %statement.id,
                     candidate = %records[*record].id,
                     route = "sufficient_key",
+                    %conflict,
                     "atlas/resolve: necessary-field conflict vetoed the key join"
                 );
                 Some(Plan::Refuse(Refusal::Contradiction {
                     targets: vec![records[*record].id.clone()],
                 }))
+            } else {
+                let mine = supplied.get(super::CHAPTER_SUBJECT_KEY);
+                let held = records[*record].supplied.get(super::CHAPTER_SUBJECT_KEY);
+                if let Some(sibling) = mine.zip(held).and_then(|(m, h)| sibling_held(m, h)) {
+                    debug!(
+                        document,
+                        statement = %statement.id,
+                        candidate = %records[*record].id,
+                        %sibling,
+                        "atlas/resolve: a statement follows its own particular into a record that also holds a sibling of its window"
+                    );
+                }
+                Some(Plan::Key {
+                    record: *record,
+                    key: key.clone(),
+                    value: value.clone(),
+                })
             }
         }
         _ => Some(Plan::Refuse(Refusal::Contradiction {
@@ -211,17 +266,20 @@ pub(super) fn settle_field(
         if plan.is_some() {
             continue;
         }
-        if necessary_compatible(criterion, &supplied[i], &records[record].supplied) {
-            *plan = field.clone();
-        } else {
+        if let Some(conflict) =
+            necessary_conflict(criterion, &supplied[i], &records[record].supplied)
+        {
             *vetoed += 1;
             debug!(
                 document,
                 statement = %statements[i].id,
                 candidate = %records[record].id,
                 route = "evidential_field",
+                %conflict,
                 "atlas/resolve: necessary-field conflict vetoed the field join"
             );
+        } else {
+            *plan = field.clone();
         }
     }
 }
@@ -262,17 +320,18 @@ pub(super) fn gate_plans(
             // A forced choice's question showed the reader's other reference
             // (`question`), so only declared values gate it; a partition
             // answerer is shown no such mark and keeps the window's references.
-            let compatible = if reads_weighed {
-                offerable(criterion, &supplied[i], held)
+            let conflict = if reads_weighed {
+                offer_conflict(criterion, &supplied[i], held)
             } else {
-                necessary_compatible(criterion, &supplied[i], held)
+                necessary_conflict(criterion, &supplied[i], held)
             };
-            if !compatible {
+            if let Some(conflict) = conflict {
                 *vetoed += 1;
                 debug!(
                     document,
                     statement = %statements[i].id,
                     candidate = %records[record].id,
+                    %conflict,
                     "atlas/resolve: necessary-field conflict vetoed the answerer join"
                 );
                 plan = Plan::Refuse(Refusal::Contradiction {
@@ -286,17 +345,18 @@ pub(super) fn gate_plans(
         };
         if let Some(group) = open_group {
             let conflict = open_groups.get(&group).and_then(|prior| {
-                prior
-                    .iter()
-                    .copied()
-                    .find(|&prior| !necessary_compatible(criterion, &supplied[i], &supplied[prior]))
+                prior.iter().copied().find_map(|prior| {
+                    necessary_conflict(criterion, &supplied[i], &supplied[prior])
+                        .map(|why| (prior, why))
+                })
             });
-            if let Some(prior) = conflict {
+            if let Some((prior, conflict)) = conflict {
                 *vetoed += 1;
                 debug!(
                     document,
                     statement = %statements[i].id,
                     candidate = %statements[prior].id,
+                    %conflict,
                     "atlas/resolve: necessary-field conflict vetoed the within-document join"
                 );
                 plan = Plan::Refuse(Refusal::Contradiction {
