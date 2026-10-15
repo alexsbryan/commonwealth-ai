@@ -151,3 +151,35 @@ pub(super) fn eligible_claim(
 ) -> bool {
     claim.is_document_reading_eligible(&policies.shape.types)
 }
+
+/// The declared types a document read makes no record of. It reads the claim
+/// kinds `eligible_claim` admits and the types they are about (with their
+/// `specializes` kin), so a state, a relation, or an entity no claim kind is
+/// about gets none unless a source supplies it. Empty when the general
+/// extractor reads the declaration, which reads every kind.
+pub fn unread_types(
+    policies: &OntologyPolicies,
+) -> Vec<&crate::enrichment::ontology::OntologyTypeDecl> {
+    if !policies.reads_documents() {
+        return Vec::new();
+    }
+    let index = TypeIndex::from_policies(policies);
+    let read: Vec<&str> = policies
+        .shape
+        .types
+        .iter()
+        .filter(|t| eligible_claim(t, policies))
+        .flat_map(|c| std::iter::once(c.name.as_str()).chain(c.subject.as_deref()))
+        .collect();
+    policies
+        .shape
+        .types
+        .iter()
+        .filter(|t| t.source.is_none())
+        .filter(|t| {
+            !read
+                .iter()
+                .any(|r| index.is_a(&t.name, r) || index.is_a(r, &t.name))
+        })
+        .collect()
+}

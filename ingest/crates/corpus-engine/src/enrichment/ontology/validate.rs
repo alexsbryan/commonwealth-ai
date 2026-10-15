@@ -322,7 +322,7 @@ fn document_fields_note(d: &DocumentFieldsDecl) -> String {
     )
 }
 
-fn kind_key(kind: TypeKind) -> &'static str {
+pub(super) fn kind_key(kind: TypeKind) -> &'static str {
     match kind {
         TypeKind::Entity => "entity",
         TypeKind::Relation => "relation",

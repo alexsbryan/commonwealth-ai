@@ -31,6 +31,18 @@ pub(super) fn layer_warnings(
                 .join(", ")
         ));
     }
+    let unread: Vec<String> = crate::enrichment::pipeline::document_read::unread_types(policies)
+        .into_iter()
+        .filter(|t| !orphans.contains(&t.name))
+        .map(|t| format!("`{}` ({})", t.name, super::validate::kind_key(t.kind)))
+        .collect();
+    if !unread.is_empty() {
+        warnings.push(format!(
+            "the document reader reads claim kinds and the types they are about, so it makes no \
+             record of {}: no claim kind is about them and no source supplies them.",
+            unread.join(", ")
+        ));
+    }
     for (key, instead) in crate::recipe_ontology::language::retired_keys(&block.body) {
         warnings.push(format!(
             "[enrichment.ontology] `{key}` is retired and ignored: {instead}. Remove the key."

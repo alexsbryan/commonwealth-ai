@@ -41,7 +41,7 @@ pub(super) use runner_support::{
     missing_source_documents as runner_missing_source_documents,
     phase1_inputs as runner_phase1_inputs, validate_response as runner_validate_response,
 };
-pub use schema::compose;
+pub use schema::{compose, unread_types};
 pub use validation::field_evidence_exists;
 pub use validation::validate_and_stamp;
 pub use window::chosen as window_chosen;
