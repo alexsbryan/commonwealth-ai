@@ -303,6 +303,81 @@ async fn a_particular_no_statement_is_about_is_carried_and_projected_with_its_ty
     );
 }
 
+/// A type RESOLVE decides that no statement kind is about is read all the
+/// same: About asks for it after the kinds' subjects, its particular carries
+/// its own identifying fields, and neither check names it unread. Failing
+/// input, named: the plan held only the kinds' subjects, so `case` below was
+/// never asked and made no record.
+#[tokio::test]
+async fn a_decided_type_no_statement_kind_is_about_is_read_by_about() {
+    let mut p = policies();
+    p.shape
+        .types
+        .push(crate::enrichment::ontology::OntologyTypeDecl {
+            name: "person".into(),
+            kind: crate::enrichment::ontology::TypeKind::Entity,
+            description: "Someone.".into(),
+            identity_criterion: Some("the same name".into()),
+            ..Default::default()
+        });
+    for t in p.shape.types.iter_mut() {
+        if t.subject.as_deref() == Some("case") {
+            t.subject = Some("person".into());
+        }
+    }
+    let plan = passes::Plan::of(&p);
+    let decided: Vec<&str> = plan.decided.iter().map(|t| t.name.as_str()).collect();
+    assert_eq!(decided, ["person", "case"], "the kinds' subjects first");
+    let identifying: Vec<&str> = plan
+        .identifying("case")
+        .iter()
+        .flat_map(|f| f.names())
+        .collect();
+    assert_eq!(identifying, ["number", "project"]);
+    assert!(super::super::unread_types(&p).is_empty());
+    assert!(crate::enrichment::atlas::resolution_records::types_without_statements(&p).is_empty());
+
+    let chapter = input_chapter(&[row(1, "doc-1", "Issue 42 install times out\nThanks", "{}")]);
+    let (infer, seen) = scripted(vec![
+        // Locate: neither line states a claim kind.
+        three("0"),
+        three("0"),
+        // About counts: no person; one case.
+        three("0"),
+        three("A"),
+        // The case: on line 1, "Issue 42"; its number and project.
+        three("A"),
+        pick(&["A", "B", "C", "D", "E", "0"], "A"),
+        pick(&["A", "B", "C", "D", "E"], "B"),
+        pick(&["A", "B", "0"], "B"),
+        three("A"),
+    ]);
+    let classes = LineClasses::of(&chapter.source_documents, &p);
+    let envelope = passes::read(&chapter, &p, &classes, &infer).await.unwrap();
+    let mut extraction = super::super::parse_response(&envelope, &p)
+        .unwrap()
+        .section_extraction
+        .unwrap();
+    super::super::validate_and_stamp(&chapter, &p, &mut extraction).unwrap();
+    assert_eq!(seen.lock().unwrap().len(), 9);
+    let outcome = &extraction.document_read.as_ref().unwrap().documents[0];
+    let [particular] = &outcome.particulars[..] else {
+        panic!("one particular: {outcome:?}");
+    };
+    assert_eq!(
+        (
+            particular.subject_type.as_str(),
+            particular.subject_local_ref.as_str()
+        ),
+        ("case", "l1:Issue 42")
+    );
+    assert!(
+        matches!(&particular.subject_fields["number"], DocumentReadField::Supported { value, .. } if value == "42"),
+        "{:?}",
+        particular.subject_fields
+    );
+}
+
 #[test]
 fn validation_refuses_a_particular_of_a_type_resolve_does_not_decide_or_cited_off_its_document() {
     let p = policies();

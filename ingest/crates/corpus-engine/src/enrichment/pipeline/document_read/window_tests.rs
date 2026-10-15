@@ -298,3 +298,33 @@ async fn an_unstated_particular_is_sent_on_the_line_that_names_it() {
         "p1 has a statement; p3 is named by no line"
     );
 }
+
+/// The window names particulars of every type RESOLVE decides, a statement
+/// kind about it or not, after the kinds' subjects; the prompt shows each.
+#[test]
+fn the_window_names_every_decided_type_a_statement_is_about_or_not() {
+    let mut p = policies();
+    p.shape
+        .types
+        .push(crate::enrichment::ontology::OntologyTypeDecl {
+            name: "person".into(),
+            kind: crate::enrichment::ontology::TypeKind::Entity,
+            description: "Someone.".into(),
+            identity_criterion: Some("the same name".into()),
+            ..Default::default()
+        });
+    for t in p.shape.types.iter_mut() {
+        if t.subject.as_deref() == Some("case") {
+            t.subject = Some("person".into());
+        }
+    }
+    let contract = super::Contract::of(&p);
+    let subjects: Vec<&str> = contract.subjects.iter().map(|t| t.name.as_str()).collect();
+    assert_eq!(subjects, ["person", "case"]);
+    let index = crate::enrichment::ontology::TypeIndex::from_policies(&p);
+    let shown = super::ontology_text(&contract, &p, &index);
+    assert!(
+        shown.contains("- case: A support case.\n  Same case when: same issue number"),
+        "{shown}"
+    );
+}

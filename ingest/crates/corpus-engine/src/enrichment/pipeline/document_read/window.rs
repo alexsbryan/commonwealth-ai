@@ -26,6 +26,7 @@ use super::{
     DocumentReadStatus, SubjectScope,
 };
 use crate::enrichment::atlas::precision::{Precision, SourcePrecision};
+use crate::enrichment::atlas::resolution_records::decides;
 use crate::enrichment::atlas::SourceDocument;
 use crate::enrichment::ontology::{
     AttrDecl, AttrFamily, OntologyPolicies, OntologyTypeDecl, SourceDecl, TypeIndex,
@@ -61,7 +62,8 @@ pub fn chosen() -> bool {
 }
 
 /// What the window reader reads from a declaration: the claim kinds it reads,
-/// each with its subject type, and those subjects, each once.
+/// each with its subject type, and the types it names particulars of, each
+/// once: those subjects, then every other type RESOLVE decides.
 struct Contract<'a> {
     kinds: Vec<(&'a OntologyTypeDecl, &'a OntologyTypeDecl)>,
     subjects: Vec<&'a OntologyTypeDecl>,
@@ -76,8 +78,14 @@ impl<'a> Contract<'a> {
             .filter(|t| super::schema::read_kind(t, policies))
             .filter_map(|t| Some((t, policies.type_decl(t.read_subject()?)?)))
             .collect();
+        let index = TypeIndex::from_policies(policies);
         let mut subjects: Vec<&OntologyTypeDecl> = Vec::new();
-        for (_, s) in &kinds {
+        let decided = policies
+            .shape
+            .types
+            .iter()
+            .filter(|t| decides(&index, &t.name));
+        for s in kinds.iter().map(|(_, s)| *s).chain(decided) {
             if !subjects.iter().any(|t| t.name == s.name) {
                 subjects.push(s);
             }

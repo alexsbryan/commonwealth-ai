@@ -74,9 +74,19 @@ impl Ask<'_> {
         kind: &KindPlan<'_>,
         calls: &mut u32,
     ) -> BTreeMap<String, DocumentReadField> {
+        self.fields(kind.subject, &kind.subject_fields, calls).await
+    }
+
+    /// The readings of `fields`, each a field of `owner`.
+    pub(super) async fn fields(
+        &self,
+        owner: &OntologyTypeDecl,
+        fields: &[FieldPlan<'_>],
+        calls: &mut u32,
+    ) -> BTreeMap<String, DocumentReadField> {
         let mut read = BTreeMap::new();
-        for field in &kind.subject_fields {
-            read.extend(self.field(kind.subject, field, calls).await);
+        for field in fields {
+            read.extend(self.field(owner, field, calls).await);
         }
         read
     }

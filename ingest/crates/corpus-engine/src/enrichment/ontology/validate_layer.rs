@@ -38,8 +38,9 @@ pub(super) fn layer_warnings(
         .collect();
     if !unread.is_empty() {
         warnings.push(format!(
-            "the document reader reads claim kinds and the types they are about, so it makes no \
-             record of {}: no claim kind is about them and no source supplies them.",
+            "the document reader reads statement kinds, the types they are about and every type \
+             RESOLVE decides, so it makes no record of {}: no statement kind is about them, \
+             RESOLVE decides none of them and no source supplies them.",
             unread.join(", ")
         ));
     }

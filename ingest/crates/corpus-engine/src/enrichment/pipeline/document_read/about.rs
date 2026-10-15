@@ -474,9 +474,7 @@ pub(super) async fn identities(
 ) -> BTreeMap<(usize, usize), BTreeMap<String, DocumentReadField>> {
     let mut out = BTreeMap::new();
     for (t, (of, about)) in plan.decided.iter().zip(abouts).enumerate() {
-        let Some(kind) = plan.kinds.iter().find(|k| k.subject.name == of.name) else {
-            continue;
-        };
+        let fields = plan.identifying(&of.name);
         for (p, named) in about.particulars.iter().enumerate() {
             let local_ref = named.local_ref();
             let ask = Ask {
@@ -491,7 +489,7 @@ pub(super) async fn identities(
                 evidence: &d.body[named.span.clone()],
                 candidates,
             };
-            out.insert((t, p), ask.subject_fields(kind, calls).await);
+            out.insert((t, p), ask.fields(of, fields, calls).await);
         }
     }
     out

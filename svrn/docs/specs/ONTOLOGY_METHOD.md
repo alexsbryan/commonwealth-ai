@@ -172,8 +172,8 @@ word and none reached its person, 2026-10-11), and **Point** at each open-valued
 "not stated" when no start is chosen; the value is read out of the words by the declared family, a quantity as
 the one number they write in digits (refused when they hold none or several), a time as ISO 8601 when code reads
 a date and as written otherwise (`point.rs`). A
-located statement is one kind and at most three verified lines. **About** asks, per document and per subject type RESOLVE
-decides, whether the document is about none, one or more than one particular of it (the type's description and
+located statement is one kind and at most three verified lines. **About** asks, per document and per type RESOLVE
+decides (a statement kind about it or not, 2026-10-15), whether the document is about none, one or more than one particular of it (the type's description and
 criterion shown), points at where each is first named or described (a line, then its words; at most five), and with
 more than one asks each statement of the type which it is about (`about.rs`); a statement's local reference names
 its particular, never its span, so the statements about one particular reach RESOLVE as one (`local_subjects.rs`)

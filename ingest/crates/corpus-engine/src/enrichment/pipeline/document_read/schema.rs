@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 
 use serde_json::{json, Value};
 
+use crate::enrichment::atlas::resolution_records::decides;
 use crate::enrichment::ontology::{
     AttrDecl, OntologyPolicies, OntologyTypeDecl, SourceDecl, TypeIndex, TypeKind,
 };
@@ -175,11 +176,12 @@ pub fn statement_attributes<'a>(
 
 /// The declared types a document read makes no record of. It reads the
 /// statement kinds `read_kind` admits (claims, and states and relations whose
-/// holder RESOLVE decides) and the types they are about (with their
-/// `specializes` kin), so a state or relation whose holder RESOLVE cannot
-/// decide, or an entity no statement is about, gets none unless a source
-/// supplies it. Empty when the general extractor reads the declaration, which
-/// reads every kind.
+/// holder RESOLVE decides), the types they are about, and every type RESOLVE
+/// decides (About, the window's particulars), each with its `specializes`
+/// kin; so a state or relation whose holder RESOLVE cannot decide, or an
+/// entity with no identity criterion no statement is about, gets none unless
+/// a source supplies it. Empty when the general extractor reads the
+/// declaration, which reads every kind.
 pub fn unread_types(
     policies: &OntologyPolicies,
 ) -> Vec<&crate::enrichment::ontology::OntologyTypeDecl> {
@@ -191,7 +193,7 @@ pub fn unread_types(
         .shape
         .types
         .iter()
-        .filter(|t| read_kind(t, policies))
+        .filter(|t| read_kind(t, policies) || decides(&index, &t.name))
         .flat_map(|c| std::iter::once(c.name.as_str()).chain(c.read_subject()))
         .collect();
     policies

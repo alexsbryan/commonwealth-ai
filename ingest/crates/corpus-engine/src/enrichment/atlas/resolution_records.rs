@@ -94,10 +94,16 @@ pub fn decides_mentions(index: &TypeIndex<'_>, type_name: &str) -> bool {
 
 /// The types RESOLVE decides ([`decides`]) that no declared statement kind is
 /// about (a claim's `subject`, a state's `of`, a relation's `from`,
-/// `OntologyTypeDecl::read_subject`): RESOLVE would have no statement of them, and their Phase-1
+/// `OntologyTypeDecl::read_subject`), when the general extractor reads the
+/// declaration: RESOLVE would have no statement of them, and their Phase-1
 /// atoms would be decided by 3a's merge instead. The build refuses such a
-/// declaration (`enrich extract`); `recipe validate` names it.
+/// declaration (`enrich extract`); `recipe validate` names it. None when the
+/// document reader reads it: it reads every type RESOLVE decides (About, the
+/// window's particulars), and each particular is a statement of its type.
 pub fn types_without_statements(policies: &OntologyPolicies) -> Vec<String> {
+    if policies.reads_documents() {
+        return Vec::new();
+    }
     let index = TypeIndex::from_policies(policies);
     policies
         .shape

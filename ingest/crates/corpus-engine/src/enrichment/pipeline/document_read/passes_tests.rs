@@ -230,6 +230,7 @@ fn the_locate_system_prompt_names_values_only_when_a_kind_shows_them() {
             .collect(),
         picked: Vec::new(),
         decided: Vec::new(),
+        identifying: Default::default(),
     };
     assert_eq!(bare.kinds.len(), 1, "membership declares no field");
     let without = locate_system(&bare);

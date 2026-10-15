@@ -287,11 +287,8 @@ async fn read_document(
     let mut l2: Vec<Job> = Vec::new();
     let mut l2_for: Vec<Option<For>> = Vec::new();
     for (t, (of, about)) in levels.decided.iter().zip(&abouts).enumerate() {
-        let Some(kind) = plan.kinds.iter().find(|k| k.subject.name == of.name) else {
-            continue;
-        };
         for (p, named) in about.particulars.iter().enumerate() {
-            for field in &kind.subject_fields {
+            for field in plan.identifying(&of.name) {
                 l2.push(Job::Field(Field::new(
                     field,
                     particular(of, named),

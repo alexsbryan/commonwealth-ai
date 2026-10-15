@@ -97,9 +97,14 @@ pub(super) struct Plan<'a> {
     pub(super) kinds: Vec<KindPlan<'a>>,
     /// Every type a read reference (a Pick field) targets, each once.
     pub(super) picked: Vec<&'a OntologyTypeDecl>,
-    /// Every subject of a kind whose identity RESOLVE decides
-    /// (`resolution_records::decides`), each once: what About asks for.
+    /// Every type whose identity RESOLVE decides (`resolution_records::
+    /// decides`), each once, a statement kind about it or not: what About
+    /// asks for. A kind's subjects first, in the kinds' order, then the rest
+    /// in declaration order.
     pub(super) decided: Vec<&'a OntologyTypeDecl>,
+    /// Per decided type, the fields that identify a particular of it
+    /// (`schema::subject_read_attributes`), read of each one About finds.
+    identifying: BTreeMap<&'a str, Vec<FieldPlan<'a>>>,
 }
 
 pub(super) struct KindPlan<'a> {
@@ -220,18 +225,38 @@ impl<'a> Plan<'a> {
             }
         }
         let mut decided: Vec<&'a OntologyTypeDecl> = Vec::new();
-        for kind in &kinds {
-            if decides(&index, &kind.subject.name)
-                && !decided.iter().any(|d| d.name == kind.subject.name)
-            {
-                decided.push(kind.subject);
+        for t in kinds
+            .iter()
+            .map(|k| k.subject)
+            .chain(policies.shape.types.iter())
+        {
+            if decides(&index, &t.name) && !decided.iter().any(|d| d.name == t.name) {
+                decided.push(t);
             }
         }
+        let identifying = decided
+            .iter()
+            .map(|t| {
+                let keys = super::schema::subject_read_attributes(policies, &index, &t.name);
+                (
+                    t.name.as_str(),
+                    fields(keys.into_iter().map(Cow::Borrowed).collect()),
+                )
+            })
+            .collect();
         Self {
             kinds,
             picked,
             decided,
+            identifying,
         }
+    }
+
+    /// The fields that identify a particular of the decided type `of`. Every
+    /// type in `decided` has an entry, built from it in `of`; any other is a
+    /// caller's error, never "no fields".
+    pub(super) fn identifying(&self, of: &str) -> &[FieldPlan<'a>] {
+        &self.identifying[of]
     }
 
     /// The kinds Locate asks line by line: every kind but an act's.
