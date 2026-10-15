@@ -16,6 +16,7 @@ use corpus_index::ingest_port::daemon::IngestPort;
 use corpus_index::types::{IndexInfo, ScoredChunk};
 use kernel_types::Sha256Hash;
 use oicp_types::evidence::{reasons, Document, SourceRef, Span, Unavailable, DEFAULT_CONTEXT};
+use oicp_types::locator::{PlacedLocators, SpanLocator};
 use oicp_types::KnowledgeResult;
 use sovereign_contracts::principal::Principal;
 use sovereign_core::context::PrincipalScope;
@@ -365,6 +366,24 @@ pub(crate) async fn search_corpus(
     Ok(knowledge_results(index, corpus_id, hits).await)
 }
 
+/// The locator of a span starting at code point `start` of a stored text
+/// (v0.6 §2.13): read from the places the writer kept beside the text
+/// ([`StoredText::locators`]), `None` when it kept none or none holds `start`.
+/// A sidecar that does not parse is an error, never "nowhere named".
+pub(crate) fn locator_at(
+    locators: Option<&str>,
+    start: u64,
+) -> Result<Option<SpanLocator>, String> {
+    let Some(json) = locators else {
+        return Ok(None);
+    };
+    let placed: PlacedLocators = serde_json::from_str(json)
+        .map_err(|e| format!("a stored text's locators do not parse: {e}"))?;
+    let found = placed.at(start);
+    tracing::trace!(start, found = ?found, "span locator read");
+    Ok(found)
+}
+
 /// `content`, its title header removed ([`title_unheaded`]), as a span of
 /// `stored`, given only when that body is an exact slice of the stored text:
 /// otherwise `not an exact slice`. The one locator verify's passages
@@ -392,6 +411,10 @@ pub(crate) fn span_of(
         tracing::error!(corpus = corpus_id, error = %e, "span: record not served");
         reasons::DOCUMENT_UNREADABLE
     })?;
+    let locator = locator_at(stored.locators.as_deref(), start as u64).map_err(|e| {
+        tracing::error!(corpus = corpus_id, error = %e, "span: locators not served");
+        reasons::DOCUMENT_UNREADABLE
+    })?;
     let len = text.chars().count();
     // Every range here is cut from `text` itself (`find`, then counts of
     // it), so a slice is never out of range.
@@ -408,7 +431,7 @@ pub(crate) fn span_of(
         exact: slice(start..end),
         prefix: slice(start.saturating_sub(context)..start),
         suffix: slice(end..(end + context).min(len)),
-        locator: None,
+        locator,
     })
 }
 
@@ -563,6 +586,7 @@ mod tests {
     #[test]
     fn a_chunk_is_a_span_only_where_its_body_is_an_exact_slice() {
         let stored = StoredText {
+            locators: None,
             text: "Préface.\n\nThe ferry ran late again.\n".into(),
             documents: vec![rec("notes", 0)],
         };
@@ -579,6 +603,40 @@ mod tests {
             span_of(&stored, "c", Some("notes"), "notes\n\n", None, 4).unwrap_err(),
             reasons::NOT_AN_EXACT_SLICE,
             "an empty body is no range, never [0, 0)"
+        );
+    }
+
+    /// A span starting in a turn carries that turn's start and speaker, read
+    /// from the places kept beside the text (v0.6 §2.13, §2.14); one in a
+    /// text with none carries none; a sidecar that does not parse is
+    /// `document unreadable`, never "nowhere named".
+    #[test]
+    fn a_span_carries_the_turn_its_start_falls_in() {
+        let located = |locators: Option<&str>| StoredText {
+            locators: locators.map(str::to_string),
+            text: "The ferry ran late.\nWhy the ferry?\n".into(),
+            documents: vec![rec("notes", 0)],
+        };
+        let at = |s: &StoredText, body: &str| span_of(s, "c", None, body, None, 4);
+        let s = located(Some(r#"[{"at":0,"locator":{"kind":"timestamp","milliseconds":4000,"speaker":"HARBOUR MASTER"}},{"at":20,"locator":{"kind":"timestamp","milliseconds":11000}}]"#));
+        assert_eq!(
+            at(&s, "The ferry ran late.").unwrap().locator,
+            Some(SpanLocator::Timestamp {
+                milliseconds: 4000,
+                speaker: Some("HARBOUR MASTER".into())
+            })
+        );
+        assert_eq!(
+            at(&s, "Why the ferry?").unwrap().locator,
+            Some(SpanLocator::Timestamp {
+                milliseconds: 11000,
+                speaker: None
+            })
+        );
+        assert_eq!(at(&located(None), "Why the ferry?").unwrap().locator, None);
+        assert_eq!(
+            at(&located(Some("not json")), "Why the ferry?").unwrap_err(),
+            reasons::DOCUMENT_UNREADABLE
         );
     }
 

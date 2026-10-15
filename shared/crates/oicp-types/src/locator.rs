@@ -171,6 +171,37 @@ fn numbered(w: &str) -> bool {
         && (n.bytes().all(|b| b.is_ascii_digit()) || n.bytes().all(|b| b"IVXLCDM".contains(&b)))
 }
 
+/// Where each place starts in a stored text, in text order: what a host keeps
+/// beside a text so a span's [`SpanLocator`] is read back at serve time, not
+/// re-derived from a source it no longer holds. One shape for every kind
+/// (a transcript's turns now, a plain text's headings next), serialised as
+/// JSON by the writer and parsed by the reader.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct PlacedLocators(pub Vec<PlacedLocator>);
+
+/// One place: its first code point and the locator spans starting at or after
+/// it (until the next place) carry.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlacedLocator {
+    /// The place's first code point in the stored text.
+    pub at: u64,
+    /// The locator of a span that starts in it.
+    pub locator: SpanLocator,
+}
+
+impl PlacedLocators {
+    /// The locator at code point `at`: the last place starting at or before
+    /// it. `None` before the first place.
+    pub fn at(&self, at: u64) -> Option<SpanLocator> {
+        self.0
+            .iter()
+            .rev()
+            .find(|p| p.at <= at)
+            .map(|p| p.locator.clone())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

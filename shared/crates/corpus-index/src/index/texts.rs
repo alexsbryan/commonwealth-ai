@@ -115,6 +115,10 @@ pub struct StoredText {
     /// Sorted by `(source_id, ordinal)`. Identical texts from different
     /// sources share one file and have one record each.
     pub documents: Vec<DocumentRecord>,
+    /// Where each place of the text starts, as the writer's front door stated
+    /// it (JSON, opaque here; `oicp_types::locator::PlacedLocators` for the
+    /// engine). `None` when it stated none.
+    pub locators: Option<String>,
 }
 
 /// What the writer is told about one document.
@@ -201,6 +205,19 @@ impl TextWriter {
     /// text store. With `store_texts = false` the name is still returned and
     /// the record kept, so the document answers `text not stored`.
     pub fn store_document(&mut self, doc: DocumentInput<'_>) -> Result<Option<Sha256Hash>> {
+        self.store_document_located(doc, None)
+    }
+
+    /// [`store_document`](Self::store_document), with the places the text's
+    /// spans are located by (JSON, kept beside the text as `<sha256>.locators`
+    /// and read back by [`CorpusIndex::text`]). Keyed by the text's name, so
+    /// two documents of identical words share one: the first written stands,
+    /// and a second that differs is logged, never swapped in.
+    pub fn store_document_located(
+        &mut self,
+        doc: DocumentInput<'_>,
+        locators: Option<&str>,
+    ) -> Result<Option<Sha256Hash>> {
         if !self.active {
             return Ok(None);
         }
@@ -212,6 +229,9 @@ impl TextWriter {
         };
         if self.store_texts {
             self.write_text(&text_sha256, doc.text)?;
+            if let Some(json) = locators {
+                self.write_locators(&text_sha256, json)?;
+            }
         }
         self.pending.push(DocumentRecord {
             text_sha256,
@@ -297,6 +317,11 @@ impl TextWriter {
                 continue;
             }
             let path = self.texts_dir.join(name.to_hex());
+            if let Err(e) = std::fs::remove_file(locators_path(&path)) {
+                if e.kind() != std::io::ErrorKind::NotFound {
+                    return Err(e.into());
+                }
+            }
             match std::fs::remove_file(&path) {
                 Ok(()) => tracing::debug!(%name, source_id, "text store: superseded text removed"),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -317,6 +342,24 @@ impl TextWriter {
         let h = Sha256Hash::of_reader(std::fs::File::open(path)?)?;
         self.last_file = Some((path.to_path_buf(), h));
         Ok(h)
+    }
+
+    fn write_locators(&mut self, name: &Sha256Hash, json: &str) -> Result<()> {
+        let path = locators_path(&self.texts_dir.join(name.to_hex()));
+        match std::fs::read_to_string(&path) {
+            Ok(held) if held == json => return Ok(()),
+            Ok(_) => {
+                tracing::warn!(%name, "text store: identical words, different locators; the first stands");
+                return Ok(());
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
+        }
+        let tmp = path.with_extension("locators.tmp");
+        std::fs::write(&tmp, json.as_bytes())?;
+        std::fs::rename(&tmp, &path)?;
+        tracing::debug!(%name, bytes = json.len(), "text store: locators written beside the text");
+        Ok(())
     }
 
     fn write_text(&mut self, name: &Sha256Hash, text: &str) -> Result<()> {
@@ -389,7 +432,17 @@ impl CorpusIndex {
         let text = String::from_utf8(bytes)
             .map_err(|e| Error::Database(format!("text {name} is not UTF-8: {e}")))?;
         documents.sort_by(|a, b| (&a.source_id, a.ordinal).cmp(&(&b.source_id, b.ordinal)));
-        Ok(Ok(StoredText { text, documents }))
+        let locators = match std::fs::read_to_string(locators_path(&path)) {
+            Ok(json) => Some(json),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+            Err(e) => return Err(e.into()),
+        };
+        tracing::debug!(corpus = %self.corpus_id(), %name, located = locators.is_some(), "text read");
+        Ok(Ok(StoredText {
+            text,
+            documents,
+            locators,
+        }))
     }
 
     /// The records of every named text this corpus holds, for a page of hits.
@@ -533,6 +586,13 @@ impl CorpusIndex {
         );
         Ok(rows_added)
     }
+}
+
+/// A text file's locators sidecar: `<sha256>.locators`.
+fn locators_path(text: &Path) -> PathBuf {
+    let mut name = text.as_os_str().to_owned();
+    name.push(".locators");
+    PathBuf::from(name)
 }
 
 fn documents_schema() -> SchemaRef {
