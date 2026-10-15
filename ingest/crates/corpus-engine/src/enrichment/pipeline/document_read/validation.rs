@@ -227,8 +227,8 @@ fn validate_outcome(
     {
         outcome.status = DocumentReadStatus::CouldNotJudge;
         outcome.reason = Some(format!(
-            "every claim ({before}) and particular ({offered}) was refused: its citation did not \
-             verify in this document"
+            "every claim ({before}) and particular ({offered}) was refused; `refused` names why \
+             each one was"
         ));
     }
     Ok(changed)
@@ -254,6 +254,12 @@ fn verify_particular(
     if particular.subject_local_ref.trim().is_empty() || particular.subject_name.trim().is_empty() {
         return Err(format!("a particular of `{of}` lacks its local reference"));
     }
+    refuse_voice(
+        policies,
+        &particular.subject_name,
+        particular.words.as_deref(),
+        &particular.subject_local_ref,
+    )?;
     if !claim_evidence_exists(document, &particular.evidence) {
         return Err(format!(
             "the line naming it is not an exact passage in document `{}`",
@@ -274,6 +280,28 @@ fn verify_particular(
     )
     .map_err(|error| error.to_string())?;
     fields_cited(&particular.subject_fields, document)
+}
+
+/// Why a subject cannot be a record: its name, its mention's words or the
+/// words of its `l{n}:` local reference are a declared voice — the reader's
+/// side of what the general extractor's parser enforces (`VoicesDecl::is_voice`).
+fn refuse_voice(
+    policies: &OntologyPolicies,
+    name: &str,
+    words: Option<&str>,
+    local_ref: &str,
+) -> std::result::Result<(), String> {
+    let voices = &policies.assertion.voices;
+    match [Some(name), words, super::about::local_ref_words(local_ref)]
+        .into_iter()
+        .flatten()
+        .find(|n| voices.is_voice(n))
+    {
+        Some(name) => Err(format!(
+            "`{name}` is a declared voice (voices.not_entities), never a particular"
+        )),
+        None => Ok(()),
+    }
 }
 
 /// `Ok(())` when every supported field's evidence is in the document.
@@ -317,6 +345,7 @@ fn verify_claim(
             claim.kind
         ));
     }
+    refuse_voice(policies, &claim.subject_name, None, &claim.subject_local_ref)?;
     if !claim_evidence_exists(document, &claim.evidence) {
         return Err(format!(
             "evidence is not an exact passage in document `{}` nor one of its declared identity fields",

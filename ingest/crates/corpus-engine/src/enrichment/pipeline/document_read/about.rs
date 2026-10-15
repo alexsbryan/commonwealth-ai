@@ -77,6 +77,13 @@ pub(super) fn local_ref(line: usize, words: &str) -> String {
     format!("l{line}:{words}")
 }
 
+/// The words of a local reference, the inverse of [`local_ref`]; `None` for a
+/// reference it did not make (a window's `sec_1/p1`).
+pub(super) fn local_ref_words(local_ref: &str) -> Option<&str> {
+    let (line, words) = local_ref.strip_prefix('l')?.split_once(':')?;
+    (!line.is_empty() && line.bytes().all(|b| b.is_ascii_digit())).then_some(words)
+}
+
 /// What one document is about, of one type.
 #[derive(Debug, Clone, PartialEq)]
 pub(super) struct About {

@@ -13,6 +13,8 @@ use crate::enrichment::pipeline::types::ChapterInput;
 mod cache_reuse_tests;
 #[path = "document_read/claim_check_tests.rs"]
 mod claim_check_tests;
+#[path = "document_read/voices_tests.rs"]
+mod voices_tests;
 
 pub(super) fn policies() -> OntologyPolicies {
     let ontology: OntologyV1 = toml::from_str(
