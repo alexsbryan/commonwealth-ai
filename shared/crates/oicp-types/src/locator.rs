@@ -90,6 +90,23 @@ impl HeadingOutline {
         &self.heads
     }
 
+    /// The headings as the places a host keeps beside the stored text: each
+    /// heading's first code point and the path it opens. Empty for a text
+    /// with none, so nothing is placed and no span is located.
+    pub fn placed(&self) -> PlacedLocators {
+        PlacedLocators(
+            self.heads
+                .iter()
+                .map(|(at, path)| PlacedLocator {
+                    at: *at,
+                    locator: SpanLocator::HeadingPath {
+                        headings: path.clone(),
+                    },
+                })
+                .collect(),
+        )
+    }
+
     /// The heading path at code point `at`: the one the last heading
     /// starting at or before it opened. `None` before the first heading and
     /// in a text with none.
@@ -256,6 +273,25 @@ mod tests {
         assert!(o.heads().is_empty());
         assert_eq!(o.at(0), None);
         assert_eq!(o.at(40), None);
+    }
+
+    /// What a host keeps beside a text answers every code point as the
+    /// outline does, after a JSON round trip; a text with no headings
+    /// places nothing.
+    #[test]
+    fn placed_headings_survive_json_and_answer_as_the_outline_does() {
+        let text = "Preface.\n\nBOOK I. OF LABOUR.\n\nCHAPTER I. OF DIVISION.\n\nPins.\n\n\
+                    BOOK II. OF STOCK.\n\nStock.\n";
+        let o = HeadingOutline::of(text);
+        let back: PlacedLocators =
+            serde_json::from_str(&serde_json::to_string(&o.placed()).unwrap()).unwrap();
+        for at in 0..text.chars().count() as u64 {
+            assert_eq!(back.at(at), o.at(at), "code point {at}");
+        }
+        assert!(HeadingOutline::of("Tuesday. No headings.\n")
+            .placed()
+            .0
+            .is_empty());
     }
 
     #[test]

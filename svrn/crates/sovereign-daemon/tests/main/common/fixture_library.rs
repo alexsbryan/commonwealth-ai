@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The conformance suite's fixture library
 //! (`cmnwlth/crates/oicp-conformance/fixture/library.json`), stored the way
-//! ingest stores it: each document's text through the one writer, its chunks
+//! ingest stores it: each document's text through the one writer with the
+//! heading paths ingest keeps beside it (v0.6 §2.13), its chunks
 //! stamped with the text's name, an FTS index over them. The evidence routes'
 //! e2e tests (align, verify) install it through here, so they read one
 //! library built one way.
@@ -95,16 +96,19 @@ pub async fn install(indexes: &std::path::Path, corpus_id: &str, docs: &[Doc], t
     for d in docs {
         let name = match writer.as_mut() {
             Some(w) => w
-                .store_document(DocumentInput {
-                    text: &d.text,
-                    source_id: &d.name,
-                    ordinal: 0,
-                    source: &DocSource::Hashed {
-                        sha256: Sha256Hash::of_str(&d.text),
-                        extractor: EXTRACTOR.into(),
+                .store_document_located(
+                    DocumentInput {
+                        text: &d.text,
+                        source_id: &d.name,
+                        ordinal: 0,
+                        source: &DocSource::Hashed {
+                            sha256: Sha256Hash::of_str(&d.text),
+                            extractor: EXTRACTOR.into(),
+                        },
+                        metadata: d.metadata.as_ref().map(|m| m.to_string().into()),
                     },
-                    metadata: d.metadata.as_ref().map(|m| m.to_string().into()),
-                })
+                    heading_places(&d.text).as_deref(),
+                )
                 .unwrap(),
             None => None,
         };
@@ -132,6 +136,14 @@ pub async fn install(indexes: &std::path::Path, corpus_id: &str, docs: &[Doc], t
     index.insert_batch(&chunks).await.unwrap();
     index.build_indexes(false, true, None).await.unwrap();
     index.mark_ingestion_complete().unwrap();
+}
+
+/// The places ingest keeps beside a plain text (corpus-engine's
+/// `DeclaredMetadata::read`): its heading paths by the one rule, none for a
+/// text with no headings.
+fn heading_places(text: &str) -> Option<String> {
+    let placed = oicp_types::locator::HeadingOutline::of(text).placed();
+    (!placed.0.is_empty()).then(|| serde_json::to_string(&placed).unwrap())
 }
 
 pub async fn state_over(indexes: std::path::PathBuf) -> AppState {

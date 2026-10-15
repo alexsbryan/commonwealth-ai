@@ -123,6 +123,8 @@ mod local_corpus_port_parity;
 mod recipe_install_port;
 #[path = "main/transcript_documents_e2e.rs"]
 mod transcript_documents_e2e;
+#[path = "main/heading_paths_e2e.rs"]
+mod heading_paths_e2e;
 #[path = "main/source_tree.rs"]
 mod source_tree;
 #[path = "main/svrn_recipe_shapes.rs"]

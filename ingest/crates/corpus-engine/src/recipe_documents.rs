@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Error, Result};
 use crate::index::{DocSource, DocumentInput};
 use crate::recipe::{AcquirerConfig, Recipe};
+use oicp_types::locator::HeadingOutline;
 use oicp_types::transcript::{reasons as transcript_reasons, DocumentFormat, TurnOutline};
 
 /// One `[[document]]` block. A closed set of two: the block carries its text,
@@ -216,13 +217,14 @@ pub(crate) fn check_documents(recipe: &Recipe) -> Result<()> {
     Ok(())
 }
 
-/// What [`DeclaredMetadata::read`] gives: the text to store and, for a
-/// transcript, the JSON `PlacedLocators` its spans are located by.
+/// What [`DeclaredMetadata::read`] gives: the text to store and the JSON
+/// `PlacedLocators` its spans are located by (a transcript's turns, a plain
+/// text's headings), `None` when it has neither.
 #[derive(Debug)]
 pub struct ReadText {
     /// The words to store and chunk.
     pub text: String,
-    /// Where each turn starts, kept beside the stored text.
+    /// Where each turn or heading starts, kept beside the stored text.
     pub locators: Option<String>,
 }
 
@@ -318,17 +320,13 @@ impl DeclaredMetadata {
     }
 
     /// The words an ingest stores for one document and where its spans are
-    /// located (v0.6 §2.14): THE rule that a document declared a transcript
-    /// is read by [`TurnOutline::read`], the one reader, and stored as its
-    /// words. An undeclared document is `content` as it is. A declared one in
-    /// neither shape is `Err`, named as the recipe names it, never read as
-    /// plain text.
-    pub fn read(
-        &self,
-        content: &str,
-        source_id: &str,
-        source: &DocSource,
-    ) -> Result<ReadText> {
+    /// located (v0.6 §2.13, §2.14): THE rule that a document declared a
+    /// transcript is read by [`TurnOutline::read`], the one reader, and
+    /// stored as its words. An undeclared document is `content` as it is,
+    /// located by the heading paths [`HeadingOutline`] reads in it, and by
+    /// nothing when it has no headings. A declared one in neither shape is
+    /// `Err`, named as the recipe names it, never read as plain text.
+    pub fn read(&self, content: &str, source_id: &str, source: &DocSource) -> Result<ReadText> {
         let format = match source {
             DocSource::Hashed { .. } => self.format_by_name.get(source_id),
             DocSource::File(path) => self
@@ -337,16 +335,15 @@ impl DeclaredMetadata {
             DocSource::Record => None,
         };
         match format {
-            None => Ok(ReadText {
-                text: content.to_string(),
-                locators: None,
-            }),
+            None => plain_text(content, source_id),
             Some(DocumentFormat::Transcript) => {
                 let name = self.source_name(source_id, source);
                 let Some(outline) = TurnOutline::read(content) else {
                     tracing::warn!(document = %name, "transcript: in neither shape; not stored");
-                    return Err(Error::Extraction(transcript_reasons::NOT_A_TRANSCRIPT.into())
-                        .of_source(name));
+                    return Err(
+                        Error::Extraction(transcript_reasons::NOT_A_TRANSCRIPT.into())
+                            .of_source(name),
+                    );
                 };
                 let locators = serde_json::to_string(&outline.placed())
                     .map_err(|e| Error::Serialization(format!("transcript locators: {e}")))?;
@@ -401,6 +398,34 @@ impl DeclaredMetadata {
             Err(_) => None,
         }
     }
+}
+
+/// A plain text as it is, its heading paths (v0.6 §2.13) placed beside it by
+/// [`HeadingOutline`], the one rule; none for a text with no headings, so a
+/// span of it names no place rather than an invented one.
+fn plain_text(content: &str, source_id: &str) -> Result<ReadText> {
+    let outline = HeadingOutline::of(content);
+    if outline.heads().is_empty() {
+        tracing::debug!(
+            document = source_id,
+            "plain text: no headings; no locators kept"
+        );
+        return Ok(ReadText {
+            text: content.to_string(),
+            locators: None,
+        });
+    }
+    let locators = serde_json::to_string(&outline.placed())
+        .map_err(|e| Error::Serialization(format!("heading locators: {e}")))?;
+    tracing::debug!(
+        document = source_id,
+        headings = outline.heads().len(),
+        "plain text: heading paths kept"
+    );
+    Ok(ReadText {
+        text: content.to_string(),
+        locators: Some(locators),
+    })
 }
 
 #[cfg(test)]

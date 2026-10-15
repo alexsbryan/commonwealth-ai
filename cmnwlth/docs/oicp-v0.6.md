@@ -482,8 +482,9 @@ SpanLocator = {"kind": "page", "page": u32}                     // the 1-based p
 
 `oicp_types::locator` holds the type and the rule (`HeadingOutline`), so a
 host's extractor and a test host read headings by one implementation. The
-reference host does not advertise `knowledge:locator` yet: its spans carry
-no locator until its extractor records where each text's headings stand.
+reference host advertises `knowledge:locator`: its ingest keeps each text's
+heading paths (`HeadingOutline::placed`), or a transcript's turns, beside
+the stored text, and every span reads its locator from them.
 
 ### 2.14 Transcripts
 
@@ -533,9 +534,9 @@ source = "interview.txt"     # or the text inline
 
 `oicp_types::transcript` holds the set and the rule (`TurnOutline::read`),
 so a host's extractor and a test host read transcripts by one
-implementation. The reference host does not advertise
-`ingest:transcripts` yet; WebVTT, SRT and DOCX are later members of the
-set, each read into the same locator.
+implementation. The reference host advertises `ingest:transcripts`;
+WebVTT, SRT and DOCX are later members of the set, each read into the same
+locator.
 
 ### 2.15 Verify by meaning
 

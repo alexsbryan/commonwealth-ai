@@ -5,7 +5,9 @@
 //! A client of the daemon's knowledge search as the manifest advertises it
 //! (`search_endpoint`), with v0.6 §2.8's two features: `--document` scopes
 //! the hits to texts by name (`knowledge:scoped`), and each hit is printed
-//! with its range of its stored text, or why it has none (`knowledge:range`).
+//! with its range of its stored text, or why it has none (`knowledge:range`),
+//! and where that range stands when the host names it (`knowledge:locator`,
+//! §2.13: the headings above it, a transcript turn's time and speaker).
 //! A host that does not advertise `knowledge:scoped` is told so when
 //! `--document` is asked, never searched unscoped. Every hit prints its text's
 //! name, so a search is how a user finds the name to scope the next one by.
@@ -19,6 +21,7 @@
 
 use sovereign_contracts::oicp::{
     features, KnowledgeResult, KnowledgeSearchResponse, ProviderManifest, SentenceRoute,
+    SpanLocator,
 };
 
 #[derive(clap::Parser, Debug)]
@@ -219,6 +222,30 @@ fn print_hit(rank: usize, hit: &KnowledgeResult) {
         (None, Some(why)) => println!("     no range: {why}"),
         (None, None) => {}
     }
+    if let Some(l) = hit.span.as_ref().and_then(|s| s.locator.as_ref()) {
+        println!("     {}", stands(l));
+    }
+}
+
+/// Where a span stands (`knowledge:locator`, v0.6 §2.13), as a reader cites
+/// it. A span with no locator prints no line: absence is "nowhere named".
+fn stands(l: &SpanLocator) -> String {
+    match l {
+        SpanLocator::HeadingPath { headings } => format!("under {}", headings.join(" › ")),
+        SpanLocator::Timestamp {
+            milliseconds,
+            speaker,
+        } => {
+            let s = milliseconds / 1000;
+            let at = format!("{}:{:02}:{:02}", s / 3600, s / 60 % 60, s % 60);
+            match speaker {
+                Some(who) => format!("at {at}, {who}"),
+                None => format!("at {at}"),
+            }
+        }
+        SpanLocator::Page { page } => format!("page {page}"),
+        SpanLocator::Row { row } => format!("row {row}"),
+    }
 }
 
 const HELP: crate::util::help::Help = crate::util::help::Help {
@@ -235,7 +262,38 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
         crate::util::help::HelpSection::Notes(
             "Each hit prints its text's name (`text <64 hex>`): pass it to --document to \
              search within that text. A hit's range `at [start, end)` is in code points of \
-             that text; a hit with none says why (`no range: not an exact slice`).",
+             that text; a hit with none says why (`no range: not an exact slice`). Where \
+             the host names where a range stands, a line says so (`under BOOK I. › \
+             CHAPTER I.`, `at 0:01:04, HARBOUR MASTER`).",
         ),
     ],
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_locator_reads_as_a_reader_cites_it() {
+        let path = SpanLocator::HeadingPath {
+            headings: vec![
+                "BOOK I.".into(),
+                "CHAPTER I. OF THE DIVISION OF LABOUR.".into(),
+            ],
+        };
+        assert_eq!(
+            stands(&path),
+            "under BOOK I. › CHAPTER I. OF THE DIVISION OF LABOUR."
+        );
+        let turn = SpanLocator::Timestamp {
+            milliseconds: 3_727_000,
+            speaker: Some("HARBOUR MASTER".into()),
+        };
+        assert_eq!(stands(&turn), "at 1:02:07, HARBOUR MASTER");
+        let whisper = SpanLocator::Timestamp {
+            milliseconds: 3500,
+            speaker: None,
+        };
+        assert_eq!(stands(&whisper), "at 0:00:03");
+    }
+}
