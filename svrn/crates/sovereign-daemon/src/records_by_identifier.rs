@@ -42,8 +42,12 @@ use serde_json::{Map, Value};
 #[cfg(any(test, feature = "test-doubles"))]
 #[path = "records_by_identifier/recorded.rs"]
 mod recorded;
+#[path = "records_by_identifier/retry.rs"]
+mod retry;
 #[path = "records_by_identifier/vendors.rs"]
 mod vendors;
+
+pub use retry::{retry_last_install, retry_unreachable};
 
 #[cfg(any(test, feature = "test-doubles"))]
 pub use recorded::RecordedFetch;

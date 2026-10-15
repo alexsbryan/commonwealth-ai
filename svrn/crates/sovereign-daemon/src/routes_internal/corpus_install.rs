@@ -122,6 +122,13 @@ pub async fn spawn_install(
             == Some(allow_lookups);
         if stamped.as_deref() == Some(sha.as_str()) {
             if documented && same_allowance {
+                // Held, but a lookup that was `unreachable` is a fact about
+                // one moment: ask those again (records only, no texts read)
+                // while the install is still listed active.
+                if let Some(c) = installed.as_ref() {
+                    let fetch = state.inner.node.record_fetch.as_ref();
+                    crate::records_by_identifier::retry_last_install(c, fetch).await;
+                }
                 release(&state, &corpus_id).await;
                 return InstallOutcome::AlreadyInstalled;
             }

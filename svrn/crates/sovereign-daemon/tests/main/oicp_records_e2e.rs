@@ -15,7 +15,8 @@ use corpus_index::ingest_port::daemon::{
 use kernel_types::{NodeId, Sha256Hash};
 use oicp_types::record::DECLARED;
 use oicp_types::{IngestDocumentState, LookupOutcome, MergedRecord};
-use sovereign_daemon::records_by_identifier::RecordedFetch;
+use sovereign_daemon::records_by_identifier::{FetchReply, RecordFetch, RecordedFetch};
+use sovereign_daemon::records_by_identifier::ResolverTable;
 use sovereign_daemon::state::{fabric, node, serving, AppState};
 
 use crate::common::fixture_library::{install as store, Doc, DIM};
@@ -44,7 +45,7 @@ fn shelf() -> Vec<Doc> {
 }
 
 /// A node whose install stores the shelf and whose lookups `fetch` answers.
-fn node_over(indexes: std::path::PathBuf, fetch: Arc<RecordedFetch>) -> AppState {
+fn node_over(indexes: std::path::PathBuf, fetch: Arc<dyn RecordFetch>) -> AppState {
     let embed: corpus_index::types::EmbedFn =
         Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.0_f32; DIM]) }));
     let (at, removes) = (indexes.clone(), indexes.clone());
@@ -225,4 +226,59 @@ async fn an_install_that_did_not_allow_lookups_sends_none_and_the_other_allowanc
         LookupOutcome::Resolved
     );
     assert!(!installed(&state, true).await, "the same allowance is held");
+}
+
+/// Answers through whichever [`RecordedFetch`] it holds now: the network
+/// changing between two installs.
+struct Switchable(std::sync::Mutex<Arc<RecordedFetch>>);
+
+#[async_trait::async_trait]
+impl RecordFetch for Switchable {
+    async fn get(&self, url: &str) -> Result<FetchReply, String> {
+        let now = self.0.lock().unwrap().clone();
+        now.get(url).await
+    }
+}
+
+/// FAILING INPUT, live 2026-10-15: Crossref answered 429 once during an
+/// install, the kept records named the DOI `unreachable`, and every later
+/// install of the same recipe and allowance was held, so the lookup was
+/// never asked again. `unreachable` is a fact about one moment: the held
+/// install asks those identifiers again, and only those.
+#[tokio::test]
+async fn a_held_install_asks_its_unreachable_lookups_again_and_only_those() {
+    let tmp = tempfile::tempdir().unwrap();
+    let doi = "10.1038/sdata.2016.18";
+    let url = ResolverTable::from_data_file().unwrap().resolvers[0].url_for(doi);
+    let busy = Arc::new(RecordedFetch::recorded_2026_10_15().with(url.clone(), 429, "slow down"));
+    let later = Arc::new(RecordedFetch::recorded_2026_10_15());
+    let net = Arc::new(Switchable(std::sync::Mutex::new(busy.clone())));
+    let state = node_over(tmp.path().to_path_buf(), net.clone());
+
+    assert!(installed(&state, true).await);
+    let first = listed(&state).await;
+    assert_eq!(
+        first["fair-principles"].as_ref().unwrap().lookups[0].outcome,
+        LookupOutcome::Unreachable
+    );
+    assert_eq!(first["fair-principles"].as_ref().unwrap().looked_up().count(), 0);
+
+    *net.0.lock().unwrap() = later.clone();
+    assert!(!installed(&state, true).await, "same recipe and allowance: held");
+    let r = listed(&state).await;
+    assert_eq!(
+        r["fair-principles"].as_ref(),
+        Some(&golden(include_str!("../fixtures/records/golden_fair-principles.json"))),
+        "the looked-up fields arrive"
+    );
+    assert_eq!(later.asked(), vec![url], "only the unreachable one was asked");
+    assert_eq!(r["sicp"], first["sicp"], "a resolved lookup stands");
+    assert_eq!(
+        r["no-such-doi"].as_ref().unwrap().lookups[0].outcome,
+        LookupOutcome::Unresolved,
+        "an unresolved lookup stands"
+    );
+
+    assert!(!installed(&state, true).await);
+    assert_eq!(later.asked().len(), 1, "nothing left to retry, nothing asked");
 }
