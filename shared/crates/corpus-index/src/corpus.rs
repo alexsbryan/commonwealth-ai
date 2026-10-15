@@ -262,7 +262,19 @@ impl Corpus {
 /// list.
 pub const INSTALL_DOCUMENTS_FILENAME: &str = "_documents.json";
 
+/// Sidecar in a corpus's canonical directory holding its sentence index
+/// (OICP v0.6 §2.11): every stored text's sentences by address, and the
+/// vectors embedded for them, stamped with the embedder that made them.
+/// Written and read by the daemon's `sentence_index`; absent until a corpus
+/// is first sentence-indexed.
+pub const SENTENCES_FILENAME: &str = "_sentences.bin";
+
 impl Corpus {
+    /// The sentence-index sidecar inside the canonical directory.
+    pub fn sentences_path(&self) -> PathBuf {
+        self.root().join(SENTENCES_FILENAME)
+    }
+
     /// The install-documents sidecar inside the canonical directory.
     pub fn install_documents_path(&self) -> PathBuf {
         self.root().join(INSTALL_DOCUMENTS_FILENAME)

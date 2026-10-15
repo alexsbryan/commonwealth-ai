@@ -110,8 +110,16 @@ async fn install(
         Some(toml) => InstallSource::Recipe(toml),
         None => InstallSource::Registry,
     };
-    let outcome = spawn_install(state, req.corpus_id.clone(), req.parameters, source).await;
+    let outcome = spawn_install(state.clone(), req.corpus_id.clone(), req.parameters, source).await;
     let spawned = install_status(outcome, &req.corpus_id)?;
+    // v0.6 §2.11: every sentence of the installed texts embedded once the
+    // install returns (`sentence_index`); a corpus already held is queued now.
+    let sentences = &state.inner.node.sentences;
+    if spawned {
+        sentences.after_install(&state, req.corpus_id.clone());
+    } else {
+        sentences.enqueue(&state, &req.corpus_id);
+    }
     Ok(Json(CorpusInstallResponse {
         corpus_id: req.corpus_id,
         spawned,

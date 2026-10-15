@@ -205,6 +205,12 @@ async fn apply_v04_enrichment(
         // text located at serve time (`oicp_evidence::span_of`).
         feats.push(features::KNOWLEDGE_SCOPED.to_string());
         feats.push(features::KNOWLEDGE_RANGE.to_string());
+        // v0.6 §2.11: sentences from the sentence index
+        // (`routes_knowledge_sentences`), scored by the data file's scorer,
+        // advertised beside it below; not offered when the file does not read.
+        if state.inner.node.sentences.config().is_ok() {
+            feats.push(features::KNOWLEDGE_SENTENCES.to_string());
+        }
         EvidenceEndpoints {
             text_endpoint: crate::routes_oicp_text::TEXT_ENDPOINT.into(),
             align_endpoint: Some("/oicp/v1/align".into()),
@@ -234,6 +240,20 @@ async fn apply_v04_enrichment(
     // daemon at bootstrap; a client reconstructs bit-compatible query
     // embeddings from it for federated search.
     let embed_model = state.local_embed_model().await?;
+    // v0.6 §2.11: the scorer the data file names, iff the feature is offered.
+    let sentence_scorer = state
+        .inner
+        .node
+        .sentences
+        .config()
+        .ok()
+        .filter(|_| {
+            manifest
+                .features
+                .iter()
+                .any(|f| f == features::KNOWLEDGE_SENTENCES)
+        })
+        .map(|c| c.scorer);
     if embed_model.is_some() || ingest.is_some() || evidence.is_some() {
         match &mut manifest.knowledge {
             Some(k) => {
@@ -246,6 +266,7 @@ async fn apply_v04_enrichment(
                 if evidence.is_some() {
                     k.evidence = evidence;
                 }
+                k.sentence_scorer = sentence_scorer;
             }
             None => {
                 manifest.knowledge = Some(KnowledgeManifest {
@@ -254,7 +275,7 @@ async fn apply_v04_enrichment(
                     embed_model,
                     ingest,
                     evidence,
-                    sentence_scorer: None,
+                    sentence_scorer,
                 });
             }
         }

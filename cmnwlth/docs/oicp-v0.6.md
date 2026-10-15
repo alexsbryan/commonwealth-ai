@@ -358,9 +358,30 @@ Truncated       { scanned: u64, in_scope: u64 }
 
 Conformance holds a reply to the scorer it names, not to its arithmetic: a
 host that names `rerank` while scoring by cosine is beyond what a client can
-see. The reference host does not yet serve this section and does not
-advertise `knowledge:sentences`; its data file will name the scorer,
-`rerank`'s candidate count and the scan's ceiling.
+see.
+
+The reference host serves this section from a sentence index
+(`svrn/crates/sovereign-daemon/src/sentence_index.rs`, the route
+`routes_knowledge_sentences.rs`). After an install, at the first sentence
+search that names a corpus, and at its start for any corpus already indexed,
+it splits each stored text with `sentence_ranges` and embeds every sentence
+in the background on its embed slot, each vector cached by the sentence's
+own bytes and stamped with the embedder's identity (its answer to a fixed
+sentinel, as the router's exemplar cache keys), never by a text's name and
+range; the vectors are kept in the corpus's directory (`_sentences.bin`) with
+each sentence's address, so a restart reloads them. A vector is scored only
+under the embedder that made it: a query whose embedder answers the sentinel
+otherwise finds every sentence pending. Its data file
+(`svrn/crates/sovereign-daemon/data/sentence_search.toml`) names `scorer`
+(`cosine`), `rerank_candidates` (50), `scan_ceiling` (400,000 sentences),
+`index_ceiling_chunks` (a corpus past 100,000 chunks is not sentence-indexed
+and is listed in `corpora_unavailable`), `passage_hits` (20, the passages
+route's search), `embed_batch` and `checkpoint_secs`. On the passages route
+the sentences are those its passage hits' ranges overlap; a hit with no range
+contributes none. A sentence search naming no `corpora` reaches the corpora
+already sentence-indexed there and starts no indexing, since a host may hold
+thousands. Its `503` names a `detail` beside `error` and `scorer`. The rerank
+scorer's model is the rerank slot's resident model.
 
 ### 2.12 Large installs
 

@@ -30,12 +30,13 @@ use std::time::{Duration, Instant};
 
 use axum::extract::State;
 use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use axum::Json;
 use sovereign_contracts::membership::MembershipEntry;
 
 use crate::types::MemberStatus;
 use kernel_types::{NodeId, Sha256Hash};
-use oicp_types::{KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse};
+use oicp_types::{Granularity, KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse};
 
 use crate::search_stage::{self, SearchStage};
 use crate::state::AppState;
@@ -64,10 +65,41 @@ pub async fn knowledge_search(
     State(state): State<AppState>,
     attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
     Json(request): Json<KnowledgeSearchRequest>,
-) -> (StatusCode, Json<KnowledgeSearchResponse>) {
+) -> Response {
+    // v0.6 §2.11: sentences, from this host's sentence index, when its data
+    // file reads; a host that cannot offer them answers passages with no
+    // `scorer`, as one that does not advertise the feature does.
+    if request.granularity == Granularity::Sentence {
+        match (
+            state.inner.node.sentences.config(),
+            crate::oicp_evidence::search_scope(&request.documents),
+        ) {
+            (Ok(cfg), Ok(scope)) => {
+                let span = search_stage::search_span("sentences", &request.query_text);
+                let principal = attached.as_ref().map(|axum::Extension(p)| &p.0);
+                return crate::routes_knowledge_sentences::search(
+                    state.clone(),
+                    principal,
+                    request,
+                    scope,
+                    cfg,
+                )
+                .instrument(span)
+                .await;
+            }
+            (Err(why), _) => {
+                tracing::warn!(%why, "knowledge search: sentences asked and not offered here; answered as passages")
+            }
+            // The passage search refuses the malformed name, as it always has.
+            (_, Err(_)) => {}
+        }
+    }
     // One span per search, its stages' events under it (`search_stage`).
     let span = search_stage::search_span("knowledge", &request.query_text);
-    search(state, attached, request).instrument(span).await
+    search(state, attached, request)
+        .instrument(span)
+        .await
+        .into_response()
 }
 
 async fn search(

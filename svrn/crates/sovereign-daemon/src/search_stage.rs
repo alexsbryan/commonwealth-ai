@@ -14,7 +14,10 @@ use std::time::Duration;
 /// The tracing target every stage event and the `search` span carry.
 pub const TARGET: &str = "search.stage";
 
-/// The stages of one passage search, in the order they run.
+/// The stages of one knowledge search, in the order they run. A passage
+/// search runs [`SearchStage::PASSAGE_ROUTE`]; a sentence search
+/// (`granularity: sentence`, OICP v0.6 §2.11) runs
+/// [`SearchStage::SENTENCE_ROUTE`], which never locates a passage.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SearchStage {
     /// The handler's own admission (this route carries no admission layer):
@@ -32,16 +35,42 @@ pub enum SearchStage {
     TextRead,
     /// One corpus's hits located in their texts (`oicp_evidence::span_of`).
     SpanOf,
+    /// A sentence search's scoring (`routes_knowledge_sentences`): the scan
+    /// of the scope's sentence vectors on the index route (`count` the
+    /// sentences scanned), or the passage hits' sentences on the passages
+    /// route (`count` the sentences scored).
+    SentenceScan,
 }
 
 impl SearchStage {
-    pub const ALL: [SearchStage; 6] = [
+    pub const ALL: [SearchStage; 7] = [
         SearchStage::Admission,
         SearchStage::QueryEmbed,
         SearchStage::IndexQuery,
         SearchStage::Records,
         SearchStage::TextRead,
         SearchStage::SpanOf,
+        SearchStage::SentenceScan,
+    ];
+
+    /// The stages a passage search emits.
+    pub const PASSAGE_ROUTE: [SearchStage; 6] = [
+        SearchStage::Admission,
+        SearchStage::QueryEmbed,
+        SearchStage::IndexQuery,
+        SearchStage::Records,
+        SearchStage::TextRead,
+        SearchStage::SpanOf,
+    ];
+
+    /// The stages a sentence search answered from its index emits: its hits
+    /// are read from their stored addresses, so neither `index_query` nor
+    /// `span_of` runs.
+    pub const SENTENCE_ROUTE: [SearchStage; 4] = [
+        SearchStage::QueryEmbed,
+        SearchStage::Admission,
+        SearchStage::SentenceScan,
+        SearchStage::TextRead,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -52,6 +81,7 @@ impl SearchStage {
             SearchStage::Records => "records",
             SearchStage::TextRead => "text_read",
             SearchStage::SpanOf => "span_of",
+            SearchStage::SentenceScan => "sentence_scan",
         }
     }
 

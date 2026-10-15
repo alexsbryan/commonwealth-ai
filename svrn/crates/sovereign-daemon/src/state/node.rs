@@ -252,6 +252,9 @@ pub struct NodePart {
     pub atlas: Option<Arc<dyn AtlasPort>>,
     /// The turn's corpus resolver ([`NodeSeed::corpus_principal`]).
     pub corpus_principal: Option<Arc<dyn sovereign_contracts::traits::PrincipalResolver>>,
+    /// The corpora's sentence indexes and the worker filling them (OICP
+    /// v0.6 §2.11, `sentence_index`), beside the corpus engine they read.
+    pub sentences: crate::sentence_index::SentenceIndex,
     /// Unix-seconds timestamp of the last foreground inference request
     /// observed at `chat_completions`. `0` means "never touched" — the
     /// initial state at boot. Bumped via

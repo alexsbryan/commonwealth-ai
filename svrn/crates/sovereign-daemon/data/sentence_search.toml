@@ -1,0 +1,40 @@
+# Sentence search (OICP v0.6 §2.11): the reference host's choices, read by
+# `sentence_index::SentenceSearchConfig`. Every key is required; an unknown
+# key or a scorer outside the closed set fails the daemon's start, never a
+# default. A swap is an edit here, then a rebuild.
+
+# The scorer every sentence reply is ranked by and names, from the closed set
+# `cosine` | `rerank` (oicp_types::SentenceScorer). `cosine` scores the
+# query's embedding against every sentence's; `rerank` reorders cosine's
+# best `rerank_candidates` through the rerank slot. A scorer the host cannot
+# run is refused by name (`503 scorer unavailable`), never answered by the
+# other.
+scorer = "cosine"
+
+# How many of cosine's best sentences `rerank` reorders (50: PV0's
+# all-sentences arm, which reranked cosine's top 50).
+rerank_candidates = 50
+
+# Sentences one scope may hold before the exhaustive scan must become an
+# approximate index. A scope past it is scored over its first `scan_ceiling`
+# sentences and answered `truncated`, never cut short in silence. Measured
+# 2026-10-14 on the Strix Halo host (32 threads), debug build, 1024-wide
+# vectors, top 50 (`scan::tests::measure_the_scan_per_sentence`): 22k rows
+# 18 ms, 100k 47 ms, 200k 94 ms, 400k 167 ms. 400k keeps the scan under a
+# fifth of a one-second search; past it a scope wants an approximate index.
+scan_ceiling = 400000
+
+# A corpus holding more chunks than this is not sentence-indexed: a sentence
+# search naming it lists it in `corpora_unavailable`, rather than starting an
+# embedding of every sentence of an encyclopedia on the embed slot.
+index_ceiling_chunks = 100000
+
+# On the passages route (a scoped text still being indexed): how many passage
+# hits' sentences are scored (20: PV0's passage-first arm).
+passage_hits = 20
+
+# Background indexing: sentences per embed call (the embedder's identity probe
+# rides along in each call), and how often a corpus's progress is written to
+# its sidecar while it embeds.
+embed_batch = 64
+checkpoint_secs = 60

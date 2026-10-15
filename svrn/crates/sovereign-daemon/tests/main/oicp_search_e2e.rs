@@ -188,7 +188,7 @@ async fn a_search_trace_names_every_stage_with_its_time_under_one_span() {
         assert_eq!(status, StatusCode::OK, "{body}");
     })
     .await;
-    for stage in SearchStage::ALL.map(SearchStage::as_str) {
+    for stage in SearchStage::PASSAGE_ROUTE.map(SearchStage::as_str) {
         let lines: Vec<&str> = trace
             .lines()
             .filter(|l| l.contains("search stage") && l.contains(&format!("stage=\"{stage}\"")))
@@ -204,7 +204,7 @@ async fn a_search_trace_names_every_stage_with_its_time_under_one_span() {
 }
 
 /// Every tracing line at DEBUG while `f` runs, without colour.
-async fn captured_debug<F: std::future::Future<Output = ()>>(f: F) -> String {
+pub(crate) async fn captured_debug<F: std::future::Future<Output = ()>>(f: F) -> String {
     #[derive(Clone)]
     struct Captured(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
     impl std::io::Write for Captured {
@@ -222,6 +222,18 @@ async fn captured_debug<F: std::future::Future<Output = ()>>(f: F) -> String {
             self.clone()
         }
     }
+    // With one dispatcher registered, tracing-core (0.1.36,
+    // `Dispatchers::rebuilder`'s `has_just_one`) computes a callsite's
+    // interest from the REGISTERING thread's default alone, and caches it
+    // for every thread: another test's thread, with no subscriber, first
+    // reaching the stage event's callsite stores `never`, and this capture
+    // sees none of its events (watched: 0 `admission` events for 1, 7 runs
+    // of 8, once the sentence tests searched beside the stage test). A
+    // second dispatcher kept for the process makes registration read the
+    // whole set, this capture's included; the rebuild below repairs a
+    // callsite cached `never` before this capture began.
+    static SECOND: std::sync::OnceLock<tracing::Dispatch> = std::sync::OnceLock::new();
+    SECOND.get_or_init(|| tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default()));
     let buf = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let subscriber = tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
@@ -230,6 +242,7 @@ async fn captured_debug<F: std::future::Future<Output = ()>>(f: F) -> String {
         .finish();
     {
         let _guard = tracing::subscriber::set_default(subscriber);
+        tracing::callsite::rebuild_interest_cache();
         f.await;
     }
     let out = String::from_utf8(buf.lock().unwrap().clone()).unwrap();

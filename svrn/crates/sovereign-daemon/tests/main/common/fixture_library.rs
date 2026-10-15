@@ -26,6 +26,9 @@ pub struct Library {
     pub corpus_id: String,
     pub documents: Vec<Doc>,
     pub plant: Plant,
+    /// Each document's signature sentence, by name.
+    #[serde(default)]
+    pub signatures: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Deserialize)]
