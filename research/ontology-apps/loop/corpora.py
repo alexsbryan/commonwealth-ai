@@ -12,16 +12,18 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.a
 BENCH = os.path.expanduser("~/.svrnmesh/bench-corpora")
 WORLDS = ["world-s1", "world-s2", "world-s3", "world-s4", "world-s5"]
 ALL = WORLDS + ["ward-story"]
-# Corpora whose gold is a question bank, not deal records (score_bank.py): a novel read through a blind recipe.
-BANKS = ["saltgrass-ledger"]
+# Corpora whose gold is a question bank, not deal records (score_bank.py): one novel read through each blind
+# recipe, the first authored with the five-axis interview, the second with the question that checks it.
+BANK_RECIPES = {"saltgrass-ledger": "recipe.blind.toml", "saltgrass-asked": "recipe.asked.toml"}
+BANKS = list(BANK_RECIPES)
 # The inner ring: 16 of the 24 deals the one-shot serves and HEAD does not (resolve-confirm), in 10 of 19 windows.
 # world-s1 is the noisiest (7 of 18 deals flipped between two reads of the same code), so read it deal by deal.
 INNER = ["world-s3", "ward-story", "world-s1"]
 
 
 def corpus(cid):
-    if cid == "saltgrass-ledger":
-        return dict(id=cid, kind="bank", recipe=f"{REPO}/research/ontology-apps/saltgrass/recipe.blind.toml",
+    if cid in BANK_RECIPES:
+        return dict(id=cid, kind="bank", recipe=f"{REPO}/research/ontology-apps/saltgrass/{BANK_RECIPES[cid]}",
                     bank=f"{REPO}/bench/lanes/chaos_monkey/saltgrass.toml",
                     oneshot_records=f"{REPO}/runs/ceiling/saltgrass/oneshot1.json")
     if cid == "ward-story":
