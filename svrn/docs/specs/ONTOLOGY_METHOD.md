@@ -234,7 +234,9 @@ code keeps the contract: every declared field answered or unknown with a reason,
 declared values, a reference a record the document's fields name or words it holds, each field's evidence in
 the claim's own document, and a claim whose words are not in its document refused by validation. A window's
 particular reaches RESOLVE as a sufficient key over its chapter (`CHAPTER_SUBJECT_KEY`), so RESOLVE decides
-identity only across windows, statement by statement against bounded candidates. If it wins through the
+identity only across windows, statement by statement against bounded candidates. Two particulars the reader read
+in one document stay two: a record holding one is never offered the other (`apart.rs::read_beside`); whether
+particulars of different documents are one is RESOLVE's to decide. If it wins through the
 default commands it becomes the one reader and the passes and waves readers are deleted (operator,
 2026-10-13); if it loses, it is deleted.
 

@@ -128,3 +128,124 @@ fn two_references_of_one_window_never_join() {
         &BTreeMap::new()
     ));
 }
+
+/// Two particulars the window's reader read in one document are two: once a
+/// question joins one of them to a record, that record is not offered the
+/// other, decided later in the same document or in a later one. Failing
+/// input, named: a rollover message ("the old piece is being replaced by the
+/// new one") whose ending and replacing particulars each picked the old deal's
+/// record when asked alone, so one record held both (two worlds' rollovers,
+/// arm particulars-all2, 2026-10-15).
+#[tokio::test]
+async fn particulars_read_in_one_document_never_share_a_record() {
+    let (infer, seen) = scripted(vec![
+        json!({"A": 0.9, "0": 0.1}),
+        json!({"A": 0.9, "0": 0.1}),
+    ]);
+    let mut res = weights(&[("proposed_answer", 0.5, 0.4)]);
+    let c = criterion(&[CHAPTER_SUBJECT_KEY]);
+    let a = "The spring storage deal is proposed.";
+    let key = |chapter| [(CHAPTER_SUBJECT_KEY, chapter)];
+    res.resolve_document(
+        &c,
+        doc("a", a),
+        &[stmt("a", a, "spring storage deal", 0, &key("sec_1/p1"))],
+        &[],
+        Answerer::Select(&infer),
+    )
+    .await;
+    let b = "The spring storage deal is replaced by the summer storage deal.";
+    let r = res
+        .resolve_document(
+            &c,
+            doc("b", b),
+            &[
+                stmt("old", b, "spring storage deal", 0, &key("sec_2/p1")),
+                stmt("new", b, "summer storage deal", 0, &key("sec_2/p2")),
+            ],
+            &[similar("a", 0.5)],
+            Answerer::Select(&infer),
+        )
+        .await;
+    assert_eq!(res.records()[0].statements, ["a", "old"]);
+    assert_eq!(r.outcomes[1].outcome.record(), Some("new"), "{r:?}");
+    assert_eq!(
+        seen.lock().unwrap().len(),
+        1,
+        "the new particular is offered nothing"
+    );
+}
+
+/// The same when the record took the other particular in an earlier document:
+/// it is the reader's distinction in THIS document that forbids it.
+#[tokio::test]
+async fn a_record_holding_a_particular_read_beside_the_statement_is_not_offered() {
+    let (infer, seen) = scripted(vec![
+        json!({"A": 0.9, "0": 0.1}),
+        json!({"A": 0.9, "0": 0.1}),
+    ]);
+    let mut res = weights(&[("proposed_answer", 0.5, 0.4)]);
+    let c = criterion(&[CHAPTER_SUBJECT_KEY]);
+    let key = |chapter| [(CHAPTER_SUBJECT_KEY, chapter)];
+    for (id, body, chapter) in [
+        ("a", "The spring storage deal is proposed.", "sec_1/p1"),
+        ("b", "The spring storage deal slipped.", "sec_2/p1"),
+    ] {
+        let proposals = if id == "a" {
+            vec![]
+        } else {
+            vec![similar("a", 0.5)]
+        };
+        res.resolve_document(
+            &c,
+            doc(id, body),
+            &[stmt(id, body, "spring storage deal", 0, &key(chapter))],
+            &proposals,
+            Answerer::Select(&infer),
+        )
+        .await;
+    }
+    let d = "The spring storage deal is replaced by the summer storage deal.";
+    res.resolve_document(
+        &c,
+        doc("d", d),
+        &[
+            stmt("old", d, "spring storage deal", 0, &key("sec_2/p1")),
+            stmt("new", d, "summer storage deal", 0, &key("sec_2/p2")),
+        ],
+        &[similar("a", 0.5)],
+        Answerer::Select(&infer),
+    )
+    .await;
+    assert_eq!(res.records()[0].statements, ["a", "b", "old"]);
+    assert_eq!(seen.lock().unwrap().len(), 1, "only b was asked");
+}
+
+#[test]
+fn a_reference_read_beside_is_one_of_the_documents_own() {
+    use super::super::apart::read_beside;
+    let set = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<BTreeSet<_>>();
+    let doc = set(&["sec_2/p1", "sec_2/p2"]);
+    let beside =
+        |mine: &[&str], held: &[&str]| read_beside(Some(&set(mine)), &set(held), &doc).cloned();
+    assert_eq!(
+        beside(&["sec_2/p2"], &["sec_1/p7", "sec_2/p1"]),
+        Some("sec_2/p1".into())
+    );
+    assert_eq!(
+        beside(&["sec_2/p2"], &["sec_1/p7", "sec_2/p5"]),
+        None,
+        "p5 is of another document"
+    );
+    assert_eq!(
+        beside(&["sec_2/p2"], &["sec_3/p1"]),
+        None,
+        "another window's p1"
+    );
+    assert_eq!(
+        beside(&["sec_2/p2"], &["sec_2/p1", "sec_2/p2"]),
+        None,
+        "it holds the statement's own"
+    );
+    assert_eq!(read_beside(None, &set(&["sec_2/p1"]), &doc), None);
+}

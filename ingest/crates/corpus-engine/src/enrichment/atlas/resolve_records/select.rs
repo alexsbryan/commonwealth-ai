@@ -16,14 +16,14 @@
 //! statements no model was asked about, so it earns no authority it has not
 //! shown in the workflow. The full distribution is kept on every outcome.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::Instant;
 
 use oicp_types::forced_choice;
 use tracing::{debug, warn};
 
 use super::answer::{describe, describe_opened, reasons, Proposed, ProposedVerdict};
-use super::apart::{chapters_compatible, necessary_compatible, offerable};
+use super::apart::{chapters_compatible, necessary_compatible, offerable, read_beside};
 use super::estimate::{Comparison, Estimate};
 use super::fields::{self, compare_necessary};
 use super::weigh::{tally, weigh, Carried, Zone};
@@ -139,6 +139,18 @@ impl Candidate<'_> {
     }
 }
 
+/// Keep the record a plan joins, by the statement's window reference, for the
+/// statements of its document after it (`read_beside`).
+fn note_join(
+    joined: &mut HashMap<usize, BTreeSet<String>>,
+    plan: &Plan,
+    mine: Option<&BTreeSet<String>>,
+) {
+    if let (Some(Alt::Record(r)), Some(mine)) = (alt_of(plan), mine) {
+        joined.entry(r).or_default().extend(mine.iter().cloned());
+    }
+}
+
 /// Where an earlier asked statement's plan put it; `None` when held or refused.
 fn alt_of(plan: &Plan) -> Option<Alt> {
     match plan {
@@ -223,21 +235,47 @@ pub(super) async fn choose(
         Alt::Record(r) => records[r].id.clone(),
         Alt::Opened(g) => statements[asked[g]].id.clone(),
     };
+    // The window particulars this document's statements are about, and the
+    // records its earlier statements joined, by their references: folded
+    // only after the document, so kept here as it is decided (`read_beside`).
+    let in_document: BTreeSet<String> = statements
+        .iter()
+        .filter_map(|s| s.keys.get(super::CHAPTER_SUBJECT_KEY).cloned())
+        .collect();
+    let mut joined: HashMap<usize, BTreeSet<String>> = HashMap::new();
     for (j, &i) in asked.iter().enumerate() {
+        let mine = w.supplied[j].get(super::CHAPTER_SUBJECT_KEY);
         // A declared key shared with an earlier statement of this document
         // settles it: the same plan, no question.
         if let Some(&(a, _)) = w.key_edges.iter().find(|&&(a, b)| b == j && a < j) {
             plans.push(plans[a].clone());
             choices.push(None);
+            note_join(&mut joined, &plans[j], mine);
             continue;
         }
+        let beside = |r: usize| {
+            let mut held = records[r]
+                .supplied
+                .get(super::CHAPTER_SUBJECT_KEY)
+                .cloned()
+                .unwrap_or_default();
+            held.extend(joined.get(&r).into_iter().flatten().cloned());
+            read_beside(mine, &held, &in_document).cloned()
+        };
         let compatible = |a: Alt| match a {
-            Alt::Record(r) => offerable(criterion, &w.supplied[j], &records[r].supplied),
+            Alt::Record(r) => {
+                offerable(criterion, &w.supplied[j], &records[r].supplied) && beside(r).is_none()
+            }
             Alt::Opened(g) => necessary_compatible(criterion, &w.supplied[j], &w.supplied[g]),
         };
         let mut candidates: Vec<Candidate> = opened.iter().map(|&g| Candidate::Opened(g)).collect();
         candidates.extend(w.shown.iter().map(|&(r, p)| Candidate::Record(r, p)));
         let offered = candidates.len();
+        for &(r, _) in w.shown {
+            if let Some(other) = beside(r) {
+                debug!(document = doc.id, statement = %statements[i].id, candidate = %records[r].id, beside = %other, "atlas/resolve: the record holds a particular the reader read beside this one in its document; not offered");
+            }
+        }
         candidates.retain(|c| compatible(c.alt()));
         if candidates.len() < offered {
             let n = offered - candidates.len();
@@ -251,7 +289,7 @@ pub(super) async fn choose(
                 place(&mut alts, Alt::Record(r));
             } else {
                 vetoed += 1;
-                debug!(document = doc.id, statement = %statements[i].id, candidate = %records[r].id, route = "evidential_field", "atlas/resolve: a supplied necessary value differs; the field's record is not weighed");
+                debug!(document = doc.id, statement = %statements[i].id, candidate = %records[r].id, route = "evidential_field", beside = ?beside(r), "atlas/resolve: a supplied necessary value differs, or the record holds a particular read beside this one; the field's record is not weighed");
             }
         }
         // The proposed answer: an offered record, or where an earlier
@@ -448,6 +486,7 @@ pub(super) async fn choose(
         seen.extend(comps);
         plans.push(decided);
         choices.push(choice);
+        note_join(&mut joined, &plans[j], mine);
     }
     Chosen {
         plans,

@@ -68,6 +68,34 @@ pub(super) fn read_apart(
         && right.iter().all(|b| mine.contains(&chapter(b)))
 }
 
+/// The window reference a record holds that this document's reader read
+/// beside the statement's own: another particular of the statement's window
+/// that a statement of this same document (`in_document`) is about. The reader
+/// saw both in one document and called them two, so no question joins them;
+/// whether particulars of DIFFERENT documents are one is RESOLVE's question
+/// (`offerable` marks those). `None` when the record already holds the
+/// statement's own reference: its particular is there.
+pub(super) fn read_beside<'a>(
+    mine: Option<&BTreeSet<String>>,
+    held: &'a BTreeSet<String>,
+    in_document: &BTreeSet<String>,
+) -> Option<&'a String> {
+    let mine = mine?;
+    if mine.is_subset(held) {
+        return None;
+    }
+    held.iter().find(|h| {
+        !mine.contains(*h)
+            && in_document.contains(*h)
+            && mine.iter().any(|m| chapter_of(m) == chapter_of(h))
+    })
+}
+
+/// The window a reference was read in: `sec_00002` of `sec_00002/p5`.
+fn chapter_of(reference: &str) -> &str {
+    reference.split_once('/').map_or(reference, |(c, _)| c)
+}
+
 /// The declared necessary values alone.
 pub(super) fn values_compatible(
     criterion: &Criterion,
