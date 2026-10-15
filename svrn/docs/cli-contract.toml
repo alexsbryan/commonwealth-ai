@@ -2231,6 +2231,18 @@ settle_secs = 120
 exit = 0
 stdout_contains = "{corpus}"
 [[journey.step]]
+run = "search --corpus {corpus} {question}"
+note = """`svrn search` (OICP v0.6 §2.8) against the corpus step 3 proved installed. The closing line `N hit(s) from M corpus(es)` is printed on every successful reply, hits or none (search_cmd.rs), so it proves the daemon answered and the reply decoded; a refusal or an unreachable daemon prints to stderr and exits non-zero. Hit count is not asserted: it depends on the fixture corpus."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "hit(s) from"
+[[journey.step]]
+run = "verify --corpus {corpus} {claim_file}"
+note = """`svrn verify` (OICP v0.6 §2.6, fast tier) judges each paragraph of a file against the installed corpus. The tally line `N claim(s): ...` is printed after the last unit (verify_cmd.rs Counts::line), so it proves the endpoint answered for every paragraph. The verdicts themselves are not asserted: the file is prose chosen for being there, not for what it claims."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "claim(s):"
+[[journey.step]]
 run = "chat inspect --corpus {corpus} {question}"
 [journey.step.expect]
 exit = 0
