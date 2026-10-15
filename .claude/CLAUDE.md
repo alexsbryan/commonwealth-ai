@@ -19,9 +19,13 @@ this harness's own affordances.
   note in `AGENTS.md`), and the MCP path is faster and costs fewer tokens.
   `symbols({"name": "ToolRegistry"})` here; `sovereign tools call symbols
   --name=ToolRegistry` is the portable equivalent named in `AGENTS.md`.
-- **Subagents are the `Agent` tool.** `Explore` for read-only fan-out searches,
-  `general-purpose` for multi-step work. Cap 3 concurrent, launched in one
-  message. Delegation is operator-authorized here and standing — see
+- **Subagents are the `Agent` tool.** `Explore` (Sonnet, read-only) for fan-out
+  searches, `worker` (Opus, medium effort) for anything that edits or builds —
+  not `general-purpose`, which carries ~54k of inherited context against the
+  worker's ~6k. Both are defined in `.claude/agents/` and skip CLAUDE.md, so the
+  brief must carry what the task needs. Up to 2 concurrent without asking, 3-4
+  after asking the operator, launched in one message. Delegation is
+  operator-authorized here and standing — see
   `.claude/docs/MAIN_SESSION_PROTOCOL.md` §Delegation.
 - **Skills are invoked bare:** `/comaintainer`, `/fieldglass`, `/fleet-report`.
   (pi spells the same skills `/skill:comaintainer`.)

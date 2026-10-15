@@ -181,11 +181,36 @@ pulls every file dump into its own context, and the operator sees a session that
 feels blind and expensive with no explanation. That failure was diagnosed on
 2026-07-27 and this section is the fix.
 
-**Cap: 3 concurrent subagents.** Not a suggestion — 3 is the ceiling. Beyond
-that the results arrive faster than they can be read, they contend for the same
-Cargo lock and daemon, and the synthesis cost exceeds what the fan-out saved.
-Launch them in ONE message (parallel tool calls) so they actually run
-concurrently; sequential launches serialize and pay the full cache tail anyway.
+**Concurrency: up to 2 without asking; 3-4 only after asking the operator;
+never more than 4.** Operator direction 2026-10-15 (was a flat cap of 3). Past
+two, the results arrive faster than they can be read, they contend for the same
+Cargo lock and daemon, and the synthesis cost can exceed what the fan-out
+saved — so the third and fourth are the operator's call. When you ask, give one
+line per agent. Launch them in ONE message (parallel tool calls) so they
+actually run concurrently; sequential launches serialize and pay the full cache
+tail anyway.
+
+**Which agent, which model.** Both are defined in `.claude/agents/`, and both set
+`omitClaudeMd: true` plus a `tools:` allowlist, so each starts from its own
+short system prompt rather than this repo's whole compass. Measured
+2026-10-15: `Explore` starts at about 4.6k tokens on Sonnet, against 14k for
+the built-in Explore, which ran on Opus. `worker` starts at about 6.4k tokens on
+Opus at medium effort, against 52-55k for `general-purpose` across the 35 runs
+on record.
+
+- `Explore` (Sonnet) handles read-only sweeps. It overrides the built-in by
+  name.
+- `worker` (Opus, medium effort) handles anything that edits, builds or
+  tests. Its prompt carries a digest of the rules a worker must not miss: debug
+  builds, `with-cargo-lock.sh`, scoped gates, code intel first, no attribution.
+- `general-purpose` is the fallback only when a task needs a tool the worker
+  lacks, such as web research. It costs about 54k tokens per spawn.
+- Neither agent sees AGENTS.md or your conversation. **The brief carries the
+  objective, the scope, the acceptance check, and any repo rule the task is
+  specifically exposed to.** A worker that hits an open design question reports
+  it and does not guess.
+- Pass `model` on the Agent call only to override deliberately, and say why.
+  The definitions are the default.
 
 **Delegate when** the answer requires reading across many files and you only
 need the conclusion:
@@ -220,8 +245,7 @@ need the conclusion:
   claim; they inherit your scope. Do not have three agents each claim the same
   symbol.
 - Prefer `Explore` for read-only search (it excerpts rather than dumping whole
-  files). Reach for `general-purpose` only when the task must also write or run
-  things.
+  files). Reach for `worker` when the task must also write or run things.
 - Say out loud that you are delegating and why. Glassbox applies to your own
   process, not just the code you write — a silent fan-out is as opaque to the
   operator as a silent refusal to fan out.

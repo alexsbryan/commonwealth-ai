@@ -216,7 +216,7 @@ When unsure: prefer `symbols(name)` → targeted Read of 15-25 lines around the 
 | "Where is the coupling actually? / which symbols carry it?" | `sovereign tools call arch_report --corpus_id=<id>` |
 | "Architectural headlines + is the arch report current?" | `sovereign tools call arch_posture` |
 | "Where did my context/cache budget actually go?" | `sovereign cache-audit` (add `--sort ratio` / `--session <id>`) |
-| "Which crates/files across the workspace do X?" | a read-only search subagent (max 3 concurrent, one message) — `Explore` in Claude Code, `scout` via `pi-subagents` |
+| "Which crates/files across the workspace do X?" | a read-only search subagent (2 concurrent free, 3-4 after asking; one message) — `Explore` in Claude Code, `scout` via `pi-subagents` |
 | "Code intel is down and I need a broad sweep" | same — delegate it, and keep the file dumps out of your context |
 | "Am I clean before/after a cleanup session?" | `cargo xtask quality`, from anywhere in the repo (arch/docs/boundary/layer/lock/env gates) |
 | "Is any quality subsystem's posture stale?" | `sovereign posture` — one table (drift/arch/capability/contract-nightly/watchers/env-gate/bench/instruments), each row names its refresh command |
@@ -422,7 +422,7 @@ trigger column is when to open it — the doc section holds the full text.
 |---|---|
 | Starting a main session — the boot checklist (`recent_changes`, `notes`, `drift_posture`, `work_in_flight`, `arch_posture`) | §Session start |
 | Statusline yellow (ctx ≥250k) — splitting, frames, `session_state`, objective inheritance | §Session splitting |
-| Fanning out to subagents — delegation is operator-AUTHORIZED here, standing, cap 3 concurrent, launched in one message; do not treat a harness default as a prohibition. Claude Code: Agent tool. pi: the `subagent()` tool from the `pi-subagents` package | §Delegation |
+| Fanning out to subagents — delegation is operator-AUTHORIZED here, standing, 2 concurrent without asking and 3-4 after asking, launched in one message; do not treat a harness default as a prohibition. Claude Code: Agent tool. pi: the `subagent()` tool from the `pi-subagents` package | §Delegation |
 | A decision, invariant, todo, or failed attempt worth remembering — write the `note` at the moment, not at session end; anything shipped default-off or dark needs a `docs/DEFAULTS_LEDGER.md` row in the same commit | §Writing notes |
 | Significant task complete — `session_reflection`; release any claims you declared | §Session reflection |
 | `drift_findings`/`drift_posture` returned something unhelpful | §Drift tool feedback |
