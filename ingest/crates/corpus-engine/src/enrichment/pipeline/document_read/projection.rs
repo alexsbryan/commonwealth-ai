@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::enrichment::ontology::{OntologyPolicies, TypeIndex};
+use crate::enrichment::ontology::{Force, OntologyPolicies, TypeIndex, TypeKind};
 use crate::enrichment::pipeline::atlas::{
     ClaimScope, ClaimSketch, EnrichmentDepth, EpistemicStatus, SectionExtraction,
 };
@@ -65,7 +65,7 @@ pub(super) fn project_compatibility_sketches(
         .shape
         .types
         .iter()
-        .filter(|ty| schema::eligible_claim(ty, policies));
+        .filter(|ty| schema::read_kind(ty, policies));
     let claim_decls: HashMap<&str, _> = claims.map(|ty| (ty.name.as_str(), ty)).collect();
     let mut sketches = Vec::new();
     let read = extraction.document_read.as_ref().ok_or_else(|| {
@@ -79,7 +79,7 @@ pub(super) fn project_compatibility_sketches(
                     claim.kind
                 ))
             })?;
-            let subject_type = decl.subject.as_deref().ok_or_else(|| {
+            let subject_type = decl.read_subject().ok_or_else(|| {
                 Error::Serialization(format!(
                     "claim type `{}` has no subject declaration",
                     decl.name
@@ -91,9 +91,10 @@ pub(super) fn project_compatibility_sketches(
                     claim.kind, claim.subject_type
                 )));
             }
+            let attrs = schema::statement_attributes(&index, decl);
             validation::validate_fields(
                 &claim.fields,
-                index.extracted_attributes(&decl.name),
+                attrs.iter().map(|a| &**a).collect(),
                 &format!("claim `{}` fields", decl.name),
             )?;
             policies.type_decl(subject_type).ok_or_else(|| {
@@ -140,12 +141,23 @@ pub(super) fn project_compatibility_sketches(
                     ))
                 })?,
             );
-            let force = decl.force.ok_or_else(|| {
-                Error::Serialization(format!(
-                    "claim type `{}` has no declared force for document reading",
-                    decl.name
-                ))
-            })?;
+            // A state or relation statement asserts what it reads; only a
+            // claim kind declares a force.
+            let force = match decl.kind {
+                TypeKind::Claim => decl.force.ok_or_else(|| {
+                    Error::Serialization(format!(
+                        "claim type `{}` has no declared force for document reading",
+                        decl.name
+                    ))
+                })?,
+                TypeKind::State | TypeKind::Relation => Force::Assertive,
+                TypeKind::Entity | TypeKind::Event => {
+                    return Err(Error::Serialization(format!(
+                        "`{}` is an {:?} type, not a statement kind",
+                        decl.name, decl.kind
+                    )))
+                }
+            };
             let discourse_act =
                 crate::enrichment::pipeline::pipelines::parse_policy::discourse_act_for(force);
             let scope = decl

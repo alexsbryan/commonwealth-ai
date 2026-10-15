@@ -382,3 +382,66 @@ subject = "person"
         prompts[3].user
     );
 }
+
+/// Every declared kind is read (operator, 2026-10-15): a state of a decided
+/// subject and a relation from it become statement kinds about it, the state
+/// carrying its value (a Point named for the state type) and the relation its
+/// other endpoint (`to`, a Pick of that type). A state of a type RESOLVE cannot
+/// decide stays unread, and `unread_types` names it with its holder.
+#[test]
+fn states_and_relations_of_a_decided_holder_are_read_kinds() {
+    let ontology: crate::enrichment::ontology::OntologyV1 = toml::from_str(
+        r#"
+[[types]]
+name = "case"
+kind = "entity"
+identity_criterion = "same issue number"
+
+[[types]]
+name = "team"
+kind = "entity"
+
+[[types]]
+name = "report"
+kind = "claim"
+force = "assertive"
+subject = "case"
+
+[[types]]
+name = "urgency"
+kind = "state"
+of = "case"
+description = "How pressing a case is."
+
+[[types]]
+name = "blocks"
+kind = "relation"
+from = "case"
+to = "case"
+
+[[types]]
+name = "morale"
+kind = "state"
+of = "team"
+"#,
+    )
+    .unwrap();
+    let p = ontology.into_policies();
+    let plan = Plan::of(&p);
+    let kinds: Vec<&str> = plan.kinds.iter().map(|k| k.decl.name.as_str()).collect();
+    assert_eq!(kinds, ["report", "urgency", "blocks"]);
+    assert!(plan.kinds.iter().all(|k| k.subject.name == "case"));
+    assert!(matches!(
+        &plan.kinds[1].fields[..],
+        [FieldPlan::Point(a)] if a.name == "urgency" && a.description == "How pressing a case is."
+    ));
+    assert!(matches!(
+        &plan.kinds[2].fields[..],
+        [FieldPlan::Pick(a, "case")] if a.name == understanding_vocab::ontology::decl::STATEMENT_TO
+    ));
+    let unread: Vec<&str> = super::super::schema::unread_types(&p)
+        .iter()
+        .map(|t| t.name.as_str())
+        .collect();
+    assert_eq!(unread, ["team", "morale"]);
+}

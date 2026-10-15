@@ -15,7 +15,7 @@ fn document_read_accepts_every_declared_claim_force() {
         let mut declared = membership.clone();
         declared.force = Some(force);
         assert!(
-            eligible_claim(&declared, &policies),
+            read_kind(&declared, &policies),
             "document reading must include declared {force:?} claims"
         );
     }

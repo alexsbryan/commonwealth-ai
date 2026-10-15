@@ -47,7 +47,7 @@ pub use validation::validate_and_stamp;
 pub use window::chosen as window_chosen;
 
 #[cfg(test)]
-use schema::eligible_claim;
+use schema::read_kind;
 
 /// Internal attributes carried only between Phase 1 projection and RESOLVE.
 pub const LOCAL_REF_ATTRIBUTE: &str = "__document_read_local_ref";

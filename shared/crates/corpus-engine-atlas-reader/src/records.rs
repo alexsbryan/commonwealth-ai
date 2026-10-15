@@ -88,7 +88,7 @@ fn refs_of<'a>(
     ) else {
         return out;
     };
-    for attr in &decl.attributes {
+    for attr in decl.attributes.iter().chain(&decl.implied_fields()) {
         if !matches!(attr.family, AttrFamily::Ref { .. }) {
             continue;
         }
@@ -221,16 +221,18 @@ impl<'a> RecordView<'a> {
             .policies
             .zip(declared_type(a))
             .and_then(|(p, t)| p.type_decl(t));
-        let (attributes, unset): (Map<String, Value>, Vec<&str>) = match (decl, stored(a)) {
+        let (attributes, unset): (Map<String, Value>, Vec<String>) = match (decl, stored(a)) {
             (Some(decl), Some(map)) => {
                 let mut held = Map::new();
                 let mut unset = Vec::new();
-                for attr in &decl.attributes {
+                // A state's value and a relation's `to` are fields its shape
+                // implies, listed with the declared ones.
+                for attr in decl.attributes.iter().chain(&decl.implied_fields()) {
                     match map.get(&attr.name) {
                         Some(v) => {
                             held.insert(attr.name.clone(), v.clone());
                         }
-                        None => unset.push(attr.name.as_str()),
+                        None => unset.push(attr.name.clone()),
                     }
                 }
                 (held, unset)

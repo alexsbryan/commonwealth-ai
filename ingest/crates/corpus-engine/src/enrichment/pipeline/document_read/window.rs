@@ -12,6 +12,7 @@
 //! document. A claim whose quote is not in its document is refused by
 //! validation (`validate_and_stamp`), never projected.
 
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 
 use serde_json::{json, Value};
@@ -72,8 +73,8 @@ impl<'a> Contract<'a> {
             .shape
             .types
             .iter()
-            .filter(|t| super::schema::eligible_claim(t, policies))
-            .filter_map(|t| Some((t, policies.type_decl(t.subject.as_deref()?)?)))
+            .filter(|t| super::schema::read_kind(t, policies))
+            .filter_map(|t| Some((t, policies.type_decl(t.read_subject()?)?)))
             .collect();
         let mut subjects: Vec<&OntologyTypeDecl> = Vec::new();
         for (_, s) in &kinds {
@@ -93,12 +94,16 @@ impl<'a> Contract<'a> {
     ) -> Vec<&'a OntologyTypeDecl> {
         let mut names: BTreeSet<&str> = BTreeSet::new();
         for (kind, subject) in &self.kinds {
-            let attrs = read_attrs(index, &kind.name)
+            let attrs = read_attrs(index, kind)
                 .into_iter()
-                .chain(subject_attrs(policies, index, &subject.name));
+                .chain(subject_attrs(policies, index, &subject.name).into_iter().map(Cow::Borrowed));
             for attr in attrs {
+                // The target's name borrowed from its declaration: an owned
+                // field (a relation's `to`) cannot lend its own.
                 if let AttrFamily::Ref { of } = &attr.family {
-                    names.insert(of.as_str());
+                    if let Some(target) = policies.type_decl(of) {
+                        names.insert(target.name.as_str());
+                    }
                 }
             }
             if matches!(subject.source, Some(SourceDecl::Metadata(_))) {
@@ -112,9 +117,8 @@ impl<'a> Contract<'a> {
     }
 }
 
-fn read_attrs<'a>(index: &TypeIndex<'a>, kind: &str) -> Vec<&'a AttrDecl> {
-    index
-        .extracted_attributes(kind)
+fn read_attrs<'a>(index: &TypeIndex<'a>, kind: &'a OntologyTypeDecl) -> Vec<Cow<'a, AttrDecl>> {
+    super::schema::statement_attributes(index, kind)
         .into_iter()
         .filter(|a| a.derived.is_none())
         .collect()
@@ -163,7 +167,7 @@ fn ontology_text(
             "- {} (a statement about one {}): {}",
             kind.name, subject.name, kind.description
         ));
-        out.extend(read_attrs(index, &kind.name).into_iter().map(attr_line));
+        out.extend(read_attrs(index, kind).iter().map(|a| attr_line(a)));
     }
     for subject in &contract.subjects {
         out.push(format!("- {}: {}", subject.name, subject.description));
@@ -691,8 +695,8 @@ fn envelope(
             }
             None => quote,
         };
-        let fields = read_attrs(index, &decl.name)
-            .into_iter()
+        let fields = read_attrs(index, decl)
+            .iter()
             .map(|a| {
                 let r = reading(
                     a,

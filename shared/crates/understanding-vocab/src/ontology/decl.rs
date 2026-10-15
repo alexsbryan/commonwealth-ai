@@ -462,35 +462,108 @@ impl OntologyTypeDecl {
     pub fn is_document_reading_eligible(&self, declared_types: &[Self]) -> bool {
         self.kind == TypeKind::Claim
             && self.force.is_some()
-            && self.subject.as_deref().is_some_and(|subject_name| {
-                declared_types
-                    .iter()
-                    .find(|subject| subject.name == subject_name)
-                    .is_some_and(|subject| {
-                        let resolvable_subject = match &subject.source {
-                            None => subject.identity_criterion.is_some(),
-                            Some(SourceDecl::Metadata(_)) => {
-                                !subject.identity.is_empty()
-                                    && subject.identity.iter().all(|key| {
-                                        subject.attributes.iter().any(|attribute| {
-                                            attribute.name == *key && attribute.derived.is_none()
-                                        })
-                                    })
-                            }
-                            Some(SourceDecl::Table(_)) => false,
-                        };
-                        // RESOLVE decides an entity or an event it identifies by
-                        // criterion; a metadata source projects entities only.
-                        match subject.kind {
-                            TypeKind::Entity => resolvable_subject,
-                            TypeKind::Event => {
-                                subject.source.is_none() && subject.identity_criterion.is_some()
-                            }
-                            _ => false,
-                        }
-                    })
-            })
+            && self
+                .subject
+                .as_deref()
+                .is_some_and(|s| resolvable_subject(s, declared_types))
     }
+
+    /// What a read statement of this type is about: a claim's `subject`, a
+    /// state's holder (`of`), a relation's first endpoint (`from`).
+    pub fn read_subject(&self) -> Option<&str> {
+        match self.kind {
+            TypeKind::Claim => self.subject.as_deref(),
+            TypeKind::State => self.of.as_deref(),
+            TypeKind::Relation => self.from.as_deref(),
+            TypeKind::Entity | TypeKind::Event => None,
+        }
+    }
+
+    /// The fields a read statement of this type carries that its shape
+    /// declares rather than its attributes: a state's value, named for the
+    /// state type; a relation's other endpoint ([`STATEMENT_TO`]), a reference
+    /// to its `to` type. The reader asks them, validation and projection keep
+    /// them, and a record view lists them, all from here.
+    pub fn implied_fields(&self) -> Vec<AttrDecl> {
+        let field = |name: String, family, description: String| AttrDecl {
+            name,
+            family,
+            description,
+            derived: None,
+            by: None,
+        };
+        match self.kind {
+            TypeKind::State => vec![field(
+                self.name.clone(),
+                AttrFamily::Text { values: Vec::new() },
+                self.description.clone(),
+            )],
+            TypeKind::Relation => self
+                .to
+                .iter()
+                .map(|to| {
+                    field(
+                        STATEMENT_TO.into(),
+                        AttrFamily::Ref { of: to.clone() },
+                        format!("the {to} it relates to"),
+                    )
+                })
+                .collect(),
+            TypeKind::Claim | TypeKind::Entity | TypeKind::Event => Vec::new(),
+        }
+    }
+
+    /// Whether the document reader reads statements of this type: an eligible
+    /// claim, or a state or relation whose holder RESOLVE decides (a
+    /// relation's other endpoint must be declared, for its Pick).
+    pub fn is_read_statement(&self, declared_types: &[Self]) -> bool {
+        match self.kind {
+            TypeKind::Claim => self.is_document_reading_eligible(declared_types),
+            TypeKind::State => self
+                .read_subject()
+                .is_some_and(|s| resolvable_subject(s, declared_types)),
+            TypeKind::Relation => {
+                self.read_subject()
+                    .is_some_and(|s| resolvable_subject(s, declared_types))
+                    && self
+                        .to
+                        .as_deref()
+                        .is_some_and(|t| declared_types.iter().any(|d| d.name == t))
+            }
+            TypeKind::Entity | TypeKind::Event => false,
+        }
+    }
+}
+
+/// A relation statement's field naming its other endpoint.
+pub const STATEMENT_TO: &str = "to";
+
+/// Whether RESOLVE can decide the records of `subject_name`: an entity or an
+/// event it identifies by criterion, or an entity a metadata source projects
+/// by declared identity fields.
+fn resolvable_subject(subject_name: &str, declared_types: &[OntologyTypeDecl]) -> bool {
+    declared_types
+        .iter()
+        .find(|subject| subject.name == subject_name)
+        .is_some_and(|subject| {
+            let resolvable = match &subject.source {
+                None => subject.identity_criterion.is_some(),
+                Some(SourceDecl::Metadata(_)) => {
+                    !subject.identity.is_empty()
+                        && subject.identity.iter().all(|key| {
+                            subject.attributes.iter().any(|attribute| {
+                                attribute.name == *key && attribute.derived.is_none()
+                            })
+                        })
+                }
+                Some(SourceDecl::Table(_)) => false,
+            };
+            match subject.kind {
+                TypeKind::Entity => resolvable,
+                TypeKind::Event => subject.source.is_none() && subject.identity_criterion.is_some(),
+                _ => false,
+            }
+        })
 }
 
 /// The atom kind a declared type specializes. Closed set: a new kind is a

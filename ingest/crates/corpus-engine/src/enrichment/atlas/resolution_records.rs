@@ -92,8 +92,9 @@ pub fn decides_mentions(index: &TypeIndex<'_>, type_name: &str) -> bool {
     })
 }
 
-/// The types RESOLVE decides ([`decides`]) that no declared claim kind names as
-/// its `subject`: RESOLVE would have no statement of them, and their Phase-1
+/// The types RESOLVE decides ([`decides`]) that no declared statement kind is
+/// about (a claim's `subject`, a state's `of`, a relation's `from`,
+/// `OntologyTypeDecl::read_subject`): RESOLVE would have no statement of them, and their Phase-1
 /// atoms would be decided by 3a's merge instead. The build refuses such a
 /// declaration (`enrich extract`); `recipe validate` names it.
 pub fn types_without_statements(policies: &OntologyPolicies) -> Vec<String> {
@@ -108,7 +109,7 @@ pub fn types_without_statements(policies: &OntologyPolicies) -> Vec<String> {
                 .shape
                 .types
                 .iter()
-                .any(|c| c.kind == TypeKind::Claim && c.subject.as_deref() == Some(t.name.as_str()))
+                .any(|c| c.read_subject() == Some(t.name.as_str()))
         })
         .map(|t| t.name.clone())
         .collect()
@@ -298,10 +299,11 @@ async fn resolve_type(
         .shape
         .types
         .iter()
-        .filter(|c| c.kind == TypeKind::Claim && c.subject.as_deref() == Some(t.name.as_str()))
+        .filter(|c| c.read_subject() == Some(t.name.as_str()))
         .map(|c| c.name.as_str())
         .collect();
-    // A claim of a kind about the type, or a particular of it no claim is
+    // A statement of a kind about the type (a claim, a state of it, a relation
+    // from it), or a particular of it no claim is
     // about (`about_type`): each is a statement of the type.
     let of_kinds = |c: &Claim| {
         c.claim_kind.as_deref().is_some_and(|k| kinds.contains(k))

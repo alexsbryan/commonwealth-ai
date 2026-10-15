@@ -201,9 +201,12 @@ failed the same way — the local model asked to find, label, name and cite at o
 source, a derivation, Act, Choose, Point or Pick from the reader's own plan with Pick's candidates, RESOLVE for a
 subject) and warns on what nothing fills (a type no read claim kind is about, a closed set wider than one
 forced choice, a reference to a type only a table holds) and on any fold, protocol or identity key keyed on it (`validate_layer.rs::fill_analysis`; blind round 2's protocol folds keyed on `step_id`
-and `decision_ref` never folded, silently). It names each declared type the reader makes no record of: a state, a
-relation, or an entity no claim kind is about and no source supplies (`document_read::unread_types`; saltgrass's first
-blind recipe lost `vessel` and `condition` that way, silently).
+and `decision_ref` never folded, silently). It names each declared type the reader makes no record of: a state or
+relation whose holder RESOLVE cannot decide, or an entity no statement is about and no source supplies
+(`document_read::unread_types`; saltgrass's first blind recipe lost `vessel` and `condition` that way, silently). A
+state or relation whose holder RESOLVE decides is read as a statement about it (2026-10-15): a state carries its value,
+a field named for the state type, and a relation its other endpoint, `to` (`OntologyTypeDecl::implied_fields`), and
+both are served as claims of their type.
 
 **The window reader (experiment, 2026-10-13; `SOVEREIGN_READER=window`, DEFAULTS_LEDGER).** The race of
 2026-10-13 (REVIEW_BRIEF.md) read five generated mail worlds four ways with one hosted model: reading windows

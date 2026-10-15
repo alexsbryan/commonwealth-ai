@@ -25,6 +25,7 @@
 //! RESOLVE's Ring 0 does, so it can be measured; "none of them" or a refused
 //! call leaves the field unknown with its distribution in the reason.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use serde_json::{json, Value};
@@ -116,25 +117,34 @@ pub(super) enum FieldPlan<'a> {
     /// A closed set of 1..=25 values: one forced choice over them.
     Choose(ClosedAttr),
     /// Open text, a quantity or a time: a span of the statement's words.
-    Point(&'a AttrDecl),
-    /// A reference: one choice among the candidates code proposes.
-    Pick(&'a AttrDecl, &'a str),
+    /// Owned when composed rather than declared (a state's value,
+    /// `schema::statement_attributes`).
+    Point(Cow<'a, AttrDecl>),
+    /// A reference: one choice among the candidates code proposes (owned for
+    /// a relation's `to`).
+    Pick(Cow<'a, AttrDecl>, &'a str),
     /// The subject of a claim kind (the first), when its type (the second)
     /// has a metadata source: one Pick among the records that source reads
     /// from the document, written as the readings of the identity fields (the
     /// third), which the statement's words rarely hold.
     Subject(&'a OntologyTypeDecl, &'a str, Vec<&'a AttrDecl>),
     /// A closed set wider than one forced choice shows: not asked, said why.
-    Unasked(&'a AttrDecl),
+    Unasked(Cow<'a, AttrDecl>),
 }
 
 impl<'a> FieldPlan<'a> {
-    fn of(attr: &'a AttrDecl) -> Self {
-        if let Some(closed) = ClosedAttr::of(attr) {
+    fn of(attr: Cow<'a, AttrDecl>, policies: &'a OntologyPolicies) -> Self {
+        if let Some(closed) = ClosedAttr::of(&attr) {
             return FieldPlan::Choose(closed);
         }
         match &attr.family {
-            AttrFamily::Ref { of } => FieldPlan::Pick(attr, of.as_str()),
+            // The target's name, borrowed from its declaration (an owned
+            // attribute cannot lend it): a reference to an undeclared type
+            // is refused at parse, so the declaration is there.
+            AttrFamily::Ref { of } => match policies.type_decl(of) {
+                Some(target) => FieldPlan::Pick(attr, target.name.as_str()),
+                None => FieldPlan::Unasked(attr),
+            },
             AttrFamily::Text { values } if !values.is_empty() => FieldPlan::Unasked(attr),
             AttrFamily::Text { .. } | AttrFamily::Quantity { .. } | AttrFamily::Time { .. } => {
                 FieldPlan::Point(attr)
@@ -165,28 +175,28 @@ impl<'a> FieldPlan<'a> {
 impl<'a> Plan<'a> {
     pub(super) fn of(policies: &'a OntologyPolicies) -> Self {
         let index = TypeIndex::from_policies(policies);
-        let fields = |attrs: Vec<&'a AttrDecl>| -> Vec<FieldPlan<'a>> {
+        let fields = |attrs: Vec<Cow<'a, AttrDecl>>| -> Vec<FieldPlan<'a>> {
             attrs
                 .into_iter()
                 .filter(|attr| attr.derived.is_none())
-                .map(FieldPlan::of)
+                .map(|attr| FieldPlan::of(attr, policies))
                 .collect()
         };
         let kinds = policies
             .shape
             .types
             .iter()
-            .filter(|ty| super::schema::eligible_claim(ty, policies))
+            .filter(|ty| super::schema::read_kind(ty, policies))
             .filter_map(|decl| {
-                let subject = policies.type_decl(decl.subject.as_deref()?)?;
+                let subject = policies.type_decl(decl.read_subject()?)?;
                 let keys = super::schema::subject_read_attributes(policies, &index, &subject.name);
                 let subject_fields = match &subject.source {
                     Some(SourceDecl::Metadata(_)) if !keys.is_empty() => {
                         vec![FieldPlan::Subject(decl, subject.name.as_str(), keys)]
                     }
-                    _ => fields(keys),
+                    _ => fields(keys.into_iter().map(Cow::Borrowed).collect()),
                 };
-                let fields = fields(index.extracted_attributes(&decl.name));
+                let fields = fields(super::schema::statement_attributes(&index, decl));
                 let keys = act::keys(policies, &index, decl, subject, &fields);
                 Some(KindPlan {
                     decl,

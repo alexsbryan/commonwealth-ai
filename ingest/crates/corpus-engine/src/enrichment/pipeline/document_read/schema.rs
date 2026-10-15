@@ -1,8 +1,11 @@
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 
 use serde_json::{json, Value};
 
-use crate::enrichment::ontology::{AttrDecl, OntologyPolicies, SourceDecl, TypeIndex, TypeKind};
+use crate::enrichment::ontology::{
+    AttrDecl, OntologyPolicies, OntologyTypeDecl, SourceDecl, TypeIndex, TypeKind,
+};
 use crate::enrichment::pipeline::types::{ChapterInput, ChatPrompt};
 
 /// v4: one reader remains (passes); the one-shot prompt, its decoder schema and
@@ -27,7 +30,7 @@ pub fn compose(chapter: &ChapterInput, policies: &OntologyPolicies, phase_id: &s
             .shape
             .types
             .iter()
-            .filter(|claim| eligible_claim(claim, policies))
+            .filter(|claim| read_kind(claim, policies))
             .count(),
         "phase1.document_read_plan_composed"
     );
@@ -46,15 +49,15 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
         .shape
         .types
         .iter()
-        .filter(|claim| eligible_claim(claim, policies))
+        .filter(|claim| read_kind(claim, policies))
         .map(|claim| {
             json!({
                 "name": claim.name,
                 "description": claim.description,
                 "force": claim.force,
-                "subject": claim.subject,
+                "subject": claim.read_subject(),
                 "scope": claim.scope,
-                "attributes": attrs_value(index.extracted_attributes(&claim.name)),
+                "attributes": attrs_value(statement_attributes(&index, claim).iter().map(|a| &**a).collect()),
             })
         })
         .collect();
@@ -145,18 +148,33 @@ pub(super) fn subject_read_attributes<'a>(
     }
 }
 
-pub(super) fn eligible_claim(
-    claim: &crate::enrichment::ontology::OntologyTypeDecl,
-    policies: &OntologyPolicies,
-) -> bool {
-    claim.is_document_reading_eligible(&policies.shape.types)
+/// Whether the reader reads statements of `ty`: an eligible claim, or a state or
+/// relation whose holder RESOLVE decides (`OntologyTypeDecl::is_read_statement`).
+pub(super) fn read_kind(ty: &OntologyTypeDecl, policies: &OntologyPolicies) -> bool {
+    ty.is_read_statement(&policies.shape.types)
 }
 
-/// The declared types a document read makes no record of. It reads the claim
-/// kinds `eligible_claim` admits and the types they are about (with their
-/// `specializes` kin), so a state, a relation, or an entity no claim kind is
-/// about gets none unless a source supplies it. Empty when the general
-/// extractor reads the declaration, which reads every kind.
+/// The fields a read statement of `decl` carries: those its shape implies (a
+/// state's value, a relation's `to`: `OntologyTypeDecl::implied_fields`), then
+/// its declared attributes.
+pub(super) fn statement_attributes<'a>(
+    index: &TypeIndex<'a>,
+    decl: &'a OntologyTypeDecl,
+) -> Vec<Cow<'a, AttrDecl>> {
+    decl.implied_fields()
+        .into_iter()
+        .map(Cow::Owned)
+        .chain(index.extracted_attributes(&decl.name).into_iter().map(Cow::Borrowed))
+        .collect()
+}
+
+/// The declared types a document read makes no record of. It reads the
+/// statement kinds `read_kind` admits (claims, and states and relations whose
+/// holder RESOLVE decides) and the types they are about (with their
+/// `specializes` kin), so a state or relation whose holder RESOLVE cannot
+/// decide, or an entity no statement is about, gets none unless a source
+/// supplies it. Empty when the general extractor reads the declaration, which
+/// reads every kind.
 pub fn unread_types(
     policies: &OntologyPolicies,
 ) -> Vec<&crate::enrichment::ontology::OntologyTypeDecl> {
@@ -168,8 +186,8 @@ pub fn unread_types(
         .shape
         .types
         .iter()
-        .filter(|t| eligible_claim(t, policies))
-        .flat_map(|c| std::iter::once(c.name.as_str()).chain(c.subject.as_deref()))
+        .filter(|t| read_kind(t, policies))
+        .flat_map(|c| std::iter::once(c.name.as_str()).chain(c.read_subject()))
         .collect();
     policies
         .shape

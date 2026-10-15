@@ -139,7 +139,7 @@ fn validate_outcome(
         .shape
         .types
         .iter()
-        .filter(|ty| super::schema::eligible_claim(ty, policies))
+        .filter(|ty| super::schema::read_kind(ty, policies))
         .map(|ty| (ty.name.as_str(), ty))
         .collect();
     let before = outcome.claims.len();
@@ -306,7 +306,7 @@ fn verify_claim(
     let decl = eligible
         .get(claim.kind.as_str())
         .ok_or_else(|| format!("claim kind `{}` is not eligible in this recipe", claim.kind))?;
-    let subject_type = decl.subject.as_deref().unwrap_or_default();
+    let subject_type = decl.read_subject().unwrap_or_default();
     if claim.subject_type != subject_type
         || claim.subject_local_ref.trim().is_empty()
         || claim.subject_name.trim().is_empty()
@@ -332,9 +332,10 @@ fn verify_claim(
             claim.kind
         ));
     }
+    let attrs = super::schema::statement_attributes(index, decl);
     validate_fields(
         &claim.fields,
-        index.extracted_attributes(&decl.name),
+        attrs.iter().map(|a| &**a).collect(),
         &format!("claim `{}` fields", decl.name),
     )
     .map_err(|error| error.to_string())?;

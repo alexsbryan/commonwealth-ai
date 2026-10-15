@@ -325,11 +325,12 @@ fn a_referenced_sourced_type_says_who_decides_its_mentions() {
     );
 }
 
-/// A declaration the document reader reads makes no record of a type no claim
-/// kind is about and no source supplies: a state of `item`, and `lot`, which
-/// `move` only references. Both are named in one warning; `item`, `move` and
-/// the sourced `party` are not. The general extractor reads every kind, so a
-/// template it reads warns of nothing (`recipe_templates_all_ten_parse`).
+/// A declaration the document reader reads makes no record of a type no
+/// statement is about and no source supplies: `lot`, which `move` only
+/// references, is named. A state of `item` is read since 2026-10-15 (its
+/// holder is decided), so it is not; nor are `item`, `move` and the sourced
+/// `party`. The general extractor reads every kind, so a template it reads
+/// warns of nothing (`recipe_templates_all_ten_parse`).
 #[test]
 fn a_type_the_document_reader_makes_no_record_of_is_warned() {
     let v = validated(&fixture().replace(
@@ -339,10 +340,8 @@ fn a_type_the_document_reader_makes_no_record_of_is_warned() {
     ));
     let unread = warned(&v, "makes no record of");
     assert_eq!(unread.len(), 1, "{:#?}", v.warnings);
-    for named in ["`mood` (state)", "`lot` (entity)"] {
-        assert!(unread[0].contains(named), "{named}: {}", unread[0]);
-    }
-    for read in ["`item`", "`move`", "`party`"] {
+    assert!(unread[0].contains("`lot` (entity)"), "{}", unread[0]);
+    for read in ["`mood`", "`item`", "`move`", "`party`"] {
         assert!(!unread[0].contains(read), "{read}: {}", unread[0]);
     }
 }
