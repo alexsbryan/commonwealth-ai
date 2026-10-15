@@ -15,8 +15,8 @@ use corpus_index::ingest_port::daemon::{
 use kernel_types::{NodeId, Sha256Hash};
 use oicp_types::record::DECLARED;
 use oicp_types::{IngestDocumentState, LookupOutcome, MergedRecord};
-use sovereign_daemon::records_by_identifier::{FetchReply, RecordFetch, RecordedFetch};
 use sovereign_daemon::records_by_identifier::ResolverTable;
+use sovereign_daemon::records_by_identifier::{FetchReply, RecordFetch, RecordedFetch};
 use sovereign_daemon::state::{fabric, node, serving, AppState};
 
 use crate::common::fixture_library::{install as store, Doc, DIM};
@@ -261,17 +261,33 @@ async fn a_held_install_asks_its_unreachable_lookups_again_and_only_those() {
         first["fair-principles"].as_ref().unwrap().lookups[0].outcome,
         LookupOutcome::Unreachable
     );
-    assert_eq!(first["fair-principles"].as_ref().unwrap().looked_up().count(), 0);
+    assert_eq!(
+        first["fair-principles"]
+            .as_ref()
+            .unwrap()
+            .looked_up()
+            .count(),
+        0
+    );
 
     *net.0.lock().unwrap() = later.clone();
-    assert!(!installed(&state, true).await, "same recipe and allowance: held");
+    assert!(
+        !installed(&state, true).await,
+        "same recipe and allowance: held"
+    );
     let r = listed(&state).await;
     assert_eq!(
         r["fair-principles"].as_ref(),
-        Some(&golden(include_str!("../fixtures/records/golden_fair-principles.json"))),
+        Some(&golden(include_str!(
+            "../fixtures/records/golden_fair-principles.json"
+        ))),
         "the looked-up fields arrive"
     );
-    assert_eq!(later.asked(), vec![url], "only the unreachable one was asked");
+    assert_eq!(
+        later.asked(),
+        vec![url],
+        "only the unreachable one was asked"
+    );
     assert_eq!(r["sicp"], first["sicp"], "a resolved lookup stands");
     assert_eq!(
         r["no-such-doi"].as_ref().unwrap().lookups[0].outcome,
@@ -280,5 +296,9 @@ async fn a_held_install_asks_its_unreachable_lookups_again_and_only_those() {
     );
 
     assert!(!installed(&state, true).await);
-    assert_eq!(later.asked().len(), 1, "nothing left to retry, nothing asked");
+    assert_eq!(
+        later.asked().len(),
+        1,
+        "nothing left to retry, nothing asked"
+    );
 }
