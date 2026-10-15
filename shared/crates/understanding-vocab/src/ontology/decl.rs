@@ -722,6 +722,34 @@ pub struct VoicesDecl {
     pub attributed_to: Vec<String>,
 }
 
+impl VoicesDecl {
+    /// Is `name` a speaker role the corpus declared as not-subject-matter?
+    /// The one decider: the general extractor and the document reader both ask it.
+    pub fn is_voice(&self, name: &str) -> bool {
+        let name = fold_voice(name);
+        self.not_entities
+            .iter()
+            .map(|v| fold_voice(v))
+            .any(|v| !v.is_empty() && v == name)
+    }
+}
+
+/// Fold a speaker role for comparison: lowercased, trimmed, leading `the`
+/// dropped. `"The Cataloguer"`, `"the cataloguer"` and `"cataloguer"` are one
+/// voice; an author should not have to spell all three.
+fn fold_voice(s: &str) -> String {
+    let lower = s.trim().to_lowercase();
+    lower
+        .strip_prefix("the ")
+        .unwrap_or(lower.as_str())
+        .trim()
+        .to_string()
+}
+
+#[cfg(test)]
+#[path = "voices_tests.rs"]
+mod voices_tests;
+
 /// `[enrichment.ontology.change]` — what holds when.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ChangeDecl {
