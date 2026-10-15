@@ -277,9 +277,15 @@ async fn a_document_is_read_in_levels_each_round_one_wave_off_one_prefix() {
         r#"{"from": "Kim Ward <kim@enron.com>"}"#,
     )]);
     let (infer, seen) = oracle(RULES);
-    let envelope = read_as(&chapter, &policies, &LineClasses::default(), &infer, Asking::Wave)
-        .await
-        .unwrap();
+    let envelope = read_as(
+        &chapter,
+        &policies,
+        &LineClasses::default(),
+        &infer,
+        Asking::Wave,
+    )
+    .await
+    .unwrap();
     let docs: Vec<DocumentReadOutcome> = serde_json::from_value(
         serde_json::from_str::<Value>(&envelope).unwrap()["documents"].clone(),
     )
@@ -353,9 +359,15 @@ async fn a_document_that_holds_nothing_declared_says_so() {
         r#"{"from": "Kim Ward <kim@enron.com>"}"#,
     )]);
     let (infer, seen) = oracle(&[]);
-    let envelope = read_as(&chapter, &policies, &LineClasses::default(), &infer, Asking::Wave)
-        .await
-        .unwrap();
+    let envelope = read_as(
+        &chapter,
+        &policies,
+        &LineClasses::default(),
+        &infer,
+        Asking::Wave,
+    )
+    .await
+    .unwrap();
     let docs: Vec<DocumentReadOutcome> = serde_json::from_value(
         serde_json::from_str::<Value>(&envelope).unwrap()["documents"].clone(),
     )
@@ -390,9 +402,15 @@ async fn waves_questions_reason_then_choose() {
     };
     let (forced_infer, _) = oracle(RULES);
     let forced = envelope(
-        read_as(&chapter, &policies, &LineClasses::default(), &forced_infer, Asking::Wave)
-            .await
-            .unwrap(),
+        read_as(
+            &chapter,
+            &policies,
+            &LineClasses::default(),
+            &forced_infer,
+            Asking::Wave,
+        )
+        .await
+        .unwrap(),
     );
 
     // The oracle reads every label question; a prompt with no forced choice
@@ -418,7 +436,9 @@ async fn waves_questions_reason_then_choose() {
     for (p, budget) in reasoned.iter() {
         assert_eq!(*budget, Some(2000));
         assert_eq!(p.phase_id.as_deref(), Some("waves_reason"));
-        assert!(p.user.ends_with("Reason it through, then end with its letter."));
+        assert!(p
+            .user
+            .ends_with("Reason it through, then end with its letter."));
     }
     let chosen = chosen.lock().unwrap();
     for p in chosen.iter() {
@@ -427,7 +447,11 @@ async fn waves_questions_reason_then_choose() {
             None => vec![p.clone()],
         };
         for q in singles {
-            assert!(q.user.contains("Your reasoning:\n...reasoning... A\n\n"), "{}", q.user);
+            assert!(
+                q.user.contains("Your reasoning:\n...reasoning... A\n\n"),
+                "{}",
+                q.user
+            );
         }
     }
     let stage = read[0]
