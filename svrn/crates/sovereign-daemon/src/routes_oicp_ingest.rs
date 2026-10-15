@@ -87,6 +87,7 @@ pub async fn corpus_install(
     tracing::debug!(
         corpus = %req.corpus_id,
         recipe_bytes = req.recipe_toml.as_ref().map(String::len),
+        allow_lookups = req.allow_lookups,
         "oicp install: request read"
     );
     match install(state, req).await {
@@ -110,7 +111,14 @@ async fn install(
         Some(toml) => InstallSource::Recipe(toml),
         None => InstallSource::Registry,
     };
-    let outcome = spawn_install(state.clone(), req.corpus_id.clone(), req.parameters, source).await;
+    let outcome = spawn_install(
+        state.clone(),
+        req.corpus_id.clone(),
+        req.parameters,
+        source,
+        req.allow_lookups,
+    )
+    .await;
     let spawned = install_status(outcome, &req.corpus_id)?;
     // v0.6 §2.11: every sentence of the installed texts embedded once the
     // install returns (`sentence_index`); a corpus already held is queued now.
@@ -185,12 +193,17 @@ pub async fn corpus_progress(State(state): State<AppState>) -> Json<CorpusProgre
     }
     let mut listed = 0usize;
     for (id, entry) in progress.iter_mut() {
-        let documents = index_dir
+        let corpus = index_dir
             .as_deref()
-            .and_then(|dir| corpus_index::corpus::Corpus::named(dir, id))
-            .and_then(|c| c.install_documents());
-        if let Some(d) = documents {
-            entry.documents = d.documents.iter().map(wire_document).collect();
+            .and_then(|dir| corpus_index::corpus::Corpus::named(dir, id));
+        if let Some((c, d)) = corpus.and_then(|c| c.install_documents().map(|d| (c, d))) {
+            // v0.6 §2.16: each ready document's record, kept with the install.
+            let records = crate::records_by_identifier::InstallRecords::of(&c);
+            entry.documents = d
+                .documents
+                .iter()
+                .map(|d| wire_document(d, &records))
+                .collect();
             entry.documents_unlisted = (d.unlisted > 0).then_some(d.unlisted);
             listed += entry.documents.len();
         }
@@ -228,15 +241,19 @@ fn held_with_documents(
         .collect()
 }
 
-/// An ingest's document outcome on the wire (v0.6 §2.9).
-fn wire_document(d: &corpus_index::ingest_port::daemon::DocumentOutcome) -> IngestDocument {
+/// An ingest's document outcome on the wire (v0.6 §2.9), a ready one with
+/// its record (§2.16) when `records` keeps one for its text.
+fn wire_document(
+    d: &corpus_index::ingest_port::daemon::DocumentOutcome,
+    records: &crate::records_by_identifier::InstallRecords,
+) -> IngestDocument {
     use corpus_index::ingest_port::daemon::DocumentState;
     IngestDocument {
         source: d.source.clone(),
         state: match &d.state {
             DocumentState::Ready { text_sha256 } => IngestDocumentState::Ready {
                 text_sha256: text_sha256.map(|h| h.to_hex()),
-                record: None,
+                record: text_sha256.and_then(|h| records.record(&h.to_hex())),
             },
             DocumentState::Failed { reason } => IngestDocumentState::Failed {
                 reason: reason.clone(),
@@ -394,5 +411,6 @@ mod tests {
     fn advertised_ingest_features_are_registered() {
         assert!(features::is_valid(features::INGEST_V1));
         assert!(features::is_valid(features::INGEST_RECIPE_TEST));
+        assert!(features::is_valid(features::INGEST_LOOKUPS));
     }
 }

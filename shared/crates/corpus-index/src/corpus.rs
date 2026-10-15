@@ -269,10 +269,29 @@ pub const INSTALL_DOCUMENTS_FILENAME: &str = "_documents.json";
 /// is first sentence-indexed.
 pub const SENTENCES_FILENAME: &str = "_sentences.bin";
 
+/// Sidecar in a corpus's canonical directory holding its documents' records
+/// by identifier (OICP v0.6 §2.16): whether its install allowed lookups, and
+/// each document's merged record by its text name. Written and read by the
+/// daemon's `records_by_identifier` when an install returns; absent for a
+/// corpus installed before records existed, which reads as an install that
+/// allowed none.
+pub const RECORDS_FILENAME: &str = "_records.json";
+
 impl Corpus {
     /// The sentence-index sidecar inside the canonical directory.
     pub fn sentences_path(&self) -> PathBuf {
         self.root().join(SENTENCES_FILENAME)
+    }
+
+    /// The records sidecar inside the canonical directory.
+    pub fn records_path(&self) -> PathBuf {
+        Self::records_in(self.root())
+    }
+
+    /// The records sidecar inside an index directory opened by path (a
+    /// search's `CorpusIndex::path`). The ONE join for this filename.
+    pub fn records_in(dir: impl AsRef<Path>) -> PathBuf {
+        dir.as_ref().join(RECORDS_FILENAME)
     }
 
     /// The install-documents sidecar inside the canonical directory.

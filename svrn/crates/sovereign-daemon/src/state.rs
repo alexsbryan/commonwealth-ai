@@ -831,6 +831,9 @@ impl AppState {
                     atlas: node_seed.atlas,
                     corpus_principal: node_seed.corpus_principal,
                     sentences: Default::default(),
+                    record_fetch: node_seed
+                        .record_fetch
+                        .unwrap_or_else(crate::records_by_identifier::web),
                     // 0 sentinel = no foreground activity observed yet.
                     // The yield hook treats 0 as "never active", regardless
                     // of the window — so a fresh boot doesn't accidentally
