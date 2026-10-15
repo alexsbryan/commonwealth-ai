@@ -801,7 +801,9 @@ question the pipeline asks about a type is a method on the resolved
   (`resolve_records/read.rs`), unless the document reader already chose it
   (`Statement::read`, filled from its subject fields by `resolution_records.rs`);
   a candidate whose SUPPLIED value (a declared field's, `Statement::keys`)
-  differs is not offered, while a value a model chose, the reader's or RESOLVE's
+  differs is not offered (`resolve_records/apart.rs`, with the window reader's
+  distinctions and the key and field joins that obey both), while a value a
+  model chose, the reader's or RESOLVE's
   own READ, is one more weighed source (`necessary:<attribute>`); each
   document's decisions count the necessary values used by origin
   (`DocumentResolution::necessary`: supplied, reader, resolve_read). A partition
