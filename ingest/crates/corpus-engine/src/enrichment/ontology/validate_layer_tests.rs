@@ -345,3 +345,37 @@ fn a_type_the_document_reader_makes_no_record_of_is_warned() {
         assert!(!unread[0].contains(read), "{read}: {}", unread[0]);
     }
 }
+
+/// The fields a state's or relation's shape implies are named with their pass
+/// as a declared field is: a state's value, Pointed at, and a relation's `to`,
+/// Picked; each statement's holder is named as a claim's subject is.
+#[test]
+fn a_state_and_a_relation_name_the_fields_their_shape_implies() {
+    let v = validated(&fixture().replace(
+        "[[enrichment.ontology.types]]\nname = \"move\"",
+        "[[enrichment.ontology.types]]\nname = \"mood\"\nkind = \"state\"\nof = \"item\"\n\n\
+         [[enrichment.ontology.types]]\nname = \"near\"\nkind = \"relation\"\nfrom = \"item\"\nto = \"party\"\n\n\
+         [[enrichment.ontology.types]]\nname = \"move\"",
+    ));
+    let note = |t: &str| {
+        v.notes
+            .iter()
+            .find(|n| n.starts_with(&format!("fill: {t}:")))
+            .unwrap_or_else(|| panic!("a fill note for {t}: {:#?}", v.notes))
+            .clone()
+    };
+    assert_eq!(
+        note("mood"),
+        "fill: mood: of `item` ← RESOLVE; mood ← Point on mood"
+    );
+    assert_eq!(
+        note("near"),
+        "fill: near: from `item` ← RESOLVE; to ← Pick on near (candidates: `party`'s source \
+         records, Mention)"
+    );
+    assert!(
+        warned(&v, "ontology type `mood`").is_empty(),
+        "{:#?}",
+        v.warnings
+    );
+}

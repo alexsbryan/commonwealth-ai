@@ -125,7 +125,8 @@ impl Gap {
     }
 }
 
-/// The fill analysis: for every attribute every declared type declares, how
+/// The fill analysis: for every attribute every declared type declares, and
+/// every field a state's or relation's shape implies (`implied_fields`), how
 /// it is filled, keyed `(type, attribute)` in declaration order. A filler is
 /// named from the declaration and the reader's plan alone
 /// (`document_read::reader_read_fields`, the plan the reader runs), never
@@ -136,7 +137,7 @@ pub(super) fn fill_analysis(policies: &OntologyPolicies) -> Option<Vec<((String,
     let index = TypeIndex::from_policies(policies);
     let mut out = Vec::new();
     for t in &policies.shape.types {
-        for a in &t.attributes {
+        for a in t.attributes.iter().chain(&t.implied_fields()) {
             let fill = if let Some(id) = &a.derived {
                 Fill::Derived(id.clone())
             } else if sourced(t.source.as_ref(), &a.name) {
@@ -237,17 +238,24 @@ pub(super) fn fill_warnings(
 
     for t in &policies.shape.types {
         let mut parts: Vec<String> = Vec::new();
-        if t.kind == TypeKind::Claim {
-            if let Some(s) = t.subject.as_deref() {
+        // What a read statement is about, by the key that declares it.
+        let role = match t.kind {
+            TypeKind::Claim => Some("subject"),
+            TypeKind::State => Some("of"),
+            TypeKind::Relation => Some("from"),
+            TypeKind::Entity | TypeKind::Event => None,
+        };
+        if let (Some(role), Some(s)) = (role, t.read_subject()) {
+            if t.is_read_statement(&policies.shape.types) {
                 parts.push(if decides(&index, s) {
-                    format!("subject `{s}` ← RESOLVE")
+                    format!("{role} `{s}` ← RESOLVE")
                 } else {
-                    format!("subject `{s}`: a sourced type, not RESOLVE's")
+                    format!("{role} `{s}`: a sourced type, not RESOLVE's")
                 });
             }
         }
         let mut gaps: Vec<String> = Vec::new();
-        for a in &t.attributes {
+        for a in t.attributes.iter().chain(&t.implied_fields()) {
             let Some(fill) = by_key.get(&(t.name.as_str(), a.name.as_str())) else {
                 continue;
             };
@@ -260,7 +268,9 @@ pub(super) fn fill_warnings(
                     // A subject's field is read on each statement about it
                     // and stays there (`SUBJECT_FIELDS_ATTRIBUTE`).
                     match (t.kind, a.by) {
-                        (TypeKind::Claim, _) => via.join(", "),
+                        (TypeKind::Claim | TypeKind::State | TypeKind::Relation, _) => {
+                            via.join(", ")
+                        }
                         (_, Some(by)) => format!(
                             "each {} statement, the record by {}",
                             via.join(", "),
