@@ -182,7 +182,11 @@ pub(super) fn project_compatibility_sketches(
             });
         }
         for particular in &outcome.particulars {
-            sketches.push(particular_sketch(particular, &outcome.document_id, read.subjects)?);
+            sketches.push(particular_sketch(
+                particular,
+                &outcome.document_id,
+                read.subjects,
+            )?);
         }
     }
     extraction.claims.extend(sketches);
