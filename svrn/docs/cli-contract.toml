@@ -2770,6 +2770,109 @@ exit = 0
 stdout_contains = "\"matched\": 1"
 
 [[journey]]
+id = "layer-issues-default-path"
+title = "Install an issue fixture and return the complete typed case partition"
+persona = "author"
+experience = "knowledge-corpora"
+tier = 3
+doc = "svrn/docs/ENRICH_A_CORPUS.md#records-from-a-declaration"
+# Frozen source-derived rows and evidence live in the fixture's expected.toml.
+[[journey.step]]
+run = "corpus install ingest/crates/sovereign-enrichment-build/tests/fixtures/layer/issues/recipe.toml --wait"
+mutates = true
+[journey.step.expect]
+exit = 0
+stdout_contains = "installed"
+[[journey.step]]
+run = "enrich init layer-issues --from-corpus layer-issues"
+mutates = true
+[journey.step.expect]
+exit = 0
+stdout_contains = "custom ontology"
+[[journey.step]]
+run = "enrich extract layer-issues --full"
+mutates = true
+[journey.step.expect]
+exit = 0
+stdout_contains = "cache updated"
+[[journey.step]]
+run = "enrich resolve layer-issues"
+mutates = true
+[journey.step.expect]
+exit = 0
+stdout_contains = "RESOLVE"
+[[journey.step]]
+run = "enrich atlas-query layer-issues --typed-file ingest/crates/sovereign-enrichment-build/tests/fixtures/layer/issues/q1.json --json"
+note = "Complete case partition: both cases and reporter references are frozen in the expected rows."
+[journey.step.expect]
+exit = 0
+stdout_contains = "\"matched\": 2"
+[[journey.step]]
+run = "enrich atlas-query layer-issues --typed-file ingest/crates/sovereign-enrichment-build/tests/fixtures/layer/issues/q2.json --json"
+note = "Which confirmed state records the reproduction on version 2.3?"
+[journey.step.expect]
+exit = 0
+stdout_contains = "\"matched\": 1"
+[[journey.step]]
+run = "enrich atlas-query layer-issues --typed-file ingest/crates/sovereign-enrichment-build/tests/fixtures/layer/issues/q3.json --json"
+note = "Which reminder-case state mentions version 2.4, and what post-update instruction follows? Both cited source occurrences must remain separate."
+[journey.step.expect]
+exit = 0
+stdout_contains = "\"matched\": 2"
+
+[[journey]]
+id = "layer-news-default-path"
+title = "Install news reports and return cited rows for related and separate fires"
+persona = "author"
+experience = "knowledge-corpora"
+tier = 3
+doc = "svrn/docs/ENRICH_A_CORPUS.md#records-from-a-declaration"
+# Frozen source-derived rows, runtime id bindings and evidence live in the
+# fixture's expected.toml. Queries target the declared `report` claim type.
+[[journey.step]]
+run = "corpus install ingest/crates/sovereign-enrichment-build/tests/fixtures/layer/news/recipe.toml --wait"
+mutates = true
+[journey.step.expect]
+exit = 0
+stdout_contains = "installed"
+[[journey.step]]
+run = "enrich init layer-news --from-corpus layer-news"
+mutates = true
+[journey.step.expect]
+exit = 0
+stdout_contains = "custom ontology"
+[[journey.step]]
+run = "enrich extract layer-news --full"
+mutates = true
+[journey.step.expect]
+exit = 0
+stdout_contains = "cache updated"
+[[journey.step]]
+run = "enrich resolve layer-news"
+mutates = true
+[journey.step.expect]
+exit = 0
+stdout_contains = "RESOLVE"
+[[journey.step]]
+run = "enrich atlas-query layer-news --typed-file ingest/crates/sovereign-enrichment-build/tests/fixtures/layer/news/q1.json --json"
+note = "Which Mill Lane reports describe the same warehouse fire?"
+[journey.step.expect]
+exit = 0
+stdout_contains = "\"matched\": 2"
+[[journey.step]]
+run = "enrich atlas-query layer-news --typed-file ingest/crates/sovereign-enrichment-build/tests/fixtures/layer/news/q2.json --json"
+note = "Which reports cite the two workers treated for smoke inhalation? The expected rows bind both source occurrences."
+[journey.step.expect]
+exit = 0
+stdout_contains = "\"matched\": 2"
+[[journey.step]]
+run = "enrich atlas-query layer-news --typed-file ingest/crates/sovereign-enrichment-build/tests/fixtures/layer/news/q3.json --json"
+note = "Which separate fire did report-b place on Station Road? Its happening ref must differ from the Mill Lane fire."
+[journey.step.expect]
+exit = 0
+stdout_contains = "\"matched\": 1"
+
+[[journey]]
 id = "meshapp-author"
 title = "Ship a mesh app: recipe to corpus to explorer to registry"
 persona = "author"
