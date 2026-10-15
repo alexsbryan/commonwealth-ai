@@ -21,15 +21,22 @@ scratchpad as score_fixed.py until loop.sh made it the loop's one scorer), each 
        not the stage the model declares for the record (2026-10-14: the declared stage served deals whose
        statements end elsewhere). A record none of whose statements states a stage keeps the declared one: the
        one-shot wrote no per-statement stage at all on world-s4.
+  best a statement is credited to a deal only when no other deal's gold sentence on its message is held more
+       wholly in it (the 60% rule's own measure: the share of the gold sentence's words the statement holds); a
+       tie keeps both, as when a statement cites a line holding both deals' sentences whole, or gold files one
+       sentence under two deals. Without it "The Cal 01 Kingsgate 4k/d call option is being replaced" (held
+       whole) is credited to the Q1 deal too, because "the Q1 Kingsgate 4k/d call option at .50" has four of
+       its six words in it (world-s2 verent/3., 2026-10-15). Measured from the statement's side instead, the
+       rule broke world-s3 quanova/6., one unpunctuated line holding both deals' sentences whole.
 Everything else is score_ward.py's. The report also carries `matches` {claim: [gold update index]}.
 """
 import json, os, re, subprocess, sys
 from email.utils import parsedate_to_datetime
 
 RECORDS = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--records=")), None)
-_fx = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--fixes=")), "cap,msg,own,fold")
+_fx = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--fixes=")), "cap,msg,own,fold,best")
 FIXES = set() if _fx == "none" else set(_fx.split(","))
-assert FIXES <= {"cap", "msg", "own", "fold"}, FIXES
+assert FIXES <= {"cap", "msg", "own", "fold", "best"}, FIXES
 sys.argv = [a for a in sys.argv if not a.startswith("--records=") and not a.startswith("--fixes=")]
 MSGIDS = sys.argv[1]
 OUT = sys.argv[2] if len(sys.argv) > 2 else None
@@ -193,6 +200,12 @@ def match(cid):
         gw, cw = words(u["quote"]), words(text)
         if len(gw) >= 2 and len(gw & cw) / len(gw) >= 0.6:
             hits.append(i)
+    if "best" in FIXES and hits:
+        cw = words(text)
+        held = {i: len(words(gold_updates[i]["quote"]) & cw) / len(words(gold_updates[i]["quote"])) for i in hits}
+        top = max(held.values())
+        deals_kept = {gold_updates[i]["deal"] for i in hits if held[i] >= top - 1e-9}
+        hits = [i for i in hits if gold_updates[i]["deal"] in deals_kept]
     _cache[cid] = hits
     return hits
 

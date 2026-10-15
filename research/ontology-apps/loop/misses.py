@@ -303,9 +303,10 @@ def intruders(D, units, g):
 
 
 def fit(D, cid, h):
-    """How much of the placed statement's own words gold update h's sentence holds (score.py matches by the gold side)."""
-    cw = words(D["S"]["claim_match_text"].get(cid))
-    return len(words(D["gold"][h]["quote"]) & cw) / max(1, len(cw))
+    """How much of gold update h's sentence the placed statement holds: score.py's measure (its 60% rule and its
+    `best` fix), so a match the scorer keeps is never read here as a sibling's."""
+    gw = words(D["gold"][h]["quote"])
+    return len(gw & words(D["S"]["claim_match_text"].get(cid))) / max(1, len(gw))
 
 
 def credit(D, cid, deal):
