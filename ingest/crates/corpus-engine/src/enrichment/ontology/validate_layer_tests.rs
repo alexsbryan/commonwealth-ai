@@ -379,3 +379,42 @@ fn a_state_and_a_relation_name_the_fields_their_shape_implies() {
         v.warnings
     );
 }
+
+/// What the document reader leaves inert is warned, each by name: argument
+/// reconstruction, a pattern, a voice, a table source and a specializing type
+/// with no criterion of its own. The general extractor applies the first three
+/// and reads the last two from text, so a template it reads warns of none
+/// (`recipe_templates_all_ten_parse`).
+#[test]
+fn what_the_document_reader_leaves_inert_is_warned_by_name() {
+    let v = validated(&format!(
+        "{}\n\
+         [[enrichment.ontology.types]]\nname = \"near\"\nkind = \"relation\"\nfrom = \"item\"\nto = \"party\"\n\n\
+         [[enrichment.ontology.types]]\nname = \"batch_row\"\nkind = \"entity\"\nsource = {{ file = \"batches.csv\" }}\n\n\
+         [[enrichment.ontology.types]]\nname = \"gadget\"\nkind = \"entity\"\nspecializes = \"item\"\n\n\
+         [[enrichment.ontology.patterns]]\ntype = \"circular_flow\"\nedge_types = [\"near\"]\nmin_entities = 3\n\n\
+         [enrichment.ontology.derive]\narguments = true\n\n\
+         [enrichment.ontology.voices]\nnot_entities = [\"the poster\"]\n",
+        fixture()
+    ));
+    let ours = ["near", "batch_row", "gadget", "pattern", "derive", "voices"];
+    assert!(
+        !v.errors.iter().any(|e| ours.iter().any(|o| e.contains(o))),
+        "{:#?}",
+        v.errors
+    );
+    for needle in [
+        "`derive.arguments` reconstructs arguments",
+        "`patterns` (1 declared)",
+        "`voices` (not_entities)",
+        "`batch_row` declares a table source",
+        "`gadget` specializes `item` but declares no identity_criterion",
+    ] {
+        assert_eq!(warned(&v, needle).len(), 1, "{needle}: {:#?}", v.warnings);
+    }
+    assert!(
+        warned(&v, "`near`").is_empty(),
+        "a relation of a decided holder is read: {:#?}",
+        v.warnings
+    );
+}

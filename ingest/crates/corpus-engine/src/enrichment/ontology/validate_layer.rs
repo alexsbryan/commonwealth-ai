@@ -44,6 +44,7 @@ pub(super) fn layer_warnings(
             unread.join(", ")
         ));
     }
+    warnings.extend(reader_inert(policies));
     for (key, instead) in crate::recipe_ontology::language::retired_keys(&block.body) {
         warnings.push(format!(
             "[enrichment.ontology] `{key}` is retired and ignored: {instead}. Remove the key."
@@ -54,6 +55,82 @@ pub(super) fn layer_warnings(
             "ontology type `{t}`: `{key}` is retired and ignored: {instead}. Remove the key."
         ));
     }
+}
+
+/// What a declaration the document reader reads also declares that the reader
+/// leaves inert, one warning each, so a feature never drops out unsaid. Each
+/// names its consumer's limit: argument reconstructions and voices are the
+/// general extractor's alone, patterns walk relation atoms the reader does not
+/// make (it stores a read relation as a claim of its type), no stage reads a
+/// table source yet, and RESOLVE does not inherit a criterion through
+/// `specializes` (`Criterion::of`). Failing input, named: the ten templates
+/// against the reader (inventory 2026-10-15): research-notebook's arguments
+/// and voices, due-diligence's pattern, product-support's `ticket`,
+/// numismatics' `sceatta`.
+fn reader_inert(policies: &OntologyPolicies) -> Vec<String> {
+    if !policies.reads_documents() {
+        return Vec::new();
+    }
+    let index = TypeIndex::from_policies(policies);
+    let types = &policies.shape.types;
+    let mut out = Vec::new();
+    let derivation = &policies.derivation;
+    if derivation.arguments {
+        out.push(
+            "`derive.arguments` reconstructs arguments from the general extractor's output only; \
+             the document reader reads this declaration, so it gets none."
+                .to_string(),
+        );
+    }
+    if !derivation.patterns.is_empty() {
+        out.push(format!(
+            "`patterns` ({} declared) walk relation atoms between entities, which the document \
+             reader does not make (a read relation is a claim of its type), so none is found.",
+            derivation.patterns.len()
+        ));
+    }
+    let voices = &policies.assertion.voices;
+    let declared: Vec<&str> = [
+        ("not_entities", !voices.not_entities.is_empty()),
+        ("attributed_to", !voices.attributed_to.is_empty()),
+        ("self", voices.self_voice.is_some()),
+    ]
+    .into_iter()
+    .filter_map(|(key, set)| set.then_some(key))
+    .collect();
+    if !declared.is_empty() {
+        out.push(format!(
+            "`voices` ({}) are applied by the general extractor only; the document reader \
+             neither keeps a voice from becoming a record nor attributes a statement to a speaker.",
+            declared.join(", ")
+        ));
+    }
+    for t in types {
+        if matches!(t.source, Some(SourceDecl::Table(_))) && !t.is_read_statement(types) {
+            out.push(format!(
+                "ontology type `{}` declares a table source, which no stage reads yet, and the \
+                 document reader does not read it from text, so it gets no records.",
+                t.name
+            ));
+        }
+        let unsourced = matches!(t.kind, TypeKind::Entity | TypeKind::Event)
+            && t.source.is_none()
+            && t.identity_criterion.is_none();
+        if let Some(parent) = types.iter().find(|p| {
+            unsourced
+                && p.name != t.name
+                && index.is_a(&t.name, &p.name)
+                && decides(&index, &p.name)
+        }) {
+            out.push(format!(
+                "ontology type `{}` specializes `{}` but declares no identity_criterion of its \
+                 own, and RESOLVE inherits none: the document reader reads its particulars as \
+                 `{}` records and makes no `{}` record.",
+                t.name, parent.name, parent.name, t.name
+            ));
+        }
+    }
+    out
 }
 
 /// What `recipe validate` says of a metadata-sourced type's mentions in text

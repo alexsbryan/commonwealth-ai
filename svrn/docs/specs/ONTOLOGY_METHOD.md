@@ -203,8 +203,12 @@ source, a derivation, Act, Choose, Point or Pick from the reader's own plan with
 subject) and warns on what nothing fills (a type no read claim kind is about, a closed set wider than one
 forced choice, a reference to a type only a table holds) and on any fold, protocol or identity key keyed on it (`validate_layer.rs::fill_analysis`; blind round 2's protocol folds keyed on `step_id`
 and `decision_ref` never folded, silently). It names each declared type the reader makes no record of: a state or
-relation whose holder RESOLVE cannot decide, or an entity no statement is about and no source supplies
-(`document_read::unread_types`; saltgrass's first blind recipe lost `vessel` and `condition` that way, silently). A
+relation whose holder RESOLVE cannot decide, or an entity with no criterion no statement is about and no source supplies
+(`document_read::unread_types`; saltgrass's first blind recipe lost `vessel` and `condition` that way, silently). It
+also names what the declaration asks that the reader leaves inert (`validate_layer.rs::reader_inert`, 2026-10-15):
+argument reconstruction and voices (the general extractor's alone), patterns (they walk relation atoms the reader
+does not make), a table source (no stage reads one yet) and a type that specializes a decided one with no criterion
+of its own (RESOLVE inherits none); for that reason the ten templates stay on the general extractor. A
 state or relation whose holder RESOLVE decides is read as a statement about it (2026-10-15): a state carries its value,
 a field named for the state type, and a relation its other endpoint, `to` (`OntologyTypeDecl::implied_fields`), and
 both are served as claims of their type.
