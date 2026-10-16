@@ -531,7 +531,10 @@ async fn a_reply_points_to_the_document_it_quotes() {
     let raw = read(&both, &policies, &classes, &infer).await.unwrap();
     let user = seen.lock().unwrap()[0].user.clone();
     let d2 = &user[user.find("=== d2 ===").unwrap()..];
-    assert!(d2.contains("Issue 42 is now closed.\n[quoted from d1]"), "{d2}");
+    assert!(
+        d2.contains("Issue 42 is now closed.\n[quoted from d1]"),
+        "{d2}"
+    );
     assert!(!d2.contains("in uv is open"), "{d2}");
     assert_eq!(
         d2.matches("[quoted from").count(),
