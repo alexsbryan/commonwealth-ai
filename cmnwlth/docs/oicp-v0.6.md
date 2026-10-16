@@ -371,7 +371,8 @@ QueuedCorpus    { corpus: String, pending: Option<u64> }
   embedded, in the order the host embeds them. `pending` is that corpus's
   own count of sentences not embedded, scoped or not, the work its place
   waits on. `place` is `embedding` for the corpus the host is embedding at
-  the moment of the reply, with `behind` empty, and `queued` for one that
+  the moment of the reply, or that nothing is ahead of, with `behind`
+  empty, and `queued` for one that
   waits, with `behind` naming the corpora embedded before it, the one
   embedding now first, in the order the host embeds them, each with its own
   `pending`; `pending` is absent for a corpus the host has queued and not

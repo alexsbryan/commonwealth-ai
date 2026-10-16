@@ -222,6 +222,9 @@ async fn apply_v04_enrichment(
         // advertised beside it below; not offered when the file does not read.
         if state.inner.node.sentences.config().is_ok() {
             feats.push(features::KNOWLEDGE_SENTENCES.to_string());
+            // v0.6 §2.11: a passages reply places each waiting corpus in the
+            // worker's queue (`sentence_index::queue::places`).
+            feats.push(features::KNOWLEDGE_SENTENCE_QUEUE.to_string());
             // v0.6 §2.15: verify reads its candidates through that sentence
             // search, under the same data file's floor (`routes_oicp_verify`).
             feats.push(features::EVIDENCE_VERIFY_SENTENCES.to_string());

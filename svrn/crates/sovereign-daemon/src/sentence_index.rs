@@ -14,11 +14,12 @@
 //! ready with `elapsed_ms` and `resident_bytes`; saves at debug).
 
 pub mod config;
+pub mod queue;
 pub mod scan;
 pub mod store;
 mod worker;
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::Instant;
@@ -43,16 +44,10 @@ pub struct Entry {
     pub data: RwLock<CorpusSentences>,
 }
 
-#[derive(Default)]
-struct Queue {
-    order: VecDeque<String>,
-    queued: HashSet<String>,
-}
-
 struct Shared {
     config: RwLock<Result<SentenceSearchConfig, String>>,
     corpora: Mutex<HashMap<String, Arc<Entry>>>,
-    queue: Mutex<Queue>,
+    queue: Mutex<queue::Fifo>,
     wake: tokio::sync::Notify,
     worker: OnceLock<()>,
 }
@@ -125,11 +120,7 @@ impl SentenceIndex {
     pub fn enqueue(&self, state: &AppState, corpus_id: &str) {
         let fresh = {
             let mut q = self.shared.queue.lock().unwrap_or_else(|p| p.into_inner());
-            let fresh = q.queued.insert(corpus_id.to_string());
-            if fresh {
-                q.order.push_back(corpus_id.to_string());
-            }
-            fresh
+            q.push(corpus_id)
         };
         tracing::debug!(target: TARGET, corpus = corpus_id, fresh, "sentence index: queued");
         self.shared.worker.get_or_init(|| {
@@ -189,9 +180,37 @@ impl SentenceIndex {
 
     pub(crate) fn next_queued(&self) -> Option<String> {
         let mut q = self.shared.queue.lock().unwrap_or_else(|p| p.into_inner());
-        let next = q.order.pop_front()?;
-        q.queued.remove(&next);
+        let next = q.take()?;
+        tracing::debug!(target: TARGET, corpus = %next, waiting = q.snapshot().waiting.len(), "sentence index: embedding now");
         Some(next)
+    }
+
+    /// The worker is done with the corpus it took.
+    pub(crate) fn finished(&self) {
+        self.shared
+            .queue
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .finish();
+    }
+
+    /// The embedding queue as it stands: the one corpus embedding now and
+    /// the corpora behind it, in the worker's order. The one reader of that
+    /// order a search uses (`queue::places`).
+    pub fn queue(&self) -> queue::QueueSnapshot {
+        self.shared
+            .queue
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .snapshot()
+    }
+
+    /// `corpus_id`'s sentences not yet embedded under the embedder `probe`
+    /// identifies, `None` before the corpus has been opened and counted.
+    pub fn pending_of(&self, corpus_id: &str, probe: &[f32]) -> Option<usize> {
+        let held = self.entry(corpus_id);
+        let d = read(&held.data);
+        (!d.texts.is_empty()).then(|| d.pending_under(probe))
     }
 
     pub(crate) async fn woken(&self) {

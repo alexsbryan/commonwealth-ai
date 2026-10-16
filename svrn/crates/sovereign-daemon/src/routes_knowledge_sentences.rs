@@ -310,6 +310,27 @@ pub(crate) async fn sentences(
     for t in &targets {
         crate::records_by_identifier::attach_to_hits(&t.ix.path(), &t.corpus, &mut results);
     }
+    // v0.6 §2.11 `knowledge:sentence_queue`: where each waiting scoped corpus
+    // stands in the worker's line, read from the worker's own queue.
+    let sentence_queue = (route == SentenceRoute::Passages).then(|| {
+        let sentences = &state.inner.node.sentences;
+        let waiting: Vec<(String, u64)> = targets
+            .iter()
+            .filter(|t| t.pending > 0)
+            .map(|t| {
+                (
+                    t.corpus.clone(),
+                    read(&t.entry.data).pending_under(&probe) as u64,
+                )
+            })
+            .collect();
+        let queue = sentences.queue();
+        let places = crate::sentence_index::queue::places(&queue, &waiting, |c| {
+            sentences.pending_of(c, &probe).map(|n| n as u64)
+        });
+        tracing::debug!(target: TARGET, embedding = ?queue.embedding, waiting = queue.waiting.len(), placed = places.len(), "sentence search: queue placed");
+        places
+    });
     tracing::debug!(target: TARGET, route = ?route, hits = results.len(), scorer = scorer.as_str(), %model, "sentence search: answered");
     Ok(KnowledgeSearchResponse {
         results,
@@ -323,7 +344,7 @@ pub(crate) async fn sentences(
         }),
         route: Some(route),
         sentences_pending: (route == SentenceRoute::Passages).then_some(pending as u64),
-        sentence_queue: None,
+        sentence_queue,
         truncated,
     })
 }

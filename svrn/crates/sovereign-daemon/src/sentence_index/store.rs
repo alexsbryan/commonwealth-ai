@@ -108,6 +108,16 @@ impl CorpusSentences {
         self.rows.len() - self.done
     }
 
+    /// Sentences not yet embedded under the embedder `probe` identifies:
+    /// every row when the held vectors are another embedder's.
+    pub fn pending_under(&self, probe: &[f32]) -> usize {
+        if same_embedder(&self.probe, probe) {
+            self.pending()
+        } else {
+            self.rows.len()
+        }
+    }
+
     /// Bytes this index holds in memory: the vectors, the rows and flags.
     pub fn resident_bytes(&self) -> usize {
         self.vectors.len() * 4
