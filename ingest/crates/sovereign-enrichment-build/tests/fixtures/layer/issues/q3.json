@@ -1,0 +1,1 @@
+{"target_type":"case_state","filters":[{"attribute":"app_version","op":"eq","value":"2.4"}],"relations":[{"relation":"case_state.subject","other_type":"case","where":{"relations":[{"relation":"case.reporter","other_type":"person","other_name":"mira"}]}}]}
