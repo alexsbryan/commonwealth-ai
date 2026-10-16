@@ -413,35 +413,7 @@ fn reading(
     let cited = evidence.filter(|e| field_evidence_exists(document, e));
     match &attr.family {
         AttrFamily::Ref { of } => {
-            let label = particulars::label_name(particulars, index, of, &words, document);
-            let cite = cited.filter(|_| label.is_some());
-            let words = label.unwrap_or(words);
-            let wanted = fold_identity_value(&words);
-            let candidate = named
-                .iter()
-                .filter(|(t, _)| t == of)
-                .flat_map(|(_, cs)| cs)
-                .find(|c| match c {
-                    Candidate::Record {
-                        identity, names, ..
-                    } => names
-                        .iter()
-                        .chain([identity.join(" ")].iter())
-                        .any(|n| fold_identity_value(n) == wanted),
-                    Candidate::Mention { text, .. } => fold_identity_value(text) == wanted,
-                });
-            match candidate {
-                Some(c) => {
-                    let (value, scalar) = c.answer();
-                    supported(Value::String(value), &scalar)
-                }
-                None if cite.is_some() || field_evidence_exists(document, &words) => {
-                    supported(Value::String(words.clone()), cite.unwrap_or(&words))
-                }
-                None => unknown(format!(
-                    "{words:?} is neither a {of} this document's fields name nor words it holds"
-                )),
-            }
+            refs::reference(of, &words, cited, document, named, particulars, index)
         }
         _ if cited.is_none() && !field_evidence_exists(document, &words) => unknown(format!(
             "{words:?} was read from a passage that is not in this document"
@@ -786,3 +758,6 @@ mod shown;
 
 #[path = "window_answer.rs"]
 mod answer;
+
+#[path = "window_refs.rs"]
+mod refs;
