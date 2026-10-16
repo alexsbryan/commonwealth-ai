@@ -128,6 +128,7 @@ pub(super) fn word_number(
             range: start..end,
             unit,
             value: Some(p.value.to_string()),
+            bound: None,
         }),
     ))
 }

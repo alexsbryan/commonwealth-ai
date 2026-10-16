@@ -614,8 +614,11 @@ DifferingSpecific { claim: ClaimSpecific,              // in the unit
 - **Contradicted names what differs.** A candidate the claim is about that
   states one of the claim's figures, dates or quantities otherwise, and
   does not back the claim, is `contradicted`, and its `differing` pairs the
-  claim's specific with the sentence's of the same kind. A claim is
-  `contradicted` only on such a passage. A client offering the source's
+  claim's specific with the sentence's of the same kind. A figure or a
+  quantity under a bound ("more than 50 years", "up to 6") is stated
+  otherwise only by one no value of its range meets: "more than a hundred
+  years" does not state "more than 50 years" otherwise, and does state
+  "fewer than 50". A claim is `contradicted` only on such a passage. A client offering the source's
   figure as a fix offers it when exactly one pair differs. A claim whose
   candidates neither back it nor differ is `unsupported` with them, nearest
   first: the library discusses it and does not back it.
