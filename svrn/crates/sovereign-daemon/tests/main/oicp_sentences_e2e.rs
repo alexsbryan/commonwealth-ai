@@ -97,8 +97,9 @@ impl InferenceProvider for WordHash {
                 .first()
                 .is_some_and(|t| t != PROBE_TEXT && t.ends_with(['.', '!', '?']));
         if background {
-            if self.hold_worker.load(Ordering::SeqCst) {
-                std::future::pending::<()>().await;
+            // Held until released, so a test can act on the queue mid-walk.
+            while self.hold_worker.load(Ordering::SeqCst) {
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
             }
             self.worker_batches.fetch_add(1, Ordering::SeqCst);
         }
@@ -560,4 +561,55 @@ async fn a_corpus_that_finished_is_not_named_ahead_of_the_next() {
     assert_eq!(q[0].corpus, behind);
     assert_eq!(q[0].place, IndexPlace::Embedding, "{body}");
     assert!(q[0].behind.is_empty(), "{body}");
+}
+
+/// A corpus removed while it embeds stops embedding at its next batch, is
+/// forgotten, and the corpus behind it goes next. Failing input (live
+/// 2026-10-16, :9741): `svrn corpus remove` of a library 95,000 sentences
+/// into its walk left the worker embedding it from the texts it had read,
+/// every save failing, and the library behind it answered queued behind
+/// one that no longer existed.
+#[tokio::test]
+async fn a_corpus_removed_while_it_embeds_stops_and_the_next_goes() {
+    let tmp = tempfile::tempdir().unwrap();
+    let embedder = WordHash::seeded(1);
+    embedder.hold_worker.store(true, Ordering::SeqCst);
+    let (state, lib, behind) = two_corpora(tmp.path(), &embedder).await;
+    let sentences = &state.inner.node.sentences;
+    let mut cfg = sentences.config().unwrap();
+    cfg.embed_batch = 1;
+    sentences.set_config(cfg);
+    let (status, body) = search(&state, both(&lib, &behind)).await;
+    let q = reply(status, &body)
+        .sentence_queue
+        .unwrap_or_else(|| panic!("a passages reply names its queue: {body}"));
+    assert_eq!(q[0].place, IndexPlace::Embedding, "{body}");
+    assert!(q[0].pending > 2, "a walk of several batches: {body}");
+
+    std::fs::remove_dir_all(tmp.path().join("indexes").join(&lib.corpus_id)).unwrap();
+    let before = embedder.worker_batches.load(Ordering::SeqCst);
+    embedder.hold_worker.store(false, Ordering::SeqCst);
+    let mut after = None;
+    for _ in 0..400 {
+        if sentences.queue().embedding.as_deref() != Some(lib.corpus_id.as_str()) {
+            after = Some(embedder.worker_batches.load(Ordering::SeqCst));
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+    let after = after.expect("the removed corpus left the worker");
+    assert!(
+        after - before <= 1,
+        "{} batches of a removed corpus embedded after its removal",
+        after - before
+    );
+    assert!(
+        !sentences.is_indexed(&tmp.path().join("indexes"), &lib.corpus_id),
+        "the removed corpus is forgotten"
+    );
+    let next = serde_json::json!({
+        "query": "river archive ferry harbour", "limit": 10, "granularity": "sentence",
+        "corpora": [behind],
+    });
+    indexed(&state, next).await;
 }

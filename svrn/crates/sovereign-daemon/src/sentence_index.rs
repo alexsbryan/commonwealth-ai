@@ -116,6 +116,18 @@ impl SentenceIndex {
         Arc::clone(map.entry(corpus_id.to_string()).or_default())
     }
 
+    /// Drop `corpus_id`'s index from memory: its corpus was removed.
+    pub(crate) fn forget(&self, corpus_id: &str) {
+        let held = self
+            .shared
+            .corpora
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .remove(corpus_id)
+            .is_some();
+        tracing::debug!(target: TARGET, corpus = corpus_id, held, "sentence index: forgotten");
+    }
+
     /// Queue `corpus_id` for the worker, starting it on first use.
     pub fn enqueue(&self, state: &AppState, corpus_id: &str) {
         let fresh = {
