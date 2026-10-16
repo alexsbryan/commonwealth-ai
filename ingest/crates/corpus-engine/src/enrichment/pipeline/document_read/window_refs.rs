@@ -64,7 +64,10 @@ pub(super) fn reference(
         }
         (Some((name, c)), _) => {
             let (text, scalar) = c.answer();
-            supported(Value::String(written(&words, name, text, document)), &scalar)
+            supported(
+                Value::String(written(&words, name, text, document)),
+                &scalar,
+            )
         }
         (None, Some(&name)) => supported(
             Value::String(written(&words, name, name.to_string(), document)),

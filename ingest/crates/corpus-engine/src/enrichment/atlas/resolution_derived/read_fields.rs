@@ -101,7 +101,12 @@ fn record_read(
         };
         if let Some(record) = record_named(graph, doc, of, &want)? {
             if want != whole {
-                debug!(document = doc, words, name, "atlas/derived: a reading written with several names lands on a record by one");
+                debug!(
+                    document = doc,
+                    words,
+                    name,
+                    "atlas/derived: a reading written with several names lands on a record by one"
+                );
             }
             return Ok(record);
         }
