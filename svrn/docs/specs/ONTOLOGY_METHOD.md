@@ -163,9 +163,10 @@ thing a document says has another name is a typed field, not a prompt rule (2026
 them, carries them on each statement (`OTHER_NAMES_ATTRIBUTE`) for RESOLVE to show and never compare, and lands a
 reference reading on a record by any (`read_fields.rs::record_read`). No name is split. Who asserts a statement is
 likewise a typed fact on every claim, never a condition of writing it (2026-10-16, note 14546b4d: readers dropped
-narrated and unnamed-voice statements, a third of their drop lines on a novel): `said_by` is a particular, the
-document's own words for one it does not name, or the document's own voice; and a kind that declares grades gets
-one of them (`window_voice.rs`).
+narrated and unnamed-voice statements, a third of their drop lines on a novel): `said_by` is the document's own
+words for who says it, or its own voice; and a kind that declares grades gets one of them (`window_voice.rs`). It
+offers no particular to cite: offered one, a mail reader minted a person per sender and crowded out the deals
+(ward-story, 50 persons and 4 deals against 4 and 10; note 2dde9c77). A label written anyway reads as its name.
 
 Code keeps the contract: every declared field answered or unknown with a reason; a closed value one of its declared
 values; a reference a record the document's fields name, a particular's label, or words the document holds

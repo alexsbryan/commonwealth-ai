@@ -32,8 +32,10 @@ pub(super) enum Voice {
 }
 
 /// The speaker a claim keeps for `said_by` in `document`, and which voice it
-/// was. A particular's label reads as the first of its names the document
-/// holds; other words are kept as written when it holds them: the check
+/// was. The answer offers no particular to cite (offered one, a mail reader
+/// minted a person per sender, note 2dde9c77), but a label written anyway
+/// reads as the first of its names the document holds; other words are kept
+/// as written when it holds them: the check
 /// validation makes of every speaker (`speaker_in_body`).
 pub(super) fn said_by(
     said_by: &Value,
