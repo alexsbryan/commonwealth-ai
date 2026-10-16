@@ -59,9 +59,22 @@ async fn node_id_capturing_chat_handler(
 }
 
 async fn spawn_node_id_capturing_peer() -> (SocketAddr, NodeIdLog) {
+    spawn_node_id_capturing_peer_with_manifest_delay(Duration::ZERO).await
+}
+
+/// As [`spawn_node_id_capturing_peer`], answering the manifest fetch
+/// only after `manifest_delay` — which is what the router measures as
+/// this peer's round trip.
+async fn spawn_node_id_capturing_peer_with_manifest_delay(
+    manifest_delay: Duration,
+) -> (SocketAddr, NodeIdLog) {
     let log: NodeIdLog = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let capabilities = move || async move {
+        tokio::time::sleep(manifest_delay).await;
+        capabilities_handler().await
+    };
     let app = Router::new()
-        .route("/oicp/v1/capabilities", get(capabilities_handler))
+        .route("/oicp/v1/capabilities", get(capabilities))
         .route("/v1/chat/completions", post(node_id_capturing_chat_handler))
         .with_state(Arc::clone(&log));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -229,6 +242,27 @@ async fn a_peer_routed_turn_identifies_this_node_to_the_peer() {
          it is the ONLY thing that distinguishes peer traffic from local \
          traffic at the receiving daemon (commonwealth-api/admission.rs)"
     );
+}
+
+/// The premise every routing test here stands on — the peer outranks
+/// the local BYOM — must not depend on how fast a loopback fetch
+/// happens to be. 40 ms is past `classify_rtt_ms`'s 25 ms Near ceiling
+/// (sovereign-scheduler `oicp_select.rs`), so the peer is scored Far,
+/// bonus 1.0 against local's 1.15: the worst a loaded run can measure.
+/// Against the unannotated local default this served locally
+/// (`local=0.4600 Founder=0.4480`); see `ByomManifest`.
+#[tokio::test]
+async fn a_peer_whose_manifest_is_slow_still_outranks_the_local_byom() {
+    let (peer_addr, _) =
+        spawn_node_id_capturing_peer_with_manifest_delay(Duration::from_millis(40)).await;
+    let wrapper = mip_with_peers(local_byom(), founder_at(peer_addr));
+
+    let (stream, attribution) = wrapper
+        .complete_stream_with_id(&mesh_allowed_request())
+        .await
+        .expect("a peer scored Far must still outrank the local BYOM");
+    assert_eq!(drain(stream).await, PEER_RESPONSE_TEXT);
+    assert!(attribution.contains("@ peer Founder"), "{attribution:?}");
 }
 
 /// A shed is a healthy peer saying "not right now". Booking it as a

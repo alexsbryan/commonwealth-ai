@@ -51,20 +51,67 @@ use serde::Deserialize;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_daemon::daemon::InferenceVenue;
 use sovereign_serving_host::peer_inference::{InferenceRouter, VenueHost, VenueSource};
+use sovereign_serving_host::slot_manifest::CoreSlotManifest;
+use sovereign_serving_host::slot_select::{SlotManifest, SlotManifestInfo};
 
 use crate::common;
 use crate::common::TestProvider;
 
-// Local provider — a weak BYOM-like model whose `model_id_for`
-// resolves to `profiles.byom_qwen25.thoughtful` in `models.toml`
-// (caps={General:2, Analysis:1, Instruction:2}). It cannot score
-// 1.0 against a DeepQuery's {Analysis:3, General:3}, so the
-// peer's 9B wins and routing flows to the peer. The local stub
-// is left in the unconfigured state — any local-path attempt
-// surfaces `TestProvider::*_not_configured` as the bubbled error,
-// which is what the LocalOnly test asserts on.
+/// The local BYOM's model file. `models.toml` has no entry for it, so
+/// [`ByomManifest`] is the only thing that gives it a profile.
+pub(crate) const LOCAL_BYOM_FILE: &str = "qwen2.5-3b-instruct-q4_k_m";
+
+// Local provider — a weak BYOM-like model, weak because
+// [`ByomManifest`] declares it so, so the peer's 9B wins and routing
+// flows to the peer. The local stub is left in the unconfigured
+// state — any local-path attempt surfaces
+// `TestProvider::*_not_configured` as the bubbled error, which is
+// what the LocalOnly test asserts on.
 pub(crate) fn local_byom() -> Arc<dyn InferenceProvider> {
-    Arc::new(TestProvider::new().with_model_id("qwen2.5-3b-instruct-q4_k_m"))
+    Arc::new(TestProvider::new().with_model_id(LOCAL_BYOM_FILE))
+}
+
+/// The slot manifest every router in this suite reads: the bundled one,
+/// except that it declares the local BYOM `General: 1` (affinity 0.25)
+/// instead of leaving it to `build_self_manifest`'s unannotated default
+/// (`General: 2, Analysis: 2`, affinity 0.5).
+///
+/// The peer fixtures out-claim that default (0.64 vs 0.40), but a new
+/// peer carries the 0.7 cold-start weight and its locality bonus comes
+/// from ONE measured manifest round trip (`classify_rtt_ms`: 1.15 under
+/// 5 ms, 1.05 under 25 ms, 1.0 past it), while local always takes 1.15.
+/// So at the default the peer won only while a loopback fetch stayed
+/// under 25 ms; past it the decision log read `local=0.4600
+/// Founder=0.4480` and the turn was served locally — what a loaded
+/// full-workspace run does. At `General: 1` local scores 0.23, below
+/// every peer fixture at every locality;
+/// `a_peer_whose_manifest_is_slow_still_outranks_the_local_byom` holds
+/// that.
+pub(crate) struct ByomManifest;
+
+impl ByomManifest {
+    fn byom_profile() -> oicp_types::CapabilityProfile {
+        [(oicp_types::Capability::General, 1)].into()
+    }
+}
+
+impl SlotManifest for ByomManifest {
+    fn capabilities_for_file(&self, file: &str) -> Option<oicp_types::CapabilityProfile> {
+        if file == LOCAL_BYOM_FILE {
+            return Some(Self::byom_profile());
+        }
+        CoreSlotManifest.capabilities_for_file(file)
+    }
+
+    fn info_for_file(&self, file: &str) -> Option<SlotManifestInfo> {
+        if file == LOCAL_BYOM_FILE {
+            return Some(SlotManifestInfo {
+                capabilities: Self::byom_profile(),
+                size_gb: None,
+            });
+        }
+        CoreSlotManifest.info_for_file(file)
+    }
 }
 
 // ── Peer endpoint source stub ───────────────────────────────
@@ -108,12 +155,7 @@ pub(crate) fn mip_with_peers(
     peers: Vec<InferenceVenue>,
 ) -> InferenceRouter {
     let src = Arc::new(StubVenueSource { peers });
-    InferenceRouter::with_peer_source(
-        local,
-        src.clone(),
-        src,
-        Arc::new(sovereign_serving_host::slot_manifest::CoreSlotManifest),
-    )
+    InferenceRouter::with_peer_source(local, src.clone(), src, Arc::new(ByomManifest))
 }
 
 // ── Mock peer HTTP server (the "Founder" role) ──────────────

@@ -21,8 +21,8 @@ use sovereign_daemon::daemon::InferenceVenue;
 use sovereign_serving_host::peer_inference::InferenceRouter;
 
 use super::{
-    capabilities_handler, capabilities_handler_fc, local_byom, mip_with_peers, StreamQuery,
-    StubVenueSource, PEER_RESPONSE_TEXT,
+    capabilities_handler, capabilities_handler_fc, local_byom, mip_with_peers, ByomManifest,
+    StreamQuery, StubVenueSource, PEER_RESPONSE_TEXT,
 };
 
 async fn chat_completions_handler(
@@ -165,10 +165,8 @@ async fn joiner_streams_through_mesh_and_attributes_peer() {
     let peer_source = Arc::new(StubVenueSource { peers });
 
     // 3. Build the local-side provider: a BYOM-class 3B that
-    //    cannot satisfy DeepQuery's preferred profile at score
-    //    1.0. The `Qwen2.5-3B` base_name is annotated in
-    //    `models.toml` as `byom_qwen25.thoughtful` so the OICP
-    //    scorer sees real (weak) caps.
+    //    `ByomManifest` declares weak, so it loses to the peer at
+    //    every measured locality.
     let local: Arc<dyn InferenceProvider> = local_byom();
 
     // 4. The wrapper under test.
@@ -176,7 +174,7 @@ async fn joiner_streams_through_mesh_and_attributes_peer() {
         local,
         peer_source.clone(),
         peer_source,
-        Arc::new(sovereign_serving_host::slot_manifest::CoreSlotManifest),
+        Arc::new(ByomManifest),
     );
 
     // 5. Build a DeepQuery-shaped request — this is what
@@ -453,7 +451,7 @@ async fn local_only_sharding_never_routes_to_peer() {
         local,
         peer_source.clone(),
         peer_source,
-        Arc::new(sovereign_serving_host::slot_manifest::CoreSlotManifest),
+        Arc::new(ByomManifest),
     );
 
     let envelope = InferenceRequirements::new()
@@ -510,7 +508,7 @@ async fn mesh_allowed_normal_latency_routes_to_peer_without_speed_signal() {
         local,
         peer_source.clone(),
         peer_source,
-        Arc::new(sovereign_serving_host::slot_manifest::CoreSlotManifest),
+        Arc::new(ByomManifest),
     );
 
     // Normal latency is an EXACT class match for the mock peer's
@@ -569,7 +567,7 @@ async fn local_only_judge_shaped_request_stays_local() {
         local,
         peer_source.clone(),
         peer_source,
-        Arc::new(sovereign_serving_host::slot_manifest::CoreSlotManifest),
+        Arc::new(ByomManifest),
     );
 
     let envelope = InferenceRequirements::new()
@@ -618,7 +616,7 @@ async fn latency_fast_never_routes_even_when_mesh_allowed() {
         local,
         peer_source.clone(),
         peer_source,
-        Arc::new(sovereign_serving_host::slot_manifest::CoreSlotManifest),
+        Arc::new(ByomManifest),
     );
 
     let envelope = InferenceRequirements::new()
@@ -668,7 +666,7 @@ async fn forced_choice_sentinel_excludes_peer_without_feature() {
         local,
         peer_source.clone(),
         peer_source,
-        Arc::new(sovereign_serving_host::slot_manifest::CoreSlotManifest),
+        Arc::new(ByomManifest),
     );
 
     let envelope = InferenceRequirements::new()
@@ -722,7 +720,7 @@ async fn forced_choice_sentinel_routes_to_peer_advertising_feature() {
         local,
         peer_source.clone(),
         peer_source,
-        Arc::new(sovereign_serving_host::slot_manifest::CoreSlotManifest),
+        Arc::new(ByomManifest),
     );
 
     let envelope = InferenceRequirements::new()
@@ -788,7 +786,7 @@ async fn explicit_peer_model_id_routes_to_peer_without_oicp_envelope() {
         local,
         peer_source.clone(),
         peer_source,
-        Arc::new(sovereign_serving_host::slot_manifest::CoreSlotManifest),
+        Arc::new(ByomManifest),
     );
 
     // No OICP envelope, Speed::Fast (which would normally bail
@@ -842,7 +840,7 @@ async fn explicit_unknown_model_id_errors_instead_of_silent_substitution() {
         local,
         peer_source.clone(),
         peer_source,
-        Arc::new(sovereign_serving_host::slot_manifest::CoreSlotManifest),
+        Arc::new(ByomManifest),
     );
 
     let request = CompletionRequest::new("hi")
@@ -893,7 +891,7 @@ async fn empty_model_id_falls_through_to_oicp_path() {
         local,
         peer_source.clone(),
         peer_source,
-        Arc::new(sovereign_serving_host::slot_manifest::CoreSlotManifest),
+        Arc::new(ByomManifest),
     );
 
     let envelope = InferenceRequirements::new()
