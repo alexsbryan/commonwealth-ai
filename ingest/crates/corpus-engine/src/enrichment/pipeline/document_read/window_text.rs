@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use tracing::debug;
 
-use super::super::line_classes::LineClasses;
+use super::super::line_classes::{LineClass, LineClasses};
 use crate::enrichment::atlas::SourceDocument;
 
 const NO_OWN_LINE: &str =
@@ -38,6 +38,26 @@ pub(super) fn own_text(doc: &SourceDocument, classes: &LineClasses) -> String {
     } else {
         own.join("\n")
     }
+}
+
+/// The lines a document quotes from an earlier one or embeds from a message
+/// it carries: the text a claim must not cite as the document's own
+/// (`envelope`). Header lines are not among them: a header is cited through a
+/// declared identity field, as validation allows.
+pub(super) fn quoted_text(doc: &SourceDocument, classes: &LineClasses) -> String {
+    let raw = doc.raw_body();
+    let lines = super::super::passes::lines(&raw);
+    lines
+        .iter()
+        .zip(classes.classes(doc.key(), &raw, &lines))
+        .filter(|(_, carried)| {
+            carried
+                .as_ref()
+                .is_some_and(|c| c.class != LineClass::Field)
+        })
+        .map(|(line, _)| &raw[line.start..line.end])
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Each document of the window by key, its label (`d1`...): what a pointer

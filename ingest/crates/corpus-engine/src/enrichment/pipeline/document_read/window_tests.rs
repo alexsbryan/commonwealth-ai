@@ -682,3 +682,67 @@ subject = "firm"
         .user
         .contains("not one particular before and after a stated change"));
 }
+
+/// Failing input, named: a reply's quoted history is hidden from the reader,
+/// but a claim citing it passed through `envelope` unchanged and validation
+/// found the quote in the raw body, so a January reply could still be read
+/// as saying October's "gone with another supplier" (note 32e3ff3d). A claim
+/// whose quote is in the lines a document quotes or embeds, and not in its
+/// own, is refused by name; one in its own lines is read; one found nowhere
+/// is left for validation to refuse.
+#[tokio::test]
+async fn a_claim_citing_lines_its_document_quotes_is_refused() {
+    let mut policies = policies();
+    policies.change.document = Some(crate::enrichment::ontology::DocumentFieldsDecl {
+        date: Some("date".into()),
+        thread: None,
+        id: None,
+        author: None,
+    });
+    let chapter = input_chapter(&[
+        row(
+            1,
+            "doc-a",
+            "Issue 42 in uv is open.\nIt fails on start.",
+            r#"{"date":"Mon, 14 May 2001 09:00:00 -0700"}"#,
+        ),
+        row(
+            2,
+            "doc-b",
+            "Issue 42 is now closed.\n> Issue 42 in uv is open.\n> It fails on start.",
+            r#"{"date":"Tue, 15 May 2001 09:00:00 -0700"}"#,
+        ),
+    ]);
+    let classes = super::super::LineClasses::of(&chapter.source_documents, &policies);
+    let answer = json!({
+        "particulars": [{"ref": "p1", "type": "case", "name": "issue 42", "fields": {}}],
+        "claims": [
+            {"kind": "reported_status", "about": "p1", "document": "d2",
+             "quote": "Issue 42 in uv is open.", "fields": {"status": "Open"}},
+            {"kind": "reported_status", "about": "p1", "document": "d2",
+             "quote": "Issue 42 is now closed.", "fields": {"status": "Closed"}},
+            {"kind": "reported_status", "about": "p1", "document": "d2",
+             "quote": "Issue 42 was reopened.", "fields": {"status": "Open"}}]});
+    let (infer, _) = scripted(vec![answer]);
+    let raw = read(&chapter, &policies, &classes, &infer).await.unwrap();
+    let mut extraction = parse_response(&raw, &policies)
+        .unwrap()
+        .section_extraction
+        .unwrap();
+    validate_and_stamp(&chapter, &policies, &mut extraction).unwrap();
+    let d2 = &extraction.document_read.as_ref().unwrap().documents[1];
+    let read: Vec<&str> = d2.claims.iter().map(|c| c.evidence.as_str()).collect();
+    assert_eq!(read, ["Issue 42 is now closed."], "{:?}", d2.refused);
+    let reasons: Vec<&str> = d2.refused.iter().map(|r| r.reason.as_str()).collect();
+    assert_eq!(reasons.len(), 2, "{reasons:?}");
+    assert!(
+        reasons
+            .iter()
+            .any(|r| r.contains("quotes or embeds") && r.contains("not its own")),
+        "{reasons:?}"
+    );
+    assert!(
+        reasons.iter().any(|r| r.contains("not an exact passage")),
+        "a quote found nowhere is validation's to refuse: {reasons:?}"
+    );
+}

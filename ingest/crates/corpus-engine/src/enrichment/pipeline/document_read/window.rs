@@ -340,6 +340,11 @@ pub(super) async fn read(
         .iter()
         .map(|doc| shown::own_text(doc, classes))
         .collect();
+    let quoted: Vec<String> = chapter
+        .source_documents
+        .iter()
+        .map(|doc| shown::quoted_text(doc, classes))
+        .collect();
     let documents = envelope(
         chapter,
         policies,
@@ -347,6 +352,7 @@ pub(super) async fn read(
         &contract,
         &labels,
         &owns,
+        &quoted,
         &parsed.value,
         parsed.dropped,
     );
@@ -576,8 +582,12 @@ fn particular_fields(
 
 /// One outcome per supplied document, in order, from the window's answer.
 /// `owns` are the documents' own lines (`own_text`), each claim's quote
-/// widened to its sentence in them (`sentence_of`); `dropped` elements of the
-/// answer did not parse (`answer::parse`) and count as lost.
+/// widened to its sentence in them (`sentence_of`); a claim whose quote is
+/// instead in the lines its document quotes or embeds (`quoted`,
+/// `quoted_text`) is refused, so only a document's own lines are cited;
+/// `dropped` elements of the answer did not parse (`answer::parse`) and count
+/// as lost.
+#[allow(clippy::too_many_arguments)]
 fn envelope(
     chapter: &ChapterInput,
     policies: &OntologyPolicies,
@@ -585,6 +595,7 @@ fn envelope(
     contract: &Contract<'_>,
     labels: &[String],
     owns: &[String],
+    quoted: &[String],
     answer: &Value,
     dropped: usize,
 ) -> Vec<DocumentReadOutcome> {
@@ -614,6 +625,7 @@ fn envelope(
         })
         .collect();
     let mut lost = dropped;
+    let mut carried = 0usize;
     for claim in claims {
         let kind = text(&claim["kind"]);
         let Some(k) = labels.iter().position(|l| *l == text(&claim["document"])) else {
@@ -663,6 +675,16 @@ fn envelope(
                     trace!(document = %outcome.document_id, %quote, %sentence, "document_read/window: a quote widened to its sentence");
                 }
                 sentence
+            }
+            None if sentence_of(&quoted[k], &quote).is_some() => {
+                carried += 1;
+                refuse(
+                    outcome,
+                    format!(
+                        "its quote is in lines this document quotes or embeds from another, not its own: {quote:?}"
+                    ),
+                );
+                continue;
             }
             None => quote,
         };
@@ -717,7 +739,7 @@ fn envelope(
     );
     let read: usize = outcomes.iter().map(|(o, _)| o.claims.len()).sum();
     let refused: usize = outcomes.iter().map(|(o, _)| o.refused.len()).sum();
-    info!(chapter = %chapter.chapter_id, documents = outcomes.len(), particulars = particulars.len(), claims = claims.len(), read, refused, lost, "document_read/window: chapter read");
+    info!(chapter = %chapter.chapter_id, documents = outcomes.len(), particulars = particulars.len(), claims = claims.len(), read, refused, carried, lost, "document_read/window: chapter read");
     outcomes
         .into_iter()
         .map(|(mut o, _)| {
