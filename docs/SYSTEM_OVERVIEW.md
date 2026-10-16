@@ -1421,7 +1421,10 @@ list and the ring round, and svrn neither accepts nor dials a peer itself
 (svrn reads the roster and reaches peers through the ports a distribution
 composes from cw-rails, `hosted_mesh`). Identity is mesh-independent and
 survives `leave` and every switch. mDNS advertises `_commonwealth._tcp.local`
-when `svrn mesh up` starts cw-rails with `--mdns`; gossip is a 10s round over
+when `svrn mesh up` starts cw-rails with `--mdns`, and refuses by cause on a
+host where a send to the mDNS group leaves on no interface (mdns-sd itself
+registers Ok there; `/v1/mesh/status` reads `mdns.advertising: false` with the
+reason); gossip is a 10s round over
 3 peers (`select_peers`: active keyed members, Online first, rotated by round)
 with timestamp-LWW conflict resolution, and offline-decay reads this node's
 contact clock, never a peer's `last_seen`.

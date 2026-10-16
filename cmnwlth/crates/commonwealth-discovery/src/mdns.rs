@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -444,6 +444,111 @@ fn dialable_address(
     chosen
 }
 
+/// The mDNS group (RFC 6762 §3), where mdns-sd sends every announcement.
+const GROUP_V4: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 251);
+const GROUP_V6: Ipv6Addr = Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0, 0xfb);
+const MDNS_PORT: u16 = 5353;
+
+/// Whether this host lets a send to the mDNS group leave on at least one
+/// interface mdns-sd announces on (every non-loopback address): the first
+/// address that accepted one, or why none did.
+///
+/// mdns-sd 0.12 cannot answer this. A refused send is an `info!` in its own
+/// log (`send_packet` returns `()`), `DaemonEvent::Announce` fires once a
+/// packet is built whether or not it left, and an IPv4 socket whose test send
+/// fails is dropped at `debug!` — so `register` is Ok on a host where no
+/// announcement ever leaves (measured 2026-10-16: errno 65 on all 14
+/// addresses). The probe is that same test packet, an empty 12-byte header
+/// no responder answers, sent the way mdns-sd sends (`IP_MULTICAST_IF`, or
+/// the IPv6 scope id), and it stops at the first acceptance.
+pub fn group_reach() -> Result<String> {
+    let mut addrs = if_addrs::get_if_addrs().map_err(|e| {
+        warn!(error = %e, "mDNS: cannot list this host's interfaces to probe the group");
+        Error::Discovery(format!("cannot list this host's interfaces: {e}"))
+    })?;
+    // IPv4 first, so `via` names a LAN address rather than lo0's fe80::1,
+    // which `is_loopback` keeps (it is link-local) and mdns-sd announces on.
+    addrs.sort_by_key(|i| i.ip().is_ipv6());
+    let probes = addrs.into_iter().filter(|i| !i.is_loopback()).map(|i| {
+        let label = format!("{}/{}", i.name, i.ip());
+        let sent = send_to_group(&i);
+        debug!(via = %label, refused = ?sent.as_ref().err(), "mDNS: probed a send to the group");
+        (label, sent)
+    });
+    match first_accepting(probes) {
+        Ok(via) => {
+            info!(via = %via, "mDNS: the group accepts a send");
+            Ok(via)
+        }
+        Err(why) => {
+            warn!(why = %why, "mDNS: no interface accepts a send to the group");
+            Err(Error::Discovery(why))
+        }
+    }
+}
+
+fn send_to_group(intf: &if_addrs::Interface) -> std::io::Result<()> {
+    use socket2::{Domain, Protocol, SockAddr, Socket, Type};
+    let (sock, group) = match intf.ip() {
+        IpAddr::V4(ip) => {
+            let sock = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
+            sock.set_multicast_if_v4(&ip)?;
+            (sock, SocketAddr::from((GROUP_V4, MDNS_PORT)))
+        }
+        IpAddr::V6(_) => {
+            // Not mdns-sd's `unwrap_or(0)`: index 0 lets the kernel pick, so
+            // an acceptance would be some other interface's, not this one's.
+            let index = intf
+                .index
+                .ok_or_else(|| std::io::Error::other("no interface index to pin the send to"))?;
+            let sock = Socket::new(Domain::IPV6, Type::DGRAM, Some(Protocol::UDP))?;
+            sock.set_multicast_if_v6(index)?;
+            (
+                sock,
+                SocketAddr::V6(SocketAddrV6::new(GROUP_V6, MDNS_PORT, 0, index)),
+            )
+        }
+    };
+    sock.send_to(&[0u8; 12], &SockAddr::from(group)).map(|_| ())
+}
+
+/// The first address that accepted a send, or every refusal grouped by
+/// cause. Lazy: nothing past the first acceptance is probed.
+fn first_accepting(
+    probes: impl IntoIterator<Item = (String, std::io::Result<()>)>,
+) -> std::result::Result<String, String> {
+    let mut refused: Vec<(String, Vec<String>)> = Vec::new();
+    for (label, sent) in probes {
+        let cause = match sent {
+            Ok(()) => return Ok(label),
+            Err(e) => e.to_string(),
+        };
+        match refused.iter_mut().find(|(c, _)| *c == cause) {
+            Some((_, labels)) => labels.push(label),
+            None => refused.push((cause, vec![label])),
+        }
+    }
+    if refused.is_empty() {
+        return Err(
+            "this host has no non-loopback interface to send an mDNS announcement on".into(),
+        );
+    }
+    let causes: Vec<String> = refused
+        .iter()
+        .map(|(cause, labels)| {
+            format!(
+                "{cause} on {} addresses ({})",
+                labels.len(),
+                labels.join(", ")
+            )
+        })
+        .collect();
+    Err(format!(
+        "no interface accepted a send to the mDNS group, so no announcement would leave this host: {}",
+        causes.join("; ")
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -464,6 +569,43 @@ mod tests {
         );
         assert_eq!(dialable_address(&set(&["fe80::1", "fe80::2"])), None);
         assert_eq!(dialable_address(&set(&[])), None);
+    }
+
+    fn refused(label: &str) -> (String, std::io::Result<()>) {
+        let host_said = std::io::Error::other("No route to host (os error 65)");
+        (label.to_string(), Err(host_said))
+    }
+
+    /// Measured 2026-10-16: every send to the group failed with errno 65 and
+    /// mdns-sd's `register` was Ok, so `cw-rails run --mdns` said it was
+    /// advertising while no packet left the host.
+    #[test]
+    fn a_host_that_refuses_every_send_does_not_reach_the_group() {
+        let why = first_accepting([refused("en0/192.168.1.4"), refused("en0/fe80::1")])
+            .expect_err("no interface accepted a send");
+        assert!(
+            why.contains("No route to host (os error 65) on 2 addresses"),
+            "{why}"
+        );
+        assert!(why.contains("en0/192.168.1.4, en0/fe80::1"), "{why}");
+        let why = first_accepting([]).expect_err("no interface to send on");
+        assert!(why.contains("no non-loopback interface"), "{why}");
+    }
+
+    /// One accepting interface is reach, and the probe stops there: a host
+    /// whose multicast works sends one packet, not one per address.
+    #[test]
+    fn the_first_accepting_interface_is_the_reach() {
+        let mut probed = 0;
+        let probes = [
+            refused("utun4/100.104.36.28"),
+            ("en0/192.168.1.4".to_string(), Ok(())),
+            refused("en0/fe80::1"),
+        ]
+        .into_iter()
+        .inspect(|_| probed += 1);
+        assert_eq!(first_accepting(probes).as_deref(), Ok("en0/192.168.1.4"));
+        assert_eq!(probed, 2);
     }
 
     #[test]

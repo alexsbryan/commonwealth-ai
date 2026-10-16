@@ -30,13 +30,13 @@
 153	cmnwlth/apps/ring-runtime
 2174	cmnwlth/crates/commonwealth-core
 1510	cmnwlth/crates/commonwealth-core::tests
-1103	cmnwlth/crates/commonwealth-discovery
-417	cmnwlth/crates/commonwealth-discovery::tests
+1185	cmnwlth/crates/commonwealth-discovery
+446	cmnwlth/crates/commonwealth-discovery::tests
 2526	cmnwlth/crates/commonwealth-media
 1027	cmnwlth/crates/commonwealth-media::tests
 1587	cmnwlth/crates/commonwealth-rail
 127	cmnwlth/crates/commonwealth-rail::tests
-11920	cmnwlth/crates/commonwealth-rails
+11921	cmnwlth/crates/commonwealth-rails
 5227	cmnwlth/crates/commonwealth-rails::tests
 2768	cmnwlth/crates/commonwealth-state
 851	cmnwlth/crates/commonwealth-state::tests

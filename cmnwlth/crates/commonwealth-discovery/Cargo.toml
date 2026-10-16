@@ -20,6 +20,10 @@ hex = "0.4"
 
 # mDNS
 mdns-sd = "0.12"
+# `mdns::group_reach` probes a send to the group per interface with
+# IP_MULTICAST_IF, as mdns-sd sends; already in this closure through
+# mdns-sd, at the version and features it asks for.
+socket2 = { version = "0.5", features = ["all"] }
 hostname = { workspace = true }
 
 
