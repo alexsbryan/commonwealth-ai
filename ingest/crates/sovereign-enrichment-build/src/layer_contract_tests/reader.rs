@@ -1,119 +1,79 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The reader's own passes on the default path, beside C1-C6: each pass
-//! ONTOLOGY_METHOD §Reading specifies is asked on the fixtures, and what it
-//! must never ask is never asked.
+//! The reader on the default path, beside C1-C6: what it shows as a
+//! document's own, and what it reads into statements and fields.
 
 use super::*;
 
-/// The line a Locate question asks about.
-pub(super) fn asked_line(prompt: &ChatPrompt) -> &str {
-    prompt
-        .user
-        .rsplit_once("\n\nLine ")
-        .and_then(|(_, rest)| rest.split_once('"'))
-        .and_then(|(_, rest)| rest.split_once("\"\n"))
-        .map(|(text, _)| text)
-        .expect("a Locate question names its line")
-}
-
-/// Prefill: every question about a document opens with its declared facts.
+/// Prefill: every document a window read shows opens with its declared facts,
+/// each field the recipe declares of a document (`[change] document`) as
+/// `field: value` above its text, and every document is shown.
 #[tokio::test]
-async fn every_question_opens_with_its_documents_declared_facts() {
+async fn every_window_shows_each_documents_declared_facts_above_its_text() {
     for shape in SHAPES {
-        let run = run(&Fixture::load(shape)).await;
-        for p in run.prompts.iter().filter(|p| {
-            !matches!(
-                p.phase_id.as_deref(),
-                Some("resolve_select" | "resolve_reason")
-            )
-        }) {
-            assert!(
-                p.user.starts_with("Declared facts of this document:\n"),
-                "{shape}: {}",
-                p.user
-            );
+        let f = Fixture::load(shape);
+        let policies = f.policies();
+        let declared: Vec<&str> = policies
+            .change
+            .document
+            .iter()
+            .flat_map(|d| d.declared().map(|(_, field)| field))
+            .collect();
+        assert!(!declared.is_empty(), "{shape} declares no document field");
+        let run = run(&f).await;
+        let mut shown = BTreeSet::new();
+        for p in &run.prompts {
+            if p.phase_id.as_deref() != Some("document_window") {
+                continue;
+            }
+            for d in shown_documents(&p.user) {
+                let id = d.head.iter().find_map(|l| l.strip_prefix("id: "));
+                let doc = id
+                    .and_then(|id| f.documents.iter().find(|x| x["id"] == id))
+                    .unwrap_or_else(|| panic!("{shape}: {} names no document", d.label));
+                for field in &declared {
+                    let value = match &doc[*field] {
+                        Value::String(s) => s.clone(),
+                        v => v.to_string(),
+                    };
+                    let fact = format!("{field}: {value}");
+                    assert!(d.head.contains(&fact.as_str()), "{shape}: no {fact:?}");
+                }
+                shown.insert(doc["id"].to_string());
+            }
         }
+        assert_eq!(shown.len(), f.documents.len(), "{shape}: {shown:?}");
     }
-}
-
-/// The Locate questions of `run`.
-pub(super) fn locates(run: &Run) -> Vec<&ChatPrompt> {
-    run.prompts
-        .iter()
-        .filter(|p| p.phase_id.as_deref() == Some("document_passes_locate"))
-        .collect()
-}
-
-/// The questions of `run` that ask about one line (Locate's and Mention's,
-/// both naming it as `asked_line` reads): where a fixture whose every kind is
-/// an act shows which lines are asked at all.
-pub(super) fn line_questions(run: &Run) -> Vec<&ChatPrompt> {
-    run.prompts
-        .iter()
-        .filter(|p| {
-            matches!(
-                p.phase_id.as_deref(),
-                Some("document_passes_locate" | "document_passes_mention")
-            )
-        })
-        .collect()
-}
-
-/// Whether `prompt` is about the document whose declared id is `id`.
-pub(super) fn in_doc(prompt: &ChatPrompt, id: &str) -> bool {
-    prompt.user.contains(&format!("\nid: {id}\n"))
 }
 
 /// Line classes: the mail fixture's reply carries a line of the message it
-/// answers under a mark, and it is never asked there (mail's one claim kind is
-/// an act, so the line questions are Mention's), while it is asked in the
-/// message it comes from. The greeting its author opens two messages with is
-/// asked in both: repetition alone is no evidence. No citation marks the
-/// carried line.
+/// answers under a mark, and it is never shown as the reply's own, while it
+/// is shown in the message it comes from. The greeting its author opens two
+/// messages with is shown in both: repetition alone is no evidence.
 #[tokio::test]
-async fn a_quoted_line_is_never_asked_and_a_repeated_one_is() {
+async fn a_quoted_line_is_never_shown_as_its_own_and_a_repeated_one_is() {
     let run = run(&Fixture::load("mail")).await;
-    let locate = line_questions(&run);
+    let own = |id: &str| own_lines(&run, Some(&format!("id: {id}")));
     let quoted = "The offer stands for thirty days; tell us if you would like to go ahead.";
     assert!(
-        locate
-            .iter()
-            .any(|p| in_doc(p, "q2@alderpine.example") && asked_line(p) == quoted),
-        "the quoted line is asked where it was written"
+        own("q2@alderpine.example").contains(&quoted),
+        "the quoted line is shown where it was written"
     );
-    let cites: Vec<&ChatPrompt> = run
-        .prompts
-        .iter()
-        .filter(|p| p.phase_id.as_deref() == Some("document_passes_cite"))
-        .collect();
-    assert!(cites.iter().any(|p| in_doc(p, "q3@birchhall.example")));
-    for p in cites.iter().filter(|p| in_doc(p, "q3@birchhall.example")) {
-        assert!(
-            p.user.contains(&format!("\n> {quoted}\n")),
-            "the carried line is shown, unmarked: {}",
-            p.user
-        );
-    }
-    for p in &locate {
-        let line = asked_line(p);
-        assert!(
-            !(in_doc(p, "q3@birchhall.example") && line.ends_with(quoted)),
-            "a quote reached Locate: {line}"
-        );
-    }
+    let reply = own("q3@birchhall.example");
+    assert!(
+        !reply.is_empty() && !reply.iter().any(|l| l.ends_with(quoted)),
+        "a quote is shown as the reply's own: {reply:?}"
+    );
     for doc in ["q1@birchhall.example", "q3@birchhall.example"] {
         assert!(
-            locate
-                .iter()
-                .any(|p| in_doc(p, doc) && asked_line(p) == "Hello Tom,"),
-            "{doc}: the repeated greeting was never asked"
+            own(doc).contains(&"Hello Tom,"),
+            "{doc}: the repeated greeting is not shown as its own"
         );
     }
 }
 
 /// Review 2026-10-10 (note 2347f4c6), on the default path: a tracker act
 /// written in the same words in two threads, and again in its own thread
-/// after a reopen, is asked in each document and each becomes a placed
+/// after a reopen, is shown as each document's own and each becomes a placed
 /// statement of its own document.
 #[tokio::test]
 async fn a_repeated_act_is_read_and_placed_in_every_document() {
@@ -140,7 +100,6 @@ async fn a_repeated_act_is_read_and_placed_in_every_document() {
         f.documents.push(doc.as_object().unwrap().clone());
     }
     let run = run(&f).await;
-    let locate = locates(&run);
     let placed: BTreeSet<String> = run
         .atoms()
         .iter()
@@ -154,10 +113,8 @@ async fn a_repeated_act_is_read_and_placed_in_every_document() {
         "event-101-closed-again",
     ] {
         assert!(
-            locate
-                .iter()
-                .any(|p| in_doc(p, doc) && asked_line(p) == closed),
-            "{doc}: the act never reached Locate"
+            own_lines(&run, Some(&format!("id: {doc}"))).contains(&closed),
+            "{doc}: the act is not shown as its own"
         );
         assert!(
             placed.contains(doc),
@@ -166,52 +123,8 @@ async fn a_repeated_act_is_read_and_placed_in_every_document() {
     }
 }
 
-/// Every pass the reader's plan has is asked on the fixtures (mail: Point
-/// on an open claim and subject field and a quantity and a time, Mention and
-/// Pick on a reference to a header-sourced type; issues and news: Point), and
-/// still asked when every type and attribute is renamed (C6's fixture).
-#[tokio::test]
-async fn every_pass_is_asked_and_still_asked_under_rename() {
-    let phases = |run: &Run| -> BTreeSet<String> {
-        run.prompts
-            .iter()
-            .filter_map(|p| p.phase_id.clone())
-            .collect()
-    };
-    let mail = Fixture::load("mail");
-    let (renamed, _) = super::contracts::renamed(&mail);
-    for (name, f) in [("mail", mail), ("mail renamed", renamed)] {
-        let asked = phases(&run(&f).await);
-        for phase in [
-            "document_passes_act",
-            "document_passes_cite",
-            "document_passes_mention",
-            "document_passes_point",
-            "document_passes_pick",
-        ] {
-            assert!(
-                asked.contains(phase),
-                "{name}: `{phase}` never asked: {asked:?}"
-            );
-        }
-    }
-    for shape in ["issues", "news"] {
-        let asked = phases(&run(&Fixture::load(shape)).await);
-        for phase in [
-            "document_passes_locate",
-            "document_passes_choose",
-            "document_passes_point",
-        ] {
-            assert!(
-                asked.contains(phase),
-                "{shape}: `{phase}` never asked: {asked:?}"
-            );
-        }
-    }
-}
-
 /// Review 2026-10-10 (note 2347f4c6): a subject field the reader reads (mail's
-/// `order.piece`, pointed at in every statement) stays on the statement that
+/// `order.piece`, read in every statement) stays on the statement that
 /// read it, as the claim's own fields do, through RESOLVE into the atlas: cited
 /// in that statement's own document, with its source and precision. RESOLVE
 /// writes no value of it on the record. Statements of one order that read it
@@ -219,11 +132,9 @@ async fn every_pass_is_asked_and_still_asked_under_rename() {
 /// field only by a declared fold.
 #[tokio::test]
 async fn a_read_subject_field_stays_on_its_statement_cited() {
-    // An act gives one statement per order per document, and the oracle never
-    // joins documents (on five messages its choice's weight is estimated at
-    // 0, so `weigh` sees nothing raised): a kind no rule names, about orders,
-    // is located line by line and puts more statements on the order an act's
-    // document is about.
+    // The oracle reads every statement as the first kind declared: a kind no
+    // rule names, about orders, so a document states several and an order
+    // holds two statements' readings.
     let mut f = Fixture::load("mail");
     let act = "[[enrichment.ontology.types]]\nname = \"order_update\"";
     assert!(f.recipe.contains(act));
@@ -373,7 +284,7 @@ async fn a_picked_reference_is_cited_in_its_own_document() {
             continue;
         }
         picked += 1;
-        assert_eq!(field["by"]["source"], "reader_pick", "{field}");
+        assert_eq!(field["by"]["source"], "reader_window", "{field}");
         assert_eq!(field["by"]["precision"], "unmeasured", "{field}");
         // Our own side is in the declared exclusion set `ours`.
         assert!(
@@ -386,7 +297,7 @@ async fn a_picked_reference_is_cited_in_its_own_document() {
 
 /// The mail fixture with an order-level read reference its records fold by
 /// `most` (`client`), and a seventh message, from our own side to our own
-/// side, so its header offers no outside record and its picks are mentions.
+/// side, so its header offers no outside record and a reading names its words.
 fn with_client_and_internal_note() -> Fixture {
     let mut f = Fixture::load("mail");
     let piece = "  { name = \"piece\", type = \"text\", description = \"what is to be made\" },\n";
@@ -477,65 +388,6 @@ async fn a_served_reference_is_a_record_of_its_type_and_a_mention_stays_unresolv
     assert!(unresolved > 0, "the internal note's mention left no trace");
 }
 
-/// About on the default path (ONTOLOGY_METHOD §Reading): a document is a
-/// member of the particular it is about although no line of it states a claim
-/// kind. Tom's thanks quotes a line of his own offer; a quoted line is never
-/// located, so the reply states nothing, but About names the order on that
-/// line, and the order's record holds the reply, cited by the whole line, with
-/// no claim kind of its own and no handoff marker left on it.
-#[tokio::test]
-async fn a_document_no_line_of_which_states_a_claim_kind_is_a_member_of_what_it_is_about() {
-    let mut f = Fixture::load("mail");
-    let (content, _) = f.fields();
-    let quoted = "dollars, including finishing, and we can deliver them by the end of April.";
-    let thanks = f
-        .documents
-        .iter_mut()
-        .find(|d| d["id"] == "q5@alderpine.example")
-        .unwrap();
-    let body = format!("{}\n\n> {quoted}", thanks[&content].as_str().unwrap());
-    thanks.insert(content.clone(), Value::String(body));
-    let run = run(&f).await;
-    assert!(
-        !line_questions(&run)
-            .iter()
-            .any(|p| in_doc(p, "q5@alderpine.example") && asked_line(p).ends_with(quoted)),
-        "the quoted line is never asked"
-    );
-    let atoms = run.atoms();
-    let orders: BTreeSet<&str> = atoms
-        .iter()
-        .filter(|a| a["atom_type"] == "Entity" && a["data"]["entity_type"] == "order")
-        .filter_map(|a| a["data"]["id"].as_str())
-        .collect();
-    let held: Vec<&Value> = atoms
-        .iter()
-        .filter(|a| {
-            a["atom_type"] == "Claim"
-                && a["data"]["evidence"][0]["source_doc_id"] == "q5@alderpine.example"
-        })
-        .collect();
-    assert_eq!(held.len(), 1, "one claim, the order it is about: {held:?}");
-    let claim = &held[0]["data"];
-    assert!(claim["claim_kind"].is_null(), "{claim}");
-    assert!(
-        claim["subject"]
-            .as_str()
-            .is_some_and(|s| orders.contains(s)),
-        "the thanks sits on an order record: {claim}"
-    );
-    assert_eq!(claim["anchor"], format!("> {quoted}"), "{claim}");
-    assert!(
-        claim["attributes"].get("__document_read_about").is_none(),
-        "the handoff marker is RESOLVE's alone: {claim}"
-    );
-    let failures = &run.files["resolution_failures.json"];
-    assert!(
-        !failures.contains("order l3:"),
-        "its subject is left to RESOLVE, never bound by name: {failures}"
-    );
-}
-
 /// `with_client_and_internal_note` with a company identity criterion, so
 /// RESOLVE decides the company mentions (`decides_mentions`).
 fn with_company_criterion() -> Fixture {
@@ -562,6 +414,9 @@ fn with_company_criterion() -> Fixture {
 /// our own company is never served and never unjudged.
 #[tokio::test]
 async fn a_company_named_in_prose_binds_to_its_header_record_and_is_the_orders_client() {
+    // A finding, so still the passes reader's: the window reader sends no
+    // mention of a type RESOLVE decides mentions of (`decides_mentions`).
+    let _passes = passes_reader();
     const PARTIES: &[(&str, &str, &str)] = &[
         ("company", "Birch Hall", "web_domain: birchhall.example"),
         ("company", "Quay Market", "web_domain: quaymarket.example"),
@@ -712,6 +567,9 @@ async fn a_company_named_in_prose_binds_to_its_header_record_and_is_the_orders_c
 /// company record is opened.
 #[tokio::test]
 async fn a_company_first_named_where_no_header_names_it_binds_to_its_seeded_record() {
+    // A finding, so still the passes reader's: the window reader sends no
+    // mention of a type RESOLVE decides mentions of (`decides_mentions`).
+    let _passes = passes_reader();
     const PARTIES: &[(&str, &str, &str)] = &[
         ("company", "Birch Hall", "web_domain: birchhall.example"),
         ("company", "Quay Market", "web_domain: quaymarket.example"),

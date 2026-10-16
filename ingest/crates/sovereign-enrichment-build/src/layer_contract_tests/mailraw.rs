@@ -2,11 +2,10 @@
 //! The customer journey's fixture in process (`tests/fixtures/layer/mailraw/`,
 //! whose recipe tells the story): six RFC 5322 messages through the engine's
 //! own ingest (`Fixture::ingest`), then the default path. What a correct read
-//! of a mailbox must never do is asserted on every question asked, and the
+//! of a mailbox must never do is asserted on every window read, and the
 //! records a right model makes are asserted with the oracle answering RESOLVE
 //! and Mention right for the parties the fixture names.
 
-use super::reader::{asked_line, line_questions};
 use super::*;
 
 const SHAPE: &str = "mailraw";
@@ -23,12 +22,6 @@ const PARTIES: &[(&str, &str, &str)] = &[
     ("order", "oak chairs", "oak chairs"),
 ];
 
-/// Whether `prompt` is about the message whose Message-ID is `id`: its
-/// declared facts name the field the recipe stamps a document's id from.
-fn in_message(prompt: &ChatPrompt, id: &str) -> bool {
-    prompt.user.contains(&format!("\nmessage_id: {id}\n"))
-}
-
 /// A line a header block states: the fixture writes every header line, of a
 /// message and of a message embedded in one, as `Field: value`, and no body
 /// line opens that way.
@@ -38,52 +31,35 @@ fn is_header_line(text: &str) -> bool {
         .any(|field| text.trim_start().starts_with(field))
 }
 
-/// C1 on a raw mailbox: the header facts open every question as declared
-/// facts, so no header line is ever asked, neither the message's own (the
-/// extractor writes them into the stored text) nor an embedded message's.
+/// C1 on a raw mailbox: a message's header facts are shown beside it as
+/// declared facts, so no header line is shown as a message's own text,
+/// neither the message's own (the extractor writes them into the stored text)
+/// nor an embedded message's.
 #[tokio::test]
-async fn no_question_asks_a_header_line() {
+async fn no_window_shows_a_header_line_as_its_own() {
     let run = run(&Fixture::ingest(SHAPE).await).await;
-    let asked: Vec<&str> = line_questions(&run).into_iter().map(asked_line).collect();
-    assert!(!asked.is_empty(), "no line was asked");
-    let headers: Vec<&&str> = asked.iter().filter(|l| is_header_line(l)).collect();
-    assert!(headers.is_empty(), "header lines were asked: {headers:?}");
-    // Nor is one offered as where a particular is first named (About).
-    let offered: Vec<&str> = run
-        .prompts
-        .iter()
-        .filter(|p| p.user.contains("first named or described?"))
-        .flat_map(|p| p.user.lines())
-        .filter_map(|l| l.split_once(" line ").and_then(|(_, r)| r.split_once(": ")))
-        .map(|(_, text)| text)
-        .filter(|text| is_header_line(text))
-        .collect();
-    assert!(
-        offered.is_empty(),
-        "About offered header lines: {offered:?}"
-    );
+    let shown = own_lines(&run, None);
+    assert!(!shown.is_empty(), "no line was shown");
+    let headers: Vec<&&str> = shown.iter().filter(|l| is_header_line(l)).collect();
+    assert!(headers.is_empty(), "header lines were shown: {headers:?}");
 }
 
 /// A forwarded message that is not in the corpus is no statement of the
-/// message carrying it: none of its lines is asked, so nothing it says is
-/// dated or authored by the forward, and no claim cites it.
+/// message carrying it: none of its lines is shown as the forward's own, so
+/// nothing it says is dated or authored by the forward, and no claim cites it.
 #[tokio::test]
-async fn no_line_of_an_embedded_message_is_asked_or_cited() {
+async fn no_line_of_an_embedded_message_is_shown_or_cited() {
     let run = run(&Fixture::ingest(SHAPE).await).await;
-    let asked: Vec<&str> = line_questions(&run)
-        .into_iter()
-        .filter(|p| in_message(p, "<n2@alderpine.example>"))
-        .map(asked_line)
-        .collect();
+    let shown = own_lines(&run, Some("message_id: <n2@alderpine.example>"));
     assert!(
-        asked
+        shown
             .iter()
             .any(|l| l.starts_with("The timber merchant answered")),
-        "the forward's own line is asked: {asked:?}"
+        "the forward's own line is shown: {shown:?}"
     );
     assert!(
-        !asked.iter().any(|l| l.contains(FORWARDED)),
-        "a line of the embedded message was asked: {asked:?}"
+        !shown.iter().any(|l| l.contains(FORWARDED)),
+        "a line of the embedded message was shown: {shown:?}"
     );
     let citing: Vec<String> = run
         .atoms()
@@ -104,6 +80,9 @@ async fn no_line_of_an_embedded_message_is_asked_or_cited() {
 /// the words as a span model would, punctuation included.
 #[tokio::test]
 async fn a_company_named_before_its_mail_is_its_seeded_record_and_named_cleanly() {
+    // A finding, so still the passes reader's: the window reader sends no
+    // mention of a type RESOLVE decides mentions of (`decides_mentions`).
+    let _passes = passes_reader();
     let run = run_knowing(&Fixture::ingest(SHAPE).await, PARTIES).await;
     let atoms = run.atoms();
     let companies: Vec<&Value> = atoms
