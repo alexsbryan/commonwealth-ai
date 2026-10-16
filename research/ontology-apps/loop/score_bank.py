@@ -10,7 +10,9 @@ A failed call is could_not_judge, never wrong. <records.json> is {"records": [{t
 claims: [{kind, quote, attributes}]}]}: a one-shot's file as runs/ceiling/oneshot.py writes it, or the system's
 records as records_of.py dumps them through the public atlas-query. Writes per-question answers and verdicts.
 """
-import json, sys, tomllib, urllib.request
+import json, os, sys, tomllib, urllib.request
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import corpora
 
 DAEMON = "http://localhost:9741/v1/chat/completions"
 NONE = "NOT IN RECORDS"
@@ -36,6 +38,15 @@ def ask(text, question):
             "think_budget": 0, "messages": [{"role": "user", "content": PROMPT.format(records=text, question=question)}]}
     req = urllib.request.Request(DAEMON, json.dumps(body).encode(), {"Content-Type": "application/json"})
     return json.load(urllib.request.urlopen(req, timeout=300))["choices"][0]["message"]["content"].strip()
+
+
+def answerer():
+    """The model behind the answerer's alias, as the daemon names it (/v1/models: owned_by "alias→<model>")."""
+    try:
+        ms = json.load(urllib.request.urlopen(DAEMON.replace("chat/completions", "models"), timeout=10))["data"]
+        return next((m["owned_by"] for m in ms if m["id"] == "commonwealth/primary"), "not served")
+    except Exception as e:
+        return f"unknown ({e})"
 
 
 def judge(q, answer):
@@ -67,5 +78,9 @@ if __name__ == "__main__":
         by[r["qtype"]][r["verdict"]] += 1
     summary = dict(records=len(records), record_chars=len(text), right=sum(r["verdict"] == "right" for r in rows),
                    judged=sum(r["verdict"] != "could_not_judge" for r in rows), by_qtype=by)
+    # This file, the model that answered and the bank it judged by: the stamp table.py checks before setting two
+    # arms side by side.
+    summary["answerer"] = answerer()
+    summary["judge"] = corpora.judge_id([open(__file__).read(), summary["answerer"]], [sys.argv[2]])
     json.dump(dict(summary=summary, questions=rows), open(sys.argv[3], "w"), indent=1)
     print(json.dumps(summary, indent=1))

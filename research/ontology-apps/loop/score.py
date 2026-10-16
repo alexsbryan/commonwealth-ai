@@ -30,8 +30,10 @@ scratchpad as score_fixed.py until loop.sh made it the loop's one scorer), each 
        rule broke world-s3 quanova/6., one unpunctuated line holding both deals' sentences whole.
 Everything else is score_ward.py's. The report also carries `matches` {claim: [gold update index]}.
 """
-import json, os, re, subprocess, sys
+import inspect, json, os, re, subprocess, sys
 from email.utils import parsedate_to_datetime
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import corpora, misses
 
 RECORDS = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--records=")), None)
 _fx = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--fixes=")), "cap,msg,own,fold,best")
@@ -271,6 +273,9 @@ report["summary"] = {
     "gold_updates_matched": len({h for d in deals for cid in placed[d["atom_id"]] for h in match(cid)}),
 }
 report["fixes"] = sorted(FIXES)
+# This file, its fixes, the served rule that counts a deal (misses.served) and the gold it held records to: the
+# stamp table.py checks.
+report["summary"]["judge"] = corpora.judge_id([open(__file__).read(), inspect.getsource(misses.served), ",".join(sorted(FIXES))], [f"{GOLD}/{f}.json" for f in FOLDERS])
 report["matches"] = {cid: match(cid) for d in deals for cid in sorted(placed[d["atom_id"]])}
 report["placed"] = {d["atom_id"]: sorted(placed[d["atom_id"]]) for d in deals}
 report["claim_doc"] = {cid: claim_doc.get(cid) for cid in report["matches"]}

@@ -11,6 +11,7 @@
 #   extract.*, resolve.*  the public commands' output; extract.err carries every window prompt and raw answer (trace)
 #   windows/        each window's labels, prompt and answer, split out of extract.err
 #   score.json      score.py's report; misses.jsonl + misses.txt, each unserved gold deal's chain and verdict (misses.py)
+#                   (a bank: records.json + bank.json; a held-out corpus, corpora.HELD_OUT, is scored and never diagnosed)
 #   decisions.jsonl every RESOLVE question judged against gold, the model's own pick beside the decision (decisions.py)
 # then table.py prints the arm's totals and categories and appends a row to runs/loop/journal.tsv.
 #

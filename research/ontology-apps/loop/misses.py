@@ -411,6 +411,7 @@ def oneshot_served(c):
 
 if __name__ == "__main__":
     run, cid = sys.argv[1], sys.argv[2]
+    corpora.refuse_held_out(cid, "misses.py")
     D = load(run, cid); one = oneshot_served(D["c"])
     import decisions  # decisions.py imports this module; imported here, after it is whole
     for st, q in decisions.parse(run).items():
