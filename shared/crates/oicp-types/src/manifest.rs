@@ -90,6 +90,10 @@ pub mod features {
     /// answers sentences ranked by `knowledge.sentence_scorer`; requires
     /// `knowledge:range` and `knowledge:scoped`.
     pub const KNOWLEDGE_SENTENCES: &str = "knowledge:sentences";
+    /// v0.6 §2.11: a sentence reply on the `passages` route names, per
+    /// scoped corpus with sentences waiting, its place in the host's
+    /// embedding queue (`sentence_queue`); requires `knowledge:sentences`.
+    pub const KNOWLEDGE_SENTENCE_QUEUE: &str = "knowledge:sentence_queue";
     /// v0.6 §2.13: every span carries `locator` where the extraction that
     /// stored its text found one, the plain-text extractor's heading paths
     /// by that section's rule; requires `knowledge:range`.
@@ -192,6 +196,7 @@ pub mod features {
         KNOWLEDGE_SCOPED,
         KNOWLEDGE_RANGE,
         KNOWLEDGE_SENTENCES,
+        KNOWLEDGE_SENTENCE_QUEUE,
         KNOWLEDGE_LOCATOR,
         INGEST_TRANSCRIPTS,
         INGEST_RECIPE,

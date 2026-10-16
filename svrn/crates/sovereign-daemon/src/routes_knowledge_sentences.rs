@@ -323,6 +323,7 @@ pub(crate) async fn sentences(
         }),
         route: Some(route),
         sentences_pending: (route == SentenceRoute::Passages).then_some(pending as u64),
+        sentence_queue: None,
         truncated,
     })
 }

@@ -28,6 +28,7 @@ pub async fn own_library_checks(host: &Host, m: &ProviderManifest) -> Vec<Check>
         check_ingest_transcript(host, m).await,
         crate::claim_checks::check_evidence_verify_sentences(host, m).await,
         crate::record_checks::check_ingest_lookups(host, m).await,
+        crate::queue_checks::check_knowledge_sentence_queue(host, m).await,
     ]
 }
 

@@ -106,6 +106,12 @@ pub struct Breaks {
     pub lookup_overwrites_declared: bool,
     /// ingest.lookups: an identifier that did not resolve is given a title.
     pub lookup_invents_unresolved: bool,
+    /// knowledge.sentence_queue: a corpus queued behind another is answered
+    /// as embedding now.
+    pub queued_as_embedding: bool,
+    /// knowledge.sentence_queue: a corpus that has finished is still named
+    /// ahead of the one behind it.
+    pub finished_named_ahead: bool,
     /// knowledge.sentences: each sentence's range is one code point past
     /// the sentence its `exact` and `content` carry.
     pub sentence_range_off_by_one: bool,
@@ -161,6 +167,14 @@ struct Fake {
     resolved: BTreeMap<String, Value>,
     /// Polls of progress since each corpus's last install.
     polls: Mutex<BTreeMap<String, u32>>,
+    /// The corpora whose sentences the fake's one worker embeds, first in
+    /// first out (v0.6 §2.11): the front is embedding now. An install of a
+    /// corpus in `queueable` joins it; each sentence search over a queued
+    /// corpus answers `passages` and then the front finishes.
+    queue: Mutex<Vec<String>>,
+    /// Corpora the worker has finished, for `finished_named_ahead`.
+    finished: Mutex<Vec<String>>,
+    queueable: Vec<String>,
 }
 
 impl Fake {
@@ -324,15 +338,19 @@ fn shelves() -> Vec<Shelf> {
         include_str!("../fixture/transcripts.json"),
         include_str!("../fixture/claims.json"),
         include_str!("../fixture/records.json"),
+        include_str!("../fixture/queue.json"),
     ]
     .into_iter()
     .flat_map(|j| {
         let fixture: Value = serde_json::from_str(j).expect("shelf fixture parses");
         let shelf: Shelf = serde_json::from_value(fixture["shelf"].clone()).expect("shelf loads");
-        let closed = fixture["closed_corpus_id"].as_str().map(|c| Shelf {
-            corpus_id: c.to_string(),
-            ..shelf.clone()
-        });
+        let closed = fixture["closed_corpus_id"]
+            .as_str()
+            .or_else(|| fixture["behind_corpus_id"].as_str())
+            .map(|c| Shelf {
+                corpus_id: c.to_string(),
+                ..shelf.clone()
+            });
         std::iter::once(shelf).chain(closed)
     })
     .collect()
@@ -393,6 +411,9 @@ pub async fn spawn(breaks: Breaks) -> Running {
         allowed: Mutex::new(BTreeSet::new()),
         resolved: records::resolver_table(),
         polls: Mutex::new(BTreeMap::new()),
+        queue: Mutex::new(Vec::new()),
+        finished: Mutex::new(Vec::new()),
+        queueable: sentences::queue_corpora(),
     });
     let app = Router::new()
         .route("/oicp/v1/capabilities", get(capabilities))
@@ -530,7 +551,7 @@ async fn capabilities(State(f): State<Arc<Fake>>) -> Json<Value> {
         "features": [
             "ingest:v1", "ingest:recipe_test", "ingest:recipe", "ingest:documents", "ingest:lookups", "evidence:text",
             "evidence:align", "evidence:verify", "evidence:verify_corrections", "evidence:verify_sentences", "knowledge:document", "knowledge:scoped",
-            "knowledge:range", "knowledge:sentences", "knowledge:locator", "ingest:transcripts", "auth:named_client"
+            "knowledge:range", "knowledge:sentences", "knowledge:sentence_queue", "knowledge:locator", "ingest:transcripts", "auth:named_client"
         ],
         "knowledge": {
             "corpora": [],

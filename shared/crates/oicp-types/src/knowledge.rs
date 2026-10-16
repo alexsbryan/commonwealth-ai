@@ -109,6 +109,41 @@ pub enum SentenceRoute {
     Passages,
 }
 
+/// v0.6 §2.11 (`knowledge:sentence_queue`): where a corpus with sentences
+/// waiting stands in the host's embedding queue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IndexPlace {
+    /// The host is embedding this corpus's sentences now.
+    Embedding,
+    /// Other corpora are embedded first; `behind` names them.
+    Queued,
+}
+
+/// v0.6 §2.11: a corpus ahead of another in the embedding queue.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QueuedCorpus {
+    pub corpus: String,
+    /// Its sentences not yet embedded; absent when the host has not yet
+    /// counted them (a corpus it has queued and not opened).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending: Option<u64>,
+}
+
+/// v0.6 §2.11: one scoped corpus with sentences waiting, and its place.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SentencePlace {
+    pub corpus: String,
+    /// The corpus's own sentences not yet embedded (not only the scoped ones).
+    pub pending: u64,
+    pub place: IndexPlace,
+    /// The corpora embedded before this one, the one embedding now first,
+    /// in the order the host embeds them; empty exactly when `place` is
+    /// `embedding`.
+    #[serde(default)]
+    pub behind: Vec<QueuedCorpus>,
+}
+
 /// v0.6 §2.11: a sentence scan stopped at the host's ceiling.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Truncated {
@@ -161,6 +196,11 @@ pub struct KnowledgeSearchResponse {
     /// `route` is `passages`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sentences_pending: Option<u64>,
+    /// v0.6 §2.11 (`knowledge:sentence_queue`): the place of each scoped
+    /// corpus whose sentences are not all embedded. Present exactly when
+    /// `route` is `passages` on a host advertising the feature.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sentence_queue: Option<Vec<SentencePlace>>,
     /// v0.6 §2.11: the scan stopped at the host's ceiling. Absent means
     /// every sentence in scope was scored.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -722,5 +762,35 @@ mod tests {
         let mut unknown = sentences;
         unknown["scorer"]["name"] = "bm25".into();
         assert!(serde_json::from_value::<KnowledgeSearchResponse>(unknown).is_err());
+    }
+
+    /// v0.6 §2.11: the queue field is additive, round-trips, and a place
+    /// outside the closed set fails to decode.
+    #[test]
+    fn sentence_queue_is_additive_and_closed() {
+        let reply = serde_json::json!({
+            "results": [], "corpora_searched": ["a", "b"],
+            "route": "passages", "sentences_pending": 9,
+            "sentence_queue": [
+                {"corpus": "a", "pending": 4, "place": "embedding"},
+                {"corpus": "b", "pending": 5, "place": "queued",
+                 "behind": [{"corpus": "a", "pending": 4}, {"corpus": "c"}]}
+            ]
+        });
+        let r: KnowledgeSearchResponse = serde_json::from_value(reply.clone()).unwrap();
+        let q = r.sentence_queue.clone().unwrap();
+        assert_eq!(q[0].place, IndexPlace::Embedding);
+        assert!(q[0].behind.is_empty());
+        assert_eq!(q[1].behind[1].pending, None);
+        let mut written = serde_json::to_value(&r).unwrap();
+        // `behind` is written empty for the embedding corpus.
+        written["sentence_queue"][0].as_object_mut().unwrap().remove("behind");
+        assert_eq!(written, reply);
+        let old = serde_json::json!({"results": [], "corpora_searched": []});
+        let r: KnowledgeSearchResponse = serde_json::from_value(old).unwrap();
+        assert!(r.sentence_queue.is_none());
+        let mut bad = reply;
+        bad["sentence_queue"][0]["place"] = "idle".into();
+        assert!(serde_json::from_value::<KnowledgeSearchResponse>(bad).is_err());
     }
 }
