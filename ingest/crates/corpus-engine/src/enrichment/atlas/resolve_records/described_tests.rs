@@ -113,7 +113,7 @@ async fn a_question_shows_what_readers_called_each_side() {
     let (infer, seen) = scripted(vec![json!({"A": 0.2, "0": 0.8})]);
     let b = "The fifth entry was not hers.";
     let mut reply = stmt("z", b, "The fifth entry was not hers", 0, &[]);
-    reply.described.names.insert("the tide ledger".into());
+    reply.described.names.insert("the tally book".into());
     reply.described = {
         let mut d = reply.described.clone();
         d.values
@@ -131,7 +131,7 @@ async fn a_question_shows_what_readers_called_each_side() {
     let u = &seen.lock().unwrap()[0].user;
     assert!(
         u.contains(
-            "Its reader read what it is about as: named: the tide ledger; kept_by: the keeper\n"
+            "Its reader read what it is about as: named: the tally book; kept_by: the keeper\n"
         ),
         "{u}"
     );

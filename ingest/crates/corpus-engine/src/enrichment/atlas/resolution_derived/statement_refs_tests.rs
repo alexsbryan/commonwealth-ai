@@ -26,7 +26,7 @@ from = "character"
 to = "character"
 "#;
 
-const LINE: &str = "Tabb trusted Maren with the ledger.";
+const LINE: &str = "Ivo trusted Nell with the ledger.";
 
 fn read(value: &str) -> Value {
     json!({"status": "supported", "value": value, "evidence": value})
@@ -57,9 +57,9 @@ fn handed(id: &str, kind: Option<&str>, local: &str, name: &str, own: Value, mor
     .unwrap()
 }
 
-/// A relation's other endpoint is a record: the statement `Tabb trusted Maren`
-/// is about Tabb's record, and its `to`, read as the words "Maren", holds the
-/// record RESOLVE put the same document's mention of Maren on, never the
+/// A relation's other endpoint is a record: the statement `Ivo trusted Nell`
+/// is about Ivo's record, and its `to`, read as the words "Nell", holds the
+/// record RESOLVE put the same document's mention of Nell on, never the
 /// words. Words that name no record there are not held, and say why.
 #[tokio::test]
 async fn a_relation_statement_holds_its_other_endpoint_as_a_record() {
@@ -82,26 +82,26 @@ async fn a_relation_statement_holds_its_other_endpoint_as_a_record() {
         handed(
             "trust",
             Some("trusts"),
-            "tabb",
-            "Tabb",
-            json!({ "to": read("Maren") }),
+            "ivo",
+            "Ivo",
+            json!({ "to": read("Nell") }),
             json!({}),
         ),
         handed(
             "doubt",
             Some("trusts"),
-            "tabb",
-            "Tabb",
-            json!({ "to": read("Pellow") }),
+            "ivo",
+            "Ivo",
+            json!({ "to": read("Grist") }),
             json!({}),
         ),
         handed(
-            "maren",
+            "nell",
             None,
-            "maren",
-            "Maren",
+            "nell",
+            "Nell",
             json!({}),
-            json!({ ABOUT_ATTRIBUTE: "character", WORDS_ATTRIBUTE: "Maren" }),
+            json!({ ABOUT_ATTRIBUTE: "character", WORDS_ATTRIBUTE: "Nell" }),
         ),
     ];
     let mut entities = Vec::new();
@@ -159,23 +159,23 @@ async fn a_relation_statement_holds_its_other_endpoint_as_a_record() {
     assert_eq!(projected.skipped.get("no `to` record"), Some(&1));
 
     let claim = |id: &str| claims.iter().find(|c| c.id.as_str() == id).unwrap();
-    let (trust, doubt, maren) = (claim("trust"), claim("doubt"), claim("maren"));
+    let (trust, doubt, nell) = (claim("trust"), claim("doubt"), claim("nell"));
     let record_of = |c: &Claim| c.subject.as_ref().map(|s| s.as_str().to_string());
     assert!(
         record_of(trust).is_some(),
-        "the relation is about Tabb's record"
+        "the relation is about Ivo's record"
     );
     assert_eq!(record_of(trust), record_of(doubt));
-    assert_ne!(record_of(trust), record_of(maren), "Tabb and Maren are two");
+    assert_ne!(record_of(trust), record_of(nell), "Ivo and Nell are two");
     assert_eq!(
         trust.attributes.get("to"),
-        record_of(maren).map(Value::String).as_ref(),
-        "`to` holds Maren's record, not her name"
+        record_of(nell).map(Value::String).as_ref(),
+        "`to` holds Nell's record, not her name"
     );
     assert_eq!(
         doubt.attributes.get("to"),
         None,
-        "no record is mentioned as Pellow"
+        "no record is mentioned as Grist"
     );
     let [relation] = &relations[..] else {
         panic!("one relation: {relations:?}");
@@ -187,21 +187,21 @@ async fn a_relation_statement_holds_its_other_endpoint_as_a_record() {
         .collect();
     assert_eq!(
         ends,
-        [record_of(trust), record_of(maren)],
-        "from Tabb to Maren"
+        [record_of(trust), record_of(nell)],
+        "from Ivo to Nell"
     );
     assert_eq!(relation.label, LINE);
     let line = lines.iter().find(|l| l.atom == "doubt").expect("a line");
     assert_eq!(line.unresolved.len(), 1, "{line:?}");
-    assert_eq!(line.unresolved[0].words, json!("Pellow"));
+    assert_eq!(line.unresolved[0].words, json!("Grist"));
     assert_eq!(
-        doubt.attributes[CLAIM_FIELDS_ATTRIBUTE]["to"]["value"], "Pellow",
+        doubt.attributes[CLAIM_FIELDS_ATTRIBUTE]["to"]["value"], "Grist",
         "the reading stays on the statement, cited"
     );
 }
 
-const TOLD: &str = "Maren said Tabb crossed the cobbles at six.";
-const HEARD: &str = "Pellow swore Maren was at the quay.";
+const TOLD: &str = "Nell said Ivo crossed the cobbles at six.";
+const HEARD: &str = "Grist swore Nell was at the quay.";
 
 const ACCOUNT: &str = r#"
 [[types]]
@@ -220,44 +220,44 @@ attributes = [{ name = "speaker", type = "ref", of = "character" }]
 "#;
 
 /// A window read names a speaker by the name it read another statement's
-/// subject under: `Maren said Tabb crossed the cobbles` holds, as `speaker`,
-/// the record RESOLVE put the same document's statement about Maren on, with
+/// subject under: `Nell said Ivo crossed the cobbles` holds, as `speaker`,
+/// the record RESOLVE put the same document's statement about Nell on, with
 /// no mention of her read. A name read nowhere is not held, and says why.
 #[tokio::test]
 async fn a_window_ref_holds_the_record_its_window_read_under_that_name() {
-    let (claims, _, lines) = accounts_derived("Maren").await;
+    let (claims, _, lines) = accounts_derived("Nell").await;
     let claim = |id: &str| claims.iter().find(|c| c.id.as_str() == id).unwrap();
     let (told, heard) = (claim("told"), claim("heard"));
     let record_of = |c: &Claim| c.subject.as_ref().map(|s| s.as_str().to_string());
     assert!(
         record_of(heard).is_some(),
-        "the account is about Maren's record"
+        "the account is about Nell's record"
     );
-    assert_ne!(record_of(told), record_of(heard), "Tabb and Maren are two");
+    assert_ne!(record_of(told), record_of(heard), "Ivo and Nell are two");
     assert_eq!(
         told.attributes.get("speaker"),
         record_of(heard).map(Value::String).as_ref(),
-        "`speaker` holds Maren's record, not her name"
+        "`speaker` holds Nell's record, not her name"
     );
     assert_eq!(
         heard.attributes.get("speaker"),
         None,
-        "no statement is read about Pellow"
+        "no statement is read about Grist"
     );
     let line = lines.iter().find(|l| l.atom == "heard").expect("a line");
     assert_eq!(line.unresolved.len(), 1, "{line:?}");
-    assert_eq!(line.unresolved[0].words, json!("Pellow"));
+    assert_eq!(line.unresolved[0].words, json!("Grist"));
 }
 
 /// Failing input, named: world-s5's window wrote a counterparty "Pellica
 /// Chemical / Elk Bluff Cement Company" for a thing a document said had a new
 /// name (arm bundle1-fresh, 2026-10-16); a reading so written folded whole
 /// named nothing. Written with two names (the window prompt's " / "), a
-/// reading lands by either: `told`'s speaker "Mrs Ashquill / Maren" holds the
-/// record of the statement read about Maren.
+/// reading lands by either: `told`'s speaker "Mrs Varden / Nell" holds the
+/// record of the statement read about Nell.
 #[tokio::test]
 async fn a_reading_written_with_two_names_lands_by_either() {
-    let (claims, _, _) = accounts_derived("Mrs Ashquill / Maren").await;
+    let (claims, _, _) = accounts_derived("Mrs Varden / Nell").await;
     let claim = |id: &str| claims.iter().find(|c| c.id.as_str() == id).unwrap();
     let (told, heard) = (claim("told"), claim("heard"));
     assert_eq!(
@@ -267,7 +267,7 @@ async fn a_reading_written_with_two_names_lands_by_either() {
             .as_ref()
             .map(|s| Value::String(s.as_str().to_string()))
             .as_ref(),
-        "`speaker` holds Maren's record by her second name"
+        "`speaker` holds Nell's record by her second name"
     );
 }
 
@@ -275,10 +275,10 @@ async fn a_reading_written_with_two_names_lands_by_either() {
 /// passages, so a resolved reference printed a passage where a name belonged
 /// (arm bundle1-fresh-sg: records 27.6k -> 50.7k chars, `speaker` alone 10k).
 /// A record RESOLVE builds is called by the name its window read gave the
-/// statement that opened it: Tabb's record is "Tabb", Maren's "Maren".
+/// statement that opened it: Ivo's record is "Ivo", Nell's "Nell".
 #[tokio::test]
 async fn a_record_is_called_by_the_name_its_reader_gave_it() {
-    let (claims, entities, _) = accounts_derived("Maren").await;
+    let (claims, entities, _) = accounts_derived("Nell").await;
     let name_of = |id: &str| {
         let record = claims
             .iter()
@@ -291,8 +291,8 @@ async fn a_record_is_called_by_the_name_its_reader_gave_it() {
             .find(|e| Some(&e.id) == record.as_ref())
             .map(|e| e.canonical_name.clone())
     };
-    assert_eq!(name_of("told").as_deref(), Some("Tabb"));
-    assert_eq!(name_of("heard").as_deref(), Some("Maren"));
+    assert_eq!(name_of("told").as_deref(), Some("Ivo"));
+    assert_eq!(name_of("heard").as_deref(), Some("Nell"));
 }
 
 /// The two accounts of `TOLD` and `HEARD`, resolved and derived, `told`'s
@@ -318,18 +318,18 @@ async fn accounts_derived(told_speaker: &str) -> (Vec<Claim>, Vec<Entity>, Vec<D
         handed(
             "told",
             Some("account"),
-            "tabb",
-            "Tabb",
+            "ivo",
+            "Ivo",
             json!({ "speaker": read(told_speaker) }),
-            json!({ SUBJECT_NAME_ATTRIBUTE: "Tabb" }),
+            json!({ SUBJECT_NAME_ATTRIBUTE: "Ivo" }),
         ),
         handed(
             "heard",
             Some("account"),
-            "maren",
-            "Maren",
-            json!({ "speaker": read("Pellow") }),
-            json!({ SUBJECT_NAME_ATTRIBUTE: "Maren" }),
+            "nell",
+            "Nell",
+            json!({ "speaker": read("Grist") }),
+            json!({ SUBJECT_NAME_ATTRIBUTE: "Nell" }),
         ),
     ];
     for (claim, line) in claims.iter_mut().zip([TOLD, HEARD]) {
