@@ -17,7 +17,10 @@ ALL = WORLDS + ["ward-story"]
 # more each written blind by one persona (generality-prereg.md, Bar R).
 BANK_RECIPES = {"saltgrass-ledger": "recipe.blind.toml", "saltgrass-asked": "recipe.asked.toml",
                 "saltgrass-detective": "recipe.detective.toml", "saltgrass-editor": "recipe.editor.toml",
-                "saltgrass-engineer": "recipe.engineer.toml"}
+                "saltgrass-engineer": "recipe.engineer.toml",
+                # A fourth persona, development from the start: the pair saltgrass-asked/-teacher is where recipe-author
+                # disagreement is diagnosed, so the held-out personas never are.
+                "saltgrass-teacher": "recipe.teacher.toml"}
 BANKS = list(BANK_RECIPES)
 # The inner ring: 16 of the 24 deals the one-shot serves and HEAD does not (resolve-confirm), in 10 of 19 windows.
 # world-s1 is the noisiest (7 of 18 deals flipped between two reads of the same code), so read it deal by deal.
