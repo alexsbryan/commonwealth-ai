@@ -831,9 +831,12 @@ def probe_model(model, paths, timeout=PROBE_TIMEOUT_S):
         return False, f"{model}: {refusal}"
     client = client_for(model, paths)
     try:
+        # A probe asks for one word, so euphemia's session-start hook gives it
+        # no brief (euphemia 0.3.7, EUPHEMIA_BRIEF=off): 231 probes had taken
+        # full briefs, 135k tokens (svrn-docs EUPHEMIA_AFTER_PILOT.md, "Reach").
         r = subprocess.run([client, "run", "--model", model, PROBE_PROMPT],
                            cwd=str(paths.workdir), capture_output=True, text=True,
-                           timeout=timeout)
+                           timeout=timeout, env={**os.environ, "EUPHEMIA_BRIEF": "off"})
     except subprocess.TimeoutExpired:
         return False, f"timeout after {timeout}s"
     except OSError as e:
