@@ -109,7 +109,10 @@ impl Report {
                 why.push(format!("a `must` failed: {}", musts.join(", ")));
             }
             if !feats.is_empty() {
-                why.push(format!("an advertised feature failed: {}", feats.join(", ")));
+                why.push(format!(
+                    "an advertised feature failed: {}",
+                    feats.join(", ")
+                ));
             }
             format!("NON-CONFORMANT ({})", why.join("; "))
         };
@@ -230,7 +233,9 @@ mod tests {
             Check::skip("b", Level::Feature, ""),
         ]);
         assert!(rep.is_conformant());
-        assert!(rep.verdict_line().starts_with("CONFORMANT; could not judge"));
+        assert!(rep
+            .verdict_line()
+            .starts_with("CONFORMANT; could not judge"));
     }
 
     #[test]
