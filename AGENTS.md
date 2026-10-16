@@ -212,7 +212,7 @@ When unsure: prefer `symbols(name)` → targeted Read of 15-25 lines around the 
 | "How many things depend on this?" | `blast("symbol_name")` |
 | "What does the narrative say about THIS symbol/file?" | `drift_findings(query: "name")` |
 | "Is the latest drift report still current?" | the boot block already tells you; otherwise `sovereign tools call drift_posture` |
-| "Is anyone else on the mesh touching this?" | `work_in_flight(scope, match_mode)` |
+| "Is anyone else on the mesh touching this?" | `commons_work(scope)` for claims (euphemia); `work_in_flight(scope, match_mode)` for live edits the daemon observed |
 | "Where is the coupling actually? / which symbols carry it?" | `sovereign tools call arch_report --corpus_id=<id>` |
 | "Architectural headlines + is the arch report current?" | `sovereign tools call arch_posture` |
 | "Where did my context/cache budget actually go?" | `sovereign cache-audit` (add `--sort ratio` / `--session <id>`) |
@@ -226,40 +226,38 @@ When unsure: prefer `symbols(name)` → targeted Read of 15-25 lines around the 
 | "What does bench lane X measure, and how do I run just it?" | `bench/lanes/README.md`, then `bench/lanes/<lane>/README.md` |
 | "Is this env var declared? What's its default/status?" | `quality/env-flags.toml` (the registry; human view `docs/ENV_FLAGS.md`); a NEW env read must be declared or `cargo xtask env-gate` fails (the required keys are `name`/`cluster`/`default`/`purpose`/`status`, and `status` must be one of `guard`/`shipped`/`experiment`/`deprecated`) |
 | "Is the CLI surface I just changed covered by anything?" | `sovereign contract` (`map` / `census` / `nightly`) — promises, what can actually fail, and the last lane verdict on this host |
-| "I'm starting non-trivial work — claim it" | `declare_scope(symbols, intent, ttl_seconds?)` |
-| "Done with what I claimed" | `release_scope(claim_id)` |
+| "I'm starting non-trivial work — claim it" | `commons_claim(scope, intent, ttl)` (euphemia) |
+| "Done with what I claimed" | `commons_release(claim)` |
+| "I found a cause, constraint or trap a later session would rediscover" | `commons_lessons` with its cue words first, then `commons_learn` (or `commons_correct` the lesson that is there) |
 
-### Coordination — work atlas (cross-mesh peer awareness)
+### Coordination — one claim system, euphemia's
 
-This repo runs on a Commonwealth mesh. Other agents (peer workstations running any harness, humans editing in their IDE) may be active in the same codebase. The work atlas (`docs/WORK_ATLAS.md`) gives you a view of what they're doing — and lets you publish what *you're* doing so they don't collide.
+Other sessions (on this machine and the operator's other machines, any
+harness) may be working in this repository. Claims and lessons are
+euphemia's: its session-start brief shows what they are on and what they
+learned, and its pre-edit hook says when an edit meets another session's
+claim or a lesson about that file. Sovereign's `declare_scope` and
+`release_scope` are retired for new claims (operator, 2026-10-16): a claim
+declared there never reaches a euphemia session, so two systems meant two
+half-pictures.
 
-**`work_in_flight` is the read surface.** It returns two arrays:
-
-- `claims[]` — explicit declarations from `declare_scope` (grade `declared`).
-- `observations[]` — passive signal from CodeWatcher edits, surfaced by the daemon's `AtlasObserver`. Grade `active` (≤5 min since last edit), `recent` (≤30 min), then dropped.
-
-Each entry carries `node_id` and `session_id`. Cross-reference the node_id against `sovereign mesh status` to identify the peer.
-
-**When to query before acting.** Before non-trivial work — refactoring a function, modifying a public API, touching a hot file — call:
-
-```
-work_in_flight(scope="<symbol-or-path>", match_mode="symbol" | "file")
-```
-
-Symbol mode matches SCIP symbol IDs and explicit claims. File mode matches file paths (with prefix matching) and is the right pick for "is anyone editing this file right now?" — observations are file-level in Phase 2.
-
-Read `branch_relation` before stopping. `same` (a peer on YOUR branch) is a real collision: STOP and tell the user "node <X> is currently working on <scope> on this branch with intent <Y>." `other` (a peer on a DIFFERENT branch) is awareness, not a lease — their work cannot collide with your working tree until one branch merges, so name it in one line ("node <X> has work on <scope> on branch <B>") and proceed; refusing on it stalls work that had nothing to collide with (watched 2026-09-23). `unknown` means a branch is missing on one side: say so, never round it to `same`, and never refuse on it. The tool returns `caller_branch` — what the relations were measured against — precisely so this is a measured fact, not a guess.
-
-**When to declare.** Use `declare_scope(symbols, intent, ttl_seconds?)` whenever you start work that:
-- Will take longer than ~5 minutes (peers querying within that window need to see your claim).
-- Touches a symbol or file other agents are likely to also touch.
-- Is part of a multi-step plan where you want peers to see the overall intent, not just the file edits the atlas observer will catch automatically.
-
-`intent` is the load-bearing field — write it as a short sentence a colleague could read and immediately know whether your work overlaps theirs. Default TTL is 4h; raise it for longer features (max 24h).
-
-**When to release.** Call `release_scope(claim_id)` when the work is genuinely done — committed, merged, or abandoned. Spec §3 forbids history: a released claim is gone, no surface records it. That's the point — peers see live state, not a log of everything ever attempted.
-
-If you forget, the TTL drops it. But explicit release is the courtesy.
+- **Claim** with `commons_claim(scope, intent, ttl)` before multi-step work
+  another session might also touch, with a ttl as long as you expect the
+  work to take; `commons_release` it when the work lands or stops. `intent`
+  is the load-bearing field: a sentence a colleague reads and knows whether
+  your work overlaps theirs. Claims are advisory, never locks.
+- **Read** with `commons_work(scope)`: each line says how the claim relates
+  to you (same worktree, same repository and branch, other branch, shared
+  contract) and what to do. A claim on YOUR branch is a real collision: tell
+  the operator before overlapping. One on another branch is awareness: name
+  it in a line and proceed.
+- **Live edits** the daemon's CodeWatcher saw (within ~5 minutes) are still
+  `work_in_flight(scope, match_mode="file")`'s `observations[]`; euphemia
+  has no passive observer. Its `claims[]` are sovereign's old declarations.
+- **Lessons:** a cause, constraint or trap a later session would otherwise
+  rediscover is a lesson (`commons_learn`, with its evidence, scoped with
+  `applies_to`), after `commons_lessons` shows it is not there already. A
+  design decision, invariant or todo for this codebase stays a `note`.
 
 <!-- portable:start mandatory pre-flight checks -->
 ### Mandatory pre-flight checks
@@ -272,7 +270,7 @@ These are hard to undo when skipped. Do not proceed without them.
 - **Before renaming a public symbol or HTTP route:** `drift_findings(query: "old_name", kind: "any")`. If any normative claim references it, the rename must update the narrative atomically. Skip this and the next drift run will surface an "anchor not in atlas" finding pointing at the rename.
 - **Before using a type from another crate:** `symbols("TypeName")` to confirm it exists and check its fields.
 - **Before minting a NEW type, trait, or enum:** `sovereign code converge noun <Name>` (~8s, read-only). It answers "does this concept already exist, and which crate owns it" across the whole workspace — the question local context cannot answer, and the one that stops a module privately re-deriving nouns that already have homes. A name already defined elsewhere is a convergence decision, not a free choice: reuse the owner's type, or rename yours apart and say which. The concept ratchet is the backstop, and it only sees your type after the next index.
-- **Before non-trivial edits to a hot file:** `work_in_flight(scope="<path>", match_mode="file")` to catch peer agents and humans editing the same file. Active-grade observations within the last 5 minutes mean someone is right there — coordinate, don't race. Skip this only when the change is local, mechanical, and unlikely to merge-conflict (typo, comment, isolated module).
+- **Before non-trivial edits to a hot file:** `commons_work(scope="<path>")` for other sessions' claims, and `work_in_flight(scope="<path>", match_mode="file")` to catch peer agents and humans editing the same file. Active-grade observations within the last 5 minutes mean someone is right there — coordinate, don't race. Skip this only when the change is local, mechanical, and unlikely to merge-conflict (typo, comment, isolated module).
 
 <!-- portable:end -->
 ### Compilation and test feedback — run the scripts
@@ -369,7 +367,7 @@ toolbox run -c sovereign-vulkan ./scripts/sovereign-test.sh --human
 
 Gate on the **exit code**, not on the summary line you read. Both cover every member of the monorepo Cargo workspace and resolve the repo's real feature contract (named once under "## Architecture"). Warm: lint ~27s, tests ~45s; cold ~3m30s.
 
-**If you touched retrieval, routing, synthesis, enrichment or inference, add the quality gate: `svrn quality check` (~30m).** The two scripts above are the *build* gate — neither runs a model against a question bank, so both stay green straight through an answer-quality regression. The check reports four verdicts per lane (passed / failed / could-not-judge / never-ran) and persists the table to `target/quality-check/<stamp>/summary.json`; gate on its exit code, and read lane KIND before you read a number (see `.claude/docs/MAIN_SESSION_PROTOCOL.md` §"Measuring quality"). A single lane runs alone with `--lane <id>`. If your change is scoped to retrieval, the lane that speaks to it is `retrieval-prod`, not the synth lane. `./scripts/sovereign-ci-bench.sh` is the FULL nightly run — hours, not minutes — and is where drift against committed baselines is judged.
+**If you touched retrieval, routing, synthesis, enrichment or inference, add the quality gate: `svrn quality check` (~30m), at end of day.** It loads models and runs for ~30 minutes beside cargo builds and the live daemon, so while worker pools, ralph loops or peer sessions share the host, record it as an end-of-day item in your frame and report rather than running it mid-session (operator, 2026-10-15: "we have a lot of concurrent work and I don't want to lock up the machine"). The two scripts above are the *build* gate — neither runs a model against a question bank, so both stay green straight through an answer-quality regression. The check reports four verdicts per lane (passed / failed / could-not-judge / never-ran) and persists the table to `target/quality-check/<stamp>/summary.json`; gate on its exit code, and read lane KIND before you read a number (see `.claude/docs/MAIN_SESSION_PROTOCOL.md` §"Measuring quality"). A single lane runs alone with `--lane <id>`. If your change is scoped to retrieval, the lane that speaks to it is `retrieval-prod`, not the synth lane. `./scripts/sovereign-ci-bench.sh` is the FULL nightly run — hours, not minutes — and is where drift against committed baselines is judged.
 
 **If you touched the CLI surface, add one more step: `sovereign contract census`.** A green workspace test run says the verbs still compile and dispatch; it says nothing about whether the use case is *proven*. The census answers that in one line — how many declared steps a lane actually runs, and how many of those check the output rather than the exit code. Three of its gates are hard zeros in the normal test run (`live_steps_all_assert_something`, `live_read_steps_assert_output`, `every_live_journey_asserts_output_somewhere`), so a new step with no `expect` block turns the suite red rather than shipping a tick nobody earned. If you added a command, `svrn contract map` is where you check that some journey drives it. Behavioural proof is the nightly lane (`svrn contract nightly` shows its last verdict and age).
 
@@ -521,4 +519,19 @@ across several machines; these keep them consistent.)
 - **No trailing `/schedule` offers.** Don't close turns proposing to
   schedule background follow-ups; the maintainer reads it as pestering.
 <!-- portable:end -->
+- **Prepare before a long run.** Ask a long, sealed or one-shot run its
+  question only when everything cheaper says it will pass: "Don't just sit
+  for the whole SAT if you know you're going to fail. Prep first, do the
+  homework" (operator, 2026-10-12). When a cheap partition, a calibration or
+  a dry run misses the bar, fix the cause on the cheap set first; a sealed
+  run goes only when the cheap evidence clears the bar with margin.
+- **Canon is constitutional.** Only a law, the wire frame, roles or doors,
+  or the crates themselves reach the operator as a canon act; the operator
+  is "sovereign over this constitutional monarchy" and the seat and workers
+  govern every other change, bound to the invariants and the architecture
+  (operator, 2026-10-15). When an act about implementation detail (a gate's
+  code, a fill the approved order already decided) is about to reach them,
+  fix the classification instead of relaying the ask. Escalate a Reserved
+  change, or a real case that puts a principle in tension with what the
+  work needs.
   An ordinary "next step?" for the task at hand is fine.
