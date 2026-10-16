@@ -52,7 +52,10 @@ pub(super) fn of_claims(
 ) -> HashMap<usize, Described> {
     let mut out = HashMap::<usize, Described>::new();
     for (&i, read) in names_of {
-        out.entry(i).or_default().names.extend(read.names.iter().cloned());
+        out.entry(i)
+            .or_default()
+            .names
+            .extend(read.names.iter().cloned());
     }
     for &i in chapter_subject_of.keys() {
         out.entry(i).or_default();

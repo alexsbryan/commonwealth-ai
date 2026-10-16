@@ -16,7 +16,9 @@ use super::super::pick::Candidate;
 use super::super::{DocumentReadField, DocumentReadOutcome, DocumentReadParticular};
 use super::{text, Contract};
 use crate::enrichment::atlas::SourceDocument;
-use crate::enrichment::ontology::{AttrDecl, OntologyPolicies, OntologyTypeDecl, SourceDecl, TypeIndex};
+use crate::enrichment::ontology::{
+    AttrDecl, OntologyPolicies, OntologyTypeDecl, SourceDecl, TypeIndex,
+};
 use crate::enrichment::pipeline::types::ChapterInput;
 use crate::enrichment::reconciliation::identity_signals::fold_identity_value;
 
@@ -243,8 +245,7 @@ pub(super) fn particular_fields(
             let cite = evidence.as_deref();
             let mut r = super::reading(a, value, cite, document, named, particulars, index);
             if matches!(r, DocumentReadField::Unknown { .. }) {
-                r = sourced_identity(subject, a, &names_of(particular), index, named)
-                    .unwrap_or(r);
+                r = sourced_identity(subject, a, &names_of(particular), index, named).unwrap_or(r);
             }
             (a.name.clone(), r)
         })
@@ -288,7 +289,10 @@ fn sourced_identity(
                 .chain(identity.iter())
                 .any(|n| fold_identity_value(n).is_some_and(|n| wanted.contains(&n))) =>
             {
-                Some(super::supported(Value::String(identity.get(at)?.clone()), scalar))
+                Some(super::supported(
+                    Value::String(identity.get(at)?.clone()),
+                    scalar,
+                ))
             }
             _ => None,
         })

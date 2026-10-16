@@ -317,7 +317,8 @@ pub(super) fn derive(
                         .as_str()
                         .map(|w| other_names(&claim.attributes, w))
                         .unwrap_or_default();
-                    let (key, value) = match of.map(|of| held(&graph, &exclusions, doc, of, &value, &also))
+                    let (key, value) = match of
+                        .map(|of| held(&graph, &exclusions, doc, of, &value, &also))
                     {
                         None => (words(&value), value),
                         Some(Held::Excluded { id, set }) => {

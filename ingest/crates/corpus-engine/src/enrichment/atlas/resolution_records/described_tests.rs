@@ -104,7 +104,10 @@ fn a_window_subjects_names_travel_with_its_description() {
 #[test]
 fn other_names_show_beside_a_subjects_name_and_a_readings_value() {
     let fields_of = HashMap::from([
-        (0, fields(json!({"counterparty": "Coastline", "product": "gas"}))),
+        (
+            0,
+            fields(json!({"counterparty": "Coastline", "product": "gas"})),
+        ),
         (1, fields(json!({"counterparty": "Input / Output"}))),
     ]);
     let read = ReadNames::of(&fields(json!({

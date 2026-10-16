@@ -5,8 +5,8 @@ use super::*;
 use crate::enrichment::atlas::resolution_records::resolve_declared_types;
 use crate::enrichment::atlas::resolve_records::{Answerer, DocumentResolution};
 use crate::enrichment::pipeline::document_read::{
-    ABOUT_ATTRIBUTE, CLAIM_FIELDS_ATTRIBUTE, LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE,
-    OTHER_NAMES_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE, SUBJECT_NAME_ATTRIBUTE, WORDS_ATTRIBUTE,
+    ABOUT_ATTRIBUTE, CLAIM_FIELDS_ATTRIBUTE, LOCAL_REF_ATTRIBUTE, OTHER_NAMES_ATTRIBUTE,
+    SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE, SUBJECT_NAME_ATTRIBUTE, WORDS_ATTRIBUTE,
 };
 use crate::index::EnrichmentChunkRow;
 use crate::recipe_ontology::OntologyBlock;

@@ -84,7 +84,10 @@ subject = "firm"
         .await
         .unwrap();
     let user = seen.lock().unwrap()[0].user.clone();
-    assert!(user.contains("\"other_names\""), "the answer shape lists other names");
+    assert!(
+        user.contains("\"other_names\""),
+        "the answer shape lists other names"
+    );
     assert!(
         !user.contains("joined by") && !user.contains("stated change"),
         "no prompt rule carries a rename or an amendment"
@@ -126,7 +129,12 @@ subject = "firm"
     let placed: Vec<_> = read.documents[1]
         .particulars
         .iter()
-        .map(|p| (p.evidence.as_str(), p.other_names.get("the harbor work").cloned()))
+        .map(|p| {
+            (
+                p.evidence.as_str(),
+                p.other_names.get("the harbor work").cloned(),
+            )
+        })
         .collect();
     assert_eq!(
         placed,
@@ -181,7 +189,10 @@ attributes = [{ name = "party", type = "ref", of = "firm" }]
     validate_and_stamp(&chapter, &policies, &mut extraction).unwrap();
     let read = extraction.document_read.as_ref().unwrap();
     assert!(
-        matches!(&read.documents[0].claims[0].fields["party"], DocumentReadField::Unknown { .. }),
+        matches!(
+            &read.documents[0].claims[0].fields["party"],
+            DocumentReadField::Unknown { .. }
+        ),
         "\"Input / Output\" is not in the document, and \"Output\" alone is another name: {:?}",
         read.documents[0].claims[0].fields
     );
