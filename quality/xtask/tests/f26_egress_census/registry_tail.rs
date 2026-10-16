@@ -188,6 +188,11 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // to compute pods (estate infrastructure, own auth).
     ("serve/crates/sovereign-compute/src/client.rs", Class::LocalDaemon, 1),
     ("serve/crates/sovereign-compute/src/supervisor.rs", Class::Mesh, 1),
+    // llama_router/live.rs (838734855): the warm-up `/models/load` and the
+    // 5 s `/models` poll, both to the supervised llama-server child at
+    // `http://127.0.0.1:{port}` — spawned with `--host 127.0.0.1` in the
+    // same file. Loopback.
+    ("serve/crates/sovereign-compute/src/llama_router/live.rs", Class::LocalDaemon, 2),
     // NEW ROW (2026-09-26, phase-b pb-serve-program d2f6e781c): the one kind
     // mount's test posts to a child router it bound on 127.0.0.1:0.
     ("serve/crates/sovereign-compute/src/server.rs", Class::TestOnly, 1),
