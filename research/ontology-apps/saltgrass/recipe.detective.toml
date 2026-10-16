@@ -1,0 +1,333 @@
+# The Saltgrass Ledger — a mystery manuscript read as a case file.
+#
+# Sixteen chapters of a novel set in Glasswater Stave. Read the way a case is
+# read: who says they were where, and when; what the tide ledger wrote down at
+# the time; who vouches for whom; and where the talk and the record part
+# company. The clock is the book's chapter order; story time (the hour, the
+# tide) is carried on each statement and event as its own attribute.
+
+[corpus]
+id = "saltgrass-detective"
+name = "The Saltgrass Ledger"
+description = "A sixteen-chapter mystery manuscript, read as a case file: characters and vessels, gate openings and movements, the tide ledger's entries, the village's accounts and suspicions, and the places they contradict one another."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# The manuscript as markdown, one `#`/`##` heading per chapter, chapters in
+# reading order.
+[acquire]
+type = "local_file"
+path = "/Users/alexsbryan/.svrnmesh/bench-corpora/chaos-saltgrass/saltgrass-ledger.txt"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "mystery-manuscript"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This is the manuscript of a mystery novel, The Saltgrass Ledger, set in Glasswater
+Stave, a salvage port whose lock basin is worked by gates. Corwin Pellow, harbormaster
+for twenty-one years, is found drowned in the basin at dawn. Maren Ashquill keeps the
+tide ledger: every opening of the gates, every vessel through them, every height of
+water against the painted gauge. Read it as a case file. What was written down at the
+time (a ledger entry, the harbormaster's own papers) is stronger than what anyone says
+afterwards, and first-hand sight is stronger than what was heard from someone else.
+Record every statement of where someone was and when, who said it, to whom, and how
+they could know it; keep a later account beside the earlier one rather than replacing
+it, because a story that changes is itself evidence. Times of day and tide heights are
+story time and must be taken as written. The narrator tells the story but is not a
+witness.
+"""
+must_not = [
+  "state a time, a tide height or a person's whereabouts the text does not give",
+  "treat a character's suspicion, or village opinion, as an established fact",
+  "merge two characters because they share a trade, a surname or a boat",
+]
+max_entities_per_section = 25
+
+# ── Shape: the people, the boats, the things ──────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "character"
+kind = "entity"
+description = "A person in the story: villager, harbor hand, salvager, vessel master, the dead man."
+attributes = [
+  { name = "name", type = "text", by = "most", description = "Full name as the text gives it." },
+  { name = "trade", type = "text", description = "What they do in the port (harbormaster, tide-ledger keeper, salvager, publican)." },
+]
+identity_fallback = ["name"]
+identity_criterion = "The same person when the text names them the same way, or when an office or epithet ('the harbormaster', 'old Pellow') plainly refers to a named person in that scene. Two people with the same surname or the same trade are different people unless the text joins them."
+
+[[enrichment.ontology.types]]
+name = "vessel"
+kind = "entity"
+description = "A boat or ship that passes the lock gates or lies in the basin."
+attributes = [
+  { name = "name", type = "text", by = "most" },
+  { name = "rig", type = "text", description = "What kind of craft: salvage tug, lugger, barge, dinghy." },
+  { name = "master", type = "text", description = "Who masters or owns her, as the text names them." },
+]
+identity_fallback = ["name"]
+identity_criterion = "The same vessel when its name is the same; an unnamed boat is the same as a named one only when the text says so."
+
+[[enrichment.ontology.types]]
+name = "item"
+kind = "entity"
+description = "A physical object that bears on what happened: the tide ledger itself, the painted gauge, a gate key, a lantern, a coat, a page."
+attributes = [
+  { name = "name", type = "text", by = "most" },
+  { name = "owner", type = "text", description = "Whose it is, as the text says." },
+]
+identity_fallback = ["name"]
+identity_criterion = "The same object when the text refers to it by the same description in the same keeping; two lanterns are two lanterns unless the text joins them."
+
+# ── Relations between people, and to boats ────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "tie"
+kind = "relation"
+from = "character"
+to = "character"
+description = "A standing connection between two people that could give a reason: kin, marriage, debt, employment, old grievance."
+attributes = [
+  { name = "nature", type = "text", values = ["kin", "marriage", "courtship", "debt", "employment", "partnership", "friendship", "grievance", "rivalry"] },
+]
+
+[[enrichment.ontology.types]]
+name = "vouches_for"
+kind = "relation"
+from = "character"
+to = "character"
+description = "One person gives another their whereabouts: 'he was with me', 'I saw her at home'. An alibi offered on someone else's behalf."
+
+[[enrichment.ontology.types]]
+name = "crews"
+kind = "relation"
+from = "character"
+to = "vessel"
+description = "A person masters, owns or works a vessel."
+
+# ── What happened: the events the statements are about ────────────────────
+
+[[enrichment.ontology.types]]
+name = "gate_opening"
+kind = "event"
+description = "One opening of the lock gates, letting water and vessels through."
+participants = { keeper = "character", vessel = "vessel" }
+attributes = [
+  { name = "at", type = "time", description = "The hour of the opening, as written." },
+  { name = "water_height", type = "quantity", unit = "ft", description = "Height of water against the painted gauge." },
+  { name = "direction", type = "text", values = ["inbound", "outbound", "both", "none"] },
+]
+identity_criterion = "The same opening when it is at the same tide on the same day; one opening can pass several vessels. Openings on different tides are different openings even with the same vessel."
+
+[[enrichment.ontology.types]]
+name = "movement"
+kind = "event"
+description = "Someone being somewhere over a span of story time: crossing the cobbles, on the quay, at the gates, at home, in the tavern. The unit an alibi is made of."
+participants = { who = "character" }
+attributes = [
+  { name = "where", type = "text", description = "The place, as the text names it: the cobbles, the gates, the quay, a house, the tavern." },
+  { name = "during", type = "time", range = true, description = "The span of story time, as written ('just before first light', 'six until the tide turned')." },
+]
+identity_criterion = "The same movement when it is the same person in the same place over overlapping time on the same day. The same person at the same place on another day is a different movement."
+
+[[enrichment.ontology.types]]
+name = "death"
+kind = "event"
+description = "A death in the story and its discovery: above all Corwin Pellow found in the basin at dawn."
+participants = { deceased = "character", found_by = "character" }
+attributes = [
+  { name = "where", type = "text", description = "Where the body was found, as written." },
+  { name = "found_at", type = "time" },
+]
+identity_criterion = "The same death when it is the same person; there is one death per person whatever the accounts say about how it came about."
+
+[[enrichment.ontology.types]]
+name = "dealing"
+kind = "event"
+description = "Money or goods changing hands, or offered: a salvage sale, a debt, a fee for passage, an attempted bribe."
+participants = { payer = "character", payee = "character" }
+attributes = [
+  { name = "amount", type = "quantity" },
+  { name = "goods", type = "text", description = "What was bought, sold or offered for." },
+  { name = "when", type = "time" },
+  { name = "outcome", type = "text", values = ["paid", "offered", "refused", "owed", "unknown"] },
+]
+identity_criterion = "The same dealing when the same two parties exchange the same thing on the same occasion; a second payment for the same goods is a second dealing."
+
+# ── What is said: the statements, the record and the talk ─────────────────
+
+[[enrichment.ontology.types]]
+name = "ledger_entry"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "gate_opening"
+description = "What the tide ledger records of a gate opening: written at the time, by the keeper. Note any sign the page was altered."
+grades = ["written at the time", "seen first-hand", "heard first-hand", "told by another", "village talk", "supposition"]
+attributes = [
+  { name = "recorded_by", type = "ref", of = "character" },
+  { name = "written_time", type = "time", description = "The hour the entry gives." },
+  { name = "water_height", type = "quantity", unit = "ft" },
+  { name = "vessel", type = "ref", of = "vessel" },
+  { name = "page_state", type = "text", values = ["clean", "struck through", "overwritten", "added later", "in another hand", "missing"] },
+]
+
+[[enrichment.ontology.types]]
+name = "account"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "movement"
+description = "Someone's statement of where a person was and when, their own whereabouts or another's. Keep each telling; do not replace an earlier account with a later one."
+grades = ["written at the time", "seen first-hand", "heard first-hand", "told by another", "village talk", "supposition"]
+attributes = [
+  { name = "speaker", type = "ref", of = "character" },
+  { name = "told_to", type = "ref", of = "character" },
+  { name = "claimed_time", type = "time", range = true, description = "The story time the speaker gives." },
+  { name = "basis", type = "text", values = ["saw it", "heard it", "was told", "wrote it down", "supposes"], description = "How the speaker says they know." },
+  { name = "stance", type = "text", values = ["affirms", "denies"] },
+]
+
+[[enrichment.ontology.types]]
+name = "suspicion"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "death"
+description = "Someone's view of how a death came about or who is to blame: accusation, whisper, theory, the village's verdict."
+grades = ["written at the time", "seen first-hand", "heard first-hand", "told by another", "village talk", "supposition"]
+attributes = [
+  { name = "speaker", type = "ref", of = "character" },
+  { name = "suspect", type = "ref", of = "character" },
+  { name = "cause", type = "text", values = ["accident", "drink", "own hand", "pushed", "struck", "unknown"] },
+  { name = "motive", type = "text" },
+  { name = "basis", type = "text", values = ["saw it", "heard it", "was told", "wrote it down", "supposes"] },
+  { name = "spoken", type = "text", values = ["openly", "in a whisper", "in thought only"] },
+]
+
+[[enrichment.ontology.types]]
+name = "dealing_report"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "dealing"
+description = "A statement or written note that money or goods changed hands or were offered: the harbormaster's papers, a debt remembered, a bribe refused."
+grades = ["written at the time", "seen first-hand", "heard first-hand", "told by another", "village talk", "supposition"]
+attributes = [
+  { name = "speaker", type = "ref", of = "character" },
+  { name = "amount", type = "quantity" },
+  { name = "basis", type = "text", values = ["saw it", "heard it", "was told", "wrote it down", "supposes"] },
+  { name = "stance", type = "text", values = ["affirms", "denies"] },
+]
+
+[[enrichment.ontology.types]]
+name = "vessel_sighting"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "vessel"
+description = "A statement that a vessel was seen or heard somewhere at some hour: at the gates, in the basin, off the point, moored where she should not be. Set beside the ledger, it shows passages the ledger does or does not record."
+grades = ["written at the time", "seen first-hand", "heard first-hand", "told by another", "village talk", "supposition"]
+attributes = [
+  { name = "speaker", type = "ref", of = "character" },
+  { name = "seen_at", type = "time", description = "The story time given." },
+  { name = "where", type = "text" },
+  { name = "basis", type = "text", values = ["saw it", "heard it", "was told", "wrote it down", "supposes"] },
+]
+
+[[enrichment.ontology.types]]
+name = "trace"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "item"
+description = "A statement about a physical object and what it shows: where it was found, who had it, what state it was in: a torn ledger page, a lantern on the quay, a gate key out of its place."
+grades = ["written at the time", "seen first-hand", "heard first-hand", "told by another", "village talk", "supposition"]
+attributes = [
+  { name = "speaker", type = "ref", of = "character" },
+  { name = "held_by", type = "ref", of = "character" },
+  { name = "where", type = "text" },
+  { name = "when", type = "time" },
+  { name = "condition", type = "text", description = "The state of the object as described: wet, torn, missing, moved." },
+]
+
+[[enrichment.ontology.types]]
+name = "threat"
+kind = "claim"
+force = "commissive"
+scope = "in_work"
+subject = "character"
+description = "One person binding themselves to do something to or for another: a threat, a warning, a promise to keep quiet, a promise to pay."
+attributes = [
+  { name = "speaker", type = "ref", of = "character" },
+  { name = "undertaking", type = "text", description = "What they say they will do." },
+  { name = "spoken", type = "text", values = ["openly", "in a whisper", "in thought only"] },
+]
+
+# ── Conditions that move across the book ──────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "standing"
+kind = "state"
+of = "character"
+description = "How a character stands in the case at a point in the book: trusted, watched, suspected, accused, cleared, exposed, afraid."
+
+# ── Who speaks ─────────────────────────────────────────────────────────────
+
+[enrichment.ontology.voices]
+not_entities = ["the narrator"]
+
+# ── Change: chapter order; nothing said later wipes out what was said earlier
+
+[enrichment.ontology.change]
+clock = "narrative"
+
+# ── Derivation: where the record and the talk part company ────────────────
+
+[enrichment.ontology.tension]
+label = "discrepancy"
+between = ["ledger_entry", "account", "vessel_sighting", "trace", "suspicion", "dealing_report"]
+same = []
+not_conflicts = [
+  "two witnesses giving an hour a few minutes apart, or 'first light' against 'dawn'",
+  "a person's account of their own movements beside another's account of a different hour",
+  "two characters suspecting different people: rival opinions, not a contradiction of fact",
+  "a ledger entry and an account that concern different tides or different days",
+  "a character's later account that adds detail without changing a time, a place or who was there",
+]
+
+[enrichment.ontology.derive]
+configurations = true
+arguments = false
+
+[[enrichment.ontology.patterns]]
+type = "circular_flow"
+name = "mutual_alibis"
+description = "People who vouch for each other in a ring: A puts B somewhere, B puts A there."
+min_entities = 2
+edge_types = ["vouches_for"]
+
+[[enrichment.ontology.patterns]]
+type = "role_overlap"
+name = "alibi_from_an_interested_party"
+description = "The person giving an alibi has a standing tie to the one it covers: kin, debt, employment."
+[enrichment.ontology.patterns.entity_roles]
+voucher = "vouches_for.from"
+connected = "tie.from"

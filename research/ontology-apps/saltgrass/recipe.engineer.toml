@@ -1,0 +1,181 @@
+# The Saltgrass Ledger — a mystery novel in sixteen chapters, read as a fact base.
+#
+# Model: one event table (`occurrence`) that every account and ledger line
+# points at. Both are claims ABOUT occurrences, so a ledger entry and a
+# testimony that disagree are two rows with the same subject key — the tension
+# selector joins on it. Who, which vessel, when and where live on `occurrence`
+# only; each statement keeps its own cited reading of them.
+
+[corpus]
+id = "saltgrass-engineer"
+name = "The Saltgrass Ledger"
+description = "A mystery novel set in Glasswater Stave: the harbormaster's death, the tide ledger's record of the lock gates, and what each villager claims, suspects and hides."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# The manuscript, one file, each chapter a `## ` section in reading order.
+[acquire]
+type = "local_file"
+path = "/Users/alexsbryan/.svrnmesh/bench-corpora/chaos-saltgrass/saltgrass-ledger.txt"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "village-mystery"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+A mystery novel in sixteen chapters, set in Glasswater Stave, a salvage port on the
+Hethering coast with a lock basin behind heavy gates. Corwin Pellow, harbormaster for
+twenty-one years, is found drowned in the basin at dawn; the village believes it was
+no accident but says so only in whispers. Maren Ashquill keeps the tide ledger: every
+opening of the gates, every vessel through them, every height of water on the painted
+gauge. The ledger is a record kept inside the story and is evidence like any witness.
+Read every statement as said by someone, at a point in the book: what a villager says
+happened, what the ledger records, whom someone suspects and why. Keep firsthand
+sight apart from hearsay and supposition. A statement later shown to be a lie is still
+a statement; keep it. The narrator tells the story but is not a villager.
+"""
+must_not = [
+  "state who killed Corwin Pellow, or that he was killed, as fact unless the text itself establishes it",
+  "present a rumour, suspicion or whisper as something a character saw",
+]
+
+[enrichment.ontology.voices]
+not_entities = ["the narrator"]
+
+# ── entities ─────────────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "villager"
+kind = "entity"
+role_of = "person"
+description = "A named person of Glasswater Stave or who comes through it: the harbormaster, the ledger keeper, salvagers, crews, kin."
+attributes = [
+  { name = "occupation", type = "text", by = "agree" },
+  { name = "years_in_post", type = "quantity", unit = "years" },
+]
+identity_fallback = ["name"]
+identity_criterion = "The same person: one full name, a surname alone, a first name, a title (\"the harbormaster\") or a nickname are one villager when the text makes them the same individual. Two people who share a surname (kin) are different villagers."
+
+[[enrichment.ontology.types]]
+name = "vessel"
+kind = "entity"
+description = "A boat or ship that passes the lock gates or lies in the basin."
+identity_fallback = ["name"]
+identity_criterion = "The same named boat. A boat called by its master's name (\"Pellow's launch\") is the named boat that master keeps, when the text makes that clear."
+
+[[enrichment.ontology.types]]
+name = "harbor_place"
+kind = "entity"
+specializes = "place"
+description = "A fixed place in the village or harbor: the lock basin, the gates, the painted gauge, the cobbles, a house, a quay."
+identity_fallback = ["name"]
+identity_criterion = "The same physical place, whatever it is called (\"the basin\", \"the lock\")."
+
+# ── events: the one table every claim points at ─────────────────────────
+
+[[enrichment.ontology.types]]
+name = "occurrence"
+kind = "event"
+description = "Something that happened at a place and a time in the story: a gate opening, a vessel's passage, the harbormaster's morning crossing, a meeting, the death, the finding of the body."
+participants = { actor = "villager", vessel = "vessel", place = "harbor_place" }
+attributes = [
+  { name = "occurrence_kind", type = "text", values = ["gate opening", "gate closing", "vessel passage", "routine walk", "meeting", "quarrel", "death", "finding of the body", "other"], by = "most" },
+  { name = "actor", type = "ref", of = "villager" },
+  { name = "vessel", type = "ref", of = "vessel" },
+  { name = "at", type = "time", range = true },
+  { name = "place", type = "ref", of = "harbor_place" },
+]
+identity_criterion = "The same happening: same kind, same place, same night or tide. Two accounts that put it at different hours are still one occurrence if they describe the same happening; that difference is the tension, not a second occurrence."
+
+# ── relations ────────────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "tie"
+kind = "relation"
+from = "villager"
+to = "villager"
+description = "A standing connection between two villagers that could give one a reason: kin, money owed, a grudge, an offered bribe."
+attributes = [
+  { name = "tie_kind", type = "text", values = ["kin", "marriage", "debt", "employment", "grudge", "rivalry", "affair", "bribe offered", "friendship"] },
+]
+
+# ── states ───────────────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "standing"
+kind = "state"
+of = "villager"
+description = "How a villager stands in the investigation at a point in the book: trusted, suspected, cleared, exposed."
+
+# ── claims ───────────────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "account"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "occurrence"
+description = "What a villager says, in the story, about something that happened: where someone was, when, what they saw."
+grades = ["saw it", "heard it said", "supposes"]
+attributes = [
+  { name = "speaker", type = "ref", of = "villager" },
+  { name = "basis", type = "text", values = ["saw it", "heard it said", "supposes"] },
+]
+
+[[enrichment.ontology.types]]
+name = "ledger_entry"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "occurrence"
+description = "A line of the tide ledger as the story quotes or describes it: a gate opened or closed, a vessel through, a water height on the painted gauge."
+attributes = [
+  { name = "entered_by", type = "ref", of = "villager" },
+  { name = "gate_action", type = "text", values = ["opened", "closed"] },
+  { name = "water_height", type = "quantity", unit = "ft" },
+]
+
+[[enrichment.ontology.types]]
+name = "suspicion"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "villager"
+description = "One villager suspecting, accusing or whispering about another: whom, by whom, and why."
+grades = ["accusation", "whisper", "unspoken"]
+attributes = [
+  { name = "held_by", type = "ref", of = "villager" },
+  { name = "motive", type = "text" },
+  { name = "spoken", type = "text", values = ["accusation", "whisper", "unspoken"] },
+]
+
+# ── change and derivation ────────────────────────────────────────────────
+
+# Time is the book's order. Nothing supersedes: a later account does not
+# delete an earlier one; a lie stays on record as evidence.
+[enrichment.ontology.change]
+clock = "narrative"
+
+[enrichment.ontology.tension]
+label = "contradiction"
+between = ["account", "ledger_entry"]
+same = ["subject"]
+not_conflicts = [
+  "Two accounts of the same occurrence where one speaker saw it and the other only heard it said, and they agree in substance.",
+  "A ledger entry's time and an account's time that differ only by rounding to the tide or the hour.",
+]
+
+[enrichment.ontology.derive]
+configurations = true
