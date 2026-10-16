@@ -26,3 +26,18 @@ bank minus 2 (of 42).
 
 **A failed bar** is reported with its numbers; it is a finding for the development loop, never a diagnosis of the
 held-out corpus.
+
+## Revisions
+
+**2026-10-16, before any read below; to cut spend about 70% (operator: "Can you do it with less?").**
+- The judge asks the five presentations in order and stops a question once one verdict has three: the majority
+  of five, unchanged, at 134-135 calls instead of 210 (checked on the saved presentations, seeds 1-5 and 6-10,
+  42/42 verdicts identical).
+- A fresh read at 79ab8ad4a counts as one of an arm's two reads: the reader at today's code makes identical
+  records (867240dec's replay). saltgrass-asked's first read is structural-fresh-sg, saltgrass-ledger's is
+  structural-fresh-ledger; each gets one new read.
+- Bar G is judged on saltgrass-ledger only for now, against the two one-shot reads on file
+  (runs/ceiling/saltgrass/oneshot1.json, oneshot2.json; their record types are recipe.blind.toml's).
+- Each persona gets one read. Bar R's read-to-read gap is pooled: the mean of |A1 - A2| over the recipes with two
+  reads (asked, ledger), and within-recipe agreement likewise pooled. A recipe pair passes when its score gap and
+  its agreement are within the pooled yardstick as the bar states.

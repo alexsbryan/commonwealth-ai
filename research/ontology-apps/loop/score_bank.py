@@ -6,6 +6,8 @@ model, temperature 0, no reasoning, one prompt), over five presentations of the 
 each record's statement order shuffled by fixed seeds), and its verdict is the majority of the five. One
 presentation moved one record set's score by 3 of 42 (23-26 over seeds 1-5, 2026-10-16) while re-asking one
 presentation moved it by none (26, 26, 26), so the answerer reads order, and one ask is not a measurement.
+The presentations are asked in seed order and a question stops once one verdict has three of them: the majority
+of five can no longer change, so the verdict is the full majority's at about two thirds of the calls.
 Each presentation is judged by the bank's own rule:
   present / partially_present / provenance_trap  right when every gold keyword is in the answer
   distractor                                     right when the gold keywords are in it and the distractor is not
@@ -92,25 +94,29 @@ if __name__ == "__main__":
     bank = tomllib.load(open(sys.argv[2], "rb"))["questions"]
     texts = {k: render(presented(records, k)) for k in PRESENTATIONS}
 
-    def one(job):
-        k, q = job
-        try:
-            ans = ask(texts[k], q["question"])
-            return k, q["id"], ans, judge(q, ans)
-        except Exception as e:  # a failed call judges nothing
-            return k, q["id"], f"call failed: {e}", "could_not_judge"
+    def asked(q):
+        per = []
+        for k in PRESENTATIONS:
+            try:
+                ans = ask(texts[k], q["question"])
+                v = judge(q, ans)
+            except Exception as e:  # a failed call judges nothing
+                ans, v = f"call failed: {e}", "could_not_judge"
+            per.append(dict(seed=k, verdict=v, answer=ans))
+            if max(sum(x["verdict"] == w for x in per) for w in ("right", "wrong")) >= 3:
+                break  # decided: the presentations left cannot change the majority of five
+        return per
 
     with ThreadPoolExecutor(8) as pool:
-        got = list(pool.map(one, [(k, q) for k in PRESENTATIONS for q in bank]))
-    rows = []
-    for q in bank:
-        per = [dict(seed=k, verdict=v, answer=a) for k, i, a, v in got if i == q["id"]]
-        rows.append(dict(id=q["id"], qtype=q["qtype"], verdict=majority([x["verdict"] for x in per]), presentations=per))
+        pers = list(pool.map(asked, bank))
+    rows = [dict(id=q["id"], qtype=q["qtype"], verdict=majority([x["verdict"] for x in per]), presentations=per)
+            for q, per in zip(bank, pers)]
     by = {}
     for r in rows:
         by.setdefault(r["qtype"], {}).setdefault(r["verdict"], 0)
         by[r["qtype"]][r["verdict"]] += 1
     summary = dict(records=len(records), record_chars=len(texts[1]), presentations=len(PRESENTATIONS),
+                   calls=sum(len(r["presentations"]) for r in rows),
                    right=sum(r["verdict"] == "right" for r in rows),
                    judged=sum(r["verdict"] != "could_not_judge" for r in rows), by_qtype=by)
     # This file, the model that answered and the bank it judged by: the stamp table.py checks before setting two
