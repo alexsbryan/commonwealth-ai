@@ -731,14 +731,14 @@ async fn resolve_type(
         let id = AtomId::exact_entity_content_hash(&rec.id, &ty, corpus_id);
         debug!(r#type = %t.name, record = %rec.id, atom = %id.as_str(), statements = rec.statements.len(), "atlas/resolve: record becomes an atom");
         atom_of.insert(rec.id.as_str(), id.clone());
-        let (canonical_name, aliases) = named::of_record(&t.name, rec, &read_statement, surface);
+        let called = named::of_record(&t.name, rec, &read_statement, surface);
         atoms.entities.push(Entity {
             id,
-            canonical_name,
-            aliases,
+            canonical_name: called.name,
+            aliases: called.aliases,
             entity_type: ty.clone(),
             first_appearance: first,
-            description: String::new(),
+            description: called.first_passage,
             defining_quote: None,
             salience: 0.0,
             enrichment_depth: EnrichmentDepth::Extracted,

@@ -893,9 +893,11 @@ question the pipeline asks about a type is a method on the resolved
   order never changes the records) under `Answerer::Select` with the adopted
   proposer (`ProposalRule::default`, `propose::{NEIGHBOURS, MAX_CANDIDATES,
   MIN_SIMILARITY}`); each record becomes an atom whose id hashes its opening
-  statement, called by the name a window read gave the earliest of its
-  statements that has one, its other read names its aliases, else by its
-  opening passage (`resolution_records/named.rs`; shown, never compared), and
+  statement, called by the name most of its statements' readers gave it (a
+  tie to the first met in fold order, so one misplaced statement cannot
+  rename it), its other read names its aliases and its opening passage its
+  first passage (the record view's `text`), else by its opening passage
+  (`resolution_records/named.rs`; shown, never compared), and
   each claim's subject its statement's record. 3b leaves such a
   subject unresolved, and the type's atoms 3a merged from Phase-1 sketches are
   retired with every reference to them, dropped and recorded, never repointed.

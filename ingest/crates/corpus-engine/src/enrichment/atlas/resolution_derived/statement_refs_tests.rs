@@ -295,6 +295,19 @@ async fn a_record_is_called_by_the_name_its_reader_gave_it() {
     };
     assert_eq!(name_of("told").as_deref(), Some("Ivo"));
     assert_eq!(name_of("heard").as_deref(), Some("Nell"));
+    // Its opening passage stays on it as its first passage (the record view's
+    // text), not as its name: what a reader first read the record from is not
+    // dropped when a name replaces the passage (saltgrass bank 31 -> 27 on
+    // arm guard-replay-sg, 2026-10-16).
+    let ivo = entities
+        .iter()
+        .find(|e| e.canonical_name == "Ivo")
+        .expect("Ivo's record");
+    assert!(
+        ivo.description.contains("crossed the cobbles"),
+        "{:?}",
+        ivo.description
+    );
 }
 
 /// The two accounts of `TOLD` and `HEARD`, resolved and derived, `told`'s
