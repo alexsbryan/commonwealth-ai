@@ -222,9 +222,6 @@ enum Choose {
     Spread,
 }
 
-/// The scripted oracle (module doc), recording every question it is asked. A
-/// wave is answered question by question, as a port that cannot batch does
-/// (`resolve_records::one_by_one`), so it records each single question.
 /// What a fixture knows of its particulars, for a model that answers RESOLVE
 /// right: per declared type, words that place a statement (a company's name in
 /// the statement's own words; for any other type, words in its document) and
@@ -253,82 +250,79 @@ fn candidate_blocks(user: &str, labels: &[String]) -> Vec<String> {
     blocks
 }
 
+/// The scripted oracle (module doc), recording every question it is asked.
 fn oracle(asked: Arc<Mutex<Vec<ChatPrompt>>>, choose: Choose, parties: Parties) -> InferenceFn {
-    corpus_engine::enrichment::atlas::resolve_records::one_by_one(Arc::new(
-        move |prompt: &ChatPrompt, _| {
-            asked.lock().unwrap().push(prompt.clone());
-            let labels: Vec<String> = prompt
-                .response_schema
-                .as_ref()
-                .and_then(|s| s["enum"].as_array())
-                .map(|a| a.iter().map(|l| l.as_str().unwrap().to_string()).collect())
-                .unwrap_or_default();
-            let phase = prompt.phase_id.clone().unwrap_or_default();
-            // RESOLVE's reasoning before its choice: words the choice is read after,
-            // which the oracle's choice does not read.
-            let answer = if phase == "resolve_reason" {
-                Ok("Under the rule, the statement's own words decide.".to_string())
-            } else if phase == "document_window" {
-                Ok(window_answer(&prompt.user, choose, parties).to_string())
-            } else if labels.is_empty() {
-                Err(corpus_engine::Error::Extraction(format!(
-                    "the oracle answers forced choices only; `{phase}` is not one"
-                )))
-            } else {
-                let pick = match phase.as_str() {
-                    // A statement the fixture places is answered right: the
-                    // candidate showing its mark, or none when none does.
-                    // Every other one, the first.
-                    "resolve_select" if !parties.is_empty() => {
-                        let of = prompt
-                            .user
-                            .strip_prefix("Type: ")
-                            .and_then(|rest| rest.split_whitespace().next())
-                            .unwrap_or("");
-                        let statement = prompt
-                            .user
-                            .split_once("its words in [[ ]]:")
-                            .map_or("", |(_, statement)| statement);
-                        let words = statement
-                            .split_once("[[")
-                            .and_then(|(_, rest)| rest.split_once("]]"))
-                            .map_or("", |(words, _)| words);
-                        let document = prompt
-                            .user
-                            .split_once("Document titled")
-                            .and_then(|(_, rest)| rest.split_once("\n>>>"))
-                            .map_or("", |(document, _)| document);
-                        let placed = parties.iter().find(|(t, key, _)| {
-                            *t == of
-                                && if of == "company" {
-                                    words.contains(key)
-                                } else {
-                                    document.to_lowercase().contains(&key.to_lowercase())
-                                }
-                        });
-                        match placed {
-                            Some((_, _, mark)) => candidate_blocks(&prompt.user, &labels)
-                                .iter()
-                                .position(|block| {
-                                    block.to_lowercase().contains(&mark.to_lowercase())
-                                })
-                                .unwrap_or(labels.len() - 1),
-                            None => 0,
-                        }
+    Arc::new(move |prompt: &ChatPrompt, _| {
+        asked.lock().unwrap().push(prompt.clone());
+        let labels: Vec<String> = prompt
+            .response_schema
+            .as_ref()
+            .and_then(|s| s["enum"].as_array())
+            .map(|a| a.iter().map(|l| l.as_str().unwrap().to_string()).collect())
+            .unwrap_or_default();
+        let phase = prompt.phase_id.clone().unwrap_or_default();
+        // RESOLVE's reasoning before its choice: words the choice is read after,
+        // which the oracle's choice does not read.
+        let answer = if phase == "resolve_reason" {
+            Ok("Under the rule, the statement's own words decide.".to_string())
+        } else if phase == "document_window" {
+            Ok(window_answer(&prompt.user, choose, parties).to_string())
+        } else if labels.is_empty() {
+            Err(corpus_engine::Error::Extraction(format!(
+                "the oracle answers forced choices only; `{phase}` is not one"
+            )))
+        } else {
+            let pick = match phase.as_str() {
+                // A statement the fixture places is answered right: the
+                // candidate showing its mark, or none when none does.
+                // Every other one, the first.
+                "resolve_select" if !parties.is_empty() => {
+                    let of = prompt
+                        .user
+                        .strip_prefix("Type: ")
+                        .and_then(|rest| rest.split_whitespace().next())
+                        .unwrap_or("");
+                    let statement = prompt
+                        .user
+                        .split_once("its words in [[ ]]:")
+                        .map_or("", |(_, statement)| statement);
+                    let words = statement
+                        .split_once("[[")
+                        .and_then(|(_, rest)| rest.split_once("]]"))
+                        .map_or("", |(words, _)| words);
+                    let document = prompt
+                        .user
+                        .split_once("Document titled")
+                        .and_then(|(_, rest)| rest.split_once("\n>>>"))
+                        .map_or("", |(document, _)| document);
+                    let placed = parties.iter().find(|(t, key, _)| {
+                        *t == of
+                            && if of == "company" {
+                                words.contains(key)
+                            } else {
+                                document.to_lowercase().contains(&key.to_lowercase())
+                            }
+                    });
+                    match placed {
+                        Some((_, _, mark)) => candidate_blocks(&prompt.user, &labels)
+                            .iter()
+                            .position(|block| block.to_lowercase().contains(&mark.to_lowercase()))
+                            .unwrap_or(labels.len() - 1),
+                        None => 0,
                     }
-                    _ => 0,
-                };
-                let rest = 0.1 / labels.len() as f64;
-                let dist: Map<String, Value> = labels
-                    .iter()
-                    .enumerate()
-                    .map(|(i, l)| (l.clone(), json!(if i == pick { 0.9 } else { rest })))
-                    .collect();
-                Ok(Value::Object(dist).to_string())
+                }
+                _ => 0,
             };
-            Box::pin(async move { answer })
-        },
-    ))
+            let rest = 0.1 / labels.len() as f64;
+            let dist: Map<String, Value> = labels
+                .iter()
+                .enumerate()
+                .map(|(i, l)| (l.clone(), json!(if i == pick { 0.9 } else { rest })))
+                .collect();
+            Ok(Value::Object(dist).to_string())
+        };
+        Box::pin(async move { answer })
+    })
 }
 
 /// A deterministic embedding of the text alone.

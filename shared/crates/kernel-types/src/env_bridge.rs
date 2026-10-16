@@ -88,6 +88,7 @@ pub const REMOVED_ENV: &[RemovedEnv] = &[
     RemovedEnv { name: "SOVEREIGN_SUFFICIENCY_CHARS", instead: "retired with SOVEREIGN_AGENTIC_KQ's loop (cc78b933b)" },
     RemovedEnv { name: "SOVEREIGN_SUFFICIENCY_CHUNKS", instead: "retired with SOVEREIGN_AGENTIC_KQ's loop (cc78b933b)" },
     RemovedEnv { name: "SOVEREIGN_TITLE_EXPAND", instead: "retired: the title-expansion retrieval step was deleted (ac032e5bc)" },
+    RemovedEnv { name: "SOVEREIGN_WAVES_ONE_BY_ONE", instead: "retired: nothing builds a forced-choice wave since the passes reader was deleted (3058feb36), so every question already goes alone" },
 ];
 
 /// The [`REMOVED_ENV`] rows the given env keys set, under either prefix, once

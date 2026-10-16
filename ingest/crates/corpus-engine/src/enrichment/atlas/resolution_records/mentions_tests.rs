@@ -110,7 +110,7 @@ fn mention(id: &str, doc: &str, line: &str, words: &str, n: usize) -> Claim {
 /// as Tucson Electric in another message, or none while there is no such
 /// record. Any other question is refused. Each question is kept.
 fn knowing(asked: Arc<Mutex<Vec<ChatPrompt>>>) -> crate::InferenceFn {
-    super::super::resolve_records::one_by_one(Arc::new(move |prompt: &ChatPrompt, _| {
+    Arc::new(move |prompt: &ChatPrompt, _| {
         asked.lock().unwrap().push(prompt.clone());
         let labels: Option<Vec<String>> = prompt
             .response_schema
@@ -164,7 +164,7 @@ fn knowing(asked: Arc<Mutex<Vec<ChatPrompt>>>) -> crate::InferenceFn {
             )),
         };
         Box::pin(async move { answer })
-    }))
+    })
 }
 
 /// The source's records are RESOLVE's first records, under the atom ids the

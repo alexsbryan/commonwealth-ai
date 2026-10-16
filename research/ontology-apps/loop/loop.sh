@@ -31,7 +31,7 @@ case "$1" in ""|all) set -- $(python3 $L/corpora.py --set all) ;; inner) set -- 
 root=runs/loop/$arm
 [ -e $root ] && [ -z "$FORCE" ] && { echo "$root exists; name a new arm (FORCE=1 overwrites)" >&2; exit 2; }
 mkdir -p $root
-export SOVEREIGN_WAVES_ONE_BY_ONE=1 SOVEREIGN_NO_STALE_WARN=1 NO_COLOR=1
+export SOVEREIGN_NO_STALE_WARN=1 NO_COLOR=1
 export RUST_LOG=info,corpus_engine::enrichment::pipeline::document_read::window=trace,corpus_engine::enrichment::atlas::resolve_records=debug
 asker=${ASKER:-recorded}
 head=$(git rev-parse --short HEAD)
