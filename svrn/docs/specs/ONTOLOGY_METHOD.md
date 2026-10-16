@@ -135,7 +135,10 @@ passage an author sends twice is read where it first appears. Each class is coun
 classes hold no word of any format (`document_read/line_classes.rs`). Nor is a line before the extractor's
 `body_start` (a header block, whose facts are declared) or inside a segment the extractor marks as an embedded
 message (what it says is that message's, dated and authored by its own header): the format knowledge stays in
-the extractor that writes those offsets into the document's metadata (amended 2026-10-12, delivery slice 1). The rest is asked a
+the extractor that writes those offsets into the document's metadata (amended 2026-10-12, delivery slice 1). The window
+reader shows a pointer to the earlier document in place of each run of quoted lines (`[quotes d3]`, or that
+document's date when it is outside the window), so a reply's referent is read where it was written, and the quoted
+text stays unshown and uncitable (2026-10-15). The rest is asked a
 fixed plan of small closed questions generated from the contract — a pure function of it, unchanged by
 renaming: **Locate** each declared claim kind no protocol rule names (line sets or none; each kind shown with its closed-valued fields' declared
 values and descriptions, the words a line states it in; the system prompt mentions values only when a kind

@@ -183,6 +183,8 @@ pub struct LineClasses {
     /// Document key → its layout, for documents whose extractor stated one
     /// that agrees with their canonical text.
     layouts: HashMap<String, Layout>,
+    /// Each document's date as the declared clock reads it, by index.
+    dates: Vec<Option<String>>,
 }
 
 /// A line's text as compared: from its first to its last letter or digit,
@@ -244,9 +246,10 @@ impl LineClasses {
             })
             .collect();
         let (mut laid, mut unlaid) = (0usize, 0usize);
-        for (index, (d, _)) in read.iter().enumerate() {
+        for (index, (d, date)) in read.iter().enumerate() {
             out.docs.insert(d.key().to_string(), (index as u32, None));
             out.keys.push(d.key().to_string());
+            out.dates.push(date.clone());
             match Layout::of(d) {
                 Ok(Some(layout)) => {
                     laid += 1;
@@ -382,6 +385,30 @@ impl LineClasses {
                 .or_else(|| marked().map(|from| carried(LineClass::Marked, from)));
         }
         out
+    }
+
+    /// Where each of `lines`, `document`'s lines in order, was written
+    /// before: the earlier document holding it as a passage or under a mark
+    /// (`carried`), whatever its layout says of it, so an embedded reply's
+    /// lines name the message they quote. `None` where no earlier document
+    /// holds the line.
+    pub(super) fn sources(
+        &self,
+        document: &str,
+        raw: &str,
+        lines: &[super::passes::Line],
+    ) -> Vec<Option<&str>> {
+        let texts: Vec<&str> = lines.iter().map(|l| &raw[l.start..l.end]).collect();
+        self.carried(document, &texts)
+            .into_iter()
+            .map(|c| c.map(|c| c.from))
+            .collect()
+    }
+
+    /// A document's date as the declared clock reads it.
+    pub(super) fn date_of(&self, document: &str) -> Option<&str> {
+        let &(index, _) = self.docs.get(document)?;
+        self.dates.get(index as usize)?.as_deref()
     }
 
     /// What keys a cached read of `documents`: each one's classified lines,

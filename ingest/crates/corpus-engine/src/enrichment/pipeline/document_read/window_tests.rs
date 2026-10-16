@@ -490,3 +490,77 @@ async fn one_malformed_element_costs_only_itself() {
 fn an_answer_with_no_readable_array_still_fails() {
     assert!(super::answer::parse(r#"{"particulars": "none" "claims"}"#, "sec_1").is_err());
 }
+
+/// Failing input, named: replies whose quoted history named the deal they
+/// answer ("redline", "the Waha piece") were shown with that history hidden
+/// and nothing in its place, so the reader could not tell which deal they
+/// answer and split or merged them (world-s4 faircroft-d2, world-s3
+/// velica-d3; arm c123-verify, 2026-10-15). Hidden quoted lines are replaced
+/// by a pointer to the document they come from: its label in the window, or
+/// its date outside it. The quoted text stays unshown and uncitable, and a
+/// claim's sentence never takes in the pointer.
+#[tokio::test]
+async fn a_reply_points_to_the_document_it_quotes() {
+    let mut policies = policies();
+    policies.change.document = Some(crate::enrichment::ontology::DocumentFieldsDecl {
+        date: Some("date".into()),
+        thread: None,
+        id: None,
+        author: None,
+    });
+    let both = input_chapter(&[
+        row(
+            1,
+            "doc-a",
+            "Issue 42 in uv is open.\nIt fails on start.",
+            r#"{"date":"Mon, 14 May 2001 09:00:00 -0700"}"#,
+        ),
+        row(
+            2,
+            "doc-b",
+            "Issue 42 is now closed.\n> Issue 42 in uv is open.\n> It fails on start.",
+            r#"{"date":"Tue, 15 May 2001 09:00:00 -0700"}"#,
+        ),
+    ]);
+    let classes = super::super::LineClasses::of(&both.source_documents, &policies);
+    let answer = json!({
+        "particulars": [{"ref": "p1", "type": "case", "name": "issue 42", "fields": {}}],
+        "claims": [{"kind": "reported_status", "about": "p1", "document": "d2",
+                    "quote": "Issue 42 is now closed.", "fields": {"status": "Closed"}}]});
+    let (infer, seen) = scripted(vec![answer]);
+    let raw = read(&both, &policies, &classes, &infer).await.unwrap();
+    let user = seen.lock().unwrap()[0].user.clone();
+    let d2 = &user[user.find("=== d2 ===").unwrap()..];
+    assert!(d2.contains("Issue 42 is now closed.\n[quotes d1]"), "{d2}");
+    assert!(!d2.contains("in uv is open"), "{d2}");
+    assert_eq!(
+        d2.matches("[quotes").count(),
+        1,
+        "one pointer per run: {d2}"
+    );
+    assert!(
+        user.contains("[quotes d3] stands in for them"),
+        "the prompt says what a pointer means"
+    );
+    let mut extraction = parse_response(&raw, &policies)
+        .unwrap()
+        .section_extraction
+        .unwrap();
+    validate_and_stamp(&both, &policies, &mut extraction).unwrap();
+    let read_b = &extraction.document_read.as_ref().unwrap().documents[1];
+    assert_eq!(read_b.claims[0].evidence, "Issue 42 is now closed.");
+
+    let alone = input_chapter(&[row(
+        2,
+        "doc-b",
+        "Issue 42 is now closed.\n> Issue 42 in uv is open.\n> It fails on start.",
+        r#"{"date":"Tue, 15 May 2001 09:00:00 -0700"}"#,
+    )]);
+    let (infer, seen) = scripted(vec![json!({"particulars": [], "claims": []})]);
+    read(&alone, &policies, &classes, &infer).await.unwrap();
+    let user = seen.lock().unwrap()[0].user.clone();
+    assert!(
+        user.contains("[quotes a document of 2001-05-14T16:00:00Z outside this window]"),
+        "{user}"
+    );
+}

@@ -235,6 +235,7 @@ fn compose(
 ) -> ChatPrompt {
     let fields = shown_fields(policies);
     let named = contract.named(policies, index);
+    let by_key = shown::labels(&chapter.source_documents, labels);
     let documents: String = chapter
         .source_documents
         .iter()
@@ -261,7 +262,8 @@ fn compose(
             if !listed.is_empty() {
                 head.push(format!("Named here: {}", listed.join("; ")));
             }
-            format!("{}\n\n{}\n", head.join("\n"), shown::own_text(doc, classes))
+            let body = shown::shown_text(doc, classes, &by_key);
+            format!("{}\n\n{body}\n", head.join("\n"))
         })
         .collect::<Vec<_>>()
         .join("\n");
