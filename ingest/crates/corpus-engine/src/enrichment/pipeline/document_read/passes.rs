@@ -574,6 +574,7 @@ async fn read_document(
             evidence,
             fields,
             subject_fields,
+            other_names: Default::default(),
         });
     }
     claims.extend(

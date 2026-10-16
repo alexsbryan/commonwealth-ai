@@ -42,7 +42,7 @@ use crate::enrichment::ontology::{
 };
 use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType, EventType};
 use crate::enrichment::pipeline::document_read::{
-    about_type, field_readings, mention_words, supported_values, window_subject_name,
+    about_type, field_readings, mention_words, supported_values,
     ABOUT_ATTRIBUTE, CHAPTER_SUBJECT_ATTRIBUTE, LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE,
     SUBJECT_FIELDS_ATTRIBUTE,
 };
@@ -324,13 +324,13 @@ async fn resolve_type(
     let mut read_local_ref_of = HashMap::<usize, String>::new();
     let mut chapter_subject_of = HashMap::<usize, String>::new();
     let mut read_subject_fields_of = HashMap::<usize, Map<String, Value>>::new();
-    let mut subject_name_of = HashMap::<usize, String>::new();
+    let mut subject_name_of = HashMap::<usize, described::ReadNames>::new();
     for (i, claim) in atoms.claims.iter_mut().enumerate() {
         if !of_kinds(claim) {
             continue;
         }
-        if let Some(name) = window_subject_name(&claim.attributes) {
-            subject_name_of.insert(i, name.to_string());
+        if let Some(read) = described::ReadNames::of(&claim.attributes) {
+            subject_name_of.insert(i, read);
         }
         claim.subject = None;
         if let Some(Value::String(document)) = claim.attributes.remove(SOURCE_DOCUMENT_ATTRIBUTE) {

@@ -235,11 +235,12 @@ window, a novel or a long report, is cut where the recipe's chunker cut it, its 
 its statements anchored in the whole; so prompt and reasoned answer fit 128k), and one call reads a window, reasoning before it answers, prompted from the contract alone
 (`window.rs`, `window_prompt.md`). One reading rule is the method's own, not a recipe's: a document that says
 one particular is replaced by, rolled into or superseded by another speaks of two, and states the first's end
-beside the second's beginning (supersession). One more is its own (2026-10-15): a thing a document
-says has another name is written with both names, joined by " / ", wherever the reader names it, and code reads
-such a reference, a subject's sourced identity and an unstated particular's line by either name
-(`document_read::names_in`); the reading keeps every name written (a listed record answers its identity), and
-a reference reading lands on a record by either name (`read_fields.rs::record_read`). The
+beside the second's beginning (supersession). A thing a document says has another name is not a prompt
+rule but a typed field of the answer (2026-10-16): a particular lists its `other_names`, and code reads a
+reference, a subject's sourced identity and an unstated particular's line by any of its names, carries the
+other names of what each statement names (`OTHER_NAMES_ATTRIBUTE`) for RESOLVE to show beside it, never to
+compare, and lands a reference reading on a record by any of them (`read_fields.rs::record_read`). No name is
+split. The
 model names each particular once across the window and cites each claim by its document and exact words;
 code keeps the contract: every declared field answered or unknown with a reason, a closed value one of its
 declared values, a reference a record the document's fields name or words it holds, each field's evidence in

@@ -6,7 +6,7 @@ use crate::enrichment::atlas::resolution_records::resolve_declared_types;
 use crate::enrichment::atlas::resolve_records::{Answerer, DocumentResolution};
 use crate::enrichment::pipeline::document_read::{
     ABOUT_ATTRIBUTE, CLAIM_FIELDS_ATTRIBUTE, LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE,
-    SUBJECT_FIELDS_ATTRIBUTE, SUBJECT_NAME_ATTRIBUTE, WORDS_ATTRIBUTE,
+    OTHER_NAMES_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE, SUBJECT_NAME_ATTRIBUTE, WORDS_ATTRIBUTE,
 };
 use crate::index::EnrichmentChunkRow;
 use crate::recipe_ontology::OntologyBlock;
@@ -225,7 +225,7 @@ attributes = [{ name = "speaker", type = "ref", of = "character" }]
 /// no mention of her read. A name read nowhere is not held, and says why.
 #[tokio::test]
 async fn a_window_ref_holds_the_record_its_window_read_under_that_name() {
-    let (claims, _, lines) = accounts_derived("Nell").await;
+    let (claims, _, lines) = accounts_derived("Nell", None).await;
     let claim = |id: &str| claims.iter().find(|c| c.id.as_str() == id).unwrap();
     let (told, heard) = (claim("told"), claim("heard"));
     let record_of = |c: &Claim| c.subject.as_ref().map(|s| s.as_str().to_string());
@@ -249,15 +249,17 @@ async fn a_window_ref_holds_the_record_its_window_read_under_that_name() {
     assert_eq!(line.unresolved[0].words, json!("Grist"));
 }
 
-/// Failing input, named: world-s5's window wrote a counterparty "Pellica
-/// Chemical / Elk Bluff Cement Company" for a thing a document said had a new
-/// name (arm bundle1-fresh, 2026-10-16); a reading so written folded whole
-/// named nothing. Written with two names (the window prompt's " / "), a
-/// reading lands by either: `told`'s speaker "Mrs Varden / Nell" holds the
-/// record of the statement read about Nell.
+/// Failing input, named: world-s5's window wrote a counterparty for a thing
+/// a document said had a new name ("Pellica Chemical", now "Elk Bluff Cement
+/// Company"; arm bundle1-fresh, 2026-10-16), and a reading by one name named
+/// nothing the other name was read under. A reading of a thing the window
+/// read gave other names (`OTHER_NAMES_ATTRIBUTE`, the answer's typed
+/// `other_names`) lands by any of them: `told`'s speaker "Mrs Varden", whose
+/// other name is "Nell", holds the record of the statement read about Nell.
 #[tokio::test]
-async fn a_reading_written_with_two_names_lands_by_either() {
-    let (claims, _, _) = accounts_derived("Mrs Varden / Nell").await;
+async fn a_reading_of_a_thing_with_other_names_lands_by_any() {
+    let (claims, _, _) =
+        accounts_derived("Mrs Varden", Some(json!({ "Mrs Varden": ["Nell"] }))).await;
     let claim = |id: &str| claims.iter().find(|c| c.id.as_str() == id).unwrap();
     let (told, heard) = (claim("told"), claim("heard"));
     assert_eq!(
@@ -278,7 +280,7 @@ async fn a_reading_written_with_two_names_lands_by_either() {
 /// statement that opened it: Ivo's record is "Ivo", Nell's "Nell".
 #[tokio::test]
 async fn a_record_is_called_by_the_name_its_reader_gave_it() {
-    let (claims, entities, _) = accounts_derived("Nell").await;
+    let (claims, entities, _) = accounts_derived("Nell", None).await;
     let name_of = |id: &str| {
         let record = claims
             .iter()
@@ -298,7 +300,10 @@ async fn a_record_is_called_by_the_name_its_reader_gave_it() {
 /// The two accounts of `TOLD` and `HEARD`, resolved and derived, `told`'s
 /// speaker read as `told_speaker`: the claims, the records and the derivation
 /// lines.
-async fn accounts_derived(told_speaker: &str) -> (Vec<Claim>, Vec<Entity>, Vec<DerivedValue>) {
+async fn accounts_derived(
+    told_speaker: &str,
+    told_others: Option<Value>,
+) -> (Vec<Claim>, Vec<Entity>, Vec<DerivedValue>) {
     let p = OntologyBlock {
         version: 1,
         body: toml::from_str(ACCOUNT).unwrap(),
@@ -321,7 +326,12 @@ async fn accounts_derived(told_speaker: &str) -> (Vec<Claim>, Vec<Entity>, Vec<D
             "ivo",
             "Ivo",
             json!({ "speaker": read(told_speaker) }),
-            json!({ SUBJECT_NAME_ATTRIBUTE: "Ivo" }),
+            match told_others {
+                Some(others) => {
+                    json!({ SUBJECT_NAME_ATTRIBUTE: "Ivo", OTHER_NAMES_ATTRIBUTE: others })
+                }
+                None => json!({ SUBJECT_NAME_ATTRIBUTE: "Ivo" }),
+            },
         ),
         handed(
             "heard",

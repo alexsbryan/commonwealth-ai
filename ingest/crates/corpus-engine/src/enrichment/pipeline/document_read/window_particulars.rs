@@ -13,11 +13,12 @@ use serde_json::Value;
 use tracing::{debug, trace};
 
 use super::super::pick::Candidate;
-use super::super::{DocumentReadOutcome, DocumentReadParticular};
-use super::{particular_fields, text, Contract};
+use super::super::{DocumentReadField, DocumentReadOutcome, DocumentReadParticular};
+use super::{text, Contract};
 use crate::enrichment::atlas::SourceDocument;
-use crate::enrichment::ontology::{OntologyPolicies, TypeIndex};
+use crate::enrichment::ontology::{AttrDecl, OntologyPolicies, OntologyTypeDecl, SourceDecl, TypeIndex};
 use crate::enrichment::pipeline::types::ChapterInput;
+use crate::enrichment::reconciliation::identity_signals::fold_identity_value;
 
 /// Add every unstated particular of a statement subject type to the outcome
 /// of the first document whose own lines name it: by its name, or else by a
@@ -47,12 +48,9 @@ pub(super) fn unstated(
             debug!(chapter = %chapter.chapter_id, particular = %local, %ty, %name, "document_read/window: no statement kind is about this type; its references name it");
             continue;
         };
-        // Its names as written (two, joined by " / ", for a thing a document
-        // says has another name), then its fields' quotes.
-        let mut cues: Vec<String> = super::refs::names_in(&name)
-            .into_iter()
-            .map(str::to_string)
-            .collect();
+        // Its names (its name, then the other names a document gives it),
+        // then its fields' quotes.
+        let mut cues: Vec<String> = names_of(p);
         if let Some(fields) = p["fields"].as_object() {
             cues.extend(fields.values().filter_map(|f| f.get("quote")).map(text));
         }
@@ -71,6 +69,16 @@ pub(super) fn unstated(
         let subject_fields =
             particular_fields(policies, index, subject, p, document, named, particulars);
         trace!(document = %outcome.document_id, particular = %local, %name, %evidence, "document_read/window: an unstated particular sent as its own statement");
+        let mut things = vec![(name.clone(), ty.clone())];
+        things.extend(ref_values(
+            super::subject_attrs(policies, index, &ty),
+            &subject_fields,
+        ));
+        let other_names = other_names_for(
+            particulars,
+            index,
+            things.iter().map(|(n, t)| (n.as_str(), t.as_str())),
+        );
         outcome.particulars.push(DocumentReadParticular {
             subject_type: ty,
             subject_local_ref: format!("{}/{local}", chapter.chapter_id),
@@ -78,6 +86,7 @@ pub(super) fn unstated(
             evidence,
             subject_fields,
             words: None,
+            other_names,
         });
     }
 }
@@ -103,6 +112,186 @@ pub(super) fn label_name(
         .filter(|name| !name.is_empty())?;
     debug!(document = %document.key(), particular = %words, %name, "document_read/window: a ref label read as its particular's name");
     Some(name)
+}
+
+/// A particular's names: its `name`, then each of the `other_names` the
+/// answer lists for it (a name a document says it also has, a former or a new
+/// one), each once and none blank. A typed list: no name is ever split, so
+/// "Input / Output" is one name.
+pub(super) fn names_of(p: &Value) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    let others = p["other_names"].as_array().into_iter().flatten().map(text);
+    for name in std::iter::once(text(&p["name"])).chain(others) {
+        if !name.trim().is_empty() && !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    names
+}
+
+/// The names of the thing `words` names: when it is the label, the name or
+/// one of the other names of a particular of type `of` (or `is_a` one), that
+/// particular's names (`names_of`), `words`' own first; else `words` alone.
+pub(super) fn names_for(
+    particulars: &[Value],
+    index: &TypeIndex<'_>,
+    of: &str,
+    words: &str,
+) -> Vec<String> {
+    let want = fold_identity_value(words);
+    let group = particulars
+        .iter()
+        .filter(|p| {
+            let ty = text(&p["type"]);
+            ty == of || index.is_a(&ty, of)
+        })
+        .map(|p| (text(&p["ref"]), names_of(p)))
+        .find(|(label, names)| {
+            label == words
+                || names
+                    .iter()
+                    .any(|n| want.is_some() && fold_identity_value(n) == want)
+        });
+    let mut out = vec![words.to_string()];
+    if let Some((_, names)) = group.filter(|(_, names)| names.len() > 1) {
+        trace!(%words, names = names.len(), "document_read/window: a reference names a particular with other names");
+        out.extend(names.into_iter().filter(|n| n != words));
+    }
+    out
+}
+
+/// For each of `wanted` (a thing a statement names: its subject's name and
+/// type, each reference reading's value and the type it refers to) that is a
+/// name of a particular of that type (or an `is_a` one) with other names,
+/// those other names ([`OTHER_NAMES_ATTRIBUTE`](super::super::OTHER_NAMES_ATTRIBUTE)).
+pub(super) fn other_names_for<'a>(
+    particulars: &[Value],
+    index: &TypeIndex<'_>,
+    wanted: impl IntoIterator<Item = (&'a str, &'a str)>,
+) -> std::collections::BTreeMap<String, Vec<String>> {
+    let groups: Vec<(String, Vec<String>)> = particulars
+        .iter()
+        .map(|p| (text(&p["type"]), names_of(p)))
+        .filter(|(_, names)| names.len() > 1)
+        .collect();
+    let mut out = std::collections::BTreeMap::new();
+    for (name, of) in wanted {
+        let Some(want) = fold_identity_value(name) else {
+            continue;
+        };
+        let same = |n: &String| fold_identity_value(n).as_deref() == Some(want.as_str());
+        for (_, group) in groups
+            .iter()
+            .filter(|(ty, group)| (ty == of || index.is_a(ty, of)) && group.iter().any(same))
+        {
+            let others: &mut Vec<String> = out.entry(name.to_string()).or_default();
+            for n in group.iter().filter(|n| !same(n)) {
+                if !others.contains(n) {
+                    others.push(n.clone());
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Each supported reference reading among `readings` as (its value, the type
+/// it refers to), for the declarations `attrs`: what a statement names by
+/// reference.
+pub(super) fn ref_values<'a>(
+    attrs: impl IntoIterator<Item = &'a crate::enrichment::ontology::AttrDecl>,
+    readings: &std::collections::BTreeMap<String, super::super::DocumentReadField>,
+) -> Vec<(String, String)> {
+    attrs
+        .into_iter()
+        .filter_map(|a| match (&a.family, readings.get(&a.name)) {
+            (
+                crate::enrichment::ontology::AttrFamily::Ref { of },
+                Some(super::super::DocumentReadField::Supported {
+                    value: Value::String(v),
+                    ..
+                }),
+            ) => Some((v.clone(), of.clone())),
+            _ => None,
+        })
+        .collect()
+}
+
+/// A particular's declared fields as the window read them, each supported only
+/// by what `document` holds; an identity its metadata source names fills an
+/// unknown one. One reading for a claim's subject and a particular of its own.
+pub(super) fn particular_fields(
+    policies: &OntologyPolicies,
+    index: &TypeIndex<'_>,
+    subject: &OntologyTypeDecl,
+    particular: &Value,
+    document: &SourceDocument,
+    named: &[(String, Vec<Candidate>)],
+    particulars: &[Value],
+) -> std::collections::BTreeMap<String, DocumentReadField> {
+    super::subject_attrs(policies, index, &subject.name)
+        .into_iter()
+        .map(|a| {
+            let entry = &particular["fields"][&a.name];
+            let (value, evidence) = match entry {
+                Value::Object(o) if o.contains_key("value") => {
+                    (o.get("value"), o.get("quote").map(text))
+                }
+                Value::Null => (None, None),
+                other => (Some(other), None),
+            };
+            let cite = evidence.as_deref();
+            let mut r = super::reading(a, value, cite, document, named, particulars, index);
+            if matches!(r, DocumentReadField::Unknown { .. }) {
+                r = sourced_identity(subject, a, &names_of(particular), index, named)
+                    .unwrap_or(r);
+            }
+            (a.name.clone(), r)
+        })
+        .collect()
+}
+
+/// An identity field of a subject its metadata source names, read from the
+/// record this document's fields name by one of the particular's `names`
+/// (`names_of`: its name, then its other names): the model names a person,
+/// the source holds their address.
+fn sourced_identity(
+    subject: &OntologyTypeDecl,
+    attr: &AttrDecl,
+    names: &[String],
+    index: &TypeIndex<'_>,
+    named: &[(String, Vec<Candidate>)],
+) -> Option<DocumentReadField> {
+    if !matches!(subject.source, Some(SourceDecl::Metadata(_))) {
+        return None;
+    }
+    let at = index
+        .effective_identity(&subject.name)
+        .iter()
+        .position(|k| *k == attr.name)?;
+    let wanted: Vec<String> = names
+        .iter()
+        .filter_map(|n| fold_identity_value(n))
+        .collect();
+    named
+        .iter()
+        .filter(|(t, _)| *t == subject.name)
+        .flat_map(|(_, cs)| cs)
+        .find_map(|c| match c {
+            Candidate::Record {
+                identity,
+                names,
+                scalar,
+                ..
+            } if names
+                .iter()
+                .chain(identity.iter())
+                .any(|n| fold_identity_value(n).is_some_and(|n| wanted.contains(&n))) =>
+            {
+                Some(super::supported(Value::String(identity.get(at)?.clone()), scalar))
+            }
+            _ => None,
+        })
 }
 
 /// The first line of `own` holding `cue`, case and whitespace aside.

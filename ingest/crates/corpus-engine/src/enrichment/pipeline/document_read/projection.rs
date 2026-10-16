@@ -16,7 +16,8 @@ use super::validation;
 use super::{
     supported_values, DocumentRead, DocumentReadOutcome, DocumentReadParticular, SubjectScope,
     ABOUT_ATTRIBUTE, CHAPTER_SUBJECT_ATTRIBUTE, CLAIM_FIELDS_ATTRIBUTE, LOCAL_REF_ATTRIBUTE,
-    SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE, SUBJECT_NAME_ATTRIBUTE, WORDS_ATTRIBUTE,
+    OTHER_NAMES_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE,
+    SUBJECT_NAME_ATTRIBUTE, WORDS_ATTRIBUTE,
 };
 
 #[derive(Debug, Deserialize)]
@@ -129,6 +130,9 @@ pub(super) fn project_compatibility_sketches(
                     SUBJECT_NAME_ATTRIBUTE.into(),
                     Value::String(claim.subject_name.clone()),
                 );
+                if let Some(others) = other_names_value(&claim.other_names) {
+                    attributes.insert(OTHER_NAMES_ATTRIBUTE.into(), others);
+                }
             }
             attributes.insert(
                 SOURCE_DOCUMENT_ATTRIBUTE.into(),
@@ -193,6 +197,14 @@ pub(super) fn project_compatibility_sketches(
     Ok(())
 }
 
+/// A window read's other names for what a statement names, as the claim's
+/// [`OTHER_NAMES_ATTRIBUTE`]; none when it names nothing with another name.
+fn other_names_value(
+    other_names: &std::collections::BTreeMap<String, Vec<String>>,
+) -> Option<Value> {
+    (!other_names.is_empty()).then(|| serde_json::json!(other_names))
+}
+
 /// A particular no claim is about, as the claim RESOLVE reads: the document
 /// asserts it is about the particular, at the words that first name it. It
 /// declares no claim kind; its type rides on [`ABOUT_ATTRIBUTE`], and its
@@ -225,6 +237,9 @@ fn particular_sketch(
             SUBJECT_NAME_ATTRIBUTE.into(),
             Value::String(particular.subject_name.clone()),
         );
+        if let Some(others) = other_names_value(&particular.other_names) {
+            attributes.insert(OTHER_NAMES_ATTRIBUTE.into(), others);
+        }
     }
     attributes.insert(
         SUBJECT_FIELDS_ATTRIBUTE.into(),

@@ -7,23 +7,52 @@ use std::collections::{BTreeSet, HashMap};
 use serde_json::{Map, Value};
 
 use super::Described;
+use crate::enrichment::pipeline::document_read::{
+    other_names_in, window_subject_name, OTHER_NAMES_ATTRIBUTE,
+};
 
-/// Each claim's description of its subject: the name its window read gave it
-/// (`names_of`), and its supported values of the type's
-/// attributes outside `carried` (the keys and necessary attributes, which
-/// travel as keys and reads). A window read's
+/// What a window read named a statement by: its subject's name, then the
+/// other names a document gives it, and the other names of every thing the
+/// statement names (`OTHER_NAMES_ATTRIBUTE`). None when it names nothing.
+#[derive(Debug, Default)]
+pub(super) struct ReadNames {
+    pub(super) names: Vec<String>,
+    pub(super) others: Map<String, Value>,
+}
+
+impl ReadNames {
+    pub(super) fn of(attributes: &Map<String, Value>) -> Option<Self> {
+        let others = attributes
+            .get(OTHER_NAMES_ATTRIBUTE)
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        let names: Vec<String> = window_subject_name(attributes)
+            .into_iter()
+            .flat_map(|name| std::iter::once(name).chain(other_names_in(&others, name)))
+            .map(str::to_string)
+            .collect();
+        (!names.is_empty() || !others.is_empty()).then_some(Self { names, others })
+    }
+}
+
+/// Each claim's description of its subject: the names its window read gave it
+/// (`names_of`: its name, then the other names a document gives it), and its
+/// supported values of the type's attributes outside `carried` (the keys and
+/// necessary attributes, which travel as keys and reads), each with the other
+/// names the read gave the thing it names: shown, never compared. A window read's
 /// claims about one chapter subject all get the union over that subject, so
 /// a question about any of them shows all the window read of it, whichever of
 /// its documents RESOLVE meets first.
 pub(super) fn of_claims(
     fields_of: &HashMap<usize, Map<String, Value>>,
-    names_of: &HashMap<usize, String>,
+    names_of: &HashMap<usize, ReadNames>,
     chapter_subject_of: &HashMap<usize, String>,
     carried: &BTreeSet<&str>,
 ) -> HashMap<usize, Described> {
     let mut out = HashMap::<usize, Described>::new();
-    for (&i, name) in names_of {
-        out.entry(i).or_default().names.insert(name.clone());
+    for (&i, read) in names_of {
+        out.entry(i).or_default().names.extend(read.names.iter().cloned());
     }
     for &i in chapter_subject_of.keys() {
         out.entry(i).or_default();
@@ -36,7 +65,13 @@ pub(super) fn of_claims(
                 Value::Number(number) => number.to_string(),
                 _ => continue,
             };
-            d.values.entry(attr.clone()).or_default().insert(value);
+            let others = names_of
+                .get(&i)
+                .map(|r| other_names_in(&r.others, &value))
+                .unwrap_or_default();
+            let shown = d.values.entry(attr.clone()).or_default();
+            shown.extend(others.into_iter().map(str::to_string));
+            shown.insert(value);
         }
     }
     let mut of_subject = HashMap::<&str, Described>::new();

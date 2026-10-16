@@ -6,6 +6,8 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+use crate::enrichment::reconciliation::identity_signals::fold_identity_value;
+
 mod about;
 mod act;
 mod ask;
@@ -165,17 +167,38 @@ pub fn window_subject_name(attributes: &Map<String, Value>) -> Option<&str> {
         .and_then(Value::as_str)
 }
 
-/// The names a reader wrote for one thing: the whole, then, when it wrote
-/// several joined by " / " (the window prompt's notation for a thing a
-/// document says has another name), each of them in order. The one reading
-/// of the notation: the window reader resolves a reference by it, and a
-/// reference reading lands on a record by it (`resolution_derived/read_fields.rs`).
-pub fn names_in(words: &str) -> Vec<&str> {
-    let mut out = vec![words];
-    if words.contains(" / ") {
-        out.extend(words.split(" / ").map(str::trim).filter(|n| !n.is_empty()));
-    }
-    out
+/// The other names a window read gave the things a statement names: each name
+/// (its subject's, or a reading's value) mapped to the names a document says
+/// the same thing also has, from the answer's typed `other_names` list on a
+/// particular (`window_particulars.rs::other_names_for`). An object; absent
+/// when no thing the statement names has another name. A name is never split:
+/// "Input / Output" is one name. RESOLVE shows the other names
+/// (`resolve_records::Described`), never compares them, and a reference
+/// reading lands on a record by any of them (`resolution_derived/read_fields.rs`).
+pub const OTHER_NAMES_ATTRIBUTE: &str = "__document_read_other_names";
+
+/// The other names `attributes` records for `name` ([`OTHER_NAMES_ATTRIBUTE`]),
+/// matched as identity values are (`fold_identity_value`); none when it
+/// records none.
+pub fn other_names<'a>(attributes: &'a Map<String, Value>, name: &str) -> Vec<&'a str> {
+    attributes
+        .get(OTHER_NAMES_ATTRIBUTE)
+        .and_then(Value::as_object)
+        .map_or_else(Vec::new, |others| other_names_in(others, name))
+}
+
+/// The other names the [`OTHER_NAMES_ATTRIBUTE`] object `others` records for
+/// `name` (see [`other_names`]).
+pub fn other_names_in<'a>(others: &'a Map<String, Value>, name: &str) -> Vec<&'a str> {
+    let Some(want) = fold_identity_value(name) else {
+        return Vec::new();
+    };
+    others
+        .iter()
+        .filter(|(n, _)| fold_identity_value(n).as_deref() == Some(want.as_str()))
+        .flat_map(|(_, others)| others.as_array().into_iter().flatten())
+        .filter_map(Value::as_str)
+        .collect()
 }
 
 /// The value of each supported reading among `fields`, by field.
@@ -271,6 +294,10 @@ pub struct DocumentReadParticular {
     pub subject_fields: BTreeMap<String, DocumentReadField>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub words: Option<String>,
+    /// The other names a window read gave what it names
+    /// ([`OTHER_NAMES_ATTRIBUTE`]).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub other_names: BTreeMap<String, Vec<String>>,
 }
 
 /// One claim refused by evidence verification, with the reason it failed.
@@ -309,6 +336,10 @@ pub struct DocumentReadClaim {
     pub fields: BTreeMap<String, DocumentReadField>,
     /// Non-derived attributes declared on its subject type.
     pub subject_fields: BTreeMap<String, DocumentReadField>,
+    /// The other names a window read gave what it names
+    /// ([`OTHER_NAMES_ATTRIBUTE`]).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub other_names: BTreeMap<String, Vec<String>>,
 }
 
 /// A field value with evidence, or an explicit absence with a reason.

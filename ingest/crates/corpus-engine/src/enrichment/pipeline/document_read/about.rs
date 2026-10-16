@@ -533,6 +533,7 @@ pub(super) fn unstated(
                 evidence: d.body[line.start..line.end].to_string(),
                 subject_fields,
                 words: None,
+                other_names: Default::default(),
             });
         }
     }

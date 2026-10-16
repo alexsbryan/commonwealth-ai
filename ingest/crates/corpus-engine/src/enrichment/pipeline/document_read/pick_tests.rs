@@ -304,6 +304,7 @@ fn a_mention_pick_offers_by_its_words_is_a_particular_of_a_decided_type() {
                 }
             )]),
             words: Some("Quay Market".into()),
+            other_names: Default::default(),
         }]
     );
     let p = declared();

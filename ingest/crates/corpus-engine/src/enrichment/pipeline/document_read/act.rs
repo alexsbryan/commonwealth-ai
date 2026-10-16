@@ -587,6 +587,7 @@ pub(super) async fn claims(
             evidence,
             fields,
             subject_fields,
+            other_names: Default::default(),
         });
     }
     out

@@ -17,6 +17,7 @@ fn particular(local_ref: &str, name: &str, words: Option<&str>) -> DocumentReadP
             })
             .into(),
         words: words.map(str::to_string),
+        other_names: Default::default(),
     }
 }
 

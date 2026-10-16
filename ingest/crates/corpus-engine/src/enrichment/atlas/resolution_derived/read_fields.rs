@@ -14,8 +14,8 @@
 //! (`decides_mentions`). One that names no mention is a window read's name
 //! for a subject: it counts as the record RESOLVE put the same document's
 //! statements read under that name on (`SUBJECT_NAME_ATTRIBUTE`). A reading
-//! written with several names (`names_in`, the window prompt's " / ") lands by
-//! the whole, then by each name. One that
+//! of a thing the window read gave other names (`OTHER_NAMES_ATTRIBUTE`) lands
+//! by its value, then by each other name. One that
 //! names none of these is never held and never
 //! minted into a record: it stays on the derivation line, cited
 //! (`UnresolvedReading`).
@@ -36,7 +36,7 @@ use crate::enrichment::atlas::resolution_sources::key_name;
 use crate::enrichment::ontology::derived::{FoldBy, SetDecl};
 use crate::enrichment::ontology::{AttrDecl, AttrFamily, OntologyPolicies, TypeIndex};
 use crate::enrichment::pipeline::document_read::{
-    field_readings, mention_words, names_in, window_subject_name, DocumentReadField,
+    field_readings, mention_words, other_names, window_subject_name, DocumentReadField,
     SUBJECT_FIELDS_ATTRIBUTE,
 };
 
@@ -83,19 +83,21 @@ struct Folded {
 /// one record `doc`'s statements whose window-read subject name folds equal to
 /// `value` are on; or why there is none. Keyed by the document, never by words
 /// across documents.
-/// A reading written with several names (`names_in`) lands by the whole,
-/// then by each name in order: the first that names a record holds it, and
-/// one that names several records is the error it was for a single name.
+/// A reading of a thing the window read gave other names (`also`, from the
+/// statement's `OTHER_NAMES_ATTRIBUTE`) lands by its value, then by each other
+/// name in order: the first that names a record holds it, and one that names
+/// several records is the error it is for the value.
 fn record_read(
     graph: &Graph<'_>,
     doc: Option<&str>,
     of: &str,
     value: &Value,
+    also: &[&str],
 ) -> Result<usize, String> {
     let doc = doc.ok_or("the statement is in no one document")?;
     let words = value.as_str().ok_or("the reading is no name")?;
     let whole = fold_identity_value(words).ok_or("the reading is no name")?;
-    for name in names_in(words) {
+    for name in std::iter::once(words).chain(also.iter().copied()) {
         let Some(want) = fold_identity_value(name) else {
             continue;
         };
@@ -105,7 +107,7 @@ fn record_read(
                     document = doc,
                     words,
                     name,
-                    "atlas/derived: a reading written with several names lands on a record by one"
+                    "atlas/derived: a reading lands on a record by another name its thing has"
                 );
             }
             return Ok(record);
@@ -226,8 +228,9 @@ pub(super) fn held(
     doc: Option<&str>,
     of: &str,
     value: &Value,
+    also: &[&str],
 ) -> Held {
-    let i = match record_read(graph, doc, of, value) {
+    let i = match record_read(graph, doc, of, value, also) {
         Ok(i) => i,
         Err(why) => return Held::Unresolved(why),
     };
@@ -310,7 +313,11 @@ pub(super) fn derive(
                     };
                     let doc = graph.claim_doc[j];
                     let cited = evidence.clone();
-                    let (key, value) = match of.map(|of| held(&graph, &exclusions, doc, of, &value))
+                    let also = value
+                        .as_str()
+                        .map(|w| other_names(&claim.attributes, w))
+                        .unwrap_or_default();
+                    let (key, value) = match of.map(|of| held(&graph, &exclusions, doc, of, &value, &also))
                     {
                         None => (words(&value), value),
                         Some(Held::Excluded { id, set }) => {

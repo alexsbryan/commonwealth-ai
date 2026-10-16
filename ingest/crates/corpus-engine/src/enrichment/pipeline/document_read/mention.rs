@@ -225,6 +225,7 @@ pub(super) fn particulars(
                 evidence: body[line.start..line.end].to_string(),
                 subject_fields,
                 words: Some(words),
+                other_names: Default::default(),
             });
         }
     }

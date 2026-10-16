@@ -9,9 +9,8 @@ How to read:
 - Only statements a document itself makes count: text it quotes from another document was stated there, not here. A document's quoted lines are not shown; a line such as [quotes d3] stands in for them. The document answers d3, so read what it refers to in d3, and cite only the document's own lines.
 - A document that says one particular is replaced by, rolled into or superseded by another speaks of two particulars and makes a statement about each: the first has ended, the second has begun. Write the first's ending even when nothing else in the window speaks of it.
 - A field takes a value only when a document states it. A field with listed values takes one of them, written exactly. A reference to a type named beside a document is written as one of the names listed there.
-- When a document says a thing has another name (a new name, a former name), write both names, joined by " / ", wherever you name it.
 
 Documents:
 {documents}
 
-Return JSON: {"particulars": [{"ref": <your label, such as p1>, "type": <a type above>, "name": <a short name>, "fields": {<field>: {"value": <value>, "quote": <the exact words of a document that state it>}}}], "claims": [{"kind": <a statement kind above>, "about": <ref>, "document": <document label>, "quote": <the exact words of that document that make the statement>, "fields": {<field>: <value>}}]}. A window that makes no statement of any kind returns {"particulars": [], "claims": []}.
+Return JSON: {"particulars": [{"ref": <your label, such as p1>, "type": <a type above>, "name": <a short name>, "other_names": [<another name a document says it has, a former or a new one; else none>], "fields": {<field>: {"value": <value>, "quote": <the exact words of a document that state it>}}}], "claims": [{"kind": <a statement kind above>, "about": <ref>, "document": <document label>, "quote": <the exact words of that document that make the statement>, "fields": {<field>: <value>}}]}. A window that makes no statement of any kind returns {"particulars": [], "claims": []}.

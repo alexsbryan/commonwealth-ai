@@ -477,6 +477,7 @@ async fn read_document(
             evidence,
             fields,
             subject_fields,
+            other_names: Default::default(),
         });
     }
     let stated_about: Vec<Option<(usize, usize)>> = stated.iter().map(|s| s.particular).collect();

@@ -651,11 +651,13 @@ question the pipeline asks about a type is a method on the resolved
   in the answer costs at most the element holding it (`window_answer.rs`): a bare fraction (`.02`) is read with
   its leading zero, and if the answer still does not parse each particular and claim is parsed alone, the ones
   that fail (and the claims about a failed particular) dropped and counted as `lost`. A reference value resolves
-  in `window_refs.rs` (label name, candidate, words held), by either name when the reader wrote two joined by
-  " / " for a thing a document says has another name (`document_read::names_in`, also used for a subject's
-  sourced identity, for placing an unstated particular, and by `read_fields.rs::record_read`, which lands such a
-  reading on a record by the whole, then each name). Found by one name, a mention or held words keep every name
-  written, so RESOLVE shows the other name too; a listed record answers its identity. Two particulars the reader
+  in `window_refs.rs` (label name, candidate, words held), by any of a particular's names when the answer lists
+  `other_names` for it (a name a document says it also has; typed, never a delimiter, so "Input / Output" is one
+  name; `window_particulars.rs::names_for`, also used for a subject's sourced identity and for placing an
+  unstated particular). Each statement carries the other names of what it names, typed by what it refers to
+  (`OTHER_NAMES_ATTRIBUTE`), which RESOLVE shows beside the subject's name and the readings' values
+  (`resolution_records/described.rs`, never compared) and `read_fields.rs::record_read` lands a reading by, its
+  value first; a listed record answers its identity. Two particulars the reader
   read in one document stay two: a record holding one is never offered the other, folded or joined earlier in the
   same document (`resolve_records/apart.rs::read_beside`, tracked in `select::choose`); a record the same document
   opened is weighed by every window reference that has joined it, not its opener's alone, as the fold's recheck

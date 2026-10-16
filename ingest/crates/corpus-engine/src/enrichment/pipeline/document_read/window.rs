@@ -33,7 +33,6 @@ use crate::enrichment::ontology::{
 };
 use crate::enrichment::pipeline::pipelines::literary::prepare_phase_json;
 use crate::enrichment::pipeline::types::{ChapterInput, ChatPrompt};
-use crate::enrichment::reconciliation::identity_signals::fold_identity_value;
 use crate::error::{Error, Result};
 use crate::InferenceFn;
 
@@ -444,49 +443,6 @@ fn reading(
     }
 }
 
-/// An identity field of a subject its metadata source names, read from the
-/// record this document's fields name by the particular's `name`: the model
-/// names a person, the source holds their address.
-fn sourced_identity(
-    subject: &OntologyTypeDecl,
-    attr: &AttrDecl,
-    name: &Value,
-    index: &TypeIndex<'_>,
-    named: &[(String, Vec<Candidate>)],
-) -> Option<DocumentReadField> {
-    if !matches!(subject.source, Some(SourceDecl::Metadata(_))) {
-        return None;
-    }
-    let at = index
-        .effective_identity(&subject.name)
-        .iter()
-        .position(|k| *k == attr.name)?;
-    let name = text(name);
-    let wanted: Vec<String> = refs::names_in(&name)
-        .into_iter()
-        .filter_map(fold_identity_value)
-        .collect();
-    named
-        .iter()
-        .filter(|(t, _)| *t == subject.name)
-        .flat_map(|(_, cs)| cs)
-        .find_map(|c| match c {
-            Candidate::Record {
-                identity,
-                names,
-                scalar,
-                ..
-            } if names
-                .iter()
-                .chain(identity.iter())
-                .any(|n| fold_identity_value(n).is_some_and(|n| wanted.contains(&n))) =>
-            {
-                Some(supported(Value::String(identity.get(at)?.clone()), scalar))
-            }
-            _ => None,
-        })
-}
-
 /// The sentence a quote stands in, from a document's own lines: the quote's
 /// words found in order (whitespace and case aside), widened to the
 /// sentence's ends (`.`, `!` or `?` before whitespace, a blank line, or the
@@ -545,39 +501,6 @@ pub(super) fn sentence_of(text: &str, quote: &str) -> Option<String> {
     };
     let span = text.get(a..b)?;
     Some(span.split_whitespace().collect::<Vec<_>>().join(" "))
-}
-
-/// A particular's declared fields as the window read them, each supported only
-/// by what `document` holds; an identity its metadata source names fills an
-/// unknown one. One reading for a claim's subject and a particular of its own.
-fn particular_fields(
-    policies: &OntologyPolicies,
-    index: &TypeIndex<'_>,
-    subject: &OntologyTypeDecl,
-    particular: &Value,
-    document: &SourceDocument,
-    named: &[(String, Vec<Candidate>)],
-    particulars: &[Value],
-) -> std::collections::BTreeMap<String, DocumentReadField> {
-    subject_attrs(policies, index, &subject.name)
-        .into_iter()
-        .map(|a| {
-            let entry = &particular["fields"][&a.name];
-            let (value, evidence) = match entry {
-                Value::Object(o) if o.contains_key("value") => {
-                    (o.get("value"), o.get("quote").map(text))
-                }
-                Value::Null => (None, None),
-                other => (Some(other), None),
-            };
-            let cite = evidence.as_deref();
-            let mut r = reading(a, value, cite, document, named, particulars, index);
-            if matches!(r, DocumentReadField::Unknown { .. }) {
-                r = sourced_identity(subject, a, &particular["name"], index, named).unwrap_or(r);
-            }
-            (a.name.clone(), r)
-        })
-        .collect()
 }
 
 /// One outcome per supplied document, in order, from the window's answer.
@@ -703,7 +626,7 @@ fn envelope(
                 (a.name.clone(), r)
             })
             .collect();
-        let subject_fields = particular_fields(
+        let subject_fields = particulars::particular_fields(
             policies,
             index,
             subject,
@@ -715,6 +638,23 @@ fn envelope(
         let name = Some(text(&particular["name"]))
             .filter(|n| !n.is_empty())
             .unwrap_or_else(|| about.clone());
+        let mut things = vec![(name.clone(), subject.name.clone())];
+        things.extend(particulars::ref_values(
+            read_attrs(index, decl).iter().map(|a| &**a),
+            &fields,
+        ));
+        things.extend(particulars::ref_values(
+            subject_attrs(policies, index, &subject.name),
+            &subject_fields,
+        ));
+        let other_names = particulars::other_names_for(
+            particulars,
+            index,
+            things.iter().map(|(n, t)| (n.as_str(), t.as_str())),
+        );
+        if !other_names.is_empty() {
+            trace!(document = %outcome.document_id, names = other_names.len(), "document_read/window: a statement carries the other names of what it names");
+        }
         outcome.claims.push(DocumentReadClaim {
             kind: kind.clone(),
             content: quote.clone(),
@@ -725,6 +665,7 @@ fn envelope(
             evidence: quote,
             fields,
             subject_fields,
+            other_names,
         });
     }
     particulars::unstated(
@@ -769,6 +710,10 @@ fn envelope(
 #[cfg(test)]
 #[path = "window_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "window_names_tests.rs"]
+mod names_tests;
 
 #[path = "window_particulars.rs"]
 mod particulars;
