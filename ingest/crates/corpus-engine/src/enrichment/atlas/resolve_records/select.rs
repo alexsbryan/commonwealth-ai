@@ -145,7 +145,11 @@ impl Candidate<'_> {
 /// Keep what a plan joins, a record or one this document opened (its
 /// opener included), by the statement's window reference, for the statements
 /// of its document after it: both are weighed by everything they hold.
-fn note_join(joined: &mut HashMap<Alt, BTreeSet<String>>, plan: &Plan, mine: Option<&BTreeSet<String>>) {
+fn note_join(
+    joined: &mut HashMap<Alt, BTreeSet<String>>,
+    plan: &Plan,
+    mine: Option<&BTreeSet<String>>,
+) {
     if let (Some(a), Some(mine)) = (alt_of(plan), mine) {
         joined.entry(a).or_default().extend(mine.iter().cloned());
     }
@@ -286,7 +290,8 @@ pub(super) async fn choose(
         candidates.extend(w.shown.iter().map(|&(r, p)| Candidate::Record(r, p)));
         let offered = candidates.len();
         for &g in &opened {
-            if let Some(conflict) = necessary_conflict(criterion, &w.supplied[j], &opened_holds(g)) {
+            if let Some(conflict) = necessary_conflict(criterion, &w.supplied[j], &opened_holds(g))
+            {
                 debug!(document = doc.id, statement = %statements[i].id, candidate = %statements[asked[g]].id, %conflict, "atlas/resolve: a record this document opened holds what keeps this statement out; not offered");
             }
         }

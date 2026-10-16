@@ -269,36 +269,37 @@ async fn a_record_opened_in_the_pass_holds_the_particulars_that_joined_it() {
     let key = |chapter| [(CHAPTER_SUBJECT_KEY, chapter)];
     let body = "The brass lamp went missing. The tin case of the brass lamp lay in a crate. \
                 The brass lamp turned up under the sand.";
-    let r = res.resolve_document(
-        &c,
-        doc("story", body),
-        &[
-            stmt(
-                "opened",
-                body,
-                "The brass lamp went missing",
-                0,
-                &key("sec_1/p1"),
-            ),
-            stmt(
-                "case",
-                body,
-                "The tin case of the brass lamp lay in a crate",
-                0,
-                &key("sec_2/p1"),
-            ),
-            stmt(
-                "found",
-                body,
-                "The brass lamp turned up under the sand",
-                0,
-                &key("sec_2/p2"),
-            ),
-        ],
-        &[],
-        Answerer::Select(&infer),
-    )
-    .await;
+    let r = res
+        .resolve_document(
+            &c,
+            doc("story", body),
+            &[
+                stmt(
+                    "opened",
+                    body,
+                    "The brass lamp went missing",
+                    0,
+                    &key("sec_1/p1"),
+                ),
+                stmt(
+                    "case",
+                    body,
+                    "The tin case of the brass lamp lay in a crate",
+                    0,
+                    &key("sec_2/p1"),
+                ),
+                stmt(
+                    "found",
+                    body,
+                    "The brass lamp turned up under the sand",
+                    0,
+                    &key("sec_2/p2"),
+                ),
+            ],
+            &[],
+            Answerer::Select(&infer),
+        )
+        .await;
     let held: Vec<Vec<String>> = res.records().iter().map(|r| r.statements.clone()).collect();
     assert_eq!(
         held,
@@ -306,7 +307,10 @@ async fn a_record_opened_in_the_pass_holds_the_particulars_that_joined_it() {
         "another window's particular may join; the joiner's window-mate may not: {r:?}"
     );
     assert!(
-        matches!(r.outcomes[2].outcome, Outcome::Decided(Decision::Opened { .. })),
+        matches!(
+            r.outcomes[2].outcome,
+            Outcome::Decided(Decision::Opened { .. })
+        ),
         "the window-mate opens its own record, never refused: {r:?}"
     );
     assert_eq!(
