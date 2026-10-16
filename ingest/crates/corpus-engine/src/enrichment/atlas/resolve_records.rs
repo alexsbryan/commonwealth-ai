@@ -1049,8 +1049,9 @@ mod wave;
 mod weigh;
 use fields::{declared_keys, key_edges};
 
-pub(crate) use read::choice_question;
-pub(crate) use select::{decision_call, LABELS, NONE};
+pub(crate) use select::LABELS;
+#[cfg(test)]
+pub(crate) use select::{decision_call, NONE};
 pub(crate) use wave::{compose as compose_wave, decision_wave, wave_text};
 pub use wave::{one_by_one, singles as wave_singles};
 

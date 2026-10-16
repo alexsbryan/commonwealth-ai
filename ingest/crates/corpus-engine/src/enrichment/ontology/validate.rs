@@ -116,7 +116,6 @@ pub fn validate_block(block: &OntologyBlock) -> OntologyValidation {
         check_evidential(&policies, &mut out.errors);
         derived_facets(&policies, &mut out.notes);
         super::validate_derived::check(&policies, &mut out.errors, &mut out.notes);
-        super::validate_layer::fill_warnings(&policies, &mut out.warnings, &mut out.notes);
     }
     out.notes.extend(document_note);
     out
@@ -719,7 +718,6 @@ fn derived_facets(p: &OntologyPolicies, notes: &mut Vec<String>) {
         if let Some(from) = inherited {
             line.push_str(&format!(" — inherited from `{from}`"));
         }
-        line.extend(super::validate_layer::mentions_note(p, &t.name));
         notes.push(line);
     }
     let by_kind = |k: TypeKind| {

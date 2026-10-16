@@ -622,16 +622,16 @@ fn undeclared_claim_kinds_are_refused_and_a_criterion_change_rereads_where_a_key
 
 /// Failing input, named: with SOVEREIGN_READER unset the default commands read
 /// with the passes reader, though the window reader met its flip condition
-/// (DEFAULTS_LEDGER, 2026-10-15). Unset names the window reader; the passes and
-/// compiled readers are reached by name; a value naming no reader is warned
-/// and the window reader reads.
+/// (DEFAULTS_LEDGER, 2026-10-15). Unset names the window reader; a value naming
+/// no reader is warned and the window reader reads.
 #[test]
 fn the_window_reader_reads_unless_another_is_named() {
     use super::{reader_named, Reader};
     assert_eq!(reader_named(None), Reader::Window);
     assert_eq!(reader_named(Some("window")), Reader::Window);
-    assert_eq!(reader_named(Some("passes")), Reader::Passes);
-    // The compiled waves reader was deleted (2026-10-16): its name is warned and the window reader reads.
+    // The compiled waves reader and the passes reader were deleted (2026-10-16):
+    // each name is warned and the window reader reads.
+    assert_eq!(reader_named(Some("passes")), Reader::Window);
     assert_eq!(reader_named(Some("waves")), Reader::Window);
     assert_eq!(reader_named(Some("pases")), Reader::Window);
 }

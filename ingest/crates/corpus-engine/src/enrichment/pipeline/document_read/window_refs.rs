@@ -46,7 +46,6 @@ pub(super) fn reference(
                     .iter()
                     .chain([identity.join(" ")].iter())
                     .any(|n| fold_identity_value(n) == wanted),
-                Candidate::Mention { text, .. } => fold_identity_value(text) == wanted,
             })
             .map(|c| (name.as_str(), c))
     });

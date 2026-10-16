@@ -894,8 +894,8 @@ impl PhaseRunner {
                 // The one reader of a declaration (ONTOLOGY_METHOD §Reading):
                 // many small questions through the chat port, answered into
                 // the envelope the parse, validation and cache below read.
-                tracing::debug!(chapter_id = %chapter.chapter_id, "phase1.document_read_passes");
-                super::document_read::read_passes(chapter, &policies, &line_classes, &self.chat)
+                tracing::debug!(chapter_id = %chapter.chapter_id, "phase1.document_read");
+                super::document_read::read_documents(chapter, &policies, &line_classes, &self.chat)
                     .await
             } else {
                 match retry_mode {

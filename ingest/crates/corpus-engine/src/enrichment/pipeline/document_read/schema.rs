@@ -117,7 +117,9 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
         "claim_types": eligible_claims,
         "subject_types": subjects,
         "metadata_sources": metadata_sources,
-        "passes": super::passes::contract_value(policies),
+        // The key predates the window reader; renaming it would change
+        // every cached read's fingerprint for no change in what is asked.
+        "passes": super::window::contract_value(policies),
     })
 }
 

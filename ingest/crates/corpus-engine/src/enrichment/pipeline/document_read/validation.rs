@@ -292,7 +292,7 @@ fn refuse_voice(
     local_ref: &str,
 ) -> std::result::Result<(), String> {
     let voices = &policies.assertion.voices;
-    match [Some(name), words, super::about::local_ref_words(local_ref)]
+    match [Some(name), words, local_ref_words(local_ref)]
         .into_iter()
         .flatten()
         .find(|n| voices.is_voice(n))
@@ -302,6 +302,13 @@ fn refuse_voice(
         )),
         None => Ok(()),
     }
+}
+
+/// The words of an `l{n}:{words}` local reference, the form the deleted passes
+/// reader gave a particular; `None` for any other (a window's `sec_1/p1`).
+fn local_ref_words(local_ref: &str) -> Option<&str> {
+    let (line, words) = local_ref.strip_prefix('l')?.split_once(':')?;
+    (!line.is_empty() && line.bytes().all(|b| b.is_ascii_digit())).then_some(words)
 }
 
 /// `Ok(())` when every supported field's evidence is in the document.

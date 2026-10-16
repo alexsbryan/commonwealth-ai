@@ -20,7 +20,7 @@ fn classes_of(
     document: &str,
     body: &str,
 ) -> Vec<Option<(LineClass, String)>> {
-    let lines = super::super::passes::lines(body);
+    let lines = lines(body);
     classes
         .classes(document, body, &lines)
         .into_iter()
@@ -263,4 +263,14 @@ fn an_undated_document_quotes_nothing_and_is_quoted_by_nothing() {
         classed(&classes, "d", "> Only u says this.\n> And this."),
         [false, false]
     );
+}
+
+#[test]
+fn lines_are_the_non_empty_lines_with_their_trimmed_spans() {
+    let body = "  a b \n\n c\r\nlast";
+    let got: Vec<(usize, &str)> = lines(body)
+        .iter()
+        .map(|l| (l.n, &body[l.start..l.end]))
+        .collect();
+    assert_eq!(got, [(1, "a b"), (2, "c"), (3, "last")]);
 }

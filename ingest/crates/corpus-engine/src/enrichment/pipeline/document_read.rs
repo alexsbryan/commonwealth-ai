@@ -8,18 +8,9 @@ use serde_json::{Map, Value};
 
 use crate::enrichment::reconciliation::identity_signals::fold_identity_value;
 
-mod about;
-mod act;
-mod ask;
 mod cache;
-mod folded;
 mod line_classes;
-mod locate;
-mod mention;
-mod passes;
 mod pick;
-mod point;
-mod prefill;
 mod projection;
 mod runner_support;
 mod schema;
@@ -31,8 +22,6 @@ pub use cache::{
     phase1_cache_matches, validate_checkpoint,
 };
 pub use line_classes::LineClasses;
-pub use passes::read as read_passes;
-pub use passes::read_fields as reader_read_fields;
 pub use projection::parse_response;
 pub(super) use runner_support::{
     cache_text as runner_cache_text, load_exemplar_bank as runner_load_exemplar_bank,
@@ -42,6 +31,7 @@ pub(super) use runner_support::{
 pub use schema::{compose, statement_attributes, unread_types};
 pub use validation::field_evidence_exists;
 pub use validation::validate_and_stamp;
+pub use window::read as read_documents;
 
 #[cfg(test)]
 use schema::read_kind;
@@ -49,17 +39,14 @@ use schema::read_kind;
 /// The document reader (`SOVEREIGN_READER`). Closed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reader {
-    /// One call reads a window of documents (`window.rs`): the default.
+    /// One call reads a window of documents (`window.rs`).
     Window,
-    /// The generated plan of small questions per document (`passes.rs`).
-    Passes,
 }
 
-/// Which reader reads declared documents: the window reader, unless
-/// `SOVEREIGN_READER` names `passes`. The one decider, read by
-/// `enrich init` (the window manifest), the reader and the read contract's
-/// fingerprint. A value that names no reader is warned and the window
-/// reader reads: never a silent fallback to another reader.
+/// Which reader reads declared documents: the window reader, the one left
+/// since the passes reader was deleted (2026-10-16). Read by `enrich init`
+/// (the window manifest). A value of `SOVEREIGN_READER` other than `window`
+/// is warned and the window reader reads.
 pub fn reader() -> Reader {
     #[cfg(any(test, feature = "test-support"))]
     if let Some(pinned) = PINNED.with(std::cell::Cell::get) {
@@ -75,11 +62,10 @@ pub fn reader() -> Reader {
 fn reader_named(value: Option<&str>) -> Reader {
     match value {
         None | Some("window") => Reader::Window,
-        Some("passes") => Reader::Passes,
         Some(other) => {
             tracing::warn!(
                 value = other,
-                "SOVEREIGN_READER names no reader (window, passes); the window reader reads"
+                "SOVEREIGN_READER names no reader (window); the window reader reads"
             );
             Reader::Window
         }
@@ -93,9 +79,7 @@ thread_local! {
 
 /// A test of one reader pins it on its thread until the guard drops, rather
 /// than assume the default or set the process's environment. Another crate's
-/// tests reach it through the `test-support` feature (its dev-dependencies),
-/// as `sovereign-enrichment-build`'s layer contract tests do for the passes
-/// reader whose plan questions they assert.
+/// tests reach it through the `test-support` feature (its dev-dependencies).
 #[cfg(any(test, feature = "test-support"))]
 pub struct Pinned;
 

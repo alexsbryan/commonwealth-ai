@@ -19,7 +19,7 @@ const NO_OWN_LINE: &str =
 /// claim cites and its sentence is widened in (`sentence_of`).
 pub(super) fn own_text(doc: &SourceDocument, classes: &LineClasses) -> String {
     let raw = doc.raw_body();
-    let lines = super::super::passes::lines(&raw);
+    let lines = super::super::line_classes::lines(&raw);
     let mut held = 0usize;
     let own: Vec<&str> = lines
         .iter()
@@ -46,7 +46,7 @@ pub(super) fn own_text(doc: &SourceDocument, classes: &LineClasses) -> String {
 /// declared identity field, as validation allows.
 pub(super) fn quoted_text(doc: &SourceDocument, classes: &LineClasses) -> String {
     let raw = doc.raw_body();
-    let lines = super::super::passes::lines(&raw);
+    let lines = super::super::line_classes::lines(&raw);
     lines
         .iter()
         .zip(classes.classes(doc.key(), &raw, &lines))
@@ -86,7 +86,7 @@ pub(super) fn shown_text(
     labels: &HashMap<&str, &str>,
 ) -> String {
     let raw = doc.raw_body();
-    let lines = super::super::passes::lines(&raw);
+    let lines = super::super::line_classes::lines(&raw);
     let sources = classes.sources(doc.key(), &raw, &lines);
     let (mut shown, mut own, mut pointers) = (Vec::new(), 0usize, 0usize);
     let mut last: Option<&str> = None;

@@ -245,7 +245,7 @@ fn compose(
             let listed: Vec<String> = named
                 .iter()
                 .flat_map(|t| {
-                    candidates(doc, policies, t, &[])
+                    candidates(doc, policies, t)
                         .shown
                         .into_iter()
                         .map(|c| c.shown(&t.name))
@@ -285,7 +285,7 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
 }
 
 /// Read `chapter` in one call and return the envelope `parse_response` reads.
-pub(super) async fn read(
+pub async fn read(
     chapter: &ChapterInput,
     policies: &OntologyPolicies,
     classes: &LineClasses,
@@ -532,7 +532,7 @@ fn envelope(
         .map(|doc| {
             let named = named_types
                 .iter()
-                .map(|t| (t.name.clone(), candidates(doc, policies, t, &[]).shown))
+                .map(|t| (t.name.clone(), candidates(doc, policies, t).shown))
                 .collect();
             (
                 DocumentReadOutcome {

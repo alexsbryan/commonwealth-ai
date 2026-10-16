@@ -50,8 +50,8 @@ async fn a_declared_voice_is_never_a_particular_or_a_subject() {
         .unwrap()
         .section_extraction
         .unwrap();
-    // An About particular (its `l{n}:` reference), a mention (its words), and
-    // one that is no voice, as a passes read would put them beside the claims.
+    // Particulars in each form validation reads a voice in: an `l{n}:`
+    // reference, a mention (its words), and one that is no voice.
     extraction.document_read.as_mut().unwrap().documents[0]
         .particulars
         .extend([

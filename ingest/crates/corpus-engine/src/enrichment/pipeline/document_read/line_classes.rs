@@ -321,7 +321,7 @@ impl LineClasses {
         &self,
         document: &str,
         raw: &str,
-        lines: &[super::passes::Line],
+        lines: &[Line],
     ) -> Vec<Option<Carried<'_>>> {
         let texts: Vec<&str> = lines.iter().map(|l| &raw[l.start..l.end]).collect();
         let mut out = self.carried(document, &texts);
@@ -392,12 +392,7 @@ impl LineClasses {
     /// (`carried`), whatever its layout says of it, so an embedded reply's
     /// lines name the message they quote. `None` where no earlier document
     /// holds the line.
-    pub(super) fn sources(
-        &self,
-        document: &str,
-        raw: &str,
-        lines: &[super::passes::Line],
-    ) -> Vec<Option<&str>> {
+    pub(super) fn sources(&self, document: &str, raw: &str, lines: &[Line]) -> Vec<Option<&str>> {
         let texts: Vec<&str> = lines.iter().map(|l| &raw[l.start..l.end]).collect();
         self.carried(document, &texts)
             .into_iter()
@@ -419,7 +414,7 @@ impl LineClasses {
         for d in documents {
             out.push_str(d.key());
             let raw = d.raw_body();
-            let lines = super::passes::lines(&raw);
+            let lines = lines(&raw);
             for (line, carried) in lines.iter().zip(self.classes(d.key(), &raw, &lines)) {
                 if let Some(carried) = carried {
                     out.push_str(&format!(" {}:{}", line.n, carried.class.label()));
@@ -429,6 +424,33 @@ impl LineClasses {
         }
         out
     }
+}
+
+/// One non-empty line of a document body: its number from 1 and the byte span
+/// of its trimmed text.
+#[derive(Debug, Clone, PartialEq)]
+pub(super) struct Line {
+    pub(super) n: usize,
+    pub(super) start: usize,
+    pub(super) end: usize,
+}
+
+pub(super) fn lines(body: &str) -> Vec<Line> {
+    let mut out = Vec::new();
+    let mut offset = 0;
+    for raw in body.split('\n') {
+        let text = raw.trim();
+        if !text.is_empty() {
+            let start = offset + (raw.len() - raw.trim_start().len());
+            out.push(Line {
+                n: out.len() + 1,
+                start,
+                end: start + text.len(),
+            });
+        }
+        offset += raw.len() + 1;
+    }
+    out
 }
 
 #[cfg(test)]
