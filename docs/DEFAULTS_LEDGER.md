@@ -30,7 +30,17 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
-### `SOVEREIGN_READER=window` — the window reader, off until measured (2026-10-13)
+### `SOVEREIGN_READER=window` — the window reader, off until measured (2026-10-13) → **GRADUATED 2026-10-15: the default reader**
+
+**Graduated.** The flip condition below was met on DeepSeek Flash through the
+loop's default commands: the five worlds served 81/93 (arm c123-verify,
+2026-10-15; the current default's reads 76/93 under the same scorer) against
+the one-shot's 68/93 under the current scorer (66/93 under the race's), and
+Ward 9/14 against the one-shot's 8/14. The window reader is now what the
+default commands run (`document_read::reader()`, unset = window); the passes
+and compiled readers stay reachable as `SOVEREIGN_READER=passes` / `=waves`
+until their retirement, which the operator scheduled next, sized by an
+inventory (2026-10-15: "flip default only" in this push).
 
 **What ships.** `document_read/window.rs` reads a chapter in one call;
 `enrich init` cuts the corpus into windows in clock order

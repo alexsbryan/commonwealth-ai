@@ -5,13 +5,14 @@ use super::*;
 use crate::enrichment::pipeline::document_read::locate::locate_system;
 use crate::enrichment::pipeline::document_read::DocumentReadField;
 
-/// The reader over `chapter`, its line classes indexed over the chapter alone.
+/// The passes reader over `chapter`, its line classes indexed over the
+/// chapter alone.
 async fn read_all(
     chapter: &ChapterInput,
     p: &OntologyPolicies,
     infer: &InferenceFn,
 ) -> Result<String> {
-    read(
+    by_plan(
         chapter,
         p,
         &LineClasses::of(&chapter.source_documents, p),

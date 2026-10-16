@@ -54,13 +54,6 @@ const MAX_ANSWER_TOKENS: u32 = 64_000;
 /// is still held by `MAX_ANSWER_TOKENS`.
 const THINKING_TOKENS: u32 = 48_000;
 
-/// Whether declared documents are read in windows: `SOVEREIGN_READER=window`.
-/// The one decider, read by `enrich init` (the window manifest), the reader
-/// and the read contract's fingerprint.
-pub fn chosen() -> bool {
-    std::env::var("SOVEREIGN_READER").is_ok_and(|v| v == "window")
-}
-
 /// What the window reader reads from a declaration: the claim kinds it reads,
 /// each with its subject type, and the types it names particulars of, each
 /// once: those subjects, then every other type RESOLVE decides.

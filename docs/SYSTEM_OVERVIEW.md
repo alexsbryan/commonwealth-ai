@@ -631,12 +631,13 @@ question the pipeline asks about a type is a method on the resolved
   subject fields flow to RESOLVE. A claim carries its subject's readings whole
   (`SUBJECT_FIELDS_ATTRIBUTE`, each a `DocumentReadField` like its own fields),
   RESOLVE keys on their supported values and keeps them on the claim, and the
-  projection sketches no subject (RESOLVE alone makes those records). The passes reader asks by default
-  (`document_read/passes.rs`, ONTOLOGY_METHOD §Reading); `SOVEREIGN_READER=waves` (experiment, DEFAULTS_LEDGER)
+  projection sketches no subject (RESOLVE alone makes those records). The reader is one closed choice,
+  `document_read::reader()` (`Reader`): the window reader by default since 2026-10-15, the passes reader when
+  `SOVEREIGN_READER=passes` (`document_read/passes.rs`, ONTOLOGY_METHOD §Reading); `SOVEREIGN_READER=waves` (experiment, DEFAULTS_LEDGER)
   reads with the compiled reader instead (`document_read/waves.rs`): the declaration compiled into levels,
   each declared target counted and its particulars pointed at first, then per particular its fields and acts,
   then per claim its fields, every question opening with one document prefix and each round of a level one
-  forced-choice wave (`waves_jobs.rs`). `SOVEREIGN_READER=window` (experiment, DEFAULTS_LEDGER) reads each
+  forced-choice wave (`waves_jobs.rs`). The window reader (the default; DEFAULTS_LEDGER, graduated 2026-10-15) reads each
   chapter in one call (`document_read/window.rs`, prompt `window_prompt.md`), and `enrich init` then cuts the
   corpus into windows: every document in declared-clock order, cut by size only where a document ends
   (`sovereign-enrichment-build/src/window_manifest.rs`, `WINDOW_CHARS`). The window reader names each

@@ -6,6 +6,7 @@ use super::*;
 
 #[tokio::test]
 async fn cached_document_read_replays_without_calling_inference() {
+    let _passes = super::super::pin(super::super::Reader::Passes);
     use std::sync::{atomic::Ordering, Arc};
 
     let rows = [row(
@@ -63,6 +64,7 @@ async fn cached_document_read_replays_without_calling_inference() {
 #[tokio::test]
 #[should_panic(expected = "changed author must reject cached accountable read")]
 async fn changed_author_does_not_reuse_a_cached_document_read() {
+    let _passes = super::super::pin(super::super::Reader::Passes);
     use std::sync::Arc;
 
     let body = "Issue 842 was closed by pull request #1380.";
@@ -94,6 +96,7 @@ async fn changed_author_does_not_reuse_a_cached_document_read() {
 #[tokio::test]
 #[should_panic(expected = "changed body must reject cached accountable read")]
 async fn changed_body_does_not_reuse_a_cached_document_read() {
+    let _passes = super::super::pin(super::super::Reader::Passes);
     use std::sync::Arc;
 
     let metadata = r#"{"author":"Alice"}"#;
@@ -135,6 +138,7 @@ async fn changed_body_does_not_reuse_a_cached_document_read() {
 #[tokio::test]
 #[should_panic(expected = "changed READ contract must reject cached accountable read")]
 async fn changed_read_contract_does_not_reuse_a_cached_document_read() {
+    let _passes = super::super::pin(super::super::Reader::Passes);
     use std::sync::Arc;
 
     let rows = [row(

@@ -1,6 +1,6 @@
 use serde_json::{json, Value};
 
-use super::super::passes::{read, read_fields};
+use super::super::passes::{by_plan, read_fields};
 use super::super::tests::{input_chapter, row, scripted};
 use super::super::{DocumentReadOutcome, DocumentReadStatus as Status};
 use super::*;
@@ -271,7 +271,7 @@ async fn read_one(
     let chapter = input_chapter(&[row(1, "doc-1", body, "{}")]);
     let (infer, seen) = scripted(answers);
     let classes = LineClasses::of(&chapter.source_documents, p);
-    let envelope = read(&chapter, p, &classes, &infer).await.unwrap();
+    let envelope = by_plan(&chapter, p, &classes, &infer).await.unwrap();
     let mut extraction = super::super::parse_response(&envelope, p)
         .unwrap()
         .section_extraction

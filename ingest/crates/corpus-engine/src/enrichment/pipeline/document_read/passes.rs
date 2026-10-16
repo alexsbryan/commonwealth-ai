@@ -57,12 +57,20 @@ pub async fn read(
     classes: &LineClasses,
     infer: &InferenceFn,
 ) -> Result<String> {
-    if super::window::chosen() {
-        return super::window::read(chapter, policies, classes, infer).await;
+    match super::reader() {
+        super::Reader::Window => super::window::read(chapter, policies, classes, infer).await,
+        super::Reader::Waves => super::waves::read(chapter, policies, classes, infer).await,
+        super::Reader::Passes => by_plan(chapter, policies, classes, infer).await,
     }
-    if super::waves::chosen() {
-        return super::waves::read(chapter, policies, classes, infer).await;
-    }
+}
+
+/// The passes reader itself, whatever `SOVEREIGN_READER` chooses.
+pub(super) async fn by_plan(
+    chapter: &ChapterInput,
+    policies: &OntologyPolicies,
+    classes: &LineClasses,
+    infer: &InferenceFn,
+) -> Result<String> {
     let plan = Plan::of(policies);
     if plan.kinds.is_empty() {
         return Err(Error::InvalidInput(
@@ -648,12 +656,15 @@ pub fn read_fields(
 /// question's wording changes this value, and so the contract fingerprint
 /// that keys cached reads (`schema::contract_value`).
 pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
-    if super::window::chosen() {
-        return super::window::contract_value(policies);
+    match super::reader() {
+        super::Reader::Window => super::window::contract_value(policies),
+        super::Reader::Waves => super::waves::contract_value(policies),
+        super::Reader::Passes => plan_contract_value(policies),
     }
-    if super::waves::chosen() {
-        return super::waves::contract_value(policies);
-    }
+}
+
+/// The passes reader's contract, whatever `SOVEREIGN_READER` chooses.
+pub(super) fn plan_contract_value(policies: &OntologyPolicies) -> Value {
     let plan = Plan::of(policies);
     let body = "first line\nsecond line";
     let lines = lines(body);

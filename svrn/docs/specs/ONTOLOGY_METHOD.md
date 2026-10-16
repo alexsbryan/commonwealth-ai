@@ -221,7 +221,8 @@ atom beside its claim, one per statement, so trajectories, configurations and pa
 extracted one (`resolution_records/statement_atoms.rs`, 2026-10-15; holders' trajectories chained by
 `resolution/trajectories.rs`, the pass 3b runs).
 
-**The window reader (experiment, 2026-10-13; `SOVEREIGN_READER=window`, DEFAULTS_LEDGER).** The race of
+**The window reader (2026-10-13; the default reader since 2026-10-15, DEFAULTS_LEDGER; the passes reader is
+`SOVEREIGN_READER=passes`).** The race of
 2026-10-13 (REVIEW_BRIEF.md) read five generated mail worlds four ways with one hosted model: reading windows
 of whole documents served 76/93 deals against the one-shot's 66/93, windows cut by date tied windows cut by
 folder (78/93 against 76/93), and on the local model windows served 5/15 of world-s4's deals where this

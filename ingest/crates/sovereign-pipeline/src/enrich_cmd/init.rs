@@ -581,7 +581,8 @@ async fn cmd_init_from_corpus(
     // The window reader reads windows, every document in clock order cut by
     // size (`window_manifest`); the other readers read the corpus's sections.
     let window_policies = ontology.as_ref().map(|spec| spec.policies()).filter(|p| {
-        corpus_engine::enrichment::pipeline::document_read::window_chosen() && p.reads_documents()
+        use corpus_engine::enrichment::pipeline::document_read::{reader, Reader};
+        reader() == Reader::Window && p.reads_documents()
     });
     let manifest = if let Some(policies) = window_policies {
         let date = policies

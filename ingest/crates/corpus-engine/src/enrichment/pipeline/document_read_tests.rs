@@ -258,6 +258,7 @@ fn reader_runner(
 /// floor of 40 is still read (abfe32a14: the floor skipped 12 uv states).
 #[tokio::test]
 async fn the_passes_reader_reads_a_section_under_the_body_word_floor() {
+    let _passes = super::pin(super::Reader::Passes);
     let rows = [row(
         1,
         "doc-a",
@@ -282,6 +283,7 @@ async fn the_passes_reader_reads_a_section_under_the_body_word_floor() {
 
 #[tokio::test]
 async fn production_phase1_uses_the_mock_provider_with_actual_document_context() {
+    let _passes = super::pin(super::Reader::Passes);
     use std::sync::{
         atomic::{AtomicUsize, Ordering},
         Arc, Mutex,
@@ -606,6 +608,7 @@ fn a_repeated_local_reference_with_a_changed_label_is_refused_not_fatal() {
 
 #[test]
 fn undeclared_claim_kinds_are_refused_and_identity_changes_reuse_read_contract() {
+    let _passes = super::pin(super::Reader::Passes);
     let rows = [row(
         1,
         "doc-a",
@@ -662,4 +665,19 @@ fn undeclared_claim_kinds_are_refused_and_identity_changes_reuse_read_contract()
         .guidance
         .push_str(" Never infer transitions.");
     assert!(cache_matches_chapter(&chapter, extraction, &changed_read_contract).is_err());
+}
+
+/// Failing input, named: with SOVEREIGN_READER unset the default commands read
+/// with the passes reader, though the window reader met its flip condition
+/// (DEFAULTS_LEDGER, 2026-10-15). Unset names the window reader; the passes and
+/// compiled readers are reached by name; a value naming no reader is warned
+/// and the window reader reads.
+#[test]
+fn the_window_reader_reads_unless_another_is_named() {
+    use super::{reader_named, Reader};
+    assert_eq!(reader_named(None), Reader::Window);
+    assert_eq!(reader_named(Some("window")), Reader::Window);
+    assert_eq!(reader_named(Some("passes")), Reader::Passes);
+    assert_eq!(reader_named(Some("waves")), Reader::Waves);
+    assert_eq!(reader_named(Some("pases")), Reader::Window);
 }

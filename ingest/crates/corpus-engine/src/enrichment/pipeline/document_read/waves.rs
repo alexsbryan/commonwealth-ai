@@ -47,11 +47,6 @@ use crate::enrichment::pipeline::types::ChapterInput;
 use crate::error::{Error, Result};
 use crate::InferenceFn;
 
-/// Whether the compiled reader reads documents (`SOVEREIGN_READER=waves`).
-pub(super) fn chosen() -> bool {
-    std::env::var("SOVEREIGN_READER").is_ok_and(|v| v == "waves")
-}
-
 /// What each level asks, compiled from the contract alone (a pure function
 /// of it: renaming every type and attribute renames the questions only).
 pub(super) struct Levels<'a> {

@@ -31,7 +31,7 @@ async fn read_claims(
     infer: &InferenceFn,
 ) -> Vec<DocumentReadClaim> {
     let classes = LineClasses::of(&chapter.source_documents, p);
-    let envelope = passes::read(chapter, p, &classes, infer).await.unwrap();
+    let envelope = passes::by_plan(chapter, p, &classes, infer).await.unwrap();
     let mut extraction = super::super::parse_response(&envelope, p)
         .unwrap()
         .section_extraction
@@ -228,7 +228,7 @@ fn the_about_questions_are_in_the_read_contract_and_generated_from_the_declarati
     let p = policies();
     let body = "first line\nsecond line";
     assert_eq!(
-        passes::contract_value(&p)["about"],
+        passes::plan_contract_value(&p)["about"],
         contract_sample(body, &passes::lines(body))
     );
     let mut case = p.type_decl("case").unwrap().clone();
@@ -261,7 +261,9 @@ async fn a_particular_no_statement_is_about_is_carried_and_projected_with_its_ty
         three("A"),
     ]);
     let classes = LineClasses::of(&chapter.source_documents, &p);
-    let envelope = passes::read(&chapter, &p, &classes, &infer).await.unwrap();
+    let envelope = passes::by_plan(&chapter, &p, &classes, &infer)
+        .await
+        .unwrap();
     let mut extraction = super::super::parse_response(&envelope, &p)
         .unwrap()
         .section_extraction
@@ -353,7 +355,9 @@ async fn a_decided_type_no_statement_kind_is_about_is_read_by_about() {
         three("A"),
     ]);
     let classes = LineClasses::of(&chapter.source_documents, &p);
-    let envelope = passes::read(&chapter, &p, &classes, &infer).await.unwrap();
+    let envelope = passes::by_plan(&chapter, &p, &classes, &infer)
+        .await
+        .unwrap();
     let mut extraction = super::super::parse_response(&envelope, &p)
         .unwrap()
         .section_extraction
