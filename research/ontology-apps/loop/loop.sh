@@ -19,8 +19,6 @@
 # Env: NOTE="what this arm changes" (required). ASKER=replay|recorded|daemon for extract (default recorded: a
 # question asked before reuses its answer, a new one goes to the daemon); resolve always runs --asker recorded.
 # INIT=1 re-cuts the windows (enrich init). RESTORE=<arm> puts that arm's cut back first, for an exact replay.
-# SOVEREIGN_READER is passed through as given: unset runs the product default (the window reader since 5f2711847),
-# so an arm exercises the path a user gets; run.json records it ("default" when unset).
 # NOSCORE=1 scores and diagnoses nothing and writes no journal row: a deletion's replay, judged by
 # `table.py --same <reference arm> <arm>` on its records, asks no bank question (a bank score is 210 model calls).
 cd "$(dirname "$0")/../../.." || exit 1
@@ -67,7 +65,6 @@ one() {
   fi
   python3 -c "import json,sys; json.dump(dict(zip(sys.argv[2::2], sys.argv[3::2])), open(sys.argv[1], 'w'), indent=1)" $out/run.json \
     arm "$arm" corpus "$id" note "$NOTE" head "$head" dirty "$dirty" svrn_ingest_mtime "$bin" engine "$engine" asker "$asker" \
-    reader "${SOVEREIGN_READER:-default}" \
     init "${INIT:-}" restore "${RESTORE:-}" extract_exit "$rx" resolve_exit "${rr:-not run}" seconds "$(( $(date +%s) - s ))" \
     answers_before "$before" answers_after "$after" noscore "${NOSCORE:-}" finished "$(date -u +%FT%TZ)"
   [ "$kind" = none ] && { echo "$id: extract exit $rx, resolve exit ${rr:-not run}; answers $before -> $after (not scored)"; return; }

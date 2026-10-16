@@ -269,11 +269,6 @@ treesitter = [
     # consumers that opt into `treesitter`.
     "dep:corpus-engine-scip",
 ]
-# `document_read::pin`, the thread-local reader pin a test of one reader
-# holds, for other crates' tests (enabled from their dev-dependencies, as
-# sovereign-enrichment-build's layer contract tests pin the passes reader).
-# Adds no dependency.
-test-support = []
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

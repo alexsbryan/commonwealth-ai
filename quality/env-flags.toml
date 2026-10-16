@@ -1116,12 +1116,6 @@ status = "shipped"
 purpose = "Embed model override for notes embeddings — takes a model ID string (corpus-engine-notes). Near-synonym of SOVEREIGN_EMBED_MODEL (a path); same meaning, incompatible values."
 
 [[flag]]
-name = "SOVEREIGN_READER"
-cluster = "inference"
-default = "unset"
-status = "shipped"
-purpose = "Which reader reads declared documents; one decider, document_read::reader (a closed Reader). Unset or =window (the default since 2026-10-15, DEFAULTS_LEDGER): each chapter in one call (document_read/window.rs), and `enrich init` cuts the corpus into windows in clock order (sovereign-enrichment-build window_manifest.rs). =passes: the generated plan of small questions per document (document_read/passes.rs). Any other value (=waves since the compiled reader was deleted, 2026-10-16) is warned and the window reader reads. Read per chapter (passes::read) and in the read contract's fingerprint, so cached reads of one reader are never served to another."
-[[flag]]
 name = "SOVEREIGN_RERANK_MODEL_PATH"
 cluster = "inference"
 default = "unset"
@@ -1798,6 +1792,14 @@ default = "no effect"
 status = "removed"
 purpose = "Enabled question decomposition and sub-query fan-out in retrieval."
 replacement = "retired: the query-decomposition retrieval step was deleted (ac032e5bc)"
+
+[[flag]]
+name = "SOVEREIGN_READER"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Chose which reader read declared documents: window (the default from 2026-10-15) or passes."
+replacement = "retired: the window reader is the one reader; the passes reader was deleted (3058feb36)"
 
 [[flag]]
 name = "SOVEREIGN_SERVER_PATH"

@@ -36,66 +36,6 @@ pub use window::read as read_documents;
 #[cfg(test)]
 use schema::read_kind;
 
-/// The document reader (`SOVEREIGN_READER`). Closed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Reader {
-    /// One call reads a window of documents (`window.rs`).
-    Window,
-}
-
-/// Which reader reads declared documents: the window reader, the one left
-/// since the passes reader was deleted (2026-10-16). Read by `enrich init`
-/// (the window manifest). A value of `SOVEREIGN_READER` other than `window`
-/// is warned and the window reader reads.
-pub fn reader() -> Reader {
-    #[cfg(any(test, feature = "test-support"))]
-    if let Some(pinned) = PINNED.with(std::cell::Cell::get) {
-        return pinned;
-    }
-    // A value that is not Unicode names no reader: it is warned below, never
-    // read as unset.
-    let value = std::env::var_os("SOVEREIGN_READER");
-    reader_named(value.as_ref().map(|v| v.to_string_lossy()).as_deref())
-}
-
-/// The reader `value` names, `None` when the variable is unset.
-fn reader_named(value: Option<&str>) -> Reader {
-    match value {
-        None | Some("window") => Reader::Window,
-        Some(other) => {
-            tracing::warn!(
-                value = other,
-                "SOVEREIGN_READER names no reader (window); the window reader reads"
-            );
-            Reader::Window
-        }
-    }
-}
-
-#[cfg(any(test, feature = "test-support"))]
-thread_local! {
-    static PINNED: std::cell::Cell<Option<Reader>> = const { std::cell::Cell::new(None) };
-}
-
-/// A test of one reader pins it on its thread until the guard drops, rather
-/// than assume the default or set the process's environment. Another crate's
-/// tests reach it through the `test-support` feature (its dev-dependencies).
-#[cfg(any(test, feature = "test-support"))]
-pub struct Pinned;
-
-#[cfg(any(test, feature = "test-support"))]
-pub fn pin(reader: Reader) -> Pinned {
-    PINNED.with(|p| p.set(Some(reader)));
-    Pinned
-}
-
-#[cfg(any(test, feature = "test-support"))]
-impl Drop for Pinned {
-    fn drop(&mut self) {
-        PINNED.with(|p| p.set(None));
-    }
-}
-
 /// Internal attributes carried only between Phase 1 projection and RESOLVE.
 pub const LOCAL_REF_ATTRIBUTE: &str = "__document_read_local_ref";
 pub const SOURCE_DOCUMENT_ATTRIBUTE: &str = "__document_read_source_document";
