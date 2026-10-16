@@ -16,6 +16,9 @@ The window reader is the product's one reader (5f2711847; the passes reader dele
 served against the one-shot's 68/93 (arms structural-fresh and structural-fresh-s1, the diagnosed set). Ward: 8/14,
 tied with the one-shot. Saltgrass, held out (`generality-prereg.md`): Bar G passes (the ledger recipe's 28.5 against
 the one-shot's 25.5), Bar R fails on 7 of 10 recipe pairs, on agreement (778461d0e).
+Who says it (b34ee699b, ebdf1eab5, voice-prereg.md) is kept on the cut line (operator, 2026-10-16): it passed
+its three target bars and missed the mail guard by one deal (31 against 32, note dcdfeb8f); the first change found
+later that jumps the objective and conflicts with it takes precedence, and this is the first thing to cut.
 
 ## How we develop (operator, 2026-10-13)
 
