@@ -296,8 +296,7 @@ async fn an_admitted_park_is_widened_but_still_bounded() {
         "a permit that never frees must eventually shed even an admitted caller"
     );
     assert!(
-        waited
-            >= std::time::Duration::from_millis(50 * u64::from(super::ADMITTED_PARK_MULTIPLE)),
+        waited >= std::time::Duration::from_millis(50 * u64::from(super::ADMITTED_PARK_MULTIPLE)),
         "the admitted caller waited {waited:?}, less than {}x the {}ms bound — \
          it was cut off at the FRESH bound",
         super::ADMITTED_PARK_MULTIPLE,
@@ -316,8 +315,7 @@ async fn zero_bound_never_sheds() {
         .expect("first caller takes the permit");
 
     let qc = Arc::clone(&q);
-    let waiter =
-        tokio::spawn(async move { acquire_with_queue_gauge(&qc, "waiter", None).await });
+    let waiter = tokio::spawn(async move { acquire_with_queue_gauge(&qc, "waiter", None).await });
     wait_until(
         || q.depth() >= 1,
         "the waiter to park despite a 1 h estimate",
@@ -442,9 +440,10 @@ async fn closed_semaphore_names_the_phase_in_the_error() {
         .expect("first caller takes the permit");
 
     let qc = Arc::clone(&q);
-    let waiter = tokio::spawn(async move {
-        acquire_with_queue_gauge(&qc, "complete_stream/fast", None).await
-    });
+    let waiter =
+        tokio::spawn(
+            async move { acquire_with_queue_gauge(&qc, "complete_stream/fast", None).await },
+        );
     wait_until(|| q.depth() >= 1, "the waiter to park").await;
     q.close_for_test();
 
