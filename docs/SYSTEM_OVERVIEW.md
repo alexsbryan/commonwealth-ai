@@ -645,7 +645,10 @@ question the pipeline asks about a type is a method on the resolved
   sufficient key (`resolution_records.rs::CHAPTER_SUBJECT_KEY`), deciding only across windows. A malformed value
   in the answer costs at most the element holding it (`window_answer.rs`): a bare fraction (`.02`) is read with
   its leading zero, and if the answer still does not parse each particular and claim is parsed alone, the ones
-  that fail (and the claims about a failed particular) dropped and counted as `lost`. Two particulars the reader
+  that fail (and the claims about a failed particular) dropped and counted as `lost`. A reference value resolves
+  in `window_refs.rs` (label name, candidate, words held), by either name when the reader wrote two joined by
+  " / " for a thing a document says has another name (`names_in`, also used for a subject's sourced identity and
+  for placing an unstated particular). Two particulars the reader
   read in one document stay two: a record holding one is never offered the other, folded or joined earlier in the
   same document (`resolve_records/apart.rs::read_beside`, tracked in `select::choose`), and each sibling's question
   shows the other as read (`apart.rs::beside_in_document`), so the first asked can leave a record that fits the

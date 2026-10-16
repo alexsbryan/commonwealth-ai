@@ -47,7 +47,12 @@ pub(super) fn unstated(
             debug!(chapter = %chapter.chapter_id, particular = %local, %ty, %name, "document_read/window: no statement kind is about this type; its references name it");
             continue;
         };
-        let mut cues = vec![name.clone()];
+        // Its names as written (two, joined by " / ", for a thing a document
+        // says has another name), then its fields' quotes.
+        let mut cues: Vec<String> = super::refs::names_in(&name)
+            .into_iter()
+            .map(str::to_string)
+            .collect();
         if let Some(fields) = p["fields"].as_object() {
             cues.extend(fields.values().filter_map(|f| f.get("quote")).map(text));
         }

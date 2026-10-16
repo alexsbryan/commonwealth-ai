@@ -462,7 +462,11 @@ fn sourced_identity(
         .effective_identity(&subject.name)
         .iter()
         .position(|k| *k == attr.name)?;
-    let wanted = fold_identity_value(&text(name))?;
+    let name = text(name);
+    let wanted: Vec<String> = refs::names_in(&name)
+        .into_iter()
+        .filter_map(fold_identity_value)
+        .collect();
     named
         .iter()
         .filter(|(t, _)| *t == subject.name)
@@ -476,7 +480,7 @@ fn sourced_identity(
             } if names
                 .iter()
                 .chain(identity.iter())
-                .any(|n| fold_identity_value(n).as_ref() == Some(&wanted)) =>
+                .any(|n| fold_identity_value(n).is_some_and(|n| wanted.contains(&n))) =>
             {
                 Some(supported(Value::String(identity.get(at)?.clone()), scalar))
             }
