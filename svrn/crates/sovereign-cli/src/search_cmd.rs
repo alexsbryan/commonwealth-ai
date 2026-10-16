@@ -26,8 +26,8 @@
 mod catalogue;
 
 use sovereign_contracts::oicp::{
-    features, KnowledgeResult, KnowledgeSearchResponse, ProviderManifest, SentenceRoute,
-    SpanLocator,
+    features, IndexPlace, KnowledgeResult, KnowledgeSearchResponse, ProviderManifest,
+    SentencePlace, SentenceRoute, SpanLocator,
 };
 
 #[derive(clap::Parser, Debug)]
@@ -146,6 +146,9 @@ pub async fn run(args: &[String]) -> i32 {
             ),
             _ => println!("from the sentence index"),
         }
+        for line in queue_lines(reply.sentence_queue.as_deref().unwrap_or_default()) {
+            println!("{line}");
+        }
     }
     if let Some(t) = reply.truncated {
         println!(
@@ -164,6 +167,38 @@ pub async fn run(args: &[String]) -> i32 {
         }
     );
     0
+}
+
+/// Where each waiting corpus stands in the host's embedding queue
+/// (`knowledge:sentence_queue`, v0.6 §2.11), one line per corpus.
+fn queue_lines(places: &[SentencePlace]) -> Vec<String> {
+    places
+        .iter()
+        .map(|p| match p.place {
+            IndexPlace::Embedding => {
+                format!(
+                    "  {}: embedding now, {} sentence(s) pending",
+                    p.corpus, p.pending
+                )
+            }
+            IndexPlace::Queued => {
+                let ahead: Vec<String> = p
+                    .behind
+                    .iter()
+                    .map(|b| match b.pending {
+                        Some(n) => format!("{} ({n} pending)", b.corpus),
+                        None => format!("{} (not yet counted)", b.corpus),
+                    })
+                    .collect();
+                format!(
+                    "  {}: queued, {} sentence(s) pending, behind {}",
+                    p.corpus,
+                    p.pending,
+                    ahead.join(", ")
+                )
+            }
+        })
+        .collect()
 }
 
 /// The manifest's search endpoint, if the host offers what was asked.
@@ -285,6 +320,42 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_queued_corpus_is_printed_behind_the_corpora_ahead_of_it() {
+        use sovereign_contracts::oicp::QueuedCorpus;
+        let places = [
+            SentencePlace {
+                corpus: "a".into(),
+                pending: 40,
+                place: IndexPlace::Embedding,
+                behind: vec![],
+            },
+            SentencePlace {
+                corpus: "b".into(),
+                pending: 7,
+                place: IndexPlace::Queued,
+                behind: vec![
+                    QueuedCorpus {
+                        corpus: "a".into(),
+                        pending: Some(40),
+                    },
+                    QueuedCorpus {
+                        corpus: "c".into(),
+                        pending: None,
+                    },
+                ],
+            },
+        ];
+        assert_eq!(
+            queue_lines(&places),
+            [
+                "  a: embedding now, 40 sentence(s) pending",
+                "  b: queued, 7 sentence(s) pending, behind a (40 pending), c (not yet counted)",
+            ]
+        );
+        assert!(queue_lines(&[]).is_empty());
+    }
 
     #[test]
     fn a_locator_reads_as_a_reader_cites_it() {

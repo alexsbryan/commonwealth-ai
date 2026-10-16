@@ -26,7 +26,9 @@ pub(super) async fn run(state: AppState, index: SentenceIndex) {
             continue;
         };
         let at = Instant::now();
-        match index_corpus(&state, &index, &corpus).await {
+        let outcome = index_corpus(&state, &index, &corpus).await;
+        index.finished();
+        match outcome {
             Ok(done) => tracing::info!(
                 target: TARGET,
                 corpus = %corpus,

@@ -47,6 +47,7 @@ string, gates behaviour**. The types are in
 | `evidence:verify_corrections` | `knowledge.evidence.verify_correction_endpoint` takes a client's correction of a verify decision (§2.10) | `evidence:verify`, `verify_correction_endpoint` |
 | `ingest:documents` | install progress lists an install from its spawn, and each document it read once it has returned (§2.9) | `ingest:v1` |
 | `knowledge:sentences` | knowledge search takes `granularity: "sentence"` and answers sentences, ranked by the scorer `knowledge.sentence_scorer` names (§2.11) | `knowledge:range`, `knowledge:scoped`, `knowledge.sentence_scorer` |
+| `knowledge:sentence_queue` | a sentence reply on the `passages` route says where each waiting scoped corpus stands in the host's embedding queue: embedding now, or queued behind which corpora with their pending counts (§2.11) | `knowledge:sentences` |
 | `knowledge:locator` | every span carries `locator` where the extraction that stored its text found one, a plain text's heading paths by §2.13's rule | `knowledge:range` |
 | `evidence:verify_sentences` | verify's candidates are §2.11's sentences, each claim names its specifics by kind, the fast tier's literal miss is a hint, and a contradicted passage names what differs (§2.15) | `evidence:verify`, `knowledge:sentences` |
 | `ingest:lookups` | for an install that allows it, a document's identifiers are looked up and its record merged under its declared metadata, listed on progress and on its hits (§2.16) | `ingest:documents`, `ingest:recipe` |
@@ -305,11 +306,16 @@ KnowledgeSearchResponse { … ,
                           scorer: Option<Scorer>,       // present iff the request asked for sentences
                           route: Option<SentenceRoute>, // beside scorer
                           sentences_pending: Option<u64>,   // present iff route = "passages"
+                          sentence_queue: Option<Vec<SentencePlace>>, // iff passages and knowledge:sentence_queue
                           truncated: Option<Truncated> }    // the scan stopped at the host's ceiling
 Scorer          { name: SentenceScorer, model: String }
 SentenceScorer  = "cosine" | "rerank"
 SentenceRoute   = "index" | "passages"
 Truncated       { scanned: u64, in_scope: u64 }
+SentencePlace   { corpus: String, pending: u64, place: IndexPlace,
+                  behind: Vec<QueuedCorpus> }   // empty iff place = "embedding"
+IndexPlace      = "embedding" | "queued"
+QueuedCorpus    { corpus: String, pending: Option<u64> }
 ```
 
 - **Hits.** At `sentence`, `results` holds at most `limit` sentences (20 by
@@ -357,6 +363,25 @@ Truncated       { scanned: u64, in_scope: u64 }
   took the sentences of its top hits, and ranked those by the same scorer;
   `sentences_pending` counts the scoped sentences not yet embedded. A client
   reads `passages` as "still indexing", not as a smaller library.
+- **Queue.** A host embeds its corpora one at a time, first in first out, so
+  a library installed behind another waits for it, and `sentences_pending`
+  alone cannot say for how long or why. On a host advertising
+  `knowledge:sentence_queue`, a `passages` reply carries `sentence_queue`:
+  one `SentencePlace` for each scoped corpus with a sentence not yet
+  embedded, in the order the host embeds them. `pending` is that corpus's
+  own count of sentences not embedded, scoped or not, the work its place
+  waits on. `place` is `embedding` for the corpus the host is embedding at
+  the moment of the reply, or that nothing is ahead of, with `behind`
+  empty, and `queued` for one that
+  waits, with `behind` naming the corpora embedded before it, the one
+  embedding now first, in the order the host embeds them, each with its own
+  `pending`; `pending` is absent for a corpus the host has queued and not
+  yet opened to count. At most one corpus is `embedding`, and a corpus that
+  has finished is named in no `behind`. The queue is the host's, read when
+  the reply is built, never a client's inference from counts. A corpus
+  placed `embedding` and then `index` on later replies is the sequence a
+  client expects; a client reads a reply without the field as no claim about
+  the queue, which is what a host not advertising the feature sends.
 - **Ceiling.** On the `index` route the scan is exhaustive up to a ceiling of
   sentences per scope, kept in the host's data file. A scope past it is
   answered from `scanned` of its `in_scope` sentences and says so in
@@ -665,6 +690,7 @@ records keep CSL-JSON field names as the resolvers return them.
 | `knowledge.scoped` | a query reaching several fixture texts, scoped to the second-ranked one, returns at least one hit and every hit from that text; a `documents` entry that is not a text name is `400` | a host that ignores `documents` |
 | `ingest.install_limit` | with `ingest:recipe` and `max_install_bytes` stated, an install body of exactly that many bytes, a recipe that does not load padded to the size, is read: `400`, never `413`; one byte more is `413 install too large` naming the limit. A stated limit past 256 MiB is probed at 256 MiB, with nothing sent past it | a host stating a limit whose install route reads bodies only to its surface's 8 MiB |
 | `knowledge.sentences` | each fixture signature, at `granularity: sentence` scoped to its own text, returns at least one sentence, at most `limit`, best first, every one from that text; each carries `span` whose `exact` is its `content` and whose range reads back byte-equal through `text_endpoint`; the reply names the advertised scorer and a model, and a route, with `sentences_pending` exactly on `passages`. A `503 scorer unavailable` naming the advertised scorer is could-not-judge | a sentence range one code point off; a sentence from outside the scope; a host advertising `rerank`, holding no rerank slot, that answers with cosine |
+| `knowledge.sentence_queue` | installs two corpora of its own (`fixture/queue.json`, the second under another id), one behind the other, and searches both at sentence granularity until the host answers `index`; every `passages` reply carries `sentence_queue`, each placed corpus has a sentence pending, at most one is `embedding` and names nothing ahead, one `queued` names the corpus embedding now first, and a corpus of the request named ahead is itself placed in that reply. Needs `ingest:recipe`; an `index` reply at the first search is could-not-judge | a corpus queued behind another answered `embedding`; a corpus that has finished still named ahead |
 | `knowledge.locator` | installs its own library (`fixture/headings.json`: a headed text with a contents line and a preface, and a text with no headings) and aligns each listed sentence verbatim; each span's `locator` is the heading path the rule gives, or absent where it gives none. Needs `ingest:recipe` and `evidence:align`, could-not-judge without | a span given the heading path of the part before the one it stands in; a locator invented for a span under no heading |
 | `evidence.verify_sentences` | installs its own library (`fixture/claims.json`, a ledger of figure sentences) and verifies five units at each served tier: every specific is an exact range of the unit inside its claim; each listed figure, date or quantity is covered, a parenthesised one too; nothing inside `(Okafor 2019)` or `(page 14)` is a specific; the fast tier never says `supported` or `contradicted` and says `unsupported` only with no evidence; a unit restating the library's figure in another form is `abstained` at `fast` and `supported` at `checker`; another figure is `contradicted`, naming the pair, each side read back; a concept the library lacks is `unsupported` with no evidence. A checker that answers `could_not_judge` is could-not-judge | a claim settled from the fast tier's literal miss; a citation's year made a specific; a figure inside parentheses left out; a contradiction that names no differing specific |
 | `ingest.lookups` | installs its own library (`fixture/records.json`: a document declaring a title and a DOI that resolves, one declaring a DOI that does not, one declaring none) allowing lookups, and again as another corpus not allowing them; reads each record off progress: every field has an origin, every declared field kept as `declared`, the resolving DOI `resolved`, the other `unresolved` with nothing taken, the undeclared document no looked-up field; every lookup of the second install `not_allowed` with nothing taken; with `knowledge:document`, a hit carries the record progress lists. A resolver `unreachable` is could-not-judge | a field invented for an identifier that did not resolve; a declared title overwritten by the looked-up one; a lookup sent for an install that did not allow it |
@@ -677,7 +703,8 @@ records keep CSL-JSON field names as the resolvers return them.
 `ingest:documents` never without `ingest:v1`; `evidence:verify_corrections`
 iff `verify_correction_endpoint`, and never without `evidence:verify`;
 `knowledge:sentences` iff `knowledge.sentence_scorer`, and never without
-`knowledge:range` and `knowledge:scoped`; `knowledge:locator` never
+`knowledge:range` and `knowledge:scoped`; `knowledge:sentence_queue`
+never without `knowledge:sentences`; `knowledge:locator` never
 without `knowledge:range`; `ingest:transcripts` never without
 `knowledge:locator` and `ingest:recipe`; `evidence:verify_sentences` never
 without `evidence:verify` and `knowledge:sentences`; `ingest:lookups` never

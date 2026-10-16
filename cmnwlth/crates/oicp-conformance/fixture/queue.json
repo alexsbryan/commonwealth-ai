@@ -1,0 +1,13 @@
+{
+  "shelf": {
+    "corpus_id": "oicp-conformance-queue-ahead",
+    "documents": [
+      {
+        "name": "pilots",
+        "text": "The pilots of the lamp harbour kept a ledger of every vessel. The lamp harbour pilots rowed out at dawn. A vessel waited for the pilots when the lamp burned low.\n"
+      }
+    ]
+  },
+  "behind_corpus_id": "oicp-conformance-queue-behind",
+  "query": "lamp harbour pilots vessel"
+}

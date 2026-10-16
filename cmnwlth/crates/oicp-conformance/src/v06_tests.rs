@@ -7,6 +7,7 @@ use crate::claim_checks::check_evidence_verify_sentences;
 use crate::evidence_checks::v05_feature_failures;
 use crate::fake_host::Breaks;
 use crate::located_checks::{check_ingest_transcript, check_knowledge_locator};
+use crate::queue_checks::check_knowledge_sentence_queue;
 use crate::record_checks::check_ingest_lookups;
 use crate::v05_tests::{bench, green, red};
 
@@ -193,4 +194,49 @@ async fn ingest_lookups_is_red_against_an_invented_field_an_overwritten_title_an
             .any(|x| x == "ingest:lookups requires ingest:documents"),
         "{f:?}"
     );
+}
+
+/// v0.6 §2.11's two failing inputs for `sentence_queue`: a corpus queued
+/// behind another answered as embedding now, and a corpus that has finished
+/// still named ahead of the one behind it.
+#[tokio::test]
+async fn knowledge_sentence_queue_is_red_against_a_queued_corpus_answered_embedding_and_a_finished_one_named_ahead(
+) {
+    let b = bench(Breaks::default()).await;
+    green(&check_knowledge_sentence_queue(&b.host, &b.manifest).await);
+    assert!(v05_feature_failures(&b.manifest).is_empty());
+    for (breaks, says) in [
+        (
+            Breaks {
+                queued_as_embedding: true,
+                ..Breaks::default()
+            },
+            "2 corpora answered embedding now (oicp-conformance-queue-ahead, \
+             oicp-conformance-queue-behind); the host embeds one at a time",
+        ),
+        (
+            Breaks {
+                finished_named_ahead: true,
+                ..Breaks::default()
+            },
+            "which has no sentence pending in this reply (it has finished)",
+        ),
+    ] {
+        let b = bench(breaks).await;
+        red(
+            &check_knowledge_sentence_queue(&b.host, &b.manifest).await,
+            says,
+        );
+    }
+    let mut m = b.manifest.clone();
+    m.features.retain(|f| f != "knowledge:sentences");
+    let f = v05_feature_failures(&m);
+    assert!(
+        f.iter()
+            .any(|x| x == "knowledge:sentence_queue requires knowledge:sentences"),
+        "{f:?}"
+    );
+    m.features.retain(|f| f != "knowledge:sentence_queue");
+    let skipped = check_knowledge_sentence_queue(&b.host, &m).await;
+    assert_eq!(skipped.status, crate::report::CheckStatus::Skip);
 }

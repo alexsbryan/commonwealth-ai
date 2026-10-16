@@ -95,6 +95,12 @@ async fn install(State(f): State<Arc<Fake>>, req: Result<Json<Value>, JsonReject
         .unwrap()
         .insert(corpus.clone(), sha.clone());
     let spawned = previous.as_deref() != held;
+    if spawned && f.queueable.contains(&corpus) {
+        let mut queue = f.queue.lock().unwrap();
+        if !queue.contains(&corpus) {
+            queue.push(corpus.clone());
+        }
+    }
     if spawned {
         f.polls.lock().unwrap().remove(&corpus);
     }

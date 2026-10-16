@@ -132,9 +132,9 @@ pub use ingest::{
     RecipeTestOptions, RecipeTestReport, RecipeTestRequest,
 };
 pub use knowledge::{
-    ChunkRange, CorpusShardInfo, Granularity, KnowledgeResult, KnowledgeSearchRequest,
+    ChunkRange, CorpusShardInfo, Granularity, IndexPlace, KnowledgeResult, KnowledgeSearchRequest,
     KnowledgeSearchResponse, LandscapeDigestEntry, LandscapeDigestRequest, LandscapeDigestResponse,
-    Scorer, SentenceRoute, SentenceScorer, Truncated,
+    QueuedCorpus, Scorer, SentencePlace, SentenceRoute, SentenceScorer, Truncated,
 };
 pub use locator::{HeadingOutline, SpanLocator};
 pub use manifest::{

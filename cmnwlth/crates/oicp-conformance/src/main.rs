@@ -24,6 +24,7 @@ mod fake_host;
 mod fixture;
 mod ingest_checks;
 mod located_checks;
+mod queue_checks;
 mod record_checks;
 mod report;
 mod search_checks;

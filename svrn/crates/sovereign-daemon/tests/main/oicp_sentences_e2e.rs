@@ -18,7 +18,9 @@ use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
 use futures::Stream;
 use kernel_types::{NodeId, Sha256Hash};
-use oicp_types::{KnowledgeResult, KnowledgeSearchResponse, SentenceRoute, SentenceScorer};
+use oicp_types::{
+    IndexPlace, KnowledgeResult, KnowledgeSearchResponse, SentenceRoute, SentenceScorer,
+};
 use sovereign_contracts::traits::{InferenceProvider, ResidentSlot};
 use sovereign_contracts::types::{CompletionRequest, CompletionResponse, ProviderCapabilities};
 use sovereign_daemon::search_stage::SearchStage;
@@ -477,4 +479,85 @@ async fn a_search_naming_no_corpus_reaches_only_the_indexed_ones() {
     let r = reply(status, &body);
     assert_eq!(r.corpora_searched, vec![lib.corpus_id.clone()], "{body}");
     assert_eq!(r.route, Some(SentenceRoute::Index));
+}
+
+/// Both corpora over the same texts, the second installed beside the first.
+async fn two_corpora(
+    dir: &std::path::Path,
+    embedder: &Arc<WordHash>,
+) -> (AppState, Library, String) {
+    let (state, lib) = host(dir, Arc::clone(embedder), true).await;
+    let behind = format!("{}-behind", lib.corpus_id);
+    install(&dir.join("indexes"), &behind, &lib.documents, true).await;
+    (state, lib, behind)
+}
+
+fn both(lib: &Library, behind: &str) -> serde_json::Value {
+    serde_json::json!({
+        "query": "river archive ferry harbour", "limit": 10, "granularity": "sentence",
+        "corpora": [lib.corpus_id, behind],
+    })
+}
+
+/// A library searched while another is embedding is queued behind it, with
+/// the count the one ahead still has; the one ahead says it is embedding.
+/// Failing input: the queued corpus answered as embedding now.
+#[tokio::test]
+async fn a_corpus_behind_another_is_answered_queued_behind_it() {
+    let tmp = tempfile::tempdir().unwrap();
+    let embedder = WordHash::seeded(1);
+    embedder.hold_worker.store(true, Ordering::SeqCst);
+    let (state, lib, behind) = two_corpora(tmp.path(), &embedder).await;
+    let (status, body) = search(&state, ask(&lib, "river archive ferry harbour", &[], 10)).await;
+    assert_eq!(reply(status, &body).route, Some(SentenceRoute::Passages));
+    let (status, body) = search(&state, both(&lib, &behind)).await;
+    let r = reply(status, &body);
+    assert_eq!(r.route, Some(SentenceRoute::Passages), "{body}");
+    let q = r.sentence_queue.clone().unwrap_or_default();
+    assert_eq!(q.len(), 2, "{body}");
+    assert_eq!(
+        (q[0].corpus.as_str(), q[0].place),
+        (lib.corpus_id.as_str(), IndexPlace::Embedding)
+    );
+    assert!(q[0].behind.is_empty(), "{body}");
+    assert_eq!(
+        (q[1].corpus.as_str(), q[1].place),
+        (behind.as_str(), IndexPlace::Queued)
+    );
+    assert_eq!(q[1].behind.len(), 1, "{body}");
+    assert_eq!(q[1].behind[0].corpus, lib.corpus_id);
+    assert_eq!(q[1].behind[0].pending, Some(q[0].pending), "{body}");
+    assert!(q[0].pending > 0 && q[1].pending > 0, "{body}");
+}
+
+/// A corpus that finished is named ahead of nobody. Failing input: the
+/// finished first library still listed ahead of the one searched after it.
+#[tokio::test]
+async fn a_corpus_that_finished_is_not_named_ahead_of_the_next() {
+    let tmp = tempfile::tempdir().unwrap();
+    let embedder = WordHash::seeded(1);
+    let (state, lib, behind) = two_corpora(tmp.path(), &embedder).await;
+    indexed(&state, ask(&lib, "river archive ferry harbour", &[], 10)).await;
+    let sentences = &state.inner.node.sentences;
+    for _ in 0..400 {
+        let q = sentences.queue();
+        if q.embedding.is_none() && q.waiting.is_empty() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    assert_eq!(
+        sentences.queue(),
+        Default::default(),
+        "the worker finished the first library"
+    );
+    embedder.hold_worker.store(true, Ordering::SeqCst);
+    let (status, body) = search(&state, both(&lib, &behind)).await;
+    let r = reply(status, &body);
+    assert_eq!(r.route, Some(SentenceRoute::Passages), "{body}");
+    let q = r.sentence_queue.unwrap_or_default();
+    assert_eq!(q.len(), 1, "{body}");
+    assert_eq!(q[0].corpus, behind);
+    assert_eq!(q[0].place, IndexPlace::Embedding, "{body}");
+    assert!(q[0].behind.is_empty(), "{body}");
 }
