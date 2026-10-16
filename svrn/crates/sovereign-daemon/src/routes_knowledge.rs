@@ -69,11 +69,8 @@ pub async fn knowledge_search(
     Json(request): Json<KnowledgeSearchRequest>,
 ) -> Response {
     let priority = request.priority;
-    sovereign_contracts::request_priority::asked(
-        priority,
-        answer_search(state, attached, request),
-    )
-    .await
+    sovereign_contracts::request_priority::asked(priority, answer_search(state, attached, request))
+        .await
 }
 
 async fn answer_search(
