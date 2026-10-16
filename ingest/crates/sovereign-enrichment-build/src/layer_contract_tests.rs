@@ -11,16 +11,8 @@
 //! The oracle reads only what a question shows and never a type or attribute
 //! name: a window read is answered by `window_answer`'s rules (a statement is
 //! a line of its own of six words or more); RESOLVE's choice takes the first
-//! candidate when one is shown. So a contract that fails is the code's. The
-//! tests of a contract the window reader fails pin the passes reader
-//! (`passes_reader`): the window reader sends no mention of a type RESOLVE
-//! decides mentions of (`decides_mentions`; a company the mail headers seed),
-//! so a company named in prose reaches RESOLVE only as the passes reader's
-//! Mention. The oracle answers those tests' questions as before: an act takes
-//! its first value when the document shows a line of six words or more and
-//! "none" otherwise; a citation takes the last marked sentence of six words
-//! or more, or the first marked when none has six; Mention and About as their
-//! arms say; any other question its first label.
+//! candidate when one is shown, and any other forced choice its first label.
+//! So a contract that fails is the code's.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -230,14 +222,6 @@ enum Choose {
     Spread,
 }
 
-/// Pins the passes reader for a test whose contract the window reader fails,
-/// until the guard drops: a finding, not a port (`document_read::pin`).
-fn passes_reader() -> corpus_engine::enrichment::pipeline::document_read::Pinned {
-    corpus_engine::enrichment::pipeline::document_read::pin(
-        corpus_engine::enrichment::pipeline::document_read::Reader::Passes,
-    )
-}
-
 /// The scripted oracle (module doc), recording every question it is asked. A
 /// wave is answered question by question, as a port that cannot batch does
 /// (`resolve_records::one_by_one`), so it records each single question.
@@ -292,76 +276,6 @@ fn oracle(asked: Arc<Mutex<Vec<ChatPrompt>>>, choose: Choose, parties: Parties) 
                 )))
             } else {
                 let pick = match phase.as_str() {
-                    // An act question sees the whole document, and the oracle
-                    // no line class: a line under a quote mark is the one kind
-                    // the fixtures carry, so it is read as carried.
-                    "document_passes_act" => {
-                        let view = prompt
-                            .user
-                            .split_once("<<<\n")
-                            .and_then(|(_, rest)| rest.split_once("\n>>>"))
-                            .map_or("", |(view, _)| view);
-                        let shows = view
-                            .lines()
-                            .filter_map(|l| l.split_once(' ').map(|(_, text)| text))
-                            .any(|t| t.split_whitespace().count() >= 6 && !t.starts_with('>'));
-                        if shows {
-                            0
-                        } else {
-                            labels.len() - 1
-                        }
-                    }
-                    // The last such sentence, so a sentence two documents
-                    // both write is the one each cites
-                    // (`a_line_written_in_two_documents_is_two_occurrences`).
-                    "document_passes_cite" => prompt
-                        .user
-                        .lines()
-                        .filter_map(|l| l.strip_prefix('[').and_then(|r| r.split_once("] ")))
-                        .filter(|(_, text)| text.split_whitespace().count() >= 6)
-                        .filter_map(|(label, _)| labels.iter().position(|l| l == label))
-                        .last()
-                        .unwrap_or(0),
-                    // A line naming a party the fixture knows is answered
-                    // right: the company kind, then the party's own first and
-                    // last words; a line naming none, none.
-                    "document_passes_mention" if !parties.is_empty() => {
-                        let line = prompt
-                            .user
-                            .rsplit_once("Line ")
-                            .and_then(|(_, rest)| rest.split_once(": \""))
-                            .and_then(|(_, rest)| rest.split_once('"'))
-                            .map_or("", |(text, _)| text);
-                        let named = parties
-                            .iter()
-                            .find(|(of, name, _)| *of == "company" && line.contains(name))
-                            .map(|(_, name, _)| name);
-                        let shown = |want: &str| {
-                            labels.iter().position(|l| {
-                                prompt.user.lines().any(|row| {
-                                    row.strip_prefix(&format!("{l} ")).is_some_and(|w| {
-                                        w.trim_matches(|c: char| !c.is_alphanumeric()) == want
-                                    })
-                                })
-                            })
-                        };
-                        let pick = match named {
-                            None => None,
-                            Some(_) if prompt.user.contains("Which kind of thing does line") => {
-                                labels.iter().position(|l| {
-                                    prompt
-                                        .user
-                                        .lines()
-                                        .any(|row| row.starts_with(&format!("{l} company")))
-                                })
-                            }
-                            Some(name) if prompt.user.contains("start?") => {
-                                shown(name.split_whitespace().next().unwrap())
-                            }
-                            Some(name) => shown(name.split_whitespace().last().unwrap()),
-                        };
-                        pick.unwrap_or(labels.len() - 1)
-                    }
                     // A statement the fixture places is answered right: the
                     // candidate showing its mark, or none when none does.
                     // Every other one, the first.
@@ -401,22 +315,6 @@ fn oracle(asked: Arc<Mutex<Vec<ChatPrompt>>>, choose: Choose, parties: Parties) 
                                 .unwrap_or(labels.len() - 1),
                             None => 0,
                         }
-                    }
-                    // About names a particular on a line the oracle would
-                    // locate (six words or more), the first such line shown,
-                    // and on none otherwise; every other About answer is the
-                    // first label.
-                    "document_passes_about"
-                        if prompt.user.contains("first named or described?") =>
-                    {
-                        prompt
-                            .user
-                            .lines()
-                            .filter_map(|l| {
-                                l.split_once(" line ").and_then(|(_, r)| r.split_once(": "))
-                            })
-                            .position(|(_, text)| text.split_whitespace().count() >= 6)
-                            .unwrap_or(labels.len() - 1)
                     }
                     _ => 0,
                 };

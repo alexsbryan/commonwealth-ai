@@ -4,7 +4,7 @@
 //! own ingest (`Fixture::ingest`), then the default path. What a correct read
 //! of a mailbox must never do is asserted on every window read, and the
 //! records a right model makes are asserted with the oracle answering RESOLVE
-//! and Mention right for the parties the fixture names.
+//! right for the parties the fixture names.
 
 use super::*;
 
@@ -72,68 +72,6 @@ async fn no_line_of_an_embedded_message_is_shown_or_cited() {
         citing.is_empty(),
         "claims cite the embedded message: {citing:?}"
     );
-}
-
-/// A company named in prose before any message from it arrives is the record
-/// a later header seeds, and no record is named with trailing punctuation or
-/// an address: the note names "Birch Hall Trust," and the oracle points at
-/// the words as a span model would, punctuation included.
-#[tokio::test]
-async fn a_company_named_before_its_mail_is_its_seeded_record_and_named_cleanly() {
-    // A finding, so still the passes reader's: the window reader sends no
-    // mention of a type RESOLVE decides mentions of (`decides_mentions`).
-    let _passes = passes_reader();
-    let run = run_knowing(&Fixture::ingest(SHAPE).await, PARTIES).await;
-    let atoms = run.atoms();
-    let companies: Vec<&Value> = atoms
-        .iter()
-        .filter(|a| a["data"]["entity_type"] == "company")
-        .collect();
-    let birch = companies
-        .iter()
-        .find(|a| a["data"]["attributes"]["web_domain"] == "birchhall.example")
-        .and_then(|a| a["data"]["id"].as_str())
-        .expect("a header seeds birchhall.example");
-    for c in &companies {
-        let name = c["data"]["canonical_name"].as_str().unwrap_or("");
-        assert!(
-            !name.contains('@') && name.ends_with(|ch: char| ch.is_alphanumeric()),
-            "a company is named {name:?}"
-        );
-    }
-    let in_note: Vec<&Value> = atoms
-        .iter()
-        .filter(|a| a["data"]["attributes"]["document_id"] == "<n1@alderpine.example>")
-        .filter(|a| {
-            a["data"]["attributes"]["__document_read_words"]
-                .as_str()
-                .is_some_and(|w| w.contains("Birch Hall"))
-        })
-        .collect();
-    assert_eq!(
-        in_note.len(),
-        1,
-        "the note names Birch Hall once: {in_note:?}"
-    );
-    assert_eq!(
-        in_note[0]["data"]["attributes"]["__document_read_words"], "Birch Hall Trust",
-        "the mention's words are trimmed of punctuation"
-    );
-    let decisions: Vec<Value> = run
-        .lines(DECISIONS_FILE)
-        .into_iter()
-        .filter(|d| d["type"] == "company" && d["document"] == "<n1@alderpine.example>")
-        .collect();
-    assert_eq!(
-        in_note[0]["data"]["subject"].as_str(),
-        Some(birch),
-        "the note's Birch Hall Trust is not birchhall.example's record; RESOLVE: {decisions:?}"
-    );
-    let opened: Vec<&&Value> = companies
-        .iter()
-        .filter(|a| a["data"]["attributes"]["web_domain"].is_null())
-        .collect();
-    assert!(opened.is_empty(), "a mention opened a company: {opened:?}");
 }
 
 /// What RESOLVE shows of a record is what a reader would recognise it by: an

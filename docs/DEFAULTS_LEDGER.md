@@ -48,6 +48,17 @@ inventory (2026-10-15: "flip default only" in this push).
 sufficient key (`CHAPTER_SUBJECT_KEY`). Unset, the passes reader and the
 corpus's own sections, unchanged.
 
+**Known gap.** The window reader never binds a company named only in prose
+(no header names it) to the record a header seeds: it sends no mention of a
+type RESOLVE decides from mentions (`resolution_records::decides_mentions`),
+where the passes reader's Mention pass did. The gap has existed since the flip
+(5f2711847); the passes pin (8158a90be) hid it, and the three tests that
+asserted it retired with the passes reader (2026-10-16):
+`mailraw::a_company_named_before_its_mail_is_its_seeded_record_and_named_cleanly`,
+`reader::a_company_named_in_prose_binds_to_its_header_record_and_is_the_orders_client`,
+`reader::a_company_first_named_where_no_header_names_it_binds_to_its_seeded_record`.
+No measured corpus exercises it; nothing is built for it (operator, 2026-10-16).
+
 **Why off.** It replaces how documents are read and how chapters are cut; the
 race that motivated it (REVIEW_BRIEF.md, 2026-10-13) ran outside the product.
 
