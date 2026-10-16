@@ -3,9 +3,10 @@
 //! the addresses of an address list, what each declared [`FieldReader`] reads
 //! out of one, and which identity value (if any) a sighting carries after the
 //! declaration's `exclude` ([`Exclusion`]). The projection
-//! ([`super::project_source_atoms`]) and the passes reader (its prefill and its
-//! Pick candidates, `pipeline/document_read/`) read fields through this one
-//! module, so the reader never sees a record the projection would not make.
+//! ([`super::project_source_atoms`]) and the window reader (the records it
+//! shows beside a document, `pipeline/document_read/pick.rs`) read fields
+//! through this one module, so the reader never sees a record the projection
+//! would not make.
 
 use std::collections::{BTreeMap, HashSet};
 

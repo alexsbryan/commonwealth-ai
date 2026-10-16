@@ -9,8 +9,9 @@ use crate::enrichment::ontology::{
 };
 use crate::enrichment::pipeline::types::{ChapterInput, ChatPrompt};
 
-/// v4: one reader remains (passes); the one-shot prompt, its decoder schema and
-/// its citation handles are gone, so reads cached under v3 are not reused.
+/// v4: one reader remained (passes, deleted 2026-10-16); the one-shot prompt,
+/// its decoder schema and its citation handles are gone, so reads cached under
+/// v3 are not reused.
 /// v5: prefill, line classes, Point, Mention and Pick; a v4 read left open
 /// fields and references unknown, so it is not reused.
 /// v6: a claim carries its subject's readings whole and the projection
@@ -25,8 +26,8 @@ use crate::enrichment::pipeline::types::{ChapterInput, ChatPrompt};
 const CONTRACT_VERSION: u32 = 9;
 
 /// The Phase-1 prompt of a declared reading: the plan this chapter will be read
-/// by, never dispatched. The passes reader asks its own small questions
-/// (`passes::read`); this is what `--dry-run` shows and part of what keys the
+/// by, never dispatched. The window reader composes its own prompt
+/// (`window::read`); this is what `--dry-run` shows and part of what keys the
 /// section cache (`runner_support::cache_text`).
 pub fn compose(chapter: &ChapterInput, policies: &OntologyPolicies, phase_id: &str) -> ChatPrompt {
     let documents: Vec<&str> = chapter.source_documents.iter().map(|d| d.key()).collect();

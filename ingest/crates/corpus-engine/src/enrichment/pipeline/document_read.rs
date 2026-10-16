@@ -146,7 +146,8 @@ pub struct DocumentRead {
 #[serde(rename_all = "snake_case")]
 pub enum SubjectScope {
     /// One reference is one particular within one document; across documents
-    /// it says nothing and RESOLVE alone decides (the passes reader).
+    /// it says nothing and RESOLVE alone decides. The deleted passes reader's
+    /// scope; reads cached before 2026-10-13 carry it.
     #[default]
     Document,
     /// One reference is one particular across the chapter's documents: the

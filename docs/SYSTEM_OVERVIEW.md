@@ -635,9 +635,9 @@ question the pipeline asks about a type is a method on the resolved
   subject fields flow to RESOLVE. A claim carries its subject's readings whole
   (`SUBJECT_FIELDS_ATTRIBUTE`, each a `DocumentReadField` like its own fields),
   RESOLVE keys on their supported values and keeps them on the claim, and the
-  projection sketches no subject (RESOLVE alone makes those records). The reader is one closed choice,
-  `document_read::reader()` (`Reader`): the window reader by default since 2026-10-15, the passes reader when
-  `SOVEREIGN_READER=passes` (`document_read/passes.rs`, ONTOLOGY_METHOD §Reading). The window reader (the default; DEFAULTS_LEDGER, graduated 2026-10-15) reads each
+  projection sketches no subject (RESOLVE alone makes those records). The window reader is the one
+  reader (ONTOLOGY_METHOD §Reading; the default from 2026-10-15, the passes reader and its waves deleted
+  2026-10-16, `SOVEREIGN_READER` retired with them). It reads each
   chapter in one call (`document_read/window.rs`, prompt `window_prompt.md`), and `enrich init` then cuts the
   corpus into windows: every document in declared-clock order, cut by size only where a document ends
   (`sovereign-enrichment-build/src/window_manifest.rs`, `WINDOW_CHARS`). The window reader names each
@@ -660,13 +660,13 @@ question the pipeline asks about a type is a method on the resolved
   (`gate_plans`) weighs it, so a window-mate opens its own record instead of being refused (code enforces this; no
   question line restates it); and a statement follows its
   own particular, joining by key the record that already holds its reference whatever sibling a question let it
-  share (`apart.rs::chapter_conflict`). Every veto event names its conflict. Every question about a
-  document opens with its declared facts (`prefill.rs`: the metadata fields the
-  declaration names and the declared sets they put the document or a sourced
-  record in, read through the projection's own field readers,
+  share (`apart.rs::chapter_conflict`). Every veto event names its conflict. Each document in a window opens
+  with its declared facts: the fields the declaration stamps or its metadata sources read
+  (`window.rs::shown_fields`) and, as `Named here:`, the records those sources name of each type a read
+  reference targets (`pick.rs::candidates`, read through the projection's own field readers,
   `resolution_sources/fields.rs`). A line carried from a document dated
   earlier, shown by structure (a passage of neighbouring lines that document
-  holds in order, or its line under a mark it lacks there), is never asked;
+  holds in order, or its line under a mark it lacks there), is never shown as the document's own;
   a line that only repeats another's words is (`line_classes.rs`, indexed
   once per run over every chapter's documents and part of the section cache
   key). Two more classes come from what the extractor wrote, never from the
@@ -683,53 +683,15 @@ question the pipeline asks about a type is a method on the resolved
   (`corpus_io::document_texts`, attached by `SectionDocuments::with_texts`),
   so no chunk title or overlap is read; a document the store cannot give is
   read from its chunks with those two classes not applied, and the trace says
-  so. A pointed span is trimmed to its first and last letter or digit
-  (`point::trimmed`). Locate (`locate.rs`) asks every remaining
-  numbered line which declared claim kind it states, among the kinds no
-  protocol rule names; a kind a rule names, about a type RESOLVE decides, is an
-  act (`act.rs`, `KindPlan::keys`): after About, each field the rules qualify
-  on is asked of the whole document per particular in two wordings off one
-  wave (a disagreement held, no statement), and an agreed value is cited by one
-  forced choice among the sentence units touching asked lines, with no "none"
-  label (one candidate is cited by code); the statement is the lines that
-  sentence touches, its key `Supported` by `reader_act`. Mention asks each
-  remaining line which entity type a read reference targets it names, pointing at the words (`mention.rs`;
-  no type a table source holds); each of the two asks a document's lines as one
-  forced-choice wave (`decision_wave`, below), since no line's question needs
-  another's answer. About (`about.rs`) asks, per document and per subject type
-  RESOLVE decides (`resolution_records::decides`), whether the document is
-  about none, one or more than one, points at where each particular is first
-  named (a line, then its words; at most five; never a header line, of the
-  document or of an embedded message, `Doc::headers`), and with several asks each
-  statement of the type which it is about; a statement's local reference is its
-  particular's (`l{line}:{words}`), so `local_subjects.rs` joins one
-  particular's statements, and the particular's identifying fields are read
-  once, at its words. A statement about none keeps its own lines as its
-  reference (`l{a}-{b}`). A particular no statement is about is carried on the
-  outcome (`DocumentReadParticular`, citing the whole line that first names it;
-  validation refuses one of a type RESOLVE does not decide or cited off its
-  document) and projected as a claim of no kind whose type rides on
-  `ABOUT_ATTRIBUTE` (`document_read::about_type`, read by 3b's subject binding,
-  which leaves it to RESOLVE, and by `resolve_type`, which makes it a statement
-  of the type), so a document is a member of what it is about whether or not a
-  line states a claim kind; the marker is removed after RESOLVE. Per statement each field is asked by its
-  declared family (`ask.rs`), every such question showing the whole document,
-  numbered as Locate shows it, with the statement named by its lines (never a
-  window around it): Choose a closed value with RESOLVE's READ question,
-  Point at an open one's start and end words and read the value by the family
-  (`point.rs`), Pick a reference among the records the target's metadata source
-  reads from this document plus its mentions, less declared exclusion sets
-  (`pick.rs`), and Pick a subject whose type has a metadata source among that
-  source's records in this document, written as the subject's identity readings
-  (`pick_subject`; the words of a statement rarely hold an address); every
-  question goes through the census funnel (`decision_call`)
-  and every read value carries `reader_choose` / `reader_point` / `reader_pick`
-  at `Precision::Unmeasured`. A closed set wider than one forced choice is
-  Unknown with that reason. Its
-  answers assemble into the `DocumentRead` envelope that validation checks
-  against the document (exact source verification is mandatory) and the section
-  cache keeps; its rendered questions are part of the contract fingerprint
-  (`schema::contract_value`, version 6). The one-shot reader is deleted.
+  so. A particular no statement is about is carried on the outcome (`DocumentReadParticular`; validation
+  refuses one of a type RESOLVE does not decide or cited off its document) and projected as a claim of no
+  kind whose type rides on `ABOUT_ATTRIBUTE` (`document_read::about_type`, read by 3b's subject binding,
+  which leaves it to RESOLVE, and by `resolve_type`, which makes it a statement of the type), so a document
+  is a member of what it is about whether or not a line states a claim kind; the marker is removed after
+  RESOLVE. Every read value carries `reader_window` at `Precision::Unmeasured`. The answer assembles into
+  the `DocumentRead` envelope that validation checks against the document (exact source verification is
+  mandatory) and the section cache keeps; the prompt and the ontology's rendering are part of the contract
+  fingerprint (`schema::contract_value`). The one-shot reader is deleted.
   The Asker (`enrichment/asker.rs`, ONTOLOGY_METHOD §Reading, campaign C5)
   stands in front of the chat and embed ports of `enrich extract`,
   `atlas-resolve` (and `enrich build`, `delta`, `resolve-statements`), built in
@@ -741,12 +703,7 @@ question the pipeline asks about a type is a method on the resolved
   the daemon; `recorded` answers from it what the run's own model gave and asks
   the daemon only the rest, recording them, so an iteration pays for the
   questions it changed; `gold` reads `answers.gold.jsonl`. Under `replay` and
-  `gold` a question with no stored answer is refused, never defaulted. A forced-choice wave
-  (`resolve_records/wave.rs`) is split into its single questions, each answered
-  and recorded under its own single prompt's key, the ones the store lacks sent
-  to the daemon as one smaller wave, so a run recorded with or without waves
-  replays either way; `SOVEREIGN_WAVES_ONE_BY_ONE=1` sends each question alone
-  (A/B valve).
+  `gold` a question with no stored answer is refused, never defaulted.
   `change.document` names per-document metadata fields; resolution stamps each
   claim with `document_date` (ISO 8601), `document_thread` and `document_id`
   from its ONE document (`locate`: the document its evidence names, stamped from
@@ -772,7 +729,7 @@ question the pipeline asks about a type is a method on the resolved
   or one of a `@bundled:<key>` list it names (`@bundled:mailbox_providers`,
   free-email-domains at a pinned commit), counted as `excluded`; code holds no
   list and skips nothing a recipe does not name (E5, 2026-10-10: the provider
-  skip that was code is now this declaration). The reader's prefill and Pick
+  skip that was code is now this declaration). The window reader's declared facts and candidates
   read fields through the same readers (`field_records`).
   RESOLVE (`enrichment/atlas/resolve_records.rs`; ONTOLOGY_METHOD.md §The core)
   puts each statement of one document into an open record of one declared
@@ -868,7 +825,7 @@ question the pipeline asks about a type is a method on the resolved
   Weighed | Opened`; anything else is a counted `Refusal` or `Held`, never
   defaulted. A link carries `by`, each source with its `Precision`
   (`atlas/precision.rs`: declared, estimated on the corpus, or unmeasured), as
-  do the reader's chosen fields (`reader_choose`) and each derived value (C3). Records keep the passage around each statement, which is
+  do the reader's fields (`reader_window`) and each derived value (C3). Records keep the passage around each statement, which is
   what later calls compare. `svrn enrich resolve-statements` runs it alone over
   supplied statements (the gold-mention setting). The atlas build runs it after
   3b, which `enrich atlas-resolve` runs by default (`ResolvePhase::All`; `--phase 3a`
@@ -915,9 +872,8 @@ question the pipeline asks about a type is a method on the resolved
   referenced type that its statement's document names in its fields and whose
   identity values it folds equal to (`key_name`, the projection's own naming),
   is dropped (`excluded`) when that record is in an exclusion set over the type
-  (`DerivedPolicy::exclusions_of`, the one Pick reads too); failing a named
-  record it counts as the one RESOLVE put the same document's mention of those
-  words on, then the one it put the same document's statements a window read
+  (`DerivedPolicy::exclusions_of`, the one `pick.rs` reads too); failing a named
+  record it counts as the one RESOLVE put the same document's statements a window read
   under that name on (`SUBJECT_NAME_ATTRIBUTE`, 2026-10-15), and otherwise is
   never held: it stays on the derivation line under `unresolved`, cited by its
   statement, document, words and evidence, so a served reference is a record of
@@ -1142,8 +1098,7 @@ prompt as branches; the engine renders each branch as the single request it
 stands for, decodes the shared token prefix once, restores that sequence state
 before each branch and reads each distribution as a single forced choice does
 (`embedded/decide_wave.rs`), so every answer equals its single request's.
-Ingest issues waves through `decision_wave`, a census funnel beside
-`decision_call` that the judge-funnel gate counts.
+No ingest path issues a wave since the passes reader was deleted (2026-10-16).
 
 **Retrieval** is `runtime/retrieval_pipeline.rs`, a step ledger where every
 step accounts for what it did to the pool. `apply_atlas_grounding` is a CALLER

@@ -85,8 +85,7 @@ text by pointing at the words. Code links on a sufficient field, never across a 
 only where the agreeing evidence (declared structure, domain-free similarity, read fields, the model's own
 choice) clears the type's precision bar; each link is a `same_as` claim carrying what made it. Every model
 question is a small closed one, answered in one forward pass as a distribution over single-token labels
-(`oicp_types::forced_choice`), off a document prefilled once (questions that need nothing from one another go
-as one wave, `forced_choice::wave`, each answered as its single request and recorded under its key); where the one-pass choice cannot clear the bar,
+(`oicp_types::forced_choice`); where the one-pass choice cannot clear the bar,
 the model may reason first, and its answer is still read as that distribution, after its own reasoning, and
 weighed as its own source (`reasoned_choice`; amended 2026-10-06 on ward's measurement). Why: shown a strong free signal,
 the model's partition departed from it far more often than it was right to (`research/ontology-apps/resolve-prereg.md`),
@@ -123,139 +122,82 @@ follows whatever decision put its value in a record (uv thread .905 under gold, 
 estimated on the run itself, document by document in clock order, and checked against the labelled ratios
 (layer-estimator) rather than declared.
 
-## Reading (agreed 2026-10-08)
+## Reading (agreed 2026-10-08; the window reader since 2026-10-15)
 
-The reader asks; it never decides identity. A document is prefilled once with its declared facts (metadata
-fields and the roles derived from them through declared sets, such as the sender's side; built 2026-10-10,
-`document_read/prefill.rs`, first in every question about the document). A line a document carries from one
-dated earlier by the declared clock is never asked, and structure must show it is carried: it lies in a
-passage, two neighbouring lines that document holds in the same order, or it is that document's line under a
-mark the line was not written under there (its text compared from first to last letter or digit). Repetition
-alone shows nothing (amended 2026-10-10 on the outside review, note 2347f4c6): a tracker's act and an
-author's greeting repeat in the same words and each is read, and who wrote a line suppresses nothing, so a
-passage an author sends twice is read where it first appears. Each class is counted and traced, and the
-classes hold no word of any format (`document_read/line_classes.rs`). Nor is a line before the extractor's
-`body_start` (a header block, whose facts are declared) or inside a segment the extractor marks as an embedded
-message (what it says is that message's, dated and authored by its own header): the format knowledge stays in
-the extractor that writes those offsets into the document's metadata (amended 2026-10-12, delivery slice 1). The window
-reader shows a pointer to the earlier document in place of each run of quoted lines (`[quoted from d3]`, or that
-document's date when it is outside the window), so a reply's referent is read where it was written, and the quoted
-text stays unshown and uncitable (2026-10-15): code refuses a claim whose quote is in its document's quoted or
-embedded lines and not its own (2026-10-16), so no prompt line carries that guarantee. The rest is asked a
-fixed plan of small closed questions generated from the contract — a pure function of it, unchanged by
-renaming: **Locate** each declared claim kind no protocol rule names (line sets or none; each kind shown with its closed-valued fields' declared
-values and descriptions, the words a line states it in; the system prompt mentions values only when a kind
-shows some), **Act** each kind a protocol rule names whose subject RESOLVE decides, asked of the whole document and
-never of a line (on the lines that carry a stage the model answered "none" at .84-.99, REVIEW_BRIEF §4.2): per
-particular About found, named by its line and words when it found more than one, and once otherwise, so About never
-gates it; each field the kind's rules qualify on (`when`) is one forced choice over its values in two wordings off
-one wave under a system prompt naming the type and field, a disagreement held with no statement; an agreed value is
-cited by one forced choice among the document's sentence units that touch asked lines (a paragraph's lines joined
-and cut after a stop before whitespace; labels A-Y and no "none", since presence is decided; one candidate cited by
-code), and the statement is the lines that sentence touches (`act.rs`, `locate.rs`; built 2026-10-12, cite-probe M2
-and its no-none amendment), **Mention** each entity type a read
-reference field targets and no exhaustive source covers (a table source is exhaustive; a metadata source names
-only who took part, so it is not), one choice per asked line then pointed at, a proposal for Pick (`mention.rs`);
-of a type with an `identity_criterion` and a metadata source, each mention Pick would offer by its words is also a
-statement RESOLVE decides, its words on its line, reading no field, and RESOLVE starts from the source's records
-under their own ids, each offered to the mentions of the documents whose fields name it
-(`resolution_records::decides_mentions`, `resolution_records/mentions.rs`; built 2026-10-12, cast instance 1), then per statement, each question opening with the declared facts and the whole document
-numbered as Locate shows it, the statement named by its lines (never a window around it; `ask.rs` `opening`,
-`statement_words`), **Choose** each closed-valued
-field (the subject's identity fields included) as a distribution over its declared values and "not stated",
-**Pick** each reference field from candidates code proposes (the records the referenced type's metadata source
-reads from this document's fields, plus this document's mentions that name no listed record, less any record in
-a declared exclusion set, a set a declared path drops by, and any mention naming such a record; `pick.rs`; a record
-folding the field holds the record a pick names or nothing, never a mention's words and never a record minted from
-them: a mention's reading holds the record RESOLVE put the same document's mention of those words on when the
-type's mentions are decided, or else the record RESOLVE put the same document's statements a window read under that
-name on (2026-10-15), and otherwise stays on the derivation line as a cited unresolved reading; a held record
-no exclusion set can judge (a condition's attribute absent) is served and marked `unjudged` on its line (operator,
-2026-10-12), `read_fields.rs`; a statement's own reference field, a relation's `to` among them, holds its record by
-the same rule, `statement_refs.rs`, 2026-10-15), and Pick the subject whose type has a metadata source
-among the records that source reads from this document, its answer written as the subject's identity readings
-(the statement's words rarely write the address that identifies a person: of Ward's 64 commitments, 59 pointed at no
-word and none reached its person, 2026-10-11), and **Point** at each open-valued field
-(text, quantity, time): its start word, then its end word, among the statement's own words shown under labels,
-"not stated" when no start is chosen; the value is read out of the words by the declared family, a quantity as
-the one number they write in digits (refused when they hold none or several), a time as ISO 8601 when code reads
-a date and as written otherwise (`point.rs`). A
-located statement is one kind and at most three verified lines. **About** asks, per document and per type RESOLVE
-decides (a statement kind about it or not, 2026-10-15), whether the document is about none, one or more than one particular of it (the type's description and
-criterion shown), points at where each is first named or described (a line, then its words; at most five), and with
-more than one asks each statement of the type which it is about (`about.rs`); a statement's local reference names
-its particular, never its span, so the statements about one particular reach RESOLVE as one (`local_subjects.rs`)
-and its identifying fields are read once, at its words; a statement about none stays its own. Whether a document is
-about a particular is asked apart from whether any line states a claim kind: a particular no statement is about
-reaches RESOLVE as a statement of its own, a claim of no kind citing the line that first names it, so the document
-is a member of its record (built 2026-10-12, repair 2 of the outside review). Every document of a selected section is read, whatever its
-length: the body-word floor (`min_section_body_words`) guards the general extractor from heading-only book
-sections and never applies to documents. A choice decides
-by its argmax and carries its source and that source's precision (C3, `atlas/precision.rs`): `unmeasured`
-until the corpus supports an estimate, because a text-reading source's precision is not identifiable without
-labels (E2b, ecb58efcc), so every value a choice decided says it rests on an unmeasured read (amended by the
-operator 2026-10-10; it said a choice decides only once measured, which would leave most values unknown). An answer code cannot verify refuses that
-question alone. Answers assemble into the stored claims RESOLVE already reads, a reading of the subject's field
-beside the claim's own, cited, and never onto the record (`SUBJECT_FIELDS_ATTRIBUTE`); the `Asker` that answers takes
-the daemon, a replay, or gold, so every question is an oracle at its own boundary (built 2026-10-09,
-`enrichment/asker.rs`, `--asker` on extract and atlas-resolve: every answer recorded by its question's content
-and stamped with the model that gave it, and a replay with no daemon reproduces the run's records, C5; `recorded`
-reuses what the same model answered and asks only the rest, 2026-10-12). One reader, chosen
-by the declaration (every claim kind readable, or the general extractor; a mix refuses): passes, every pass built
-(Locate and Choose 2026-10-09; prefill, line classes, Mention, Pick and Point 2026-10-10, order
-ontology-layer-15; About and Act 2026-10-12); the one-shot reader was deleted on 2026-10-09 with no comparison run (operator: no build step gated on a
-test made up for it). Why: every one-shot read
-failed the same way — the local model asked to find, label, name and cite at once (stage ~43%, party
-.24-.44, terse one-shot abstaining on half its documents; crm-proof loops 7-10c). `recipe validate` names each attribute's filler (a
-source, a derivation, Act, Choose, Point or Pick from the reader's own plan with Pick's candidates, RESOLVE for a
-subject) and warns on what nothing fills (a type no read claim kind is about, a closed set wider than one
-forced choice, a reference to a type only a table holds) and on any fold, protocol or identity key keyed on it (`validate_layer.rs::fill_analysis`; blind round 2's protocol folds keyed on `step_id`
-and `decision_ref` never folded, silently). It names each declared type the reader makes no record of: a state or
-relation whose holder RESOLVE cannot decide, or an entity with no criterion no statement is about and no source supplies
-(`document_read::unread_types`; saltgrass's first blind recipe lost `vessel` and `condition` that way, silently). It
-also names what the declaration asks that the reader leaves inert (`validate_layer.rs::reader_inert`, 2026-10-15):
-argument reconstruction and voices (the general extractor's alone), a pattern over an edge type that is no read
-relation kind (patterns walk relation atoms, which the reader makes of read relation statements only), a table source (no stage reads one yet) and a type that specializes a decided one with no criterion
-of its own (RESOLVE inherits none); for that reason the ten templates stay on the general extractor. A
-state or relation whose holder RESOLVE decides is read as a statement about it (2026-10-15): a state carries its value,
-a field named for the state type, and a relation its other endpoint, `to` (`OntologyTypeDecl::implied_fields`), and
-both are served as claims of their type. After RESOLVE and the reference derive each is also a State or Relation
-atom beside its claim, one per statement, so trajectories, configurations and patterns read them as they read an
-extracted one (`resolution_records/statement_atoms.rs`, 2026-10-15; holders' trajectories chained by
-`resolution/trajectories.rs`, the pass 3b runs).
+The reader asks; it never decides identity. There is one reader, chosen by the declaration (every claim kind
+readable, or the general extractor; a mix refuses): the window reader (`document_read/window.rs`, prompt
+`window_prompt.md`). The passes reader before it, a fixed plan of small closed questions per document, was deleted
+on 2026-10-16 after the window reader served more through the default commands (DEFAULTS_LEDGER); the one-shot
+reader before that, on 2026-10-09.
 
-**The window reader (2026-10-13; the default reader since 2026-10-15, DEFAULTS_LEDGER; the passes reader is
-`SOVEREIGN_READER=passes`).** The race of
-2026-10-13 (REVIEW_BRIEF.md) read five generated mail worlds four ways with one hosted model: reading windows
-of whole documents served 76/93 deals against the one-shot's 66/93, windows cut by date tied windows cut by
-folder (78/93 against 76/93), and on the local model windows served 5/15 of world-s4's deals where this
-pipeline served 1/15. So a second reader
-is measured beside the passes reader through the default commands. `enrich init` cuts the corpus into
-windows (every document in declared-clock order, cut by size where a document ends; a document longer than a
-window, a novel or a long report, is cut where the recipe's chunker cut it, its parts read in their own windows and
-its statements anchored in the whole; so prompt and reasoned answer fit 128k), and one call reads a window, reasoning before it answers, prompted from the contract alone
-(`window.rs`, `window_prompt.md`). One reading rule is the method's own, not a recipe's: a document that says
-one particular is replaced by, rolled into or superseded by another speaks of two, and states the first's end
-beside the second's beginning (supersession). A thing a document says has another name is not a prompt
-rule but a typed field of the answer (2026-10-16): a particular lists its `other_names`, and code reads a
-reference, a subject's sourced identity and an unstated particular's line by any of its names, carries the
-other names of what each statement names (`OTHER_NAMES_ATTRIBUTE`) for RESOLVE to show beside it, never to
-compare, and lands a reference reading on a record by any of them (`read_fields.rs::record_read`). No name is
-split. The
-model names each particular once across the window and cites each claim by its document and exact words;
-code keeps the contract: every declared field answered or unknown with a reason, a closed value one of its
-declared values, a reference a record the document's fields name or words it holds, each field's evidence in
-the claim's own document, and a claim whose words are not in its document refused by validation. A malformed
-value in the answer costs the particular or claim that holds it, counted, never the window. A window's
-particular reaches RESOLVE as a sufficient key over its chapter (`CHAPTER_SUBJECT_KEY`), so RESOLVE decides
-identity only across windows, statement by statement against bounded candidates. Two particulars the reader read
-in one document stay two: a record holding one is never offered the other (`apart.rs::read_beside`), whether
-it was opened before the document or earlier in it (weighed by every particular that has joined it), a guarantee
-code makes with no question line restating it (2026-10-16); whether
-particulars of different documents are one is RESOLVE's to decide, and once it lets two share a record, each
-particular's later statements follow it there by key. If it wins through the
-default commands it becomes the one reader and the passes and waves readers are deleted (operator,
-2026-10-13); if it loses, it is deleted.
+`enrich init` cuts the corpus into windows: every document in declared-clock order, cut by size where a document
+ends; a document longer than a window (a novel, a long report) is cut where the recipe's chunker cut it, its parts
+read in their own windows and its statements anchored in the whole, so prompt and reasoned answer fit 128k
+(`sovereign-enrichment-build/src/window_manifest.rs`). One call reads a window, reasoning before it answers,
+prompted from the contract alone, a pure function of it, unchanged by renaming: the ontology rendered (each
+statement kind with its subject type and fields, each field's family and closed values), then each document under
+its label with its declared facts above its text: the fields the declaration stamps or its metadata sources read,
+and as `Named here:` the records those sources name of each type a read reference targets (`window.rs::compose`,
+`pick.rs::candidates`).
+
+What a document shows as its own is decided by structure, never by a format word (`document_read/line_classes.rs`).
+A line it carries from one dated earlier by the declared clock is not its own: it lies in a passage, two
+neighbouring lines that document holds in the same order, or it is that document's line under a mark the line was
+not written under there (compared from first to last letter or digit). Repetition alone shows nothing (amended
+2026-10-10 on the outside review, note 2347f4c6): a tracker's act and an author's greeting repeat and each is read,
+and who wrote a line suppresses nothing. Nor is a line before the extractor's `body_start` (a header block, whose
+facts are declared) or inside a segment the extractor marks as an embedded message: the format knowledge stays in
+the extractor (amended 2026-10-12). In place of each run of quoted lines the window shows a pointer to the earlier
+document (`[quoted from d3]`, or its date outside the window), so a reply's referent is read where it was written
+and the quoted text stays unshown and uncitable (2026-10-15); code refuses a claim whose quote is in its document's
+quoted or embedded lines and not its own (2026-10-16), so no prompt line carries that guarantee. Every document of a
+selected section is read, whatever its length: the body-word floor (`min_section_body_words`) guards the general
+extractor only.
+
+The answer is typed: particulars, each named once across the window with its type, name and identifying fields,
+and claims, each of a declared kind, about a particular, citing its document and exact words, with its fields. One
+reading rule is the method's own, not a recipe's: a document that says one particular is replaced by, rolled into or
+superseded by another speaks of two, and states the first's end beside the second's beginning (supersession). A
+thing a document says has another name is a typed field, not a prompt rule (2026-10-16): a particular lists its
+`other_names`, and code reads a reference, a subject's sourced identity and an unstated particular's line by any of
+them, carries them on each statement (`OTHER_NAMES_ATTRIBUTE`) for RESOLVE to show and never compare, and lands a
+reference reading on a record by any (`read_fields.rs::record_read`). No name is split.
+
+Code keeps the contract: every declared field answered or unknown with a reason; a closed value one of its declared
+values; a reference a record the document's fields name, a particular's label, or words the document holds
+(`window_refs.rs`); each field's evidence in the claim's own document; a claim whose words are not in its document
+refused by validation. A malformed value costs the particular or claim holding it, counted, never the window
+(`window_answer.rs`). A particular no claim is about reaches RESOLVE as a statement of its own, a claim of no kind
+citing the line that names it, so the document is a member of its record. A state or relation whose holder RESOLVE
+decides is read as a statement about it (2026-10-15): a state carries its value, a field named for the state type,
+and a relation its other endpoint, `to` (`OntologyTypeDecl::implied_fields`); after RESOLVE each is also a State or
+Relation atom beside its claim (`resolution_records/statement_atoms.rs`).
+
+A window's particular reaches RESOLVE as a sufficient key over its chapter (`CHAPTER_SUBJECT_KEY`), so RESOLVE
+decides identity only across windows, statement by statement against bounded candidates. Two particulars the reader
+read in one document stay two: a record holding one is never offered the other (`apart.rs::read_beside`), a
+guarantee code makes with no question line restating it (2026-10-16). A reading of a subject's field stays on its
+claim, cited, never on the record (`SUBJECT_FIELDS_ATTRIBUTE`). A read reference holds a record or nothing: the
+record the document's fields name, else the one RESOLVE put the same document's statements read under that name on,
+else none, the reading staying on the derivation line, cited (`read_fields.rs`, `statement_refs.rs`). Every read
+value carries its source, `reader_window`, at precision `unmeasured` (C3, `atlas/precision.rs`): a text-reading
+source's precision is not identifiable without labels (E2b, ecb58efcc). The `Asker` answers every question from the
+daemon, a replay or gold, so every question is an oracle at its own boundary (`enrichment/asker.rs`, `--asker` on
+extract and atlas-resolve: every answer recorded by its question's content and stamped with its model; a replay with
+no daemon reproduces the run's records, C5; `recorded` reuses what the same model answered and asks only the rest).
+
+`recipe validate` names each declared type the reader makes no record of (`document_read::unread_types`;
+saltgrass's first blind recipe lost `vessel` and `condition` that way) and what the declaration asks that the reader
+leaves inert (`validate_layer.rs::reader_inert`, 2026-10-15): argument reconstruction and voices (the general
+extractor's alone), a pattern over an edge type that is no read relation kind, a table source, and a type that
+specializes a decided one with no criterion of its own; for that reason the ten templates stay on the general
+extractor. The reader sends no mention of a type RESOLVE decides from mentions (`decides_mentions`), so a company
+named only in prose is not bound to the record its header seeds (DEFAULTS_LEDGER, known gap).
+
+Why windows: the race of 2026-10-13 (REVIEW_BRIEF.md) read five generated mail worlds four ways with one hosted
+model; windows of whole documents served 76/93 deals against the one-shot's 66/93, and on the local model windows
+served 5/15 of world-s4's deals where the passes reader served 1/15. Through the default commands the window reader
+then served 81/93 on the worlds and 9/14 on Ward, and graduated (2026-10-15).
 
 ## The generality test
 

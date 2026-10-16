@@ -1,7 +1,7 @@
 //! Particulars the window's reader named that no statement of the window is
 //! about. Each reaches RESOLVE as a statement of its own
-//! (`DocumentReadParticular`, as the passes reader's `about::unstated` sends
-//! them), on the first document whose own lines name it, so a person only
+//! (`DocumentReadParticular`), on the first document whose own lines name it,
+//! so a person only
 //! ever spoken of is a record, decided across windows by RESOLVE like any
 //! other. Failing input, named: saltgrass (2026-10-14), whose window reader
 //! named nine characters, the killer among them, of which four became records:

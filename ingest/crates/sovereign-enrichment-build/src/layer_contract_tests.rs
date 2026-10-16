@@ -395,8 +395,8 @@ async fn run_as(
     // Windows as `enrich init` cuts them for a recipe that reads documents,
     // one document each (at `WINDOW_CHARS` a fixture is one window): the
     // window reader reads every document and RESOLVE decides every identity
-    // across them, as it did the passes reader's. One window's particulars
-    // across its documents are corpus-engine's (`window_tests.rs`).
+    // across them. One window's particulars across its documents are
+    // corpus-engine's (`window_tests.rs`).
     let policies = spec.policies();
     let date = policies
         .change

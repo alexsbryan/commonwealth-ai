@@ -11,7 +11,7 @@ use crate::enrichment::atlas::SourceDocument;
 const NO_OWN_LINE: &str =
     "(no line of its own: every line is carried, a header or an embedded message)";
 
-/// A document's own lines, as the passes reader asks them: no line it carries
+/// A document's own lines: no line it carries
 /// from a document dated earlier, no header line, no line of a message it
 /// embeds (`line_classes.rs`). A reply's quoted history is the earlier
 /// message's, which the window holds under its own date or another window

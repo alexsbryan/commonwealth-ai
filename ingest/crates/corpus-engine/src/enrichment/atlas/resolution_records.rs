@@ -361,7 +361,7 @@ async fn resolve_type(
     }
 
     // One decider: the Phase-1 atoms of the type go first, whatever follows,
-    // in either kind a sketch may have named it. The passes reader sketches
+    // in either kind a sketch may have named it. The document reader sketches
     // no subject, so these come from the general extractor's sketches. A
     // source's records are not Phase-1 sketches: they stay, and are seeded.
     let retired: BTreeSet<AtomId> = atoms

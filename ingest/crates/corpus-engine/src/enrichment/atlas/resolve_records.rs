@@ -57,8 +57,7 @@ pub struct Criterion {
 }
 
 /// A closed-valued attribute as READ asks it: one forced choice over its
-/// declared values. RESOLVE asks it of identity-necessary attributes, the
-/// passes reader of every closed-valued field it reads.
+/// declared values. RESOLVE asks it of identity-necessary attributes.
 #[derive(Debug, Clone)]
 pub struct ClosedAttr {
     pub name: String,

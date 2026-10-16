@@ -190,7 +190,7 @@ pub const V1_RETIRED_KEYS: &[(&str, &str)] = &[
     ),
     (
         "document_reader",
-        "one reader remains, the passes reader (ONTOLOGY_METHOD §Reading)",
+        "one reader remains, the window reader (ONTOLOGY_METHOD §Reading)",
     ),
 ];
 

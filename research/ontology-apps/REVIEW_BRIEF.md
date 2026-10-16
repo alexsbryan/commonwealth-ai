@@ -8,7 +8,14 @@ something works.
 One recipe and the default commands turn a corpus into typed, cited records. It must work on mail and on a novel,
 and scale past 1M tokens. The yardstick is a model that reads the whole corpus at once (the "one-shot"). The test
 is five generated mail worlds with an answer key (93 deals; `research/ontology-apps/world/`), scored by
-`score_ward.py`.
+`loop/score.py`, and every arm runs through `loop/loop.sh` (it replaced `run_world.sh`).
+
+## Where it stands (2026-10-16)
+
+The window reader is the product's one reader (5f2711847; the passes reader deleted 2026-10-16). Worlds: 86/93
+served against the one-shot's 68/93 (arms structural-fresh and structural-fresh-s1, the diagnosed set). Ward: 8/14,
+tied with the one-shot. Saltgrass, held out (`generality-prereg.md`): Bar G passes (the ledger recipe's 28.5 against
+the one-shot's 25.5), Bar R fails on 7 of 10 recipe pairs, on agreement (778461d0e).
 
 ## How we develop (operator, 2026-10-13)
 
@@ -22,48 +29,10 @@ is five generated mail worlds with an answer key (93 deals; `research/ontology-a
   A design that only works by eating context is out, however well it scores.
 - **The writer is not the reader.** MiMo writes the worlds, so it never reads them.
 
-## The race, 2026-10-13 (DeepSeek Flash, one run each, `runs/race/`)
+## The race, 2026-10-13
 
-Four architectures were read with the same model and scored by the same scorer. On world-s4 and s1:
-
-| Design | Deals served |
-|---|---|
-| Windows | 28/33 |
-| Cast-first with the key's cast | 22/33 |
-| One-shot | 22/33 |
-| Cast-first with a built cast, notes, and rolling | Behind, or cut short when the DeepSeek balance ran out; not pursued |
-
-"Windows" reads each folder whole, up to about 24k tokens, then one call merges the records across windows.
-
-Windows against the one-shot on all five worlds, and on Ward (real mail):
-
-| | Windows | One-shot |
-|---|---|---|
-| Deals served, 5 worlds | 76/93 (82%) | 66/93 (71%) |
-| Stage updates attached, 5 worlds | 294/328 (90%) | 247/328 (75%) |
-| Ward deals served | 7/14 | 8/14 |
-| Ward updates attached | 18/35 | 13/35 |
-
-Updates attached is better with windows on all six corpora. Served is better on three worlds and one deal worse
-on two.
-
-On world-s4 with the local model, Qwen 35B-A3B with thinking off:
-
-| Run | Deals served | Updates attached | Time |
-|---|---|---|---|
-| Windows, DeepSeek Flash | 14/15 | 48/55 | 4 min |
-| Windows, local, thinking on | 9/15 | 31/55 | 83 min |
-| Windows, local, thinking off | 5/15 | 27/55 | 6 min |
-| Today's pipeline, local | 1/15 | 27/55 | 43 min |
-
-With thinking off the local model folds a company's deals into one record (four false merges); with thinking on it
-makes none, but it cites fewer statements (43 quotes against DeepSeek's 101), so updates stay unattached. Each call
-thinks for 7-9.5k tokens. With thinking on, the daemon's JSON format empties the answer (note 068f6b1f), so those
-runs ask for JSON in the prompt only.
-
-**Windows cut by date** (one date-ordered stream, folder names hidden, 15 calls against 67) tie windows cut by
-folder: 78/93 served against 76, 284/328 attached against 294. The folders were not doing the work. Ward fits in one
-date window, so it cannot answer this; its rerun (5/14 against the one-shot's 8/14) puts single-run noise on Ward at
+History, tables at c73b91408: four architectures read with DeepSeek Flash; windows served 76/93 against the
+one-shot's 66/93, windows cut by date tied windows cut by folder, and Ward's rerun put single-run noise there at
 about three deals.
 
 ## What we could be wrong about
@@ -83,10 +52,8 @@ The percentages are my estimates, not measurements.
 ## Steps
 
 1. ~~Thinking on locally~~ (done: 9/15). ~~Windows cut by date~~ (done: ties the folder cut).
-2. **Product.** Build windows into the default commands, reusing what exists, with the merge in capped blocks so no
-   call grows with the corpus. Measure with `run_world.sh` on the five worlds and Ward. No new test world (operator,
-   2026-10-13: the instruments in hand are enough).
-3. **Saltgrass** through the same commands: write the recipe, `recipe validate`, score against its fact ledger.
+2. ~~Product~~ (done: the window reader is the default commands' reader, 5f2711847).
+3. ~~Saltgrass~~ (done: blind recipes through the same commands, scored by its question banks; above).
 4. **The model track.** Engineer the system down to the local model. Filed 2026-10-15 (Qwen 35B-A3B, thinking
    on, product window reader, world-s4; `runs/loop/local35b-s4-think{,-w20k,-w10k}`): 3/15 at the default 40k-char
    window, 5/15 at 20k, against DeepSeek's 9-10/15. The losses are per call, not the design: the model plans a
@@ -105,5 +72,5 @@ not the race table's 66/93 and 247/328.
 
 ## Deferred until something works
 
-Labelling the hay, blind recipes, a second writer model, a real literary anchor, bars, statistics beyond five
+Labelling the hay, a second writer model, a real literary anchor, bars, statistics beyond five
 worlds, and a review process.

@@ -36,17 +36,17 @@ store (ids cited per row).
 loop's default commands: the five worlds served 81/93 (arm c123-verify,
 2026-10-15; the current default's reads 76/93 under the same scorer) against
 the one-shot's 68/93 under the current scorer (66/93 under the race's), and
-Ward 9/14 against the one-shot's 8/14. The window reader is now what the
-default commands run (`document_read::reader()`, unset = window); the passes
-and compiled readers stay reachable as `SOVEREIGN_READER=passes` / `=waves`
-until their retirement, which the operator scheduled next, sized by an
-inventory (2026-10-15: "flip default only" in this push).
+Ward 9/14 against the one-shot's 8/14. The window reader is now the one
+reader: the passes reader was deleted 2026-10-16 (3058feb36), with the wave
+transport (f3101f027), the reader switch and `SOVEREIGN_READER` (5d5b93ccc)
+and the mention words only it wrote (afa549596), each records-identical in a
+zero-spend replay of the eight loop corpora against a same-store baseline
+(arm q4-base).
 
 **What ships.** `document_read/window.rs` reads a chapter in one call;
 `enrich init` cuts the corpus into windows in clock order
 (`window_manifest.rs`); a window's particulars reach RESOLVE as a chapter-wide
-sufficient key (`CHAPTER_SUBJECT_KEY`). Unset, the passes reader and the
-corpus's own sections, unchanged.
+sufficient key (`CHAPTER_SUBJECT_KEY`).
 
 **Known gap.** The window reader never binds a company named only in prose
 (no header names it) to the record a header seeds: it sends no mention of a
@@ -86,8 +86,8 @@ reader reads, unchanged.
 Locate and Mention become enumerations, and fields are read per particular
 over the whole document. Served records may move either way.
 
-**Flip condition.** The pre-registered experiment (cast-probe-style PREREG
-under research/ontology-apps/waves/) passes on Ward, uv and GVC: no system
+**Flip condition.** The pre-registered experiment (cast-probe-style PREREG,
+`research/ontology-apps/waves/PREREG.md`, deleted 2026-10-16 with the reader) passes on Ward, uv and GVC: no system
 loses more than run-to-run churn on its served-record metric, and the cost
 per document falls as its bar says. Refuted, the row moves to Rejected and
 the three files are deleted.
@@ -160,7 +160,8 @@ field. Until then the operator says so.
 
 **What ships.** No switch. A version-1 recipe whose claim kinds all have a
 force and a subject RESOLVE or a metadata source identifies is read by the
-passes reader (Locate per numbered line, Choose per closed-valued field); one
+passes reader (Locate per numbered line, Choose per closed-valued field; the
+window reader since 2026-10-15, the passes reader deleted 2026-10-16); one
 with no such claim kind is read by the general extractor; a mix refuses at
 parse (`OntologyPolicies::reads_documents`, `recipe_ontology/language.rs`).
 The one-shot reader is deleted. Both keys still load, are ignored, and are
