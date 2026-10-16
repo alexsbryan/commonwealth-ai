@@ -887,7 +887,10 @@ question the pipeline asks about a type is a method on the resolved
   order never changes the records) under `Answerer::Select` with the adopted
   proposer (`ProposalRule::default`, `propose::{NEIGHBOURS, MAX_CANDIDATES,
   MIN_SIMILARITY}`); each record becomes an atom whose id hashes its opening
-  statement, and each claim's subject its statement's record. 3b leaves such a
+  statement, called by the name a window read gave the earliest of its
+  statements that has one, its other read names its aliases, else by its
+  opening passage (`resolution_records/named.rs`; shown, never compared), and
+  each claim's subject its statement's record. 3b leaves such a
   subject unresolved, and the type's atoms 3a merged from Phase-1 sketches are
   retired with every reference to them, dropped and recorded, never repointed.
   Decisions land in `atlas/resolve_decisions.jsonl`, and each placed claim keeps

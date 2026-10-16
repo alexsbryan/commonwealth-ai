@@ -225,7 +225,7 @@ attributes = [{ name = "speaker", type = "ref", of = "character" }]
 /// no mention of her read. A name read nowhere is not held, and says why.
 #[tokio::test]
 async fn a_window_ref_holds_the_record_its_window_read_under_that_name() {
-    let (claims, lines) = accounts_derived("Maren").await;
+    let (claims, _, lines) = accounts_derived("Maren").await;
     let claim = |id: &str| claims.iter().find(|c| c.id.as_str() == id).unwrap();
     let (told, heard) = (claim("told"), claim("heard"));
     let record_of = |c: &Claim| c.subject.as_ref().map(|s| s.as_str().to_string());
@@ -257,7 +257,7 @@ async fn a_window_ref_holds_the_record_its_window_read_under_that_name() {
 /// record of the statement read about Maren.
 #[tokio::test]
 async fn a_reading_written_with_two_names_lands_by_either() {
-    let (claims, _) = accounts_derived("Mrs Ashquill / Maren").await;
+    let (claims, _, _) = accounts_derived("Mrs Ashquill / Maren").await;
     let claim = |id: &str| claims.iter().find(|c| c.id.as_str() == id).unwrap();
     let (told, heard) = (claim("told"), claim("heard"));
     assert_eq!(
@@ -271,9 +271,34 @@ async fn a_reading_written_with_two_names_lands_by_either() {
     );
 }
 
+/// Failing input, named: saltgrass's records were called by their opening
+/// passages, so a resolved reference printed a passage where a name belonged
+/// (arm bundle1-fresh-sg: records 27.6k -> 50.7k chars, `speaker` alone 10k).
+/// A record RESOLVE builds is called by the name its window read gave the
+/// statement that opened it: Tabb's record is "Tabb", Maren's "Maren".
+#[tokio::test]
+async fn a_record_is_called_by_the_name_its_reader_gave_it() {
+    let (claims, entities, _) = accounts_derived("Maren").await;
+    let name_of = |id: &str| {
+        let record = claims
+            .iter()
+            .find(|c| c.id.as_str() == id)
+            .unwrap()
+            .subject
+            .clone();
+        entities
+            .iter()
+            .find(|e| Some(&e.id) == record.as_ref())
+            .map(|e| e.canonical_name.clone())
+    };
+    assert_eq!(name_of("told").as_deref(), Some("Tabb"));
+    assert_eq!(name_of("heard").as_deref(), Some("Maren"));
+}
+
 /// The two accounts of `TOLD` and `HEARD`, resolved and derived, `told`'s
-/// speaker read as `told_speaker`: the claims and the derivation lines.
-async fn accounts_derived(told_speaker: &str) -> (Vec<Claim>, Vec<DerivedValue>) {
+/// speaker read as `told_speaker`: the claims, the records and the derivation
+/// lines.
+async fn accounts_derived(told_speaker: &str) -> (Vec<Claim>, Vec<Entity>, Vec<DerivedValue>) {
     let p = OntologyBlock {
         version: 1,
         body: toml::from_str(ACCOUNT).unwrap(),
@@ -353,5 +378,5 @@ async fn accounts_derived(told_speaker: &str) -> (Vec<Claim>, Vec<DerivedValue>)
         &mut |v| lines.push(v.clone()),
     )
     .unwrap();
-    (claims, lines)
+    (claims, entities, lines)
 }

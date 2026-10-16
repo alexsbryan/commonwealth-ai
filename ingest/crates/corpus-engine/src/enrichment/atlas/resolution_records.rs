@@ -55,6 +55,8 @@ mod described;
 mod local_subjects;
 #[path = "resolution_records/mentions.rs"]
 mod mentions;
+#[path = "resolution_records/named.rs"]
+mod named;
 #[path = "resolution_records/nearest.rs"]
 mod nearest;
 #[path = "resolution_records/retire.rs"]
@@ -680,6 +682,11 @@ async fn resolve_type(
     // Records become the type's atoms, in the type's own kind; a seeded
     // record is its source's atom already.
     let mut atom_of: HashMap<&str, AtomId> = HashMap::new();
+    let read_statement: HashMap<&str, &Statement> = placed
+        .iter()
+        .flat_map(|p| &p.statements)
+        .map(|s| (s.id.as_str(), s))
+        .collect();
     for rec in resolver.records() {
         if let Some(id) = seeded.atoms.get(&rec.id) {
             debug!(r#type = %t.name, record = %rec.id, statements = rec.statements.len(), "atlas/resolve: a seeded record keeps its source's atom");
@@ -724,10 +731,11 @@ async fn resolve_type(
         let id = AtomId::exact_entity_content_hash(&rec.id, &ty, corpus_id);
         debug!(r#type = %t.name, record = %rec.id, atom = %id.as_str(), statements = rec.statements.len(), "atlas/resolve: record becomes an atom");
         atom_of.insert(rec.id.as_str(), id.clone());
+        let (canonical_name, aliases) = named::of_record(&t.name, rec, &read_statement, surface);
         atoms.entities.push(Entity {
             id,
-            canonical_name: surface,
-            aliases: Vec::new(),
+            canonical_name,
+            aliases,
             entity_type: ty.clone(),
             first_appearance: first,
             description: String::new(),

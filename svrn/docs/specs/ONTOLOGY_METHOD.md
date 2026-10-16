@@ -110,7 +110,8 @@ at settling, and the weighed posterior is kept beside it, deciding only what no 
 weights overrode 36 of its 39 picks of an offered company; amended 2026-10-14 from gold-judged RESOLVE questions on
 five generated worlds and Ward: the question shows each side by what its readers read it to be, their supported
 values of the type's other declared attributes (`resolve_records::Described`, shown and never compared; since
-2026-10-15 also the names a window read gave it, so a subject no field describes is not shown as nothing), and the
+2026-10-15 also the names a window read gave it, so a subject no field describes is not shown as nothing, and a
+record is called by its earliest read name, never by its opening passage when a reader named it), and the
 default path asks the reasoned choice, so where one token over the offered records joined 18 of 28 statements whose
 own record was not offered, reasoning joins 4 of 27; with both, the model's own pick decided 49 of 57 such
 questions, and the veto of 2026-10-13, a pick overruled when the weighed sources put none at the bar, 44, so it is
