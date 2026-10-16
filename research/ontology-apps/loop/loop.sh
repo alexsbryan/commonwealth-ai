@@ -22,7 +22,7 @@
 # SOVEREIGN_READER is passed through as given: unset runs the product default (the window reader since 5f2711847),
 # so an arm exercises the path a user gets; run.json records it ("default" when unset).
 # NOSCORE=1 scores and diagnoses nothing and writes no journal row: a deletion's replay, judged by
-# `table.py --same <reference arm> <arm>` on its records, asks no bank question (a bank's answerer is a model call).
+# `table.py --same <reference arm> <arm>` on its records, asks no bank question (a bank score is 210 model calls).
 cd "$(dirname "$0")/../../.." || exit 1
 L=research/ontology-apps/loop
 arm=$1; shift

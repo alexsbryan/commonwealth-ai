@@ -2,15 +2,21 @@
 
 For a corpus whose gold is a question bank (saltgrass: bench/lanes/chaos_monkey/saltgrass.toml), not deal
 records. Every question is asked of the records alone, by one fixed answerer for every arm (the daemon's
-model, temperature 0, no reasoning, one prompt), and judged by the bank's own rule:
+model, temperature 0, no reasoning, one prompt), over five presentations of the same records (record order and
+each record's statement order shuffled by fixed seeds), and its verdict is the majority of the five. One
+presentation moved one record set's score by 3 of 42 (23-26 over seeds 1-5, 2026-10-16) while re-asking one
+presentation moved it by none (26, 26, 26), so the answerer reads order, and one ask is not a measurement.
+Each presentation is judged by the bank's own rule:
   present / partially_present / provenance_trap  right when every gold keyword is in the answer
   distractor                                     right when the gold keywords are in it and the distractor is not
   absent_adjacent / absent_out_of_domain         right when the answer is NOT IN RECORDS (an answer is invention)
-A failed call is could_not_judge, never wrong. <records.json> is {"records": [{type, name, attributes|fields,
+A failed call is could_not_judge, never wrong; so is a question with fewer than three judged presentations or
+a tie among them. <records.json> is {"records": [{type, name, attributes|fields,
 claims: [{kind, quote, attributes}]}]}: a one-shot's file as runs/ceiling/oneshot.py writes it, or the system's
 records as records_of.py dumps them through the public atlas-query. Writes per-question answers and verdicts.
 """
-import json, os, sys, tomllib, urllib.request
+import json, os, random, sys, tomllib, urllib.request
+from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import corpora
 
@@ -19,6 +25,27 @@ NONE = "NOT IN RECORDS"
 PROMPT = ("Answer the question from these records only. They are all you know. Answer in one or two sentences "
           "and name the records you used by their number. If the records do not say, answer exactly: "
           f"{NONE}\n\nRecords:\n{{records}}\n\nQuestion: {{question}}")
+
+
+PRESENTATIONS = range(1, 6)  # fixed seeds: the same records are always shown the same five ways
+
+
+def presented(records, seed):
+    """The same records, their order and each record's statement order shuffled by `seed`."""
+    rng = random.Random(seed)
+    shown = [dict(r, claims=rng.sample(r.get("claims", []), len(r.get("claims", [])))) for r in records]
+    rng.shuffle(shown)
+    return shown
+
+
+def majority(verdicts):
+    """A question's verdict over its presentations: what most judged ones gave; fewer than three judged, or a tie,
+    is could_not_judge."""
+    judged = [v for v in verdicts if v != "could_not_judge"]
+    right = judged.count("right")
+    if len(judged) < 3 or 2 * right == len(judged):
+        return "could_not_judge"
+    return "right" if 2 * right > len(judged) else "wrong"
 
 
 def render(records):
@@ -63,20 +90,28 @@ def judge(q, answer):
 if __name__ == "__main__":
     records = json.load(open(sys.argv[1]))["records"]
     bank = tomllib.load(open(sys.argv[2], "rb"))["questions"]
-    text = render(records)
+    texts = {k: render(presented(records, k)) for k in PRESENTATIONS}
+
+    def one(job):
+        k, q = job
+        try:
+            ans = ask(texts[k], q["question"])
+            return k, q["id"], ans, judge(q, ans)
+        except Exception as e:  # a failed call judges nothing
+            return k, q["id"], f"call failed: {e}", "could_not_judge"
+
+    with ThreadPoolExecutor(8) as pool:
+        got = list(pool.map(one, [(k, q) for k in PRESENTATIONS for q in bank]))
     rows = []
     for q in bank:
-        try:
-            ans = ask(text, q["question"])
-            v = judge(q, ans)
-        except Exception as e:  # a failed call judges nothing
-            ans, v = f"call failed: {e}", "could_not_judge"
-        rows.append(dict(id=q["id"], qtype=q["qtype"], verdict=v, answer=ans))
+        per = [dict(seed=k, verdict=v, answer=a) for k, i, a, v in got if i == q["id"]]
+        rows.append(dict(id=q["id"], qtype=q["qtype"], verdict=majority([x["verdict"] for x in per]), presentations=per))
     by = {}
     for r in rows:
         by.setdefault(r["qtype"], {}).setdefault(r["verdict"], 0)
         by[r["qtype"]][r["verdict"]] += 1
-    summary = dict(records=len(records), record_chars=len(text), right=sum(r["verdict"] == "right" for r in rows),
+    summary = dict(records=len(records), record_chars=len(texts[1]), presentations=len(PRESENTATIONS),
+                   right=sum(r["verdict"] == "right" for r in rows),
                    judged=sum(r["verdict"] != "could_not_judge" for r in rows), by_qtype=by)
     # This file, the model that answered and the bank it judged by: the stamp table.py checks before setting two
     # arms side by side.
