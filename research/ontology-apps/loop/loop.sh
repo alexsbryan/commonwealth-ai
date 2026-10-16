@@ -42,7 +42,7 @@ one() {
   cut=~/.svrnmesh/indexes/$id/chapters.json; cfg=~/.svrnmesh/enrichment/$id/config.json
   if [ -n "$RESTORE" ]; then
     cp runs/loop/$RESTORE/$id/chapters.json $cut || { echo "$id: no saved cut in runs/loop/$RESTORE"; return; }
-  elif [ -n "$INIT" ]; then  # re-cut the windows; init over a literary-pipeline config is put back (run_world.sh)
+  elif [ -n "$INIT" ]; then  # re-cut the windows; init over a literary-pipeline config is put back
     cp $cfg $out/config.before.json
     sovereign enrich init $id --from-corpus $id --chat-model commonwealth/primary --embed-model qwen3-embedding-0.6b --force > $out/init.out 2> $out/init.err || { echo "$id: init failed"; return; }
     if python3 -c "import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get('pipeline_id') == 'literary' else 1)" $cfg; then

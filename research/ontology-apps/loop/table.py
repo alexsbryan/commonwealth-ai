@@ -149,7 +149,11 @@ def diff(a, b):
 def same(a, b):
     """Per corpus both arms ran: the atlas's atoms and edges equal as data (loop.sh copies them to <run>/atlas/), every
     window of the cut read in each arm (one traced answer per chapter, none served from the section cache), and
-    neither arm's answer store grew (no model call). A corpus missing any of these could not be judged."""
+    neither arm's answer store grew (no model call). A corpus missing any of these could not be judged.
+    A replay serves each question's LATEST recorded answer, so a reference arm holds only until a fresh read of the
+    same corpus records new answers: same-ref went stale on saltgrass-asked/-ledger when gen-fresh read them
+    (2026-10-16), while a build before the change under test (q4-base) still matched. Re-take the reference after
+    any fresh read of a corpus it covers."""
     def atoms(run):
         return {x["data"]["id"]: x for x in json.load(open(f"{run}/atlas/atoms.json"))["atoms"]}
     def read_all(run):
