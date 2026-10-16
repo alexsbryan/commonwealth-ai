@@ -3,6 +3,8 @@ table.py --line <run dir>: one corpus's summary line.
 table.py --history: the journal, one line per arm.
 table.py --diff <arm dir A> <arm dir B>: deal by deal, what B gains and loses against A, with the verdict; refused
 unless every corpus both arms scored was judged by the same judge (its score file's stamp, corpora.judge_id).
+table.py --same <arm dir A> <arm dir B>: whether B's records are A's, corpus by corpus (a deletion's proof); exit 0
+only when every corpus passes.
 
 Held-out corpora (corpora.HELD_OUT) are reported apart from the development set, as totals only.
 
@@ -144,6 +146,38 @@ def diff(a, b):
         print("".join((out.stdout or out.stderr).splitlines(keepends=True)[:5]), end="")
 
 
+def same(a, b):
+    """Per corpus both arms ran: the atlas's atoms and edges equal as data (loop.sh copies them to <run>/atlas/), every
+    window of the cut read in each arm (one traced answer per chapter, none served from the section cache), and
+    neither arm's answer store grew (no model call). A corpus missing any of these could not be judged."""
+    def atoms(run):
+        return {x["data"]["id"]: x for x in json.load(open(f"{run}/atlas/atoms.json"))["atoms"]}
+    def read_all(run):
+        n = sum(1 for l in open(f"{run}/extract.err", errors="replace") if "TRACE document_read/window: answer chapter=" in l)
+        return n, len(json.load(open(f"{run}/chapters.json"))["chapters"])
+    verdicts = {}
+    for cid in sorted({os.path.basename(r.rstrip("/")) for r in glob.glob(f"{a}/*/")} & {os.path.basename(r.rstrip("/")) for r in glob.glob(f"{b}/*/")}):
+        ra, rb = f"{a}/{cid}", f"{b}/{cid}"
+        if not all(os.path.exists(f"{r}/atlas/{f}") for r in (ra, rb) for f in ("atoms.json", "edges.json")):
+            verdicts[cid] = "could not judge: no atlas copy in " + " and ".join(r for r in (ra, rb) if not os.path.exists(f"{r}/atlas/atoms.json")); continue
+        why = []
+        for r in (ra, rb):
+            got, cut = read_all(r)
+            if got != cut: why.append(f"{r}: {got} of {cut} windows read")
+            m = json.load(open(f"{r}/run.json"))
+            if m.get("answers_before") != m.get("answers_after") or not m.get("answers_before"):
+                why.append(f"{r}: answer store {m.get('answers_before', '?')} -> {m.get('answers_after', '?')}")
+        if why: verdicts[cid] = "could not judge: " + "; ".join(why); continue
+        A, B = atoms(ra), atoms(rb)
+        changed = sorted(k for k in A.keys() & B.keys() if A[k] != B[k])
+        edges = json.load(open(f"{ra}/atlas/edges.json"))["edges"] == json.load(open(f"{rb}/atlas/edges.json"))["edges"]
+        if A == B and edges: verdicts[cid] = f"identical ({len(A)} atoms)"; continue
+        verdicts[cid] = (f"DIFFER: atoms only in A {len(A.keys() - B.keys())}, only in B {len(B.keys() - A.keys())}, changed {len(changed)}"
+                         f" {changed[:3]}; edges {'equal' if edges else 'differ'}")
+    for cid, v in verdicts.items(): print(f"{cid:<16} {v}")
+    sys.exit(0 if verdicts and all(v.startswith("identical") for v in verdicts.values()) else 1)
+
+
 if __name__ == "__main__":
     if sys.argv[1] == "--line": print(line(sys.argv[2]))
     elif sys.argv[1] == "--history":
@@ -152,4 +186,5 @@ if __name__ == "__main__":
             banks = "".join(f" {b} {x[b]}{' (held out)' if b in corpora.HELD_OUT else ''}" for b in corpora.BANKS if x.get(b))
             print(f"{x['finished'][:16]}  {x['arm']:<22} {x['head']:<10} worlds {x['worlds']:<6} ward {x['ward']:<6}{banks} {x['note'][:90]}")
     elif sys.argv[1] == "--diff": diff(sys.argv[2], sys.argv[3])
+    elif sys.argv[1] == "--same": same(sys.argv[2], sys.argv[3])
     else: arm(sys.argv[1])

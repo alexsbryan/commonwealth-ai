@@ -13,6 +13,7 @@
 #   score.json      score.py's report; misses.jsonl + misses.txt, each unserved gold deal's chain and verdict (misses.py)
 #                   (a bank: records.json + bank.json; a held-out corpus, corpora.HELD_OUT, is scored and never diagnosed)
 #   decisions.jsonl every RESOLVE question judged against gold, the model's own pick beside the decision (decisions.py)
+#   atlas/          the records: the atlas's atoms.json and edges.json after RESOLVE (table.py --same compares two arms')
 # then table.py prints the arm's totals and categories and appends a row to runs/loop/journal.tsv.
 #
 # Env: NOTE="what this arm changes" (required). ASKER=replay|recorded|daemon for extract (default recorded: a
@@ -20,6 +21,8 @@
 # INIT=1 re-cuts the windows (enrich init). RESTORE=<arm> puts that arm's cut back first, for an exact replay.
 # SOVEREIGN_READER is passed through as given: unset runs the product default (the window reader since 5f2711847),
 # so an arm exercises the path a user gets; run.json records it ("default" when unset).
+# NOSCORE=1 scores and diagnoses nothing and writes no journal row: a deletion's replay, judged by
+# `table.py --same <reference arm> <arm>` on its records, asks no bank question (a bank's answerer is a model call).
 cd "$(dirname "$0")/../../.." || exit 1
 L=research/ontology-apps/loop
 arm=$1; shift
@@ -49,10 +52,14 @@ one() {
     fi
   fi
   cp $cut $out/chapters.json; cp $cfg $out/config.json
+  store=~/.svrnmesh/enrichment/$id/answers.jsonl; before=$(wc -l < $store 2>/dev/null | tr -d ' ')
   sovereign enrich extract $id --full --asker $asker > $out/extract.out 2> $out/extract.err; rx=$?
   [ $rx = 0 ] && { sovereign enrich resolve $id --asker recorded > $out/resolve.out 2> $out/resolve.err; rr=$?; }
-  kind=$(python3 $L/corpora.py $id kind)
-  if [ "$kind" = bank ]; then  # a question bank's corpus: its records through the public query, asked the bank
+  after=$(wc -l < $store 2>/dev/null | tr -d ' ')
+  [ "$rr" = 0 ] && mkdir -p $out/atlas && cp ~/.svrnmesh/indexes/$id/atlas/atoms.json ~/.svrnmesh/indexes/$id/atlas/edges.json $out/atlas/
+  kind=$(python3 $L/corpora.py $id kind); [ -n "$NOSCORE" ] && kind=none
+  if [ "$kind" = none ]; then :
+  elif [ "$kind" = bank ]; then  # a question bank's corpus: its records through the public query, asked the bank
     [ $rx = 0 ] && [ "$rr" = 0 ] && python3 $L/records_of.py $id $(python3 $L/corpora.py $id recipe) $out/records.json > $out/records.out 2>&1 \
       && python3 $L/score_bank.py $out/records.json $(python3 $L/corpora.py $id bank) $out/bank.json > $out/score.out 2>&1
   else
@@ -62,7 +69,8 @@ one() {
     arm "$arm" corpus "$id" note "$NOTE" head "$head" dirty "$dirty" svrn_ingest_mtime "$bin" engine "$engine" asker "$asker" \
     reader "${SOVEREIGN_READER:-default}" \
     init "${INIT:-}" restore "${RESTORE:-}" extract_exit "$rx" resolve_exit "${rr:-not run}" seconds "$(( $(date +%s) - s ))" \
-    finished "$(date -u +%FT%TZ)"
+    answers_before "$before" answers_after "$after" noscore "${NOSCORE:-}" finished "$(date -u +%FT%TZ)"
+  [ "$kind" = none ] && { echo "$id: extract exit $rx, resolve exit ${rr:-not run}; answers $before -> $after (not scored)"; return; }
   if [ "$kind" = bank ]; then
     [ -f $out/bank.json ] && echo "$id $(python3 -c "import json,sys; s=json.load(open(sys.argv[1]))['summary']; print(f\"bank {s['right']}/{s['judged']} right; records {s['records']}\")" $out/bank.json)" \
       || echo "$id: extract exit $rx, resolve exit ${rr:-not run}; see $out"
@@ -75,4 +83,4 @@ one() {
 }
 for id in "$@"; do one $id & done
 wait
-python3 $L/table.py $root
+[ -n "$NOSCORE" ] || python3 $L/table.py $root
