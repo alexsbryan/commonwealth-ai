@@ -179,8 +179,8 @@ pub use grounding::value_present_in_chunks;
 // the checker is shown): `POST /oicp/v1/verify` reads them (the daemon's
 // `routes_oicp_verify`, OICP v0.6 §2.15).
 pub use grounding::{
-    differing_specifics, sentence_ranges, sentence_specifics, without_citations, Specific,
-    SpecificKind,
+    differing_specifics, sentence_ranges, sentence_specifics, without_citations, FigureBound,
+    Specific, SpecificKind,
 };
 // The native-grounding stack (`NATIVE_GROUNDING.md`). Default ON since
 // 2026-08-11; `SOVEREIGN_NATIVE_GROUNDING=0` is the opt-out. What is on

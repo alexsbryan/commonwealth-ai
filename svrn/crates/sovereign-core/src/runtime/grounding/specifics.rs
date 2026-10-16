@@ -15,7 +15,8 @@
 //! percent sign, or a cardinal written in words ([`spelled`]); it is a
 //! `Figure` (with a unit when a percent or currency marks it), a `Date` (a
 //! year, a day beside a month; digits only), or a `Quantity` (a number
-//! before the noun it counts). A name is a run of name-shaped words
+//! before the noun it counts), bounded when words before it say so ("more
+//! than 50", [`bound`]). A name is a run of name-shaped words
 //! ([`super::judge::cap_name`]), less the words that are never names
 //! ([`super::judge::non_name_word`]), where a run that opens the sentence
 //! counts only once it is two words long.
@@ -38,6 +39,8 @@ use std::collections::HashSet;
 use std::ops::Range;
 
 use super::judge::{cap_name, non_name_word};
+
+pub use bound::FigureBound;
 
 /// What a specific is (§2.15's closed set).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -71,6 +74,10 @@ pub struct Specific {
     /// compared: `48000` for "48,000" and for "forty-eight thousand".
     /// `None` for a name, and for a number compared as written ("1990s").
     pub value: Option<String>,
+    /// The side of its number a figure's or a quantity's value lies on, read
+    /// from the words before it ("more than 50"); `None` for a point, a date
+    /// and a name ([`bound`]).
+    pub bound: Option<FigureBound>,
 }
 
 /// The sentences of `text`, as code-point ranges with their surrounding
@@ -184,6 +191,7 @@ pub fn sentence_specifics(sentence: &str) -> Vec<Specific> {
                 range: r.range,
                 unit: None,
                 value: None,
+                bound: None,
             });
         }
     }
@@ -269,6 +277,7 @@ pub fn sentence_specifics(sentence: &str) -> Vec<Specific> {
         }
     }
     flush(&mut run, &mut out);
+    bound::read_bounds(sentence, &mut out);
     out
 }
 
@@ -416,6 +425,7 @@ fn number_specific(bare: &str, a: usize, w: &Around<'_>) -> Option<Specific> {
         text,
         range,
         unit,
+        bound: None,
     })
 }
 
@@ -615,6 +625,10 @@ fn is_author_date(inner: &str) -> bool {
 /// names what differs"). Read by value (`3.2%` is `3.2 per cent`), so a
 /// claim's figure the passage carries in any form is never a difference.
 ///
+/// A bounded figure or quantity ("more than 50 years") differs only from one
+/// no value of its range meets ([`bound`]): "more than a hundred years" does
+/// not state "more than 50" otherwise, and "fewer than 50" it does.
+///
 /// A difference in a figure or a quantity counts only where the claim's
 /// dates are not also stated otherwise: two periods' figures differing is
 /// not a contradiction. A date stated otherwise counts only beside something
@@ -638,9 +652,19 @@ pub fn differing_specifics(
         .filter(counted)
         .filter(|s| !held(*s))
         .filter_map(|s| {
-            let other = passage.iter().find(|p| {
-                p.kind == s.kind && p.unit == s.unit && !claim_values.contains(&value(*p))
-            })?;
+            let alike = |p: &&Specific| p.kind == s.kind && p.unit == s.unit;
+            if let Some(met) = passage
+                .iter()
+                .filter(alike)
+                .find(|p| bound::ranges_meet(s, p) == Some(true))
+            {
+                tracing::debug!(target: "grounding_gate", event = "differing_bound_met", claim = %s.text, passage = %met.text, "a bounded figure the passage's meets: not stated otherwise");
+                return None;
+            }
+            let other = passage
+                .iter()
+                .filter(alike)
+                .find(|p| !claim_values.contains(&value(*p)))?;
             Some((s.clone(), other.clone()))
         })
         .collect();
@@ -704,6 +728,10 @@ fn strip_possessive(w: &str) -> &str {
         .or_else(|| w.strip_suffix("\u{2019}s"))
         .unwrap_or(w)
 }
+
+// A figure's bound ("more than 50"), and whether two bounded specifics meet.
+#[path = "specifics_bound.rs"]
+mod bound;
 
 // Cardinals written in words, read by the runtime's one number-word reader.
 #[path = "specifics_spelled.rs"]
