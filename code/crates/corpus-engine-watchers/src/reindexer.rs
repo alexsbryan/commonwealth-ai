@@ -408,7 +408,7 @@ struct RebuildCtx {
 /// How long the demoted full rust-analyzer export stays suppressed after it
 /// last FINISHED, while FS saves keep arriving. The tree-sitter overlay keeps
 /// symbol defs fresh in this window; only the precise cross-file edges wait,
-/// and a commit refreshes precisely and immediately (git-HEAD path, ungated).
+/// and a commit waits out the same cooldown (`head_step`, 2026-10-16).
 ///
 /// Two properties this constant must hold, both learned the hard way:
 ///
@@ -432,9 +432,8 @@ const FULL_REBUILD_COOLDOWN: Duration = Duration::from_secs(900);
 /// actually launches. The export is a multi-minute whole-workspace
 /// rust-analyzer pass; starting it between two keystrokes contends with
 /// the operator's own builds mid-flow. Gating on a short quiescence
-/// window shifts it into the natural pauses. Commit-triggered and
-/// startup/explicit rebuilds are NOT gated — a commit is the operator
-/// saying "done here".
+/// window shifts it into the natural pauses. Startup/explicit rebuilds
+/// are not gated; commits wait on the cooldown alone (`head_step`).
 const FULL_REBUILD_QUIESCENCE: Duration = Duration::from_secs(30);
 
 /// Upper bound on how long the quiescence gate may defer a due full
@@ -849,6 +848,7 @@ async fn run_worker(ctx: WorkerCtx) {
     // Guards the single detached rust-analyzer rebuild so the select loop never
     // blocks on it (see `spawn_full_rebuild`).
     let rebuild_in_flight = Arc::new(AtomicBool::new(false));
+    let mut last_harvested_head: Option<String> = None;
 
     loop {
         let debounce_sleep = match (pending_fs, last_fs_event) {
@@ -933,35 +933,22 @@ async fn run_worker(ctx: WorkerCtx) {
                         .await
                         .unwrap_or_default();
                     if old_head != new_head {
-                        // Phase 7.1: harvest commit messages
-                        // between old_head..new_head into
-                        // `source='committed'` notes BEFORE the
-                        // SCIP rebuild kicks off. Order doesn't
-                        // matter for correctness — both are
-                        // independent — but doing it first means
-                        // the next `sovereign audit` after the
-                        // rebuild completes already has the new
-                        // committed-source rows.
-                        if let Some(notes) = commit_harvester.as_deref() {
-                            let session_id = format!(
-                                "harvest-{}",
-                                rebuild_ctx.entry.corpus_id
-                            );
-                            let wrote = crate::commit_harvest::harvest_between(
-                                &entry.root,
-                                &old_head,
-                                &new_head,
-                                notes,
-                                &session_id,
-                            )
-                            .await;
-                            if wrote > 0 {
-                                tracing::info!(
-                                    corpus_id = %rebuild_ctx.entry.corpus_id,
-                                    new_notes = wrote,
-                                    "commit_harvest: persisted committed-source notes"
-                                );
-                            }
+                        let step = head_step::head_step(
+                            &old_head,
+                            &new_head,
+                            last_harvested_head.as_deref(),
+                            rebuild_in_flight.load(Ordering::Acquire),
+                            last_finished(),
+                            FULL_REBUILD_COOLDOWN,
+                        );
+                        let corpus = &rebuild_ctx.entry.corpus_id;
+                        let from = step.harvest_from.as_deref();
+                        head_step::harvest(commit_harvester.as_deref(), from, &entry.root, &new_head, corpus).await;
+                        last_harvested_head = Some(new_head.clone());
+                        if !step.rebuild {
+                            tracing::debug!(corpus_id = %corpus, %old_head, %new_head, "commit-triggered full \
+                                export deferred (in flight or within cooldown); the git poll retries");
+                            continue;
                         }
                         let req = RebuildRequest {
                             reason: RebuildReason::GitHead {
@@ -972,11 +959,6 @@ async fn run_worker(ctx: WorkerCtx) {
                         };
                         // Spawn (don't await): a commit-triggered rebuild must
                         // not block the loop's overlay servicing either.
-                        // A commit is the natural precise-refresh boundary and
-                        // resets the FS-change cooldown: the graph is being
-                        // brought fully current, so no FS-triggered full
-                        // export is due until this one finishes and its
-                        // cooldown elapses.
                         spawn_full_rebuild(
                             &rebuild_ctx,
                             req,
@@ -1588,5 +1570,6 @@ fn working_tree_dirty(root: &Path) -> bool {
 // so freshness readers need not name this crate (fp-23).
 pub use sovereign_contracts::git::read_git_head;
 
+mod head_step;
 #[cfg(test)]
 mod tests;

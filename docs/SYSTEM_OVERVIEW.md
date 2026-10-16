@@ -1323,7 +1323,9 @@ once per daemon, so a corpus indexed later answers after a restart
 Code's tool graph and the Reindexer share ONE merged `ScipGraph` handle,
 so updates are visible to `symbols`/`callers`/`blast` live. Each debounced
 save runs an embed-free tree-sitter overlay; the heavy rust-analyzer export is
-demoted (spawned, rate-limited, quiescence-gated, `nice +10`) and is
+demoted (spawned, rate-limited, quiescence-gated, `nice +10`); a commit waits
+out the same 15-minute cooldown from the last export's end, its messages
+harvested at once (`reindexer/head_step.rs`), and the export is
 one-writer, staging and renaming under a cross-process flock so a query in
 flight always sees a complete graph. **One project owns one workspace**:
 registration refuses a root that is an ancestor or descendant of a registered
