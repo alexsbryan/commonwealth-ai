@@ -65,6 +65,14 @@ pub struct Expect {
     pub differing: Vec<[String; 2]>,
 }
 
+/// The claims shelf, read from `fixture/claims.json`. The one reader: the
+/// checks that need figure sentences a host's verify decides install this
+/// shelf rather than carry a shelf of their own.
+pub fn claims_fixture() -> Result<ClaimsShelf, String> {
+    serde_json::from_str(include_str!("../fixture/claims.json"))
+        .map_err(|e| format!("fixture/claims.json does not load: {e}"))
+}
+
 /// `evidence.verify_sentences` (§2.15).
 pub async fn check_evidence_verify_sentences(host: &Host, m: &ProviderManifest) -> Check {
     let id = "evidence.verify_sentences";
@@ -87,9 +95,9 @@ pub async fn check_evidence_verify_sentences(host: &Host, m: &ProviderManifest) 
             "could not judge: the claims shelf is installed by ingest:recipe",
         );
     }
-    let fx: ClaimsShelf = match serde_json::from_str(include_str!("../fixture/claims.json")) {
+    let fx = match claims_fixture() {
         Ok(x) => x,
-        Err(e) => return fail(format!("fixture/claims.json does not load: {e}")),
+        Err(e) => return fail(e),
     };
     if let Err(e) = fx.shelf.install(host, m, &[]).await {
         return fail(e);

@@ -164,18 +164,17 @@ pub async fn check_evidence_verify(
     )
 }
 
-/// `evidence.verify_correction` (§2.10): a decided claim of the fixture
-/// unit carries an `episode_id`; a correction of it whose witness is a span
-/// verify itself returned is kept `verified`, one whose range runs past the
-/// text is `out_of_range`, and a malformed episode is 400 `not an episode
-/// id`. Against a live host this writes two correction lines into its
-/// journal, as the install checks write the fixture corpus.
-pub async fn check_evidence_verify_correction(
-    host: &Host,
-    m: &ProviderManifest,
-    lib: &Library,
-    state: &FixtureState,
-) -> Check {
+/// `evidence.verify_correction` (§2.10): a decided claim carries an
+/// `episode_id`; a correction of it whose witness is a span verify itself
+/// returned is kept `verified`, one whose range runs past the text is
+/// `out_of_range`, and a malformed episode is 400 `not an episode id`.
+/// The unit is the claims shelf's first (a figure and a year, which a host's
+/// verify decides; the library's planted prose carries no specific and a host
+/// abstains on it before any episode exists), so the check needs
+/// `evidence:verify_sentences` and `ingest:recipe` and is could-not-judge
+/// without them. Against a live host this installs that shelf and writes two
+/// correction lines into its journal.
+pub async fn check_evidence_verify_correction(host: &Host, m: &ProviderManifest) -> Check {
     use oicp_types::verify::{VerifyCorrectionReply, WitnessCheck};
     let id = "evidence.verify_correction";
     let fail = |why: String| Check::fail(id, Level::Feature, why);
@@ -195,12 +194,32 @@ pub async fn check_evidence_verify_correction(
     ) else {
         return fail("evidence:verify_corrections advertised without both endpoints".into());
     };
-    let corpus = match fixture_corpus(id, state) {
-        Ok(c) => c,
-        Err(skip) => return skip,
+    for (feature, why) in [
+        (
+            features::EVIDENCE_VERIFY_SENTENCES,
+            "could not judge: the claims shelf's units are decided by evidence:verify_sentences,              not advertised",
+        ),
+        (
+            features::INGEST_RECIPE,
+            "could not judge: the claims shelf is installed by ingest:recipe, not advertised",
+        ),
+    ] {
+        if !m.has_feature(feature) {
+            return Check::skip(id, Level::Feature, why);
+        }
+    }
+    let fx = match crate::claim_checks::claims_fixture() {
+        Ok(x) => x,
+        Err(e) => return fail(e),
     };
-    let (planted, _) = lib.planted_quote();
-    let unit = format!("{} {planted}", lib.plant.sentence);
+    if let Err(e) = fx.shelf.install(host, m, &[]).await {
+        return fail(e);
+    }
+    let corpus = fx.shelf.corpus_id.clone();
+    let Some(case) = fx.claims.first() else {
+        return fail("fixture/claims.json holds no unit".into());
+    };
+    let unit = case.unit.clone();
     let mut found = None;
     for tier in &ev.verify_tiers {
         let r = match host

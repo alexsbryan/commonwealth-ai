@@ -443,14 +443,14 @@ fn a_sentence_reply_names_pending_sentences_exactly_on_the_passage_route() {
 async fn evidence_verify_correction_is_red_against_a_witness_never_read() {
     use crate::verify_checks::check_evidence_verify_correction;
     let b = bench(Breaks::default()).await;
-    green(&check_evidence_verify_correction(&b.host, &b.manifest, &b.lib, &b.fixture).await);
+    green(&check_evidence_verify_correction(&b.host, &b.manifest).await);
     let b = bench(Breaks {
         witness_unread: true,
         ..Breaks::default()
     })
     .await;
     red(
-        &check_evidence_verify_correction(&b.host, &b.manifest, &b.lib, &b.fixture).await,
+        &check_evidence_verify_correction(&b.host, &b.manifest).await,
         "not OutOfRange",
     );
 }
@@ -467,8 +467,6 @@ async fn the_evidence_checks_say_why_they_could_not_judge() {
         crate::search_checks::check_knowledge_range(&b.host, &b.manifest, &b.lib, &gone).await,
         crate::search_checks::check_knowledge_scoped(&b.host, &b.manifest, &b.lib, &gone).await,
         crate::ingest_checks::check_ingest_documents(&b.host, &b.manifest, &b.lib, &gone).await,
-        crate::verify_checks::check_evidence_verify_correction(&b.host, &b.manifest, &b.lib, &gone)
-            .await,
     ] {
         assert_eq!(c.status, CheckStatus::Skip, "{}", c.id);
         assert!(c.detail.starts_with("could not judge"), "{}", c.detail);
@@ -553,4 +551,23 @@ fn v05_features_must_co_occur_with_their_sections() {
     assert_eq!(f.len(), 2, "{f:?}");
     assert!(f[0].contains("knowledge.evidence"));
     assert!(f[1].contains("ingest:v1"));
+}
+
+#[tokio::test]
+async fn evidence_verify_correction_is_judged_on_the_claims_shelf_and_says_why_not() {
+    use crate::verify_checks::check_evidence_verify_correction;
+    // Green is a pass, not a skip: the unit is one the host decides.
+    let b = bench(Breaks::default()).await;
+    let c = check_evidence_verify_correction(&b.host, &b.manifest).await;
+    assert_eq!(c.status, CheckStatus::Pass, "{}", c.detail);
+    // Without evidence:verify_sentences the claims units are not decided.
+    let mut m = b.manifest.clone();
+    m.features.retain(|f| f != "evidence:verify_sentences");
+    let c = check_evidence_verify_correction(&b.host, &m).await;
+    assert_eq!(c.status, CheckStatus::Skip, "{}", c.detail);
+    assert!(
+        c.detail.contains("evidence:verify_sentences"),
+        "{}",
+        c.detail
+    );
 }
