@@ -126,8 +126,9 @@ Never create `{{control_dir}}/STOP`, `DONE` or `NEEDS_HUMAN.md`; the loop owns t
 In a POOL LANE (the note that opens this prompt says so):
 - Edit `{{state}}` only to correct your own row's premises (§6). The loop
   marks your row after it merges your branch; never mark it yourself.
-- A decision is minted as campaign `engine-swap`:
-  `scripts/ralph-decisions.py new engine-swap --subject <unit-id> --who worker`,
+- A decision is minted under your ROW ID, never the campaign, so two
+  machines running two rows can never mint the same id (eutropia, design
+  §13.1 option a): `scripts/ralph-decisions.py new <row-id> --subject <row-id> --who worker`,
   and you write only the file it names. Never run `ralph-decisions.py --write`
   and never edit ralph/DECISIONS.md in a lane.
 - The pool deletes your worktree, `target/` included, after the merge.
