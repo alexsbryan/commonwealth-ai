@@ -76,6 +76,10 @@ workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hac
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# The layer contract tests assert the passes reader's plan questions; they
+# pin that reader with corpus-engine's test-support pin (the default is the
+# window reader since 5f2711847).
+corpus-engine = { workspace = true, features = ["treesitter", "test-support"] }
 
 [features]
 default = []

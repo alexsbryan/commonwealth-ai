@@ -490,6 +490,11 @@ async fn run_as(
     choose: Choose,
     parties: Parties,
 ) -> Run {
+    // These contracts are the passes reader's (C1 asserts its plan's
+    // phases); the window reader, the default, has its own in corpus-engine.
+    let _passes = corpus_engine::enrichment::pipeline::document_read::pin(
+        corpus_engine::enrichment::pipeline::document_read::Reader::Passes,
+    );
     let spec = fixture.spec();
     let corpus_id = "layer-fixture";
     let cfg = config(corpus_id, spec.clone());

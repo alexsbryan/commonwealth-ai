@@ -65,7 +65,7 @@ pub enum Reader {
 /// fingerprint. A value that names no reader is warned and the window
 /// reader reads: never a silent fallback to another reader.
 pub fn reader() -> Reader {
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     if let Some(pinned) = PINNED.with(std::cell::Cell::get) {
         return pinned;
     }
@@ -91,23 +91,26 @@ fn reader_named(value: Option<&str>) -> Reader {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 thread_local! {
     static PINNED: std::cell::Cell<Option<Reader>> = const { std::cell::Cell::new(None) };
 }
 
 /// A test of one reader pins it on its thread until the guard drops, rather
-/// than assume the default or set the process's environment.
-#[cfg(test)]
-pub(crate) struct Pinned;
+/// than assume the default or set the process's environment. Another crate's
+/// tests reach it through the `test-support` feature (its dev-dependencies),
+/// as `sovereign-enrichment-build`'s layer contract tests do for the passes
+/// reader whose plan questions they assert.
+#[cfg(any(test, feature = "test-support"))]
+pub struct Pinned;
 
-#[cfg(test)]
-pub(crate) fn pin(reader: Reader) -> Pinned {
+#[cfg(any(test, feature = "test-support"))]
+pub fn pin(reader: Reader) -> Pinned {
     PINNED.with(|p| p.set(Some(reader)));
     Pinned
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl Drop for Pinned {
     fn drop(&mut self) {
         PINNED.with(|p| p.set(None));
