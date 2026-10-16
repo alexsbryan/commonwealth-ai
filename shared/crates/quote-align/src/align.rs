@@ -18,7 +18,8 @@ pub struct QuoteAlignment {
     /// Every difference, in quotation order. Empty when the quotation is
     /// verbatim under `norm_v0`.
     pub edits: Vec<QuoteEdit>,
-    /// Quotation tokens matched exactly, over quotation tokens.
+    /// Quotation tokens matched exactly, or the first word differing only in
+    /// its first letter's case, over quotation tokens.
     pub coverage: f32,
 }
 
@@ -199,31 +200,79 @@ struct Anchor {
 /// Up to `cfg.seeds` of the quotation's rarest word n-grams, and every
 /// occurrence of each in the texts, rarest first, capped at
 /// `cfg.max_anchors`. Each gap-free run of words seeds with n-grams of its
-/// own length, capped at 3, so a run shorter than the longest still seeds:
+/// own length, capped at 3 (backing off to 2 and 1 when none occurs), so a
+/// run shorter than the longest still seeds:
 /// a quotation whose one long run holds a word cut at its edge is found
 /// through the runs between its gaps. Rarity is counted in the candidate
-/// texts themselves.
+/// texts themselves. Grams match case-folded, as `extend` and `token_cost`
+/// compare: a quotation whose only words differ from the source's in case
+/// ("Cynics" for "cynics", "Extracts" for "EXTRACTS") still seeds, and the
+/// case difference is reported as a substitution.
 fn seed(q: &Quote, sources: &[Source], cfg: &AlignConfig) -> Vec<Anchor> {
     // Words of each gap-free run of the quotation, as (item index, chars).
+    let quote_folded: Vec<(usize, Vec<char>)> = q
+        .items
+        .iter()
+        .enumerate()
+        .filter_map(|(i, item)| match item {
+            Item::Tok(t) if t.word => Some((i, fold(q.chars(t)))),
+            _ => None,
+        })
+        .collect();
+    let mut folded_words = quote_folded.iter();
     let mut runs: Vec<Vec<(usize, &[char])>> = vec![Vec::new()];
-    for (i, item) in q.items.iter().enumerate() {
+    for item in q.items.iter() {
         match item {
             Item::Tok(t) if t.word => {
+                let (i, chars) = folded_words.next().expect("one folded word per word item");
                 if let Some(run) = runs.last_mut() {
-                    run.push((i, q.chars(t)));
+                    run.push((*i, chars.as_slice()));
                 }
             }
             Item::Tok(_) => {}
             Item::Gap { .. } => runs.push(Vec::new()),
         }
     }
-    // The n-gram lengths in use, each a run's own length capped at 3. A key
-    // spells its length (its unused slots are empty, and a word never is), so
-    // grams of different lengths never collide.
+    // Source words, case-folded once for every gram length tried.
+    let source_words: Vec<(Vec<usize>, Vec<Vec<char>>)> = sources
+        .iter()
+        .map(|src| {
+            let words: Vec<usize> = (0..src.tokens.len())
+                .filter(|&t| src.tokens[t].word)
+                .collect();
+            let folded = words
+                .iter()
+                .map(|&t| fold(src.chars(&src.tokens[t])))
+                .collect();
+            (words, folded)
+        })
+        .collect();
+    // Back off from 3-grams to 2-grams to single words when nothing longer
+    // occurs: one changed word in a quotation of five words or fewer sits in
+    // every 3-gram ("melody of the slave songs" for "melody of these slave
+    // songs"), so without the backoff it never seeds.
+    for cap in (1..=3).rev() {
+        let anchors = seed_grams(&runs, &source_words, cap, cfg);
+        if !anchors.is_empty() {
+            return anchors;
+        }
+    }
+    Vec::new()
+}
+
+/// [`seed`] at one gram length cap: each run seeds with n-grams of its own
+/// length, capped at `cap`. A key spells its length (its unused slots are
+/// empty, and a word never is), so grams of different lengths never collide.
+fn seed_grams(
+    runs: &[Vec<(usize, &[char])>],
+    source_words: &[(Vec<usize>, Vec<Vec<char>>)],
+    cap: usize,
+    cfg: &AlignConfig,
+) -> Vec<Anchor> {
     let mut lengths: Vec<usize> = Vec::new();
     let mut grams: Vec<(Key, usize)> = Vec::new();
-    for run in &runs {
-        let n = run.len().min(3);
+    for run in runs {
+        let n = run.len().min(cap);
         if n == 0 {
             continue;
         }
@@ -242,13 +291,10 @@ fn seed(q: &Quote, sources: &[Source], cfg: &AlignConfig) -> Vec<Anchor> {
         by_key.entry(*k).or_default().push(g);
     }
     let mut hits: Vec<Vec<(usize, usize)>> = vec![Vec::new(); grams.len()];
-    for (s, src) in sources.iter().enumerate() {
-        let words: Vec<usize> = (0..src.tokens.len())
-            .filter(|&t| src.tokens[t].word)
-            .collect();
+    for (s, (words, folded)) in source_words.iter().enumerate() {
         for &n in &lengths {
-            for w in words.windows(n) {
-                let k = key(w.iter().map(|&t| src.chars(&src.tokens[t])));
+            for (w, f) in words.windows(n).zip(folded.windows(n)) {
+                let k = key(f.iter().map(Vec::as_slice));
                 if let Some(gs) = by_key.get(&k) {
                     for &g in gs {
                         hits[g].push((s, w[0]));
@@ -270,6 +316,21 @@ fn seed(q: &Quote, sources: &[Source], cfg: &AlignConfig) -> Vec<Anchor> {
         })
         .take(cfg.max_anchors)
         .collect()
+}
+
+/// The same word but for its first letter's case: "Cynics" for "cynics".
+fn first_letter_case_only(a: &[char], b: &[char]) -> bool {
+    match (a.split_first(), b.split_first()) {
+        (Some((x, a_rest)), Some((y, b_rest))) => {
+            x != y && a_rest == b_rest && x.to_lowercase().eq(y.to_lowercase())
+        }
+        _ => false,
+    }
+}
+
+/// A word's characters, lower-cased, as seeding compares them.
+fn fold(word: &[char]) -> Vec<char> {
+    word.iter().flat_map(|c| c.to_lowercase()).collect()
 }
 
 /// An n-gram key of up to three words; unused slots are empty.
@@ -314,7 +375,26 @@ fn align_at(
     let (mut behind, behind_cost) = extend(q, src, &behind_items, &behind_toks, cfg)?;
     behind.reverse();
     let ops: Vec<Op> = behind.into_iter().chain(ahead).collect();
-    let matched = ops.iter().filter(|o| matches!(o, Op::Match { .. })).count();
+    // The quotation's first word, its first letter's case changed to fit the
+    // writer's sentence, covers its place: that is the one case change a
+    // quotation conventionally makes. It is still an edit the client judges.
+    // Any other case difference is not coverage: "I Am the Walrus" is not
+    // King Lear's "I am the".
+    let first_word = q
+        .items
+        .iter()
+        .position(|i| matches!(i, Item::Tok(t) if t.word));
+    let matched = ops
+        .iter()
+        .filter(|o| match o {
+            Op::Match { .. } => true,
+            Op::Sub { q: qi, s: si } if Some(*qi) == first_word => match &q.items[*qi] {
+                Item::Tok(t) => first_letter_case_only(q.chars(t), src.chars(&src.tokens[*si])),
+                Item::Gap { .. } => false,
+            },
+            _ => false,
+        })
+        .count();
     let coverage = matched as f32 / q.tokens as f32;
     let hit = Render { q, src }.alignment(a.text, &ops, coverage)?;
     Some((hit, ahead_cost + behind_cost))

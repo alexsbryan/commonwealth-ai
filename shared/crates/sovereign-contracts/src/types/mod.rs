@@ -114,9 +114,10 @@ pub use next_edit_journal::{
 mod grounding_journal;
 pub use grounding_journal::{
     append as grounding_journal_append, read_all as grounding_journal_read_all,
-    stats as grounding_journal_stats, EvidenceRef, GateCallMechanism, GateCallRow,
-    GateJudgeVerdict, GroundingDecisionLine, GroundingLine, GroundingStats, JudgeFailure,
-    JudgeFailureReason, GROUNDING_JOURNAL_SCHEMA, GROUNDING_STREAM,
+    stats as grounding_journal_stats, CorrectedVerdict, EvidenceRef, GateCallMechanism,
+    GateCallRow, GateJudgeVerdict, GroundingCorrectionLine, GroundingDecisionLine, GroundingLine,
+    GroundingStats, JudgeFailure, JudgeFailureReason, SpecificsTally, WitnessCheck, WitnessRef,
+    GROUNDING_JOURNAL_SCHEMA, GROUNDING_STREAM,
 };
 mod routing;
 pub use routing::{

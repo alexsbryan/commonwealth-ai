@@ -39,7 +39,7 @@ pub use norm::{norm_v0, NormText};
 /// algorithm and the normaliser. It changes whenever the same input could
 /// align differently, so a client keys cached alignments on it; the golden
 /// bank (`bank/golden.txt`) fails when the output changes and this does not.
-pub const ALIGNER_ID: &str = "align/2 norm/0";
+pub const ALIGNER_ID: &str = "align/3 norm/0";
 
 /// `s`'s code points `[range.start, range.end)`, or `None` when the range
 /// falls outside `s` or is reversed.

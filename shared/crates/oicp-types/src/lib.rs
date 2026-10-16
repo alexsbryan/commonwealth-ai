@@ -29,6 +29,10 @@
 //! address, quotations aligned against them; search hits that carry their
 //! document's record; install with a recipe; and named clients. Each is
 //! gated by its own feature string, never by the version.
+//!
+//! v0.6 (`cmnwlth/docs/oicp-v0.6.md`) adds `verify` ([`verify`]): a unit of
+//! text judged claim by claim against those texts, at a tier, under
+//! `evidence:verify`.
 
 pub mod capabilities;
 pub mod capability;
@@ -37,7 +41,9 @@ pub mod completion;
 pub mod error;
 /// The v0.5 evidence extension: stored texts, spans into them, alignment.
 pub mod evidence;
+// v0.6 §2.6: a unit judged claim by claim against the stored texts.
 pub mod forced_choice;
+pub mod verify;
 // Crate-private: `model_aliases` is its only caller and always was. It was
 // `pub mod glob` in `commonwealth-core` and the move is what makes the
 // privacy true rather than intended — a `git grep` before the move found zero
@@ -53,6 +59,7 @@ pub mod ingest;
 pub mod job;
 pub mod jsonrpc;
 pub mod knowledge;
+pub mod locator;
 pub mod manifest;
 pub mod mcp;
 pub mod measurements;
@@ -68,6 +75,7 @@ pub mod peer_preference;
 /// a `sovereign-contracts → serving-policy` edge (domains
 /// `REVIEW-build-middleware-seam`).
 pub mod pipeline_context;
+pub mod record;
 pub mod registry;
 pub mod requirements;
 pub mod response;
@@ -82,6 +90,7 @@ pub mod tool;
 /// `REVIEW-build-serving-drop-inference`) so the host reaches it without
 /// linking the inference stack.
 pub mod tool_calls;
+pub mod transcript;
 pub mod version;
 /// The `work` plane's wire vocabulary (pb-work-doors): acts, the folded
 /// queue, refusals and the `process:v1` payload.
@@ -119,13 +128,15 @@ pub use inference_service::{
 };
 pub use ingest::{
     CorpusIngestProgress, CorpusInstallRequest, CorpusInstallResponse, CorpusProgressResponse,
-    IngestEndpoints, IngestPhase, RecipeStageReport, RecipeTestOptions, RecipeTestReport,
-    RecipeTestRequest,
+    IngestDocument, IngestDocumentState, IngestEndpoints, IngestPhase, RecipeStageReport,
+    RecipeTestOptions, RecipeTestReport, RecipeTestRequest,
 };
 pub use knowledge::{
-    ChunkRange, CorpusShardInfo, KnowledgeResult, KnowledgeSearchRequest, KnowledgeSearchResponse,
-    LandscapeDigestEntry, LandscapeDigestRequest, LandscapeDigestResponse,
+    ChunkRange, CorpusShardInfo, Granularity, IndexPlace, KnowledgeResult, KnowledgeSearchRequest,
+    KnowledgeSearchResponse, LandscapeDigestEntry, LandscapeDigestRequest, LandscapeDigestResponse,
+    QueuedCorpus, Scorer, SentencePlace, SentenceRoute, SentenceScorer, Truncated,
 };
+pub use locator::{HeadingOutline, SpanLocator};
 pub use manifest::{
     features, CorpusDescriptor, EmbedModelInfo, FederatedMeshDescriptor, FederationManifest,
     KnowledgeManifest, ModelStatus, NormalizationStrategy, PoolingStrategy, ProviderInfo,
@@ -133,6 +144,7 @@ pub use manifest::{
 };
 pub use model_aliases::{AliasResolution, ModelAlias, ModelAliasConfig, ModelAliasTable};
 pub use pipeline_context::PipelineContextConfig;
+pub use record::{LookupOutcome, MergedRecord, RecordLookup};
 pub use registry::{ExtensionRegistry, ExtensionStats};
 pub use requirements::{InferenceRequirements, PrivacyRequirements, ShardingPrivacy};
 pub use response::{MatchQuality, OicpResponseMeta};
@@ -146,4 +158,6 @@ pub use scoring::{
     LOCALITY_LOCAL_BONUS, LOCALITY_NEAR_BONUS, SCORING_EPSILON, THROUGHPUT_EWMA_ALPHA,
     THROUGHPUT_FLOOR, THROUGHPUT_OBSERVATION_THRESHOLD, THROUGHPUT_REFERENCE_TG_TOK_S,
 };
+pub use transcript::{DocumentFormat, TranscriptShape, TurnOutline, TurnStart};
+pub use verify::{ClaimSpecific, ClaimSpecificKind, DifferingSpecific};
 pub use version::OICP_VERSION;

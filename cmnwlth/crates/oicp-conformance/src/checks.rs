@@ -237,17 +237,27 @@ async fn v05_checks(host: &Host, m: &ProviderManifest, args: &Args) -> Vec<Check
             let (recipe, fixture) = ingest_checks::check_ingest_recipe(host, m, args, &lib).await;
             out.push(recipe);
             out.push(ingest_checks::check_ingest_recipe_test(host, m, args, &lib).await);
+            out.push(ingest_checks::check_ingest_documents(host, m, &lib, &fixture).await);
             out.push(evidence_checks::check_knowledge_document(host, m, &lib, &fixture).await);
             out.push(evidence_checks::check_evidence_text(host, m, &lib, &fixture).await);
             out.push(evidence_checks::check_evidence_align(host, m, &lib, &fixture).await);
+            out.push(crate::verify_checks::check_evidence_verify(host, m, &lib, &fixture).await);
+            out.push(crate::verify_checks::check_evidence_verify_correction(host, m).await);
+            out.extend(crate::search_checks::search_checks(host, m, &lib, &fixture).await);
         }
         Err(e) => {
             for id in [
                 "ingest.recipe",
                 "ingest.recipe_test",
+                "ingest.documents",
                 "knowledge.document",
                 "evidence.text",
                 "evidence.align",
+                "evidence.verify",
+                "evidence.verify_correction",
+                "knowledge.range",
+                "knowledge.scoped",
+                "knowledge.sentences",
             ] {
                 out.push(Check::fail(
                     id,
@@ -257,6 +267,8 @@ async fn v05_checks(host: &Host, m: &ProviderManifest, args: &Args) -> Vec<Check
             }
         }
     }
+    // Read no fixture library: they run whether or not it loads.
+    out.extend(crate::located_checks::own_library_checks(host, m).await);
     out.push(auth_checks::check_auth_named_client(host, m, args).await);
     out.push(auth_checks::check_auth_local_peer(host, Some(m)).await);
     out
@@ -627,6 +639,11 @@ async fn check_knowledge_search(host: &Host, m: &ProviderManifest) -> Check {
         if !bad.is_empty() {
             return Check::fail(id, Level::Feature, bad.join("; "));
         }
+    }
+    // v0.6 §2.8: with knowledge:range, every hit carries its range or why not.
+    let bad = crate::search_checks::range_failures_if_advertised(m, &hits);
+    if !bad.is_empty() {
+        return Check::fail(id, Level::Feature, bad.join("; "));
     }
     // `corpora_searched` vs the advertised set: the spec does NOT require
     // searched ⊆ advertised. A mesh-federated host legitimately searches

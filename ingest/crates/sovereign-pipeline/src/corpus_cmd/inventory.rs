@@ -53,6 +53,7 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
         std::collections::BTreeMap::new();
     let mut params_file: Option<PathBuf> = None;
     let mut wait_secs: Option<u64> = None;
+    let mut inline = false;
 
     let mut iter = args.iter();
     while let Some(a) = iter.next() {
@@ -77,6 +78,7 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
             "--wait" => {
                 wait_secs = Some(DEFAULT_WAIT_SECS);
             }
+            "--inline" => inline = true,
             _ if a.starts_with("--wait=") => {
                 let raw = &a["--wait=".len()..];
                 match raw.parse::<u64>() {
@@ -90,7 +92,7 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
             "--help" | "-h" => {
                 println!(
                     "Usage: svrn corpus install <id|recipe.toml> [--wait[=SECS]] \
-                     [--params k=v[,k=v...]] [--params-file <path>]\n\n\
+                     [--params k=v[,k=v...]] [--params-file <path>] [--inline]\n\n\
                      Given a path to a recipe file, registers it under \
                      ~/.svrnmesh/recipes/<id>/ (printing what it registered) and \
                      installs the id the recipe declares. Given an id, installs \
@@ -106,7 +108,13 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
                      With --wait it polls until the index is actually usable and \
                      exits non-zero if it never becomes so, so exit 0 means \
                      \"installed\". Default budget {DEFAULT_WAIT_SECS}s; \
-                     --wait=SECS to change it. Use this in scripts and gates."
+                     --wait=SECS to change it. Use this in scripts and gates.\n\n\
+                     --inline (a recipe path only) registers nothing here: the \
+                     recipe, its inline documents included, is sent in the \
+                     daemon's published OICP install, as from a client that \
+                     shares no disk with it. It is refused before sending when \
+                     larger than the daemon's stated max_install_bytes, and \
+                     --wait then polls the daemon's published progress."
                 );
                 return 0;
             }
@@ -122,6 +130,9 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
         eprintln!("Missing corpus ID. Usage: svrn corpus install <id|recipe.toml> [--params …]");
         return 1;
     };
+    if inline {
+        return install_inline_from(arg, params, params_file, wait_secs).await;
+    }
 
     // `svrn recipe validate my-coins.toml` takes a path, so `svrn corpus
     // install my-coins.toml` has to as well — the two are consecutive lines
@@ -199,6 +210,44 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
 // wait cannot disagree about which directory they are talking about (§10.6).
 // The CLI leaf's, shared with svrn's `corpus share` (pb-cli-llm-ingest-move).
 use sovereign_cli_base::dirs::configured_indexes_dir as indexes_dir;
+
+/// `--inline`: the recipe at `arg` over the daemon's published install
+/// (`inline_install`), its `--params-file` merged as the local path merges it.
+async fn install_inline_from(
+    arg: &str,
+    mut params: std::collections::BTreeMap<String, serde_json::Value>,
+    params_file: Option<PathBuf>,
+    wait_secs: Option<u64>,
+) -> i32 {
+    if !super::recipe_source::looks_like_recipe_path(arg) {
+        tracing::info!(arg, "corpus install --inline: not a recipe path");
+        eprintln!("error: --inline takes a recipe file, not an id: `{arg}`");
+        return 1;
+    }
+    if let Some(path) = params_file {
+        let parsed = std::fs::read_to_string(&path)
+            .map_err(|e| e.to_string())
+            .and_then(|raw| {
+                serde_json::from_str::<std::collections::BTreeMap<String, serde_json::Value>>(&raw)
+                    .map_err(|e| e.to_string())
+            });
+        match parsed {
+            Ok(from_file) => {
+                for (k, v) in from_file {
+                    params.entry(k).or_insert(v);
+                }
+            }
+            Err(e) => {
+                eprintln!("--params-file {}: {e}", path.display());
+                return 1;
+            }
+        }
+    }
+    let Some(base) = sovereign_cli_base::urls::daemon_base_or_refuse(None) else {
+        return 1;
+    };
+    super::inline_install::install_inline(&base, std::path::Path::new(arg), params, wait_secs).await
+}
 
 /// Default `--wait` budget. Generous enough for any LOCAL recipe (the
 /// journey fixture commits in ~20s on this host) and far too short for a

@@ -1,0 +1,17 @@
+# A library one v0.6 check installs beside the fixture library, rendered by
+# oicp-conformance from that check's fixture file.
+[corpus]
+id = "{corpus_id}"
+name = "OICP conformance shelf"
+description = "Short documents one conformance check installs and reads back."
+license = "CC0-1.0"
+mesh_sharing = false
+
+[acquire]
+type = "inline"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "paragraph"

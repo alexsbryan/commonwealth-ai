@@ -69,22 +69,25 @@ avoids, so an eager split makes the work more expensive, not less. Do not
 propose one, and do not treat a long-but-sub-250k session as a problem to
 manage. Everything below applies once you are actually past yellow.
 
-- **As the donor:** keep your frame current AS YOU WORK — call the
-  `session_state` MCP tool (or `sovereign tools call session_state`) at
-  transitions: task start, plan step done, blocker hit. It upserts named
-  sections of `~/.sovereign/sessions/<session-id>/frame.md`, preserves the
-  rest, and rejects over-budget writes with per-section token counts. You
-  hold the state; your encode-time writes are the strong path
-  (auto-distilled frames recall ~17% and never authorize a split). A
-  wrap-up request should be a final small upsert, not a from-scratch write.
-- **`objective` is required, and you INHERIT it — you do not re-author it.**
-  Any write touching `goal`/`state`/`next`/`decisions` is rejected while the
-  frame's `## Objective` is blank. It holds the STANDING outcome the work
-  serves — what a user gets when the initiative lands — plus `Done when:`
-  (falsifiable at initiative altitude) and `Not worth continuing if:`. When
-  continuing a predecessor, copy its `## Objective` verbatim from the frame
-  the boot hook already injected; edit it only if the objective genuinely
-  changed, and say so in `Decisions` when it does. **Restating it as a delta
+- **As the donor:** keep your frame current AS YOU WORK — call euphemia's
+  `commons_frame` MCP tool (or `euphemia frame --state … --next …`) at
+  transitions: task start, plan step done, blocker hit. The frame is
+  euphemia's since 2026-10-15 (euphemia 0.3.5; svrn-docs `EUPHEMIA_ARCS.md`,
+  "The MVP"): it upserts named sections of your session's frame, preserves
+  the rest, and refuses a write over 3,500 bytes with each section's size.
+  euphemia's Stop hook keeps your last message beside it, and its
+  session-start hook shows both to the next session in this terminal, first,
+  above the brief. You hold the state; nothing distills it for you any more.
+  A wrap-up request should be a final small update, not a from-scratch
+  write. sovereign's `session_state` is retired for this: do not call it.
+- **You INHERIT the `objective` — you do not re-author it.** It holds the
+  STANDING outcome the work serves — what a user gets when the initiative
+  lands — plus `Done when:` (falsifiable at initiative altitude) and `Not
+  worth continuing if:`, in a sentence or two. Your first `commons_frame`
+  write starts from your predecessor's frame in this terminal, so its
+  Objective carries over without copying. Write a new `objective` only when
+  the objective genuinely changed, with `why`: it supersedes the old one,
+  which stays under it, dated, for every successor to see. **Restating it as a delta
   from the last frame ("item two's remaining half") is the specific failure
   this exists to stop** — audited 2026-07-29, 21 of 63 frames did exactly
   that, and one three-session chain lost the name of its own objective.
@@ -94,13 +97,9 @@ manage. Everything below applies once you are actually past yellow.
 - **Re-rank `Next` against the objective before you continue it.** The same
   audit found a lineage recopying four backlog items verbatim across three
   frames — carried forever, never done, never dropped. Inheriting an item is
-  a decision, not a default: drop what the objective does not need. The write
-  response now tells you: `carried[]` lists `Next` items your ancestors were
-  also carrying (with `depth`), and `objective_sessions` counts how many
-  consecutive frames have stated this same objective. **Act on it in the same
-  turn** — do the item, drop it, or say in `Objective` why it stays. It is
-  advisory because carrying is often right; it is reported because carrying
-  silently never is. Contract: `SESSION_CONTINUITY.md §2.2`.
+  a decision, not a default: drop what the objective does not need. **Act on
+  each inherited `Next` item in your first turns** — do it, drop it, or say
+  why it stays. Contract: `SESSION_CONTINUITY.md §2.2`.
 - **Under an order, the frame is NOT a second copy of the campaign**
   (operator direction 2026-09-10: splitting state between the two tools "is
   where context gets lost and reflected upon a reflection"). Once a session is

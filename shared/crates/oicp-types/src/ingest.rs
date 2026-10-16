@@ -26,6 +26,19 @@ pub struct IngestEndpoints {
     /// host advertises the `ingest:recipe_test` feature.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub test_endpoint: Option<String>,
+    /// v0.6 §2.12: the largest install request body, in bytes as sent, that
+    /// `install_endpoint` reads. A client sizes an inline recipe's request
+    /// against it before it sends; a body past it is `413` with
+    /// [`reasons::INSTALL_TOO_LARGE`]. Absent: the host states no number.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_install_bytes: Option<u64>,
+}
+
+/// Named refusals of the ingest routes.
+pub mod reasons {
+    /// v0.6 §2.12: an install body past the host's `max_install_bytes`:
+    /// `413`, with the limit named beside it, never read in part.
+    pub const INSTALL_TOO_LARGE: &str = "install too large";
 }
 
 /// `POST {install_endpoint}` — install a corpus by recipe id (§5.1), or,
@@ -43,6 +56,11 @@ pub struct CorpusInstallRequest {
     /// the host advertises `ingest:recipe`; an invalid recipe is a `400`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recipe_toml: Option<String>,
+    /// v0.6 §2.16 (`ingest:lookups`): the installing client allows the host
+    /// to look its documents' identifiers up with resolvers off the host.
+    /// `false`, the default, is never written and sends no lookup.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub allow_lookups: bool,
 }
 
 /// Response to [`CorpusInstallRequest`] (§5.1).
@@ -95,6 +113,47 @@ pub struct CorpusIngestProgress {
     /// Human-readable detail; the error message when `phase = Failed`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
+    /// v0.6 §2.9 (`ingest:documents`): once the install has returned, each
+    /// document it read, ready or failed, in the order read. Empty before
+    /// then, and from a host that does not advertise the feature.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub documents: Vec<IngestDocument>,
+    /// Documents read but not listed, past the host's cap; `documents` is
+    /// partial when this is present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub documents_unlisted: Option<u64>,
+}
+
+/// One document of an install (v0.6 §2.9), named as its recipe names it: an
+/// inline `[[document]]` by its `name`, a file by its path relative to the
+/// acquired root.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IngestDocument {
+    /// The document's name in the recipe; absent when the host's extractor
+    /// could not say which document failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// Ready or failed.
+    #[serde(flatten)]
+    pub state: IngestDocumentState,
+}
+
+/// Whether a document of an install can be read (v0.6 §2.9).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum IngestDocumentState {
+    /// Stored: `text_sha256` names its text (`evidence:text`), absent when
+    /// the corpus keeps no texts.
+    Ready {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        text_sha256: Option<String>,
+        /// v0.6 §2.16 (`ingest:lookups`): the document's merged record,
+        /// listed whether or not a search has hit it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        record: Option<crate::record::MergedRecord>,
+    },
+    /// Not stored, and why.
+    Failed { reason: String },
 }
 
 /// `GET {progress_endpoint}` response (§5.2). Keyed by `corpus_id`.
@@ -172,6 +231,7 @@ mod tests {
             corpus_id: "acme-emails".into(),
             parameters: params,
             recipe_toml: None,
+            allow_lookups: false,
         };
         let back: CorpusInstallRequest =
             serde_json::from_str(&serde_json::to_string(&req).unwrap()).unwrap();
@@ -183,9 +243,14 @@ mod tests {
             corpus_id: "x".into(),
             parameters: BTreeMap::new(),
             recipe_toml: None,
+            allow_lookups: false,
         };
         let v = serde_json::to_value(&bare).unwrap();
         assert!(v.get("parameters").is_none(), "empty parameters omitted");
+        assert!(
+            v.get("allow_lookups").is_none(),
+            "the default is never written"
+        );
 
         let prog = CorpusProgressResponse {
             progress: BTreeMap::from([(
@@ -194,6 +259,8 @@ mod tests {
                     phase: IngestPhase::Embedding,
                     fraction: Some(0.4),
                     detail: None,
+                    documents: Vec::new(),
+                    documents_unlisted: None,
                 },
             )]),
         };
@@ -237,11 +304,29 @@ mod tests {
             install_endpoint: "/oicp/v1/corpus/install".into(),
             progress_endpoint: "/oicp/v1/corpus/progress".into(),
             test_endpoint: None,
+            max_install_bytes: None,
         };
         let v = serde_json::to_value(&e).unwrap();
         assert!(
             v.get("test_endpoint").is_none(),
             "absent recipe-test endpoint omitted"
         );
+        assert!(
+            v.get("max_install_bytes").is_none(),
+            "an unstated install limit is omitted, so a v0.5 manifest round-trips"
+        );
+    }
+
+    /// v0.6 §2.12: a stated limit is read back as the number the host wrote.
+    #[test]
+    fn ingest_endpoints_state_the_largest_install() {
+        let v = serde_json::json!({
+            "install_endpoint": "/oicp/v1/corpus/install",
+            "progress_endpoint": "/oicp/v1/corpus/progress",
+            "max_install_bytes": 67_108_864u64,
+        });
+        let e: IngestEndpoints = serde_json::from_value(v.clone()).unwrap();
+        assert_eq!(e.max_install_bytes, Some(67_108_864));
+        assert_eq!(serde_json::to_value(&e).unwrap(), v);
     }
 }

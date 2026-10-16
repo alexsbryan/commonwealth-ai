@@ -1,0 +1,46 @@
+# Records by identifier (OICP v0.6 §2.16): which CSL variable this host looks
+# up, with which resolver, and what a reply may add to a record. Read by
+# `records_by_identifier::ResolverTable`. Every key is required; an unknown
+# key, a reply shape or a normalisation outside its closed set fails the
+# crate's tests and the lookup, never a default. A lookup leaves this host
+# only for an install whose request said `allow_lookups: true`.
+
+# The CSL variables a resolver's reply may add to a record, where the
+# recipe declared none. Everything else a reply carries (Crossref's
+# reference list, license, indexing dates; Open Library's subjects and
+# covers) is not a citation field and stays out, so a record on every
+# progress reply is a catalogue entry, not a mirror of the registry.
+# `abstract` is left out on the same ground: it is the text's, not its
+# citation's.
+keep = [
+    "type", "title", "title-short", "container-title", "container-title-short",
+    "collection-title", "collection-number", "author", "editor", "translator",
+    "issued", "original-date", "publisher", "publisher-place", "volume",
+    "issue", "page", "number", "number-of-pages", "edition", "chapter-number",
+    "DOI", "ISBN", "ISSN", "URL", "language", "genre", "medium", "version",
+    "event-title", "event-place",
+]
+
+# Distinct identifiers asked at once during one install's lookups.
+concurrency = 4
+
+# One row per CSL variable this host has a resolver for. `url` names the
+# identifier's place as `{value}`, the declared value normalised
+# (`normalize`: `doi` drops a `https://doi.org/` or `doi:` prefix, `isbn`
+# drops hyphens and spaces) and percent-encoded. `reply` is the shape the
+# resolver answers in, from the closed set `csl` (a CSL-JSON object) |
+# `open_library_books` (Open Library's Books API, `jscmd=data`).
+
+[[resolver]]
+variable = "DOI"
+name = "crossref"
+normalize = "doi"
+url = "https://api.crossref.org/works/{value}/transform/application/vnd.citationstyles.csl+json"
+reply = "csl"
+
+[[resolver]]
+variable = "ISBN"
+name = "open_library"
+normalize = "isbn"
+url = "https://openlibrary.org/api/books?bibkeys=ISBN:{value}&format=json&jscmd=data"
+reply = "open_library_books"

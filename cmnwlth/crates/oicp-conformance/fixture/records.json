@@ -1,0 +1,64 @@
+{
+  "shelf": {
+    "corpus_id": "oicp-conformance-records",
+    "documents": [
+      {
+        "name": "fair-principles",
+        "metadata": {
+          "id": "fair-principles",
+          "type": "article-journal",
+          "title": "A Title the Recipe Declares",
+          "DOI": "10.1038/sdata.2016.18"
+        },
+        "text": "Data should be findable, accessible, interoperable and reusable by people and machines alike.\n"
+      },
+      {
+        "name": "no-such-doi",
+        "metadata": {
+          "id": "no-such-doi",
+          "type": "article-journal",
+          "DOI": "10.0000/oicp-conformance.unresolvable"
+        },
+        "text": "This document names an identifier no registry holds.\n"
+      },
+      {
+        "name": "plain-note",
+        "text": "A note that declares no identifier at all.\n"
+      }
+    ]
+  },
+  "closed_corpus_id": "oicp-conformance-records-closed",
+  "lookups": [
+    {
+      "document": "fair-principles",
+      "identifier": "DOI",
+      "resolves": true
+    },
+    {
+      "document": "no-such-doi",
+      "identifier": "DOI",
+      "resolves": false
+    }
+  ],
+  "fake_resolver": {
+    "10.1038/sdata.2016.18": {
+      "type": "article-journal",
+      "title": "The FAIR Guiding Principles for scientific data management and stewardship",
+      "author": [
+        {
+          "family": "Wilkinson",
+          "given": "Mark D."
+        }
+      ],
+      "container-title": "Scientific Data",
+      "issued": {
+        "date-parts": [
+          [
+            2016
+          ]
+        ]
+      },
+      "DOI": "10.1038/sdata.2016.18"
+    }
+  }
+}

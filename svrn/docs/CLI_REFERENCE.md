@@ -294,6 +294,19 @@ svrn corpus install sep --wait=7200 && svrn enrich init sep --from-corpus sep
 svrn corpus status sep        # ready | building | absent
 ```
 
+`--inline` installs a recipe file the way a client that shares no disk with
+the daemon does: nothing is registered locally, and the recipe, its inline
+`[[document]]` texts included, goes in the daemon's published OICP install
+(`cmnwlth/docs/oicp-v0.5.md` §4). It is sized first against the largest
+install the daemon states, `max_install_bytes` (64 MiB on this daemon,
+`oicp-v0.6.md` §2.12), and refused by name past it without being sent. With
+`--wait` it polls the daemon's published progress and reports the time and
+how many documents were read:
+
+```bash
+svrn corpus install library.recipe.toml --inline --wait=1800
+```
+
 `status` reports one row per **corpus**, not per directory: an in-flight
 partition appears as its own corpus id in state `building`, never as a
 separate corpus named `<id>-partition-node-…`.
@@ -391,6 +404,57 @@ Output is a bare path, so it substitutes directly: `root="$(svrn path root)"`.
 ### `svrn status`
 
 Top-level health rollup for the current project: code intelligence, daemon, watcher state, drift posture. Replaces `svrn project status` (old name still forwards here).
+
+### `svrn search`
+
+Searches your corpora, or only some texts in them, and prints each hit with
+its source, its text's name and where in that text it stands. It is a client of
+the daemon's knowledge search with the `documents` scope and per-hit ranges of
+`cmnwlth/docs/oicp-v0.6.md` §2.8.
+
+```
+svrn search tide tables                         # every corpus you may read
+svrn search tide tables --corpus <id> ...       # only these corpora
+svrn search tide tables --document <name> ...   # only these texts
+svrn search tide tables --sentences             # sentences by meaning
+svrn search tide tables --limit 20 --json       # more hits, as JSON
+```
+
+`--sentences` asks for sentences rather than passages (`knowledge:sentences`,
+§2.11): each hit is one sentence of a stored text with its range, ranked by the
+scorer the daemon names (`scored by cosine (<embed model>)`). A library still
+being indexed says so (`still indexing: N sentence(s) pending`) and answers
+from the sentences of its best passages meanwhile; a scope larger than the
+daemon's scan ceiling says how much of it was scanned.
+
+A text's name is the 64-hex `text` line each hit prints; pass it to
+`--document` to search within that text. A hit's range, `at [start, end)`, is
+in code points of its text, and a hit with none says why (`no range: not an
+exact slice`).
+
+### `svrn verify`
+
+Checks a piece of writing against your corpora, one paragraph at a time, and
+prints each sentence's verdict with the line it is on. It is a client of the
+daemon's OICP `verify` (`cmnwlth/docs/oicp-v0.6.md` §2.6, read by meaning
+under §2.15).
+
+```
+svrn verify draft.md                      # every corpus you may read, fast tier
+svrn verify draft.md --corpus <id> ...    # only these corpora
+svrn verify draft.md --tier checker       # the daemon's judge reads each claim
+svrn verify - --json < draft.md           # one reply per paragraph, as JSON
+```
+
+Each sentence is read against the sentences of your corpora that sentence
+search finds about it; one nothing in them is about (below the relevance floor
+in the daemon's `sentence_search.toml`) is `unsupported` at either tier. `fast`
+uses no model: it says `abstained` and lists the figures, dates and names no
+sentence it read carries, a hint and not a verdict. `checker` judges each
+sentence against the best of them; one that states a figure, date or quantity
+otherwise makes the sentence `contradicted`, and the output names both.
+Every verdict is uncalibrated, so `unsupported` means nothing backs the
+sentence, not that it is false.
 
 ### `svrn notes` (alias: `svrn reflect`)
 

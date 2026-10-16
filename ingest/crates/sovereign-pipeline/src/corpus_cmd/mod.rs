@@ -12,6 +12,7 @@
 // helpers. `run_corpus` below is the dispatcher.
 mod diagnostics;
 mod fmt;
+mod inline_install;
 mod inventory;
 mod optimize;
 mod partitions;
@@ -92,7 +93,7 @@ const HELP_CORPUS: sovereign_cli_base::help::Help = sovereign_cli_base::help::He
             ("ingest <folder>",           "Build a corpus from a folder via the workflow runner (chunk→embed→store; --corpus <id>, --glob, --share)"),
             ("share <id>",                "Let this mesh's members search an installed corpus (sets its query_sharing)"),
             ("search <id> <query>",       "Search a corpus (embeds the query via the daemon; --limit N, --json for the hits as JSON)"),
-            ("install <id>",              "Install a corpus (e.g. 'wikipedia'). --wait[=SECS] to exit 0 only once the index is usable"),
+            ("install <id>",              "Install a corpus (e.g. 'wikipedia'). --wait[=SECS] to exit 0 only once the index is usable; <recipe.toml> --inline sends the recipe, documents and all, to a daemon that shares no disk"),
             ("remove <id>",               "Remove canonical + partitions (or --canonical-only / --partitions-only)"),
             ("status [<id>]",             "Show state (ready/building/absent) + shard status; one corpus, or all. <id> --drift: its declared-but-unbuilt enrichment, if any"),
             ("diag <id>",                 "Audit an installed corpus: distinct-article count vs. recipe filter"),

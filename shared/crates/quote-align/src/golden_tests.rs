@@ -223,10 +223,10 @@ fn the_golden_bank_is_red_against_the_planted_aligner() {
             "the bank did not see {case} go red: {changed:?}"
         );
     }
+    // `verbatim` is not here since align/3: its near passage, "The river
+    // keeps its own", is one word substituted, so the plant moves it too.
     assert!(
-        !changed
-            .iter()
-            .any(|c| c == "verbatim" || c == "elided_interior"),
+        !changed.iter().any(|c| c == "elided_interior"),
         "the plant moves only substitutions: {changed:?}"
     );
 }

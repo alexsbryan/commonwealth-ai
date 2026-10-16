@@ -21,13 +21,15 @@ use corpus_index::index::{CorpusIndex, DocumentRecord};
 use corpus_index::ingest_port::daemon::IngestPort;
 use kernel_types::Sha256Hash;
 use oicp_types::evidence::{
-    reasons, AlignRequest, AlignResponse, Alignment, CorpusTexts, Difference, DifferenceKind, Span,
+    AlignRequest, AlignResponse, Alignment, CorpusTexts, Difference, DifferenceKind, Span,
     Unavailable,
 };
 use quote_align::{code_point_slice, AlignConfig, QuoteAlignment, QuoteEdit, QuoteEditKind};
 use sovereign_contracts::principal::AttachedPrincipal;
 
-use crate::oicp_evidence::{absence_reason, open_for_reading, readable_corpora, wire_document};
+use crate::oicp_evidence::{
+    absence_reason, open_for_reading, readable_corpora, requested_corpora, wire_document,
+};
 use crate::routes_internal::ErrorBody;
 use crate::state::AppState;
 
@@ -63,14 +65,19 @@ pub(crate) fn wire_difference(edit: &QuoteEdit) -> Difference {
 /// A text the lexical search led to, and the documents whose chunks matched.
 struct Candidate {
     text: String,
+    /// The places the text's spans are located by (`StoredText::locators`).
+    locators: Option<String>,
     /// `(corpus_id, record)` of each document a matched chunk was cut from.
     matched: Vec<(String, DocumentRecord)>,
 }
 
+/// One stored text read: its name, words, locators and matched documents.
+type ReadText = (Sha256Hash, String, Option<String>, Vec<DocumentRecord>);
+
 /// What one corpus contributed: its digest, and the `(text, matched)` pairs.
 struct CorpusRead {
     digest: Sha256Hash,
-    texts: Vec<(Sha256Hash, String, Vec<DocumentRecord>)>,
+    texts: Vec<ReadText>,
 }
 
 /// `POST /oicp/v1/align`.
@@ -105,25 +112,7 @@ pub async fn align(
         &installed,
     );
 
-    let mut corpora_unavailable: Vec<Unavailable> = Vec::new();
-    let targets: Vec<String> = if req.corpora.is_empty() {
-        readable.clone()
-    } else {
-        let mut seen = std::collections::HashSet::new();
-        let mut out = Vec::new();
-        for id in req.corpora.iter().filter(|id| seen.insert(id.as_str())) {
-            if readable.contains(id) {
-                out.push(id.clone());
-            } else {
-                tracing::debug!(corpus = %id, "oicp align: requested corpus not held for this caller");
-                corpora_unavailable.push(Unavailable {
-                    corpus_id: id.clone(),
-                    reason: reasons::CORPUS_NOT_HELD.into(),
-                });
-            }
-        }
-        out
-    };
+    let (targets, mut corpora_unavailable) = requested_corpora(&req.corpora, &readable, "align");
 
     let mut corpora: Vec<CorpusTexts> = Vec::new();
     let mut candidates: Vec<(Sha256Hash, Candidate)> = Vec::new();
@@ -134,7 +123,7 @@ pub async fn align(
                     corpus_id: corpus_id.clone(),
                     texts_digest: read.digest.to_hex(),
                 });
-                for (name, text, records) in read.texts {
+                for (name, text, locators, records) in read.texts {
                     let matched = records.into_iter().map(|r| (corpus_id.clone(), r));
                     match candidates.iter_mut().find(|(n, _)| *n == name) {
                         Some((_, c)) => c.matched.extend(matched),
@@ -142,6 +131,7 @@ pub async fn align(
                             name,
                             Candidate {
                                 text,
+                                locators,
                                 matched: matched.collect(),
                             },
                         )),
@@ -243,7 +233,7 @@ async fn read_corpus(
             Err(e) => return Err(format!("text store unreadable: {e}")),
         };
         let matched = matched_documents(corpus_id, &name, &stored.documents, &sources);
-        texts.push((name, stored.text, matched));
+        texts.push((name, stored.text, stored.locators, matched));
     }
     tracing::debug!(
         corpus = %corpus_id,
@@ -312,6 +302,7 @@ fn wire_alignment(
             exact: slice(start..end)?,
             prefix: slice(start.saturating_sub(context)..start)?,
             suffix: slice(end..(end + context).min(len))?,
+            locator: crate::oicp_evidence::locator_at(candidate.locators.as_deref(), start as u64)?,
         },
         differences: a.edits.iter().map(wire_difference).collect(),
         coverage: a.coverage,
@@ -353,6 +344,39 @@ mod tests {
         assert_eq!((d.quote, d.source), ([2, 2], [5, 11]));
     }
 
+    /// An alignment's span carries the turn its start falls in.
+    #[test]
+    fn an_alignment_span_carries_its_turns_locator() {
+        let record = DocumentRecord {
+            text_sha256: Sha256Hash::of_str("x"),
+            extractor: "plaintext@1".into(),
+            source_id: "talk".into(),
+            source_sha256: None,
+            ordinal: 0,
+            metadata: None,
+            text_stored: true,
+        };
+        let candidate = Candidate {
+            locators: Some(r#"[{"at":0,"locator":{"kind":"timestamp","milliseconds":4000,"speaker":"HARBOUR MASTER"}},{"at":20,"locator":{"kind":"timestamp","milliseconds":11000}}]"#.into()),
+            text: "The ferry ran late.\nWhy the ferry?\n".into(),
+            matched: vec![("c".into(), record)],
+        };
+        let a = QuoteAlignment {
+            text: 0,
+            source: 20..34,
+            edits: Vec::new(),
+            coverage: 1.0,
+        };
+        let w = wire_alignment(&a, &candidate, 3).unwrap();
+        assert_eq!(
+            w.span.locator,
+            Some(oicp_types::locator::SpanLocator::Timestamp {
+                milliseconds: 11000,
+                speaker: None
+            })
+        );
+    }
+
     #[test]
     fn a_span_binds_exactly_with_its_context() {
         let record = DocumentRecord {
@@ -367,6 +391,7 @@ mod tests {
         let mut low = record.clone();
         low.source_id = "a".into();
         let candidate = Candidate {
+            locators: None,
             text: "naïve café au lait".into(),
             matched: vec![("c2".into(), low.clone()), ("c1".into(), record.clone())],
         };

@@ -168,8 +168,8 @@ them, which is the portable form anyway. The rationale per tool is in
 `sovereign-tools/src/mcp_surface.rs::MCP_TOOLS_RETIRED`, and the rule it
 records is the one to apply before adding any tool back: **a tool is called
 only when something in a session's flow asks its question** — a hook, a
-protocol step, a skill. `session_state` (482 calls) is used because the split
-protocol demands it; `notes` (101) because a hook injects note titles every
+protocol step, a skill. `session_state` (482 calls) was used because the split
+protocol demanded it (the frame is euphemia's `commons_frame` since 2026-10-15); `notes` (101) because a hook injects note titles every
 turn; `work_in_flight` (59) because this file mandates it pre-flight. If you
 cannot name the moment that calls a tool, it is inventory. Re-expose one only
 together with the trigger that reaches it.
@@ -421,7 +421,7 @@ trigger column is when to open it — the doc section holds the full text.
 | Trigger | Doc section |
 |---|---|
 | Starting a main session — the boot checklist (`recent_changes`, `notes`, `drift_posture`, `work_in_flight`, `arch_posture`) | §Session start |
-| Statusline yellow (ctx ≥250k) — splitting, frames, `session_state`, objective inheritance | §Session splitting |
+| Statusline yellow (ctx ≥250k) — splitting, frames (euphemia's `commons_frame`), objective inheritance | §Session splitting |
 | Fanning out to subagents — delegation is operator-AUTHORIZED here, standing, 2 concurrent without asking and 3-4 after asking, launched in one message; do not treat a harness default as a prohibition. Claude Code: Agent tool. pi: the `subagent()` tool from the `pi-subagents` package | §Delegation |
 | A decision, invariant, todo, or failed attempt worth remembering — write the `note` at the moment, not at session end; anything shipped default-off or dark needs a `docs/DEFAULTS_LEDGER.md` row in the same commit | §Writing notes |
 | Significant task complete — `session_reflection`; release any claims you declared | §Session reflection |

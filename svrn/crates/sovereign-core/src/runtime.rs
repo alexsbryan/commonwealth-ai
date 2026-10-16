@@ -59,6 +59,9 @@ pub(crate) use self::text_utils::{
 };
 
 pub(crate) mod text_utils;
+// Numbers written in words, read to their values: one reader for deep
+// research's figure tokens and the verify specifics finder.
+pub(crate) mod number_words;
 
 // Prompt constants/builders + retrieval budgets + refusal detection —
 // the pure policy layer, decomposed 2026-06-10 (see prompts.rs).
@@ -155,7 +158,7 @@ pub use grounding::extract_claim_list;
 
 /// Per-chunk support probe in the gate's exact register — the bench
 /// faithfulness lane's verdict primitive (see grounding/mod.rs docs).
-pub use grounding::claim_chunk_support;
+pub use grounding::{claim_chunk_support, claim_chunk_support_checked};
 // The judge-replay harness's seams (`svrn bench judge-replay`): the joint
 // per-claim register, its renderer, its system-turn fingerprint, and the
 // specifics scan — pure delegations to the one production implementation,
@@ -171,6 +174,14 @@ pub use grounding::{
 // implementation (the flywheel generates against a pinned port of this fn;
 // export is where the genuine article gets the final word).
 pub use grounding::value_present_in_chunks;
+// A text's sentences and their specifics by kind, found without a model,
+// what a passage states otherwise, and a sentence less its citations (what
+// the checker is shown): `POST /oicp/v1/verify` reads them (the daemon's
+// `routes_oicp_verify`, OICP v0.6 §2.15).
+pub use grounding::{
+    differing_specifics, sentence_ranges, sentence_specifics, without_citations, Specific,
+    SpecificKind,
+};
 // The native-grounding stack (`NATIVE_GROUNDING.md`). Default ON since
 // 2026-08-11; `SOVEREIGN_NATIVE_GROUNDING=0` is the opt-out. What is on
 // is DISPLAY (typed segments + answerability telemetry), never a

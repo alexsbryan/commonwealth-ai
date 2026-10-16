@@ -13,18 +13,21 @@ use crate::evidence_checks::{
 };
 use crate::fake_host::{named_token, revoked_token, spawn, Breaks};
 use crate::fixture::Library;
-use crate::ingest_checks::{check_ingest_recipe, check_ingest_recipe_test, FixtureState};
+use crate::ingest_checks::{
+    check_ingest_install_limit, check_ingest_recipe, check_ingest_recipe_test, padded_install,
+    FixtureState,
+};
 use crate::report::{Check, CheckStatus};
 
-struct Bench {
-    host: Host,
-    manifest: ProviderManifest,
+pub(crate) struct Bench {
+    pub(crate) host: Host,
+    pub(crate) manifest: ProviderManifest,
     args: Args,
     lib: Library,
     fixture: FixtureState,
 }
 
-async fn bench(breaks: Breaks) -> Bench {
+pub(crate) async fn bench(breaks: Breaks) -> Bench {
     let fake = spawn(breaks).await;
     let host = Host::new(&fake.url, None);
     let manifest: ProviderManifest = reqwest::get(format!("{}/oicp/v1/capabilities", fake.url))
@@ -49,12 +52,12 @@ async fn bench(breaks: Breaks) -> Bench {
 }
 
 #[track_caller]
-fn green(c: &Check) {
+pub(crate) fn green(c: &Check) {
     assert_eq!(c.status, CheckStatus::Pass, "{}: {}", c.id, c.detail);
 }
 
 #[track_caller]
-fn red(c: &Check, says: &str) {
+pub(crate) fn red(c: &Check, says: &str) {
     assert_eq!(
         c.status,
         CheckStatus::Fail,
@@ -87,6 +90,62 @@ async fn ingest_recipe_is_red_against_a_200_on_a_bad_recipe() {
     assert!(matches!(fixture, FixtureState::Unavailable(_)));
 }
 
+/// v0.6 §2.9: an install is listed on the first poll after it spawned, and
+/// once it has returned every fixture document is listed ready by name.
+#[tokio::test]
+async fn ingest_documents_is_red_against_a_late_listing_and_an_entry_with_no_documents() {
+    use crate::ingest_checks::check_ingest_documents;
+    let b = bench(Breaks::default()).await;
+    let (c, fixture) = check_ingest_recipe(&b.host, &b.manifest, &b.args, &b.lib).await;
+    green(&c);
+    green(&check_ingest_documents(&b.host, &b.manifest, &b.lib, &fixture).await);
+
+    let b = bench(Breaks {
+        late_listing: true,
+        ..Breaks::default()
+    })
+    .await;
+    let (c, _) = check_ingest_recipe(&b.host, &b.manifest, &b.args, &b.lib).await;
+    red(&c, "the next poll did not list");
+
+    let b = bench(Breaks {
+        omit_documents: true,
+        ..Breaks::default()
+    })
+    .await;
+    let (_, fixture) = check_ingest_recipe(&b.host, &b.manifest, &b.args, &b.lib).await;
+    red(
+        &check_ingest_documents(&b.host, &b.manifest, &b.lib, &fixture).await,
+        "lists no documents",
+    );
+
+    let b = bench(Breaks {
+        unserved_text_names: true,
+        ..Breaks::default()
+    })
+    .await;
+    let (_, fixture) = check_ingest_recipe(&b.host, &b.manifest, &b.args, &b.lib).await;
+    red(
+        &check_ingest_documents(&b.host, &b.manifest, &b.lib, &fixture).await,
+        "its text does not read",
+    );
+}
+
+/// v0.6 §2.9 (platform row PH): a fixture the host holds is listed with its
+/// documents even when no install of it returned in this run, as after the
+/// host's restart. Red against a host that lists only this run's installs:
+/// until PH this was `could not judge`.
+#[tokio::test]
+async fn ingest_documents_is_red_against_a_held_fixture_progress_does_not_list() {
+    use crate::ingest_checks::check_ingest_documents;
+    let b = bench(Breaks::default()).await;
+    let held = FixtureState::Installed(b.lib.corpus_id.clone());
+    red(
+        &check_ingest_documents(&b.host, &b.manifest, &b.lib, &held).await,
+        "is held and progress does not list it",
+    );
+}
+
 #[tokio::test]
 async fn ingest_recipe_serves_the_fixture_from_a_dir_on_a_local_host() {
     let b = bench(Breaks::default()).await;
@@ -100,6 +159,44 @@ async fn ingest_recipe_serves_the_fixture_from_a_dir_on_a_local_host() {
     let written = std::fs::read_to_string(dir.join("okafor2019.txt")).unwrap();
     assert_eq!(written, b.lib.doc("okafor2019").unwrap().text);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// v0.6 §2.12. The break is the reference host before it: a manifest
+/// stating a limit over a route that reads bodies only to the surface's 8 MiB,
+/// which refused a 22.6 MB inline library `413`.
+#[tokio::test]
+async fn ingest_install_limit_is_red_against_an_install_read_only_to_the_surface_limit() {
+    let b = bench(Breaks::default()).await;
+    green(&check_ingest_install_limit(&b.host, &b.manifest).await);
+
+    let b = bench(Breaks {
+        install_at_surface_limit: true,
+        ..Breaks::default()
+    })
+    .await;
+    red(
+        &check_ingest_install_limit(&b.host, &b.manifest).await,
+        "within the stated max_install_bytes",
+    );
+}
+
+/// The probe body is the size asked, to the byte, and is an install request
+/// whose recipe does not load.
+#[test]
+fn a_padded_install_is_the_size_asked_and_its_recipe_does_not_load() {
+    for n in [200u64, 9 * 1024 * 1024 + 1] {
+        let body = padded_install(n).expect("large enough");
+        assert_eq!(body.len() as u64, n);
+        let v: serde_json::Value = serde_json::from_slice(&body).expect("JSON");
+        let recipe = v["recipe_toml"].as_str().expect("a recipe");
+        assert!(recipe.starts_with("this is [not a recipe"), "{recipe:.40}");
+        assert!(!recipe.contains("[corpus]"));
+    }
+    let small = padded_install(10).expect_err("smaller than the request around it");
+    assert!(
+        small.contains("smaller than the smallest install request"),
+        "{small}"
+    );
 }
 
 #[tokio::test]
@@ -163,6 +260,202 @@ async fn evidence_align_is_red_against_a_missing_texts_digest() {
 }
 
 #[tokio::test]
+async fn evidence_verify_is_red_against_an_unknown_verdict_and_a_span_off_by_one() {
+    let b = bench(Breaks::default()).await;
+    green(
+        &crate::verify_checks::check_evidence_verify(&b.host, &b.manifest, &b.lib, &b.fixture)
+            .await,
+    );
+    let b = bench(Breaks {
+        verify_unknown_verdict: true,
+        ..Breaks::default()
+    })
+    .await;
+    red(
+        &crate::verify_checks::check_evidence_verify(&b.host, &b.manifest, &b.lib, &b.fixture)
+            .await,
+        "does not decode",
+    );
+    let b = bench(Breaks {
+        exact_off_by_one: true,
+        ..Breaks::default()
+    })
+    .await;
+    red(
+        &crate::verify_checks::check_evidence_verify(&b.host, &b.manifest, &b.lib, &b.fixture)
+            .await,
+        "the text there says",
+    );
+}
+
+#[tokio::test]
+async fn knowledge_range_and_scoped_are_red_against_a_span_off_by_one_and_a_leaking_scope() {
+    use crate::search_checks::{check_knowledge_range, check_knowledge_scoped};
+    let b = bench(Breaks::default()).await;
+    green(&check_knowledge_range(&b.host, &b.manifest, &b.lib, &b.fixture).await);
+    green(&check_knowledge_scoped(&b.host, &b.manifest, &b.lib, &b.fixture).await);
+    assert!(v05_feature_failures(&b.manifest).is_empty());
+    let b = bench(Breaks {
+        exact_off_by_one: true,
+        ..Breaks::default()
+    })
+    .await;
+    red(
+        &check_knowledge_range(&b.host, &b.manifest, &b.lib, &b.fixture).await,
+        "the text there says",
+    );
+    let b = bench(Breaks {
+        scope_leaks: true,
+        ..Breaks::default()
+    })
+    .await;
+    red(
+        &check_knowledge_scoped(&b.host, &b.manifest, &b.lib, &b.fixture).await,
+        "is from",
+    );
+    let mut m = b.manifest.clone();
+    m.features.retain(|f| f != "knowledge:document");
+    let f = v05_feature_failures(&m);
+    assert!(
+        f.iter()
+            .any(|x| x == "knowledge:scoped requires knowledge:document"),
+        "{f:?}"
+    );
+    assert!(
+        f.iter()
+            .any(|x| x == "knowledge:range requires knowledge:document"),
+        "{f:?}"
+    );
+}
+
+async fn sentences(b: &Bench) -> Check {
+    crate::search_checks::check_knowledge_sentences(&b.host, &b.manifest, &b.lib, &b.fixture).await
+}
+
+/// A host whose text names are its own (its extractor trims each text, as
+/// the reference host's does) is judged by those names, learned from each
+/// document's record. Failing input: the check scoping each search by the
+/// sha256 of the fixture's bytes, which such a host holds no text by, so
+/// every scoped search finds nothing (watched live: "`okafor2019`'s
+/// signature, scoped to its own text, found no sentence").
+#[tokio::test]
+async fn knowledge_sentences_scopes_by_the_host_s_own_text_names() {
+    let b = bench(Breaks {
+        trims_texts: true,
+        ..Breaks::default()
+    })
+    .await;
+    green(&sentences(&b).await);
+}
+
+/// v0.6 §2.11's three failing inputs, and the lawful refusal beside the
+/// third: a host whose `rerank` cannot run refuses by name, which the check
+/// cannot judge, and never passes.
+#[tokio::test]
+async fn knowledge_sentences_is_red_against_a_range_off_by_one_a_leaking_scope_and_a_rerank_fallback(
+) {
+    let b = bench(Breaks::default()).await;
+    green(&sentences(&b).await);
+    assert!(v05_feature_failures(&b.manifest).is_empty());
+    for (breaks, says) in [
+        (
+            Breaks {
+                sentence_range_off_by_one: true,
+                ..Breaks::default()
+            },
+            "the text there says",
+        ),
+        (
+            Breaks {
+                scope_leaks: true,
+                ..Breaks::default()
+            },
+            "outside the `documents` scope",
+        ),
+        (
+            Breaks {
+                rerank_falls_back: true,
+                ..Breaks::default()
+            },
+            "advertises `rerank`; the reply was scored by `cosine`",
+        ),
+    ] {
+        red(&sentences(&bench(breaks).await).await, says);
+    }
+    let b = bench(Breaks {
+        rerank_without_slot: true,
+        ..Breaks::default()
+    })
+    .await;
+    let c = sentences(&b).await;
+    assert_eq!(c.status, CheckStatus::Skip, "{}", c.detail);
+    assert!(
+        c.detail
+            .contains("refuses its advertised scorer `rerank` by name"),
+        "{}",
+        c.detail
+    );
+    let mut m = b.manifest.clone();
+    m.features.retain(|f| f != "knowledge:scoped");
+    m.knowledge.as_mut().unwrap().sentence_scorer = None;
+    let f = v05_feature_failures(&m);
+    for want in [
+        "knowledge:sentences requires knowledge:scoped",
+        "knowledge:sentences (true) must co-occur with knowledge.sentence_scorer",
+    ] {
+        assert!(f.iter().any(|x| x == want), "{want}: {f:?}");
+    }
+}
+
+/// §2.11's route rule, offline: `sentences_pending` exactly on `passages`.
+#[test]
+fn a_sentence_reply_names_pending_sentences_exactly_on_the_passage_route() {
+    use crate::search_checks::sentence_reply_failures;
+    use oicp_types::{KnowledgeSearchResponse, Scorer, SentenceRoute, SentenceScorer};
+    let reply = |route, pending| KnowledgeSearchResponse {
+        scorer: Some(Scorer {
+            name: SentenceScorer::Cosine,
+            model: "m".into(),
+        }),
+        route: Some(route),
+        sentences_pending: pending,
+        ..Default::default()
+    };
+    let judge =
+        |r: &KnowledgeSearchResponse| sentence_reply_failures(SentenceScorer::Cosine, "", 5, r);
+    assert!(judge(&reply(SentenceRoute::Index, None)).is_empty());
+    assert!(judge(&reply(SentenceRoute::Passages, Some(3))).is_empty());
+    assert_eq!(
+        judge(&reply(SentenceRoute::Passages, None)),
+        ["route `passages` without `sentences_pending`"]
+    );
+    assert_eq!(
+        judge(&reply(SentenceRoute::Index, Some(3))),
+        ["route `index` with `sentences_pending: 3`"]
+    );
+    assert_eq!(
+        judge(&KnowledgeSearchResponse::default()),
+        ["the reply names no scorer", "the reply names no route"]
+    );
+}
+
+#[tokio::test]
+async fn evidence_verify_correction_is_red_against_a_witness_never_read() {
+    use crate::verify_checks::check_evidence_verify_correction;
+    let b = bench(Breaks::default()).await;
+    green(&check_evidence_verify_correction(&b.host, &b.manifest).await);
+    let b = bench(Breaks {
+        witness_unread: true,
+        ..Breaks::default()
+    })
+    .await;
+    red(
+        &check_evidence_verify_correction(&b.host, &b.manifest).await,
+        "not OutOfRange",
+    );
+}
+
+#[tokio::test]
 async fn the_evidence_checks_say_why_they_could_not_judge() {
     let b = bench(Breaks::default()).await;
     let gone = FixtureState::Unavailable("ingest:recipe not advertised".into());
@@ -170,6 +463,10 @@ async fn the_evidence_checks_say_why_they_could_not_judge() {
         check_knowledge_document(&b.host, &b.manifest, &b.lib, &gone).await,
         check_evidence_text(&b.host, &b.manifest, &b.lib, &gone).await,
         check_evidence_align(&b.host, &b.manifest, &b.lib, &gone).await,
+        crate::verify_checks::check_evidence_verify(&b.host, &b.manifest, &b.lib, &gone).await,
+        crate::search_checks::check_knowledge_range(&b.host, &b.manifest, &b.lib, &gone).await,
+        crate::search_checks::check_knowledge_scoped(&b.host, &b.manifest, &b.lib, &gone).await,
+        crate::ingest_checks::check_ingest_documents(&b.host, &b.manifest, &b.lib, &gone).await,
     ] {
         assert_eq!(c.status, CheckStatus::Skip, "{}", c.id);
         assert!(c.detail.starts_with("could not judge"), "{}", c.detail);
@@ -254,4 +551,23 @@ fn v05_features_must_co_occur_with_their_sections() {
     assert_eq!(f.len(), 2, "{f:?}");
     assert!(f[0].contains("knowledge.evidence"));
     assert!(f[1].contains("ingest:v1"));
+}
+
+#[tokio::test]
+async fn evidence_verify_correction_is_judged_on_the_claims_shelf_and_says_why_not() {
+    use crate::verify_checks::check_evidence_verify_correction;
+    // Green is a pass, not a skip: the unit is one the host decides.
+    let b = bench(Breaks::default()).await;
+    let c = check_evidence_verify_correction(&b.host, &b.manifest).await;
+    assert_eq!(c.status, CheckStatus::Pass, "{}", c.detail);
+    // Without evidence:verify_sentences the claims units are not decided.
+    let mut m = b.manifest.clone();
+    m.features.retain(|f| f != "evidence:verify_sentences");
+    let c = check_evidence_verify_correction(&b.host, &m).await;
+    assert_eq!(c.status, CheckStatus::Skip, "{}", c.detail);
+    assert!(
+        c.detail.contains("evidence:verify_sentences"),
+        "{}",
+        c.detail
+    );
 }

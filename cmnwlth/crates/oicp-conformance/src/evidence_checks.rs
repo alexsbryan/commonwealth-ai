@@ -17,6 +17,7 @@ use crate::report::{Check, Level};
 
 /// §2.1 and §4 feature co-occurrence: `evidence:text` iff
 /// `knowledge.evidence`, `evidence:align` iff its `align_endpoint`,
+/// `evidence:verify` iff its `verify_endpoint` (v0.6),
 /// `ingest:recipe` only beside `ingest:v1`, `knowledge:document` only with a
 /// knowledge plane.
 pub fn v05_feature_failures(m: &ProviderManifest) -> Vec<String> {
@@ -37,11 +38,105 @@ pub fn v05_feature_failures(m: &ProviderManifest) -> Vec<String> {
              ({align_endpoint})"
         ));
     }
+    // v0.6 §2.1: `evidence:verify` iff `verify_endpoint`, with tiers, and
+    // never without `evidence:text`.
+    let verify = m.has_feature(features::EVIDENCE_VERIFY);
+    let verify_endpoint = evidence.and_then(|e| e.verify_endpoint.as_ref()).is_some();
+    if verify != verify_endpoint {
+        f.push(format!(
+            "evidence:verify ({verify}) must co-occur with knowledge.evidence.verify_endpoint \
+             ({verify_endpoint})"
+        ));
+    }
+    if verify_endpoint && evidence.is_some_and(|e| e.verify_tiers.is_empty()) {
+        f.push("knowledge.evidence.verify_endpoint advertised with no verify_tiers".into());
+    }
+    if verify && !text {
+        f.push("evidence:verify requires evidence:text".into());
+    }
     if m.has_feature(features::INGEST_RECIPE) && !m.has_feature(features::INGEST_V1) {
         f.push("ingest:recipe requires ingest:v1".into());
     }
+    let corrections = m.has_feature(features::EVIDENCE_VERIFY_CORRECTIONS);
+    if corrections != evidence.is_some_and(|e| e.verify_correction_endpoint.is_some()) {
+        f.push(format!(
+            "evidence:verify_corrections ({corrections}) must co-occur with \
+             knowledge.evidence.verify_correction_endpoint"
+        ));
+    }
+    if corrections && !verify {
+        f.push("evidence:verify_corrections requires evidence:verify".into());
+    }
+    if m.has_feature(features::INGEST_DOCUMENTS) && !m.has_feature(features::INGEST_V1) {
+        f.push("ingest:documents requires ingest:v1".into());
+    }
     if m.has_feature(features::KNOWLEDGE_DOCUMENT) && m.knowledge.is_none() {
         f.push("knowledge:document requires a knowledge plane".into());
+    }
+    // v0.6 §2.8: a scope names texts and a range points into one, so both
+    // need hits that name their text; a range is only checkable read back.
+    for (feat, name) in [
+        (features::KNOWLEDGE_SCOPED, "knowledge:scoped"),
+        (features::KNOWLEDGE_RANGE, "knowledge:range"),
+    ] {
+        if m.has_feature(feat) && !m.has_feature(features::KNOWLEDGE_DOCUMENT) {
+            f.push(format!("{name} requires knowledge:document"));
+        }
+    }
+    if m.has_feature(features::KNOWLEDGE_RANGE) && !text {
+        f.push("knowledge:range requires evidence:text".into());
+    }
+    // v0.6 §2.11: a sentence is a range read back through the text endpoint,
+    // cut under the same scope, by the scorer the manifest names.
+    let sentences = m.has_feature(features::KNOWLEDGE_SENTENCES);
+    let scorer = m.knowledge.as_ref().and_then(|k| k.sentence_scorer);
+    if sentences != scorer.is_some() {
+        f.push(format!(
+            "knowledge:sentences ({sentences}) must co-occur with knowledge.sentence_scorer"
+        ));
+    }
+    for (feat, name) in [
+        (features::KNOWLEDGE_RANGE, "knowledge:range"),
+        (features::KNOWLEDGE_SCOPED, "knowledge:scoped"),
+    ] {
+        if sentences && !m.has_feature(feat) {
+            f.push(format!("knowledge:sentences requires {name}"));
+        }
+    }
+    // v0.6 §2.11: a queue place is on a sentence reply.
+    if m.has_feature(features::KNOWLEDGE_SENTENCE_QUEUE) && !sentences {
+        f.push("knowledge:sentence_queue requires knowledge:sentences".into());
+    }
+    // v0.6 §2.13: a locator is read off a hit's span.
+    if m.has_feature(features::KNOWLEDGE_LOCATOR) && !m.has_feature(features::KNOWLEDGE_RANGE) {
+        f.push("knowledge:locator requires knowledge:range".into());
+    }
+    // v0.6 §2.15: verify's candidates are sentences.
+    for (feat, name) in [
+        (features::EVIDENCE_VERIFY, "evidence:verify"),
+        (features::KNOWLEDGE_SENTENCES, "knowledge:sentences"),
+    ] {
+        if m.has_feature(features::EVIDENCE_VERIFY_SENTENCES) && !m.has_feature(feat) {
+            f.push(format!("evidence:verify_sentences requires {name}"));
+        }
+    }
+    // v0.6 §2.16: a record is listed beside a document a recipe installed.
+    for (feat, name) in [
+        (features::INGEST_DOCUMENTS, "ingest:documents"),
+        (features::INGEST_RECIPE, "ingest:recipe"),
+    ] {
+        if m.has_feature(features::INGEST_LOOKUPS) && !m.has_feature(feat) {
+            f.push(format!("ingest:lookups requires {name}"));
+        }
+    }
+    // v0.6 §2.14: a transcript is declared in a recipe and located by turn.
+    for (feat, name) in [
+        (features::KNOWLEDGE_LOCATOR, "knowledge:locator"),
+        (features::INGEST_RECIPE, "ingest:recipe"),
+    ] {
+        if m.has_feature(features::INGEST_TRANSCRIPTS) && !m.has_feature(feat) {
+            f.push(format!("ingest:transcripts requires {name}"));
+        }
     }
     f
 }
@@ -99,7 +194,7 @@ pub fn typed_hit_failures(results: &[Value]) -> Vec<String> {
     f
 }
 
-fn fixture_corpus<'a>(id: &str, state: &'a FixtureState) -> Result<&'a str, Check> {
+pub(crate) fn fixture_corpus<'a>(id: &str, state: &'a FixtureState) -> Result<&'a str, Check> {
     match state {
         FixtureState::Installed(c) => Ok(c),
         FixtureState::Unavailable(why) => Err(Check::skip(
@@ -404,7 +499,12 @@ pub async fn check_evidence_align(
 }
 
 /// GET a slice of a text; `Err` on any reply but 200 that decodes.
-async fn read(host: &Host, endpoint: &str, sha: &str, query: &str) -> Result<TextSlice, String> {
+pub(crate) async fn read(
+    host: &Host,
+    endpoint: &str,
+    sha: &str,
+    query: &str,
+) -> Result<TextSlice, String> {
     let r = host.get(&format!("{endpoint}/{sha}{query}")).await?;
     if r.status != 200 {
         return Err(format!(

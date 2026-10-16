@@ -64,6 +64,8 @@ libc = "0.2"
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# `corpus install --inline`'s fake daemon (corpus_cmd/inline_install_tests.rs).
+axum = { workspace = true }
 tokio = { workspace = true }
 # The one `test_env::scoped_home` HOME lock the enrich_cmd test modules take.
 sovereign-enrichment-build = { workspace = true, features = ["test-support"] }

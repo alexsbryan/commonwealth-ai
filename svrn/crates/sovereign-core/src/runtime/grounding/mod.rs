@@ -48,9 +48,11 @@ mod decline;
 pub(crate) mod config;
 mod judge;
 pub mod native_grounding;
+mod number_presence;
 mod pipeline;
 mod sealed;
 mod search;
+mod specifics;
 mod surgical;
 mod value_presence;
 
@@ -58,6 +60,10 @@ mod value_presence;
 // chaos scorer consumes it to MEASURE `blatant_confab_rate`. Re-exported up to
 // `sovereign_core::runtime` (see runtime.rs) so the bench shares one
 // implementation rather than re-deriving the check.
+pub use specifics::{
+    differing_specifics, sentence_ranges, sentence_specifics, without_citations, Specific,
+    SpecificKind,
+};
 pub use value_presence::{assess_asserted_value, value_present_in_chunks, AssertedValue};
 
 // The supporting-specifics half of groundedness: `value_presence` checks the
@@ -130,9 +136,10 @@ pub(crate) use repair::{
     verification_note, FailedClaim,
 };
 pub use replay::{
-    claim_chunk_support, extract_claim_list, replay_claim_violation_joint,
-    replay_claims_support_batched, replay_judge_system_turn, replay_render_batched_claims_prompt,
-    replay_render_claim_prompt, replay_scan_unsupported_specifics,
+    claim_chunk_support, claim_chunk_support_checked, extract_claim_list,
+    replay_claim_violation_joint, replay_claims_support_batched, replay_judge_system_turn,
+    replay_render_batched_claims_prompt, replay_render_claim_prompt,
+    replay_scan_unsupported_specifics,
 };
 // Decline detection keeps its historical `grounding::` paths: the gate
 // modules (`use super::*`), `runtime.rs`'s re-export up, and the moved tests

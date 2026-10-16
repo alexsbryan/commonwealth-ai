@@ -56,7 +56,7 @@ impl Iterator for PlaintextIterator {
             match process_text_file(&path, &self.title_pattern, &self.strip_boilerplate) {
                 Ok(Some(doc)) => return Some(Ok(doc)),
                 Ok(None) => continue, // empty file, skip
-                Err(e) => return Some(Err(e)),
+                Err(e) => return Some(Err(e.of_source(path.display()))),
             }
         }
     }

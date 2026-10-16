@@ -211,6 +211,9 @@ pub mod internal_principal;
 pub mod mesh_principal_gate;
 /// The test that keeps `x-mesh-proof` to one minter and one reader.
 pub mod mesh_proof_header_gate;
+/// Records by identifier (OICP v0.6 §2.16): a document's declared metadata
+/// merged with what Crossref or Open Library return for its DOI or ISBN.
+pub mod records_by_identifier;
 pub mod reshaping;
 pub mod routes_completions;
 pub mod routes_guest_ask;
@@ -219,15 +222,20 @@ pub mod routes_inference;
 pub mod routes_internal;
 pub mod routes_kinds;
 pub mod routes_knowledge;
+pub(crate) mod routes_knowledge_sentences;
 pub mod routes_oicp;
 pub mod routes_oicp_align;
 pub mod routes_oicp_ingest;
 pub mod routes_oicp_text;
+pub mod routes_oicp_verify;
+pub mod routes_oicp_verify_journal;
 pub mod routes_ollama;
 pub mod routes_rail;
 pub mod routes_rail_live;
 pub mod routes_responses;
 pub mod routes_status;
+pub mod search_stage;
+pub mod sentence_index;
 pub mod server;
 pub mod state;
 pub mod yield_hook;

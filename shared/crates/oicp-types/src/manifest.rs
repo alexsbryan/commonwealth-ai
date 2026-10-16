@@ -46,6 +46,15 @@ pub mod features {
     /// The §5.4 recipe-test endpoint is mounted; MUST co-occur with
     /// `knowledge.ingest.test_endpoint`.
     pub const INGEST_RECIPE_TEST: &str = "ingest:recipe_test";
+    /// v0.6 §2.9: progress lists every install from its spawn and, once it
+    /// has returned, each document it read, ready or failed; requires
+    /// `ingest:v1`.
+    pub const INGEST_DOCUMENTS: &str = "ingest:documents";
+    /// v0.6 §2.16: for an install that allows it, a document's DOI or ISBN
+    /// is looked up and the record merged under its declared metadata,
+    /// listed on progress and on its hits; requires `ingest:documents` and
+    /// `ingest:recipe`.
+    pub const INGEST_LOOKUPS: &str = "ingest:lookups";
     /// §6 fingerprints are populated on manifest models and echoed in
     /// response metadata.
     pub const MODEL_FINGERPRINT: &str = "model_fingerprint";
@@ -55,8 +64,44 @@ pub mod features {
     /// v0.5 §2.3: `knowledge.evidence.align_endpoint` aligns a quote against
     /// stored texts; MUST co-occur with that endpoint.
     pub const EVIDENCE_ALIGN: &str = "evidence:align";
+    /// v0.6 §2.6: `knowledge.evidence.verify_endpoint` judges a unit against
+    /// stored texts at the tiers `verify_tiers` names; MUST co-occur with
+    /// that endpoint.
+    pub const EVIDENCE_VERIFY: &str = "evidence:verify";
+    /// v0.6 §2.10: `knowledge.evidence.verify_correction_endpoint` takes a
+    /// client's correction of a verify decision; requires
+    /// `evidence:verify`.
+    pub const EVIDENCE_VERIFY_CORRECTIONS: &str = "evidence:verify_corrections";
+    /// v0.6 §2.15: verify retrieves a claim's candidates through sentence
+    /// search, names its specifics by kind, and decides nothing from the
+    /// fast tier's literal miss; requires `evidence:verify` and
+    /// `knowledge:sentences`.
+    pub const EVIDENCE_VERIFY_SENTENCES: &str = "evidence:verify_sentences";
     /// v0.5 §3: knowledge-search hits carry `document`.
     pub const KNOWLEDGE_DOCUMENT: &str = "knowledge:document";
+    /// v0.6 §2.8: knowledge search takes `documents`, the text names its
+    /// hits must be cut from; requires `knowledge:document`.
+    pub const KNOWLEDGE_SCOPED: &str = "knowledge:scoped";
+    /// v0.6 §2.8: every knowledge-search hit carries `span`, its range of
+    /// its stored text, or names why not in `span_absent`; requires
+    /// `knowledge:document`.
+    pub const KNOWLEDGE_RANGE: &str = "knowledge:range";
+    /// v0.6 §2.11: knowledge search takes `granularity: sentence` and
+    /// answers sentences ranked by `knowledge.sentence_scorer`; requires
+    /// `knowledge:range` and `knowledge:scoped`.
+    pub const KNOWLEDGE_SENTENCES: &str = "knowledge:sentences";
+    /// v0.6 §2.11: a sentence reply on the `passages` route names, per
+    /// scoped corpus with sentences waiting, its place in the host's
+    /// embedding queue (`sentence_queue`); requires `knowledge:sentences`.
+    pub const KNOWLEDGE_SENTENCE_QUEUE: &str = "knowledge:sentence_queue";
+    /// v0.6 §2.13: every span carries `locator` where the extraction that
+    /// stored its text found one, the plain-text extractor's heading paths
+    /// by that section's rule; requires `knowledge:range`.
+    pub const KNOWLEDGE_LOCATOR: &str = "knowledge:locator";
+    /// v0.6 §2.14: a recipe `[[document]]` takes `format = "transcript"`,
+    /// read by turn, each turn's start and speaker its spans' locator;
+    /// requires `knowledge:locator` and `ingest:recipe`.
+    pub const INGEST_TRANSCRIPTS: &str = "ingest:transcripts";
     /// v0.5 §4: install accepts `recipe_toml`; requires `ingest:v1`.
     pub const INGEST_RECIPE: &str = "ingest:recipe";
     /// v0.5 §5.1: a presented named credential is honoured, and a bogus
@@ -139,10 +184,21 @@ pub mod features {
         OICP_REQUEST_PROPERTIES,
         INGEST_V1,
         INGEST_RECIPE_TEST,
+        INGEST_DOCUMENTS,
+        INGEST_LOOKUPS,
         MODEL_FINGERPRINT,
         EVIDENCE_TEXT,
         EVIDENCE_ALIGN,
+        EVIDENCE_VERIFY,
+        EVIDENCE_VERIFY_CORRECTIONS,
+        EVIDENCE_VERIFY_SENTENCES,
         KNOWLEDGE_DOCUMENT,
+        KNOWLEDGE_SCOPED,
+        KNOWLEDGE_RANGE,
+        KNOWLEDGE_SENTENCES,
+        KNOWLEDGE_SENTENCE_QUEUE,
+        KNOWLEDGE_LOCATOR,
+        INGEST_TRANSCRIPTS,
         INGEST_RECIPE,
         AUTH_NAMED_CLIENT,
     ];
@@ -335,6 +391,11 @@ pub struct KnowledgeManifest {
     /// `align_endpoint` is set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence: Option<EvidenceEndpoints>,
+    /// v0.6 §2.11: the sentence scorer the host's data file names. Present
+    /// iff the manifest advertises `knowledge:sentences`; every sentence
+    /// reply names this scorer, or the search is refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sentence_scorer: Option<crate::knowledge::SentenceScorer>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

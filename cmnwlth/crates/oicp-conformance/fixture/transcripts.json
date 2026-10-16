@@ -1,0 +1,86 @@
+{
+  "shelf": {
+    "corpus_id": "oicp-conformance-transcripts",
+    "documents": [
+      {
+        "name": "harbour-interview",
+        "format": "transcript",
+        "text": "Interview at the harbour office, recorded for the port archive.\n\nHARBOUR MASTER  00:00:04\nThe ferry has run late every Tuesday this spring.\n\nInterviewer (00:00:11)\nWhy the ferry and not the mail boat?\n\n[00:00:15] HARBOUR MASTER:\nThe tide tables were printed for a deeper channel.\nWe sail by tables nobody trusts.\n\n1:02:07\nThe recording ends with the foghorn.\n"
+      },
+      {
+        "name": "quay-recording",
+        "format": "transcript",
+        "text": "{\"text\": \" The tide came in early on Thursday. Nobody on the quay had read the new tables yet.\", \"segments\": [{\"id\": 0, \"start\": 0.0, \"end\": 3.5, \"text\": \" The tide came in early on Thursday.\"}, {\"id\": 1, \"start\": 3.5, \"end\": 7.25, \"text\": \" Nobody on the quay had read\"}, {\"id\": 2, \"start\": 7.25, \"end\": 9.0, \"text\": \" the new tables yet.\"}], \"language\": \"en\"}"
+      },
+      {
+        "name": "minutes",
+        "format": "transcript",
+        "text": "The meeting opened at noon.\n\nThe harbour master read the tide tables aloud.\n"
+      }
+    ]
+  },
+  "located": [
+    {
+      "document": "harbour-interview",
+      "quote": "Interview at the harbour office, recorded for the port archive.",
+      "locator": null
+    },
+    {
+      "document": "harbour-interview",
+      "quote": "The ferry has run late every Tuesday this spring.",
+      "locator": {
+        "kind": "timestamp",
+        "milliseconds": 4000,
+        "speaker": "HARBOUR MASTER"
+      }
+    },
+    {
+      "document": "harbour-interview",
+      "quote": "Why the ferry and not the mail boat?",
+      "locator": {
+        "kind": "timestamp",
+        "milliseconds": 11000,
+        "speaker": "Interviewer"
+      }
+    },
+    {
+      "document": "harbour-interview",
+      "quote": "We sail by tables nobody trusts.",
+      "locator": {
+        "kind": "timestamp",
+        "milliseconds": 15000,
+        "speaker": "HARBOUR MASTER"
+      }
+    },
+    {
+      "document": "harbour-interview",
+      "quote": "The recording ends with the foghorn.",
+      "locator": {
+        "kind": "timestamp",
+        "milliseconds": 3727000
+      }
+    },
+    {
+      "document": "quay-recording",
+      "quote": "The tide came in early on Thursday.",
+      "locator": {
+        "kind": "timestamp",
+        "milliseconds": 0
+      }
+    },
+    {
+      "document": "quay-recording",
+      "quote": "Nobody on the quay had read the new tables yet.",
+      "locator": {
+        "kind": "timestamp",
+        "milliseconds": 3500
+      }
+    }
+  ],
+  "failed": [
+    {
+      "document": "minutes",
+      "reason": "not a transcript"
+    }
+  ]
+}

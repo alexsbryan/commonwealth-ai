@@ -17,14 +17,23 @@
 mod args;
 mod auth_checks;
 mod checks;
+mod claim_checks;
 mod evidence_checks;
 #[cfg(test)]
 mod fake_host;
 mod fixture;
 mod ingest_checks;
+mod located_checks;
+mod queue_checks;
+mod record_checks;
 mod report;
+mod search_checks;
+mod shelf;
 #[cfg(test)]
 mod v05_tests;
+#[cfg(test)]
+mod v06_tests;
+mod verify_checks;
 mod wire;
 
 use std::process::ExitCode;
@@ -151,11 +160,7 @@ fn print_summary(report: &Report) {
     }
     eprintln!(
         "\n{pass} passed, {fail} failed, {skip} skipped — {}",
-        if report.is_conformant() {
-            "CONFORMANT"
-        } else {
-            "NON-CONFORMANT (a `must` failed)"
-        }
+        report.verdict_line()
     );
 }
 

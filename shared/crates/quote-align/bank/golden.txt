@@ -1,8 +1,10 @@
-aligner: align/2 norm/0
+aligner: align/3 norm/0
 
 === verbatim
-anchors=4 below_floor=1
+anchors=4 below_floor=0
 alignment text=0 source=[37, 59) coverage=1.0000 "the town keeps its own"
+alignment text=0 source=[0, 23) coverage=0.8000 "The river keeps its own"
+  substituted quote=[0, 8) "the town" source=[0, 9) "The river"
 
 === substituted_word
 anchors=1 below_floor=0
@@ -30,8 +32,8 @@ alignment text=0 source=[0, 31) coverage=0.8333 "The river keeps its own counsel
   substituted quote=[24, 31) "secrets" source=[24, 31) "counsel"
 
 === case_only
-anchors=4 below_floor=1
-alignment text=0 source=[0, 31) coverage=0.8333 "The river keeps its own counsel"
+anchors=5 below_floor=1
+alignment text=0 source=[0, 31) coverage=1.0000 "The river keeps its own counsel"
   substituted quote=[0, 3) "the" source=[0, 3) "The"
 
 === punctuation_added
@@ -93,7 +95,7 @@ alignment text=0 source=[50, 71) coverage=1.0000 "keeps her own counsel"
 anchors=1 below_floor=1
 
 === unrelated
-anchors=0 below_floor=0
+anchors=2 below_floor=2
 
 === edge_cut_word_between_gaps
 anchors=1 below_floor=0

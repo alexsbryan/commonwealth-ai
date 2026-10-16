@@ -33,13 +33,23 @@ fn edits(quote: &str, text: &str, a: &QuoteAlignment) -> Vec<(QuoteEditKind, Str
 
 #[test]
 fn a_verbatim_quote_binds_exactly_with_no_edits() {
-    let a = one("the town keeps its own", RIVER);
+    let found = align("the town keeps its own", &[RIVER], &cfg());
+    let a = &found.alignments[0];
     assert_eq!(
         code_point_slice(RIVER, a.source.clone()),
         Some("the town keeps its own")
     );
     assert!(a.edits.is_empty());
     assert_eq!(a.coverage, 1.0);
+    // "The river keeps its own" is the near passage, one word away: it is
+    // reported after the exact one whatever the quotation's case.
+    assert_eq!(
+        found.alignments[1..]
+            .iter()
+            .map(|n| code_point_slice(RIVER, n.source.clone()))
+            .collect::<Vec<_>>(),
+        [Some("The river keeps its own")]
+    );
 }
 
 #[test]
@@ -107,6 +117,41 @@ fn case_is_reported_and_the_client_judges_it() {
     );
 }
 
+/// One changed word in the middle of five sits in every 3-gram; the seed
+/// backs off to 2-grams and the substitution is found.
+#[test]
+fn a_short_quotation_with_its_middle_word_changed_seeds_through_shorter_grams() {
+    let quote = "river keeps her own counsel";
+    let a = one(quote, RIVER);
+    assert_eq!(
+        edits(quote, RIVER, &a),
+        [(QuoteEditKind::Substituted, "her".into(), "its".into())]
+    );
+    assert_eq!(a.coverage, 0.8);
+}
+
+/// A quotation whose first letter's case is the only difference seeds and
+/// covers ("Counsel" for "counsel"); any other case change seeds but does
+/// not cover, so the floor drops it and says so.
+#[test]
+fn a_quotation_differing_only_in_case_is_found() {
+    let a = one("Counsel", RIVER);
+    assert_eq!(
+        edits("Counsel", RIVER, &a),
+        [(
+            QuoteEditKind::Substituted,
+            "Counsel".into(),
+            "counsel".into()
+        )]
+    );
+    assert_eq!(a.coverage, 1.0);
+
+    let found = align("OWN COUNSEL", &[RIVER], &cfg());
+    assert!(found.anchors > 0, "it seeds, case folded: {found:?}");
+    assert!(found.alignments.is_empty(), "{found:?}");
+    assert_eq!(found.below_floor, 1);
+}
+
 #[test]
 fn an_ellipsis_elides_and_brackets_are_editorial() {
     let quote = "The river \u{2026} counsel, and the town keeps its own";
@@ -145,8 +190,12 @@ fn ranges_are_code_points_of_the_inputs_as_given() {
 fn the_best_text_wins_and_unrelated_quotes_find_nothing() {
     let other = "A different river keeps nothing to itself at all.";
     let found = align("the town keeps its own", &[other, RIVER], &cfg());
-    assert_eq!(found.alignments.len(), 1);
     assert_eq!(found.alignments[0].text, 1);
+    assert!(found.alignments[0].edits.is_empty());
+    assert!(
+        found.alignments.iter().all(|a| a.text == 1),
+        "the other text holds no passage near enough: {found:?}"
+    );
 
     let none = align(
         "an entirely unrelated sentence about tax law",

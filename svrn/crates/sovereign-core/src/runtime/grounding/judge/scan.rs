@@ -469,6 +469,21 @@ pub(super) fn strip_citation_spans(claim: &str) -> String {
     }
 }
 
+/// A word shaped like a given name: an uppercase letter, then one or more
+/// lowercase letters, once its surrounding punctuation is trimmed. The one
+/// rule for "is this word name-shaped": the bigram name veto
+/// (`absent_name_attribution`) and the fast tier's specifics
+/// (`grounding::specifics`) both read it.
+pub(crate) fn cap_name(w: &str) -> Option<&str> {
+    let t = w.trim_matches(|c: char| !c.is_alphanumeric());
+    let mut chars = t.chars();
+    let first = chars.next()?;
+    (first.is_uppercase()
+        && t.chars().count() >= 2
+        && chars.all(|c| c.is_lowercase() && c.is_alphabetic()))
+    .then_some(t)
+}
+
 /// Capitalized FUNCTION/BOILERPLATE words are structurally never given
 /// names — "From Retrieved" (a section header), "Source Federalist" (a
 /// label fragment). Blocking them as bigram members costs a theoretical

@@ -517,6 +517,21 @@ async fn extract_answer_value(
 /// Inspector", every word of which the list used to swallow) from being
 /// refused on a technicality.
 pub fn value_present_in_chunks(value: &str, chunks: &[String]) -> bool {
+    // A value that IS a number is found by its value among the passage's
+    // numbers; the word path below would drop "3.2%" to nothing and find
+    // "4.12%" by "12". See number_presence.rs.
+    if let Some(want) = super::number_presence::numeric_value(value) {
+        let found = super::number_presence::numbers_in(&chunks.join(" ")).contains(&want);
+        tracing::debug!(
+            target: "grounding_gate",
+            event = "numeric_value_presence",
+            value = %value,
+            canonical = %want,
+            found,
+            "numeric value matched by value among the passage's numbers"
+        );
+        return found;
+    }
     let hay: String = chunks
         .join(" ")
         .to_lowercase()

@@ -60,7 +60,7 @@ pub async fn spawn_corpus_install_outcome(
     corpus_id: String,
     parameters: std::collections::BTreeMap<String, serde_json::Value>,
 ) -> InstallOutcome {
-    spawn_install(state, corpus_id, parameters, InstallSource::Registry).await
+    spawn_install(state, corpus_id, parameters, InstallSource::Registry, false).await
 }
 
 /// [`spawn_corpus_install_outcome`] from either [`InstallSource`].
@@ -69,12 +69,14 @@ pub async fn spawn_corpus_install_outcome(
 /// recipe_sha256)` as the stamp on an installed corpus is
 /// [`InstallOutcome::AlreadyInstalled`], and a different one reingests the
 /// corpus — validated first, so a recipe that does not load never costs the
-/// installed corpus.
+/// installed corpus. `allow_lookups` is part of the install (OICP v0.6
+/// §2.16): the same recipe with the other allowance is a new one.
 pub async fn spawn_install(
     state: AppState,
     corpus_id: String,
     parameters: std::collections::BTreeMap<String, serde_json::Value>,
     source: InstallSource,
+    allow_lookups: bool,
 ) -> InstallOutcome {
     let Some(engine) = state.inner.node.corpus_engine.clone() else {
         tracing::warn!(
@@ -108,9 +110,29 @@ pub async fn spawn_install(
             .as_ref()
             .and_then(|c| corpus_index::corpus::Corpus::recipe_sha256_in(c.root()));
         tracing::debug!(corpus = %corpus_id, %sha, stamped = ?stamped, "spawn_corpus_install: recipe install");
+        // Held only with its documents recorded (v0.6 §2.9): a corpus from
+        // before the record existed is read again, so progress can list it.
+        let documented = installed
+            .as_ref()
+            .is_some_and(|c| c.install_documents().is_some());
+        // `None` (records that do not read) is unknown: never the same.
+        let same_allowance = installed
+            .as_ref()
+            .and_then(crate::records_by_identifier::allowed_by_last_install)
+            == Some(allow_lookups);
         if stamped.as_deref() == Some(sha.as_str()) {
-            release(&state, &corpus_id).await;
-            return InstallOutcome::AlreadyInstalled;
+            if documented && same_allowance {
+                // Held, but a lookup that was `unreachable` is a fact about
+                // one moment: ask those again (records only, no texts read)
+                // while the install is still listed active.
+                if let Some(c) = installed.as_ref() {
+                    let fetch = state.inner.node.record_fetch.as_ref();
+                    crate::records_by_identifier::retry_last_install(c, fetch).await;
+                }
+                release(&state, &corpus_id).await;
+                return InstallOutcome::AlreadyInstalled;
+            }
+            tracing::info!(corpus = %corpus_id, documented, same_allowance, "spawn_corpus_install: held with no documents record or another allowance, reading it again");
         }
     }
 
@@ -160,6 +182,7 @@ pub async fn spawn_install(
 
     let state_for_task = state.clone();
     let corpus_id_for_task = corpus_id.clone();
+    let documents_at = corpus_index::corpus::Corpus::named(engine.index_dir(), &corpus_id);
     tokio::spawn(async move {
         // Progress callback: latest-wins per corpus, except that a
         // terminal failure is never clobbered. See
@@ -178,6 +201,14 @@ pub async fn spawn_install(
         // before anything was recorded: the corpus stayed in
         // `active_ingests` and a poller saw no failure, only absence.
         let joined = tokio::spawn((prepared.run)(Some(progress_cb))).await;
+        // Records by identifier (OICP v0.6 §2.16) are part of the install, so
+        // kept while it is still listed active: its lookups can take seconds,
+        // and a poll must never find a returned install listed nowhere.
+        if let (Ok(Ok(info)), Some(c)) = (&joined, documents_at.as_ref()) {
+            let fetch = state_for_task.inner.node.record_fetch.as_ref();
+            crate::records_by_identifier::record_install(c, &info.documents, allow_lookups, fetch)
+                .await;
+        }
 
         state_for_task
             .inner
@@ -203,12 +234,56 @@ pub async fn spawn_install(
 
         match result {
             Ok(info) => {
+                let failed = info
+                    .documents
+                    .iter()
+                    .filter(|d| {
+                        matches!(
+                            d.state,
+                            corpus_index::ingest_port::daemon::DocumentState::Failed { .. }
+                        )
+                    })
+                    .count();
                 tracing::info!(
                     corpus = %corpus_id_for_task,
                     chunks = info.chunks_created,
                     duration_secs = info.duration_secs,
+                    documents = info.documents.len(),
+                    documents_failed = failed,
+                    documents_unlisted = info.documents_unlisted,
                     "spawn_corpus_install: ingest complete"
                 );
+                // Kept with the corpus, so a restart does not lose it (PH).
+                let documents = corpus_index::ingest_port::daemon::InstallDocuments {
+                    documents: info.documents.clone(),
+                    unlisted: info.documents_unlisted,
+                };
+                if let Some(Err(e)) = documents_at
+                    .as_ref()
+                    .map(|c| c.stamp_install_documents(&documents))
+                {
+                    tracing::warn!(
+                        corpus = %corpus_id_for_task, error = %e,
+                        "spawn_corpus_install: the documents record did not write; progress lists none for this corpus"
+                    );
+                }
+                // The install returned, so it is complete, whether or not the
+                // engine's last progress callback has landed yet (that task is
+                // spawned, so it can trail this): a poller never sees a
+                // returned install vanish (OICP v0.6 §2.9).
+                state_for_task
+                    .inner
+                    .ingest
+                    .corpus_progress
+                    .write()
+                    .await
+                    .insert(
+                        corpus_id_for_task.clone(),
+                        sovereign_contracts::daemon_wire::IngestProgress::Complete {
+                            total_chunks: info.chunks_created,
+                            duration_secs: info.duration_secs,
+                        },
+                    );
                 // Record the ingest on the local Activity ledger — the
                 // headline "your import did real work" signal. Embedding
                 // thousands of chunks is heavy local resource use that

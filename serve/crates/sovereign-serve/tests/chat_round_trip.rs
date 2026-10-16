@@ -23,8 +23,8 @@ use futures::{Stream, StreamExt};
 use sovereign_contracts::oicp::{InferenceRequirements, LatencyClass};
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::{
-    CompletionRequest, CompletionResponse, Depth, FinishReason, ProviderCapabilities, SamplingMode,
-    Speed, StreamFrame, ToolSchema, TurnAdmission,
+    CompletionRequest, CompletionResponse, Depth, FinishReason, PromptShape, ProviderCapabilities,
+    SamplingMode, Speed, StreamFrame, ToolSchema, TurnAdmission,
 };
 use sovereign_inference::remote::SplitInferenceProvider;
 
@@ -212,6 +212,17 @@ fn differences(sent: &CompletionRequest, received: &CompletionRequest) -> Vec<St
             None | Some(ARM_CHAT_ID) => expected.model_id = received.model_id.clone(),
             Some(other) => out.push(format!("model_id: sent None, engine got {other:?}")),
         }
+    }
+    // `enable_thinking` unset and `Some(false)` are one render for every shape
+    // but a conversation: the engine reads `templated_thinking()` (off unless
+    // asked for) and the client states that value on the wire
+    // (`chat_wire::template_thinking`, prompt.templated-thinking-default). Only
+    // that pair is equated; a `Some(true)` and a conversation stay exact.
+    if sent.enable_thinking.is_none()
+        && !matches!(sent.prompt_shape, Some(PromptShape::Conversation { .. }))
+        && received.enable_thinking == Some(false)
+    {
+        expected.enable_thinking = Some(false);
     }
     let want = serde_json::to_value(&expected).expect("request serializes");
     let got = serde_json::to_value(received).expect("request serializes");

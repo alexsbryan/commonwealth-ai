@@ -6,7 +6,8 @@
 # read two architecture docs, inject one budgeted artifact at session start:
 #
 #   Tier 0 — brain health: is the daemon up, how many MCP tools are live.
-#   Tier 2 — the session HANDOFF, in three fallbacks, best first:
+#   Tier 2 — (moved to euphemia 2026-10-15; see the note at its old place)
+#            the session HANDOFF, as it was, in three fallbacks:
 #            (a) own frame, whole — a resume/compact of this same session_id.
 #            (b) PREDECESSOR frame, whole — the session that previously
 #                occupied this terminal, looked up by harness-process identity
@@ -316,173 +317,13 @@ branch = git("rev-parse", "--abbrev-ref", "HEAD")
 prov["repo"] = repo
 prov["branch"] = branch
 
-# Own frame on resume/compact — inject it whole, it is definitionally correct.
-own = os.path.join(SESSIONS_ROOT, session_id, "frame.md") if session_id else ""
-if own and os.path.isfile(own):
-    try:
-        with open(own) as f:
-            frame = f.read()
-        prov["frame_selection"] = "own_full"
-        prov["frame_session"] = session_id
-        prov["frame_is_own"] = True
-        prov["frame_age_s"] = int(time.time() - os.path.getmtime(own))
-        prov["frame_bytes_full"] = nbytes(frame)
-        m = re.search(r"^provenance:\s*(\S+)", frame, re.M)
-        prov["frame_provenance"] = m.group(1) if m else "unknown"
-        frame, prov["frame_truncated"] = fit_bytes(
-            frame, FRAME_BUDGET_BYTES,
-            f"\n\n_[frame truncated at {FRAME_BUDGET_BYTES}B — "
-            f"read the rest on demand: `Read {own}`]_")
-        prov["frame_bytes_injected"] = nbytes(frame)
-        emit("### Your own session frame (resumed — this is the state you banked)\n")
-        emit(frame)
-        emit("")
-    except Exception as e:
-        emit(f"_own frame at {own} unreadable ({type(e).__name__})_\n")
-else:
-    prov["frame_selection"] = "index"
-    try:
-        # The exchange: hand back this terminal's previous occupant, then
-        # record us as the occupant so OUR successor is a lookup too. Claiming
-        # is safe on every path — a session that turns out to need no handoff
-        # still needs to be findable by the session that follows it.
-        argv = ["sovereign", "session", "frames", "--json",
-                "--repo", repo, "--branch", branch,
-                "--limit", "8", "--max-age-days", str(FRAME_MAX_AGE_DAYS)]
-        if session_id:
-            argv += ["--claim-window", session_id]
-        p = subprocess.run(argv, capture_output=True, text=True, timeout=10)
-        doc = json.loads(p.stdout) if p.returncode == 0 and p.stdout.strip() else {}
-        cands = doc.get("candidates") or []
-        prov["frame_candidates"] = doc.get("count", len(cands))
-        win = doc.get("window") or {}
-        prov["window_key"] = win.get("key")
-        prov["window_pid"] = win.get("pid")
-        pred = doc.get("predecessor") or {}
-        prov["predecessor"] = pred.get("session_id")
-        prov["predecessor_kind"] = pred.get("kind")
-        prov["predecessor_has_frame"] = pred.get("has_frame")
-
-        # (b) The deterministic handoff. Injected whole, exactly like a resume,
-        # because it is the same kind of answer: nothing was selected.
-        if pred.get("has_frame") and pred.get("path"):
-            frame = open(pred["path"]).read()
-            prov["frame_selection"] = (
-                "attached" if pred.get("kind") == "explicit" else "lineage"
-            )
-            prov["frame_session"] = pred.get("session_id")
-            prov["frame_age_s"] = pred.get("frame_age_s")
-            m = re.search(r"^provenance:\s*(\S+)", frame, re.M)
-            prov["frame_provenance"] = m.group(1) if m else "unknown"
-            prov["frame_bytes_full"] = nbytes(frame)
-            frame, prov["frame_truncated"] = fit_bytes(
-                frame, FRAME_BUDGET_BYTES,
-                f"\n\n_[frame truncated — full: `sovereign session frames "
-                f"{pred.get('short_id', '')}`]_")
-            prov["frame_bytes_injected"] = nbytes(frame)
-            how = ("you attached this window to it"
-                   if pred.get("kind") == "explicit"
-                   else "the session that was running in this terminal before "
-                        "the last /clear")
-            emit(f"### Session handoff — frame `{pred.get('short_id', '')}` "
-                 f"({how})\n")
-            emit(frame)
-            emit("\n_This is not a guess: it is the frame banked by this "
-                 "terminal's previous session. If it is the wrong workstream, "
-                 "`sovereign session frames` lists the others and "
-                 "`sovereign session attach <id>` re-points this window._\n")
-
-            # What is being INHERITED, not just what was done. Pre-rendered by
-            # the CLI so this surface and the `session_state` write response
-            # can never disagree; absent (and silent) for a healthy handoff.
-            # SESSION_CONTINUITY.md §2.2.
-            if pred.get("inherited_advice"):
-                prov["inherited_carried"] = pred.get("carried_items")
-                prov["inherited_worst_frames"] = pred.get("carried_worst_frames")
-                prov["objective_sessions"] = pred.get("objective_sessions")
-                emit(f"\n{pred['inherited_advice']}\n")
-
-            # A stale terminal binding beside a live frame for the same repo:
-            # the lineage answer is still injected (it is an observation), but
-            # the fresher frame is NAMED rather than silently outranked. The
-            # 2026-08-13 handoff injected a 16h frame as "the" predecessor
-            # while an 11-minute in-flight frame existed, and cost the
-            # successor 120k+ tokens. Pre-rendered by the CLI so this surface
-            # and `sovereign session frames` cannot disagree.
-            # The seat is handed over by the MACHINERY, not by whatever the
-            # outgoing seat remembered to type: the frame carries `role:
-            # seat` (stamped by the frame writer from the notes hook's
-            # detection) and the CLI renders the boot line from it. Without
-            # this, a successor inherits the seat's whole frame and is never
-            # told to take the seat — the 2026-08-13 handoff exactly.
-            if pred.get("seat_boot_line"):
-                prov["seat_handoff"] = True
-                emit(f"\n{pred['seat_boot_line']}\n")
-
-            if pred.get("fresher_advisory"):
-                prov["fresher_frame_named"] = True
-                emit(f"\n{pred['fresher_advisory']}\n")
-
-        # (b′) A predecessor with no frame is worth saying out loud — the
-        # successor should know its lineage resolved but the donor banked
-        # nothing, rather than silently reading it as "fresh start".
-        elif pred.get("session_id"):
-            emit(f"_This terminal's previous session "
-                 f"(`{pred.get('short_id', '')}`) banked no frame — nothing to "
-                 f"hand off. Index below._\n")
-
-        # (c) No lineage: fall back to the index, as before.
-        if prov["frame_selection"] == "index" and cands:
-            # Rendered here rather than shelling a second time for the human
-            # view; `sovereign session frames` is the authoritative renderer
-            # and prints the same facts.
-            lines = [f"### Live session frames ({prov['frame_candidates']}) — "
-                     f"read one in full: `sovereign session frames <id>`\n"]
-            # A picker, not a payload: three is enough to choose from,
-            # and `sovereign session frames` lists the rest on demand.
-            for c in cands[:3]:
-                sig = c.get("signals") or {}
-                marks = []
-                if sig.get("branch_match"):
-                    marks.append("this branch")
-                if sig.get("in_flight"):
-                    marks.append("in-flight")
-                mark = f" · {' · '.join(marks)}" if marks else ""
-                age = c.get("age_s") or 0
-                age_s = (f"{age // 60}m" if age < 3600
-                         else f"{age // 3600}h" if age < 86400
-                         else f"{age // 86400}d")
-                lines.append(
-                    f"- `{c.get('short_id', '')}` · {age_s}{mark} · "
-                    f"{c.get('next_items', 0)} next — {c.get('goal', '')}"
-                )
-            why = ("this terminal has no recorded predecessor (first session "
-                   "in a new window)" if win else
-                   "no harness window could be resolved, so lineage is "
-                   "unavailable here")
-            lines.append(f"\n_No frame is injected: {why}. Pick the one that "
-                         "describes work you are continuing — and if you know "
-                         "which it is, `sovereign session attach <id>` makes "
-                         "the next /clear in this window deterministic._\n")
-            # A frame is the wrong surface for campaign work, and this list is
-            # exactly where that goes wrong: N frames, none of them able to say
-            # which one you continue, while `co-resume.sh <campaign>` is
-            # unambiguous by construction. A cw-lift frame's hand-written
-            # Objective named two of three demos and dropped the third for a
-            # week (MAIN_SESSION_PROTOCOL §Session splitting).
-            lines.append(
-                "_Continuing a CAMPAIGN? Do not pick a frame — "
-                "`scripts/co-resume.sh <campaign-id>` is the surface, and it "
-                "reads the artifacts rather than a distillation of them. "
-                "Frames under an order carry only invariants and dead ends._\n")
-            block = "\n".join(lines)
-            prov["frame_bytes_injected"] = nbytes(block)
-            emit(block)
-        # No fresh frame is normal (first boot, or >14d idle) — say nothing.
-    except FileNotFoundError:
-        emit("_frame index unavailable (`sovereign` not on PATH)_\n")
-    except Exception as e:
-        emit(f"_frame index unavailable ({type(e).__name__})_\n")
+# The frame tier is euphemia's since 2026-10-15 (euphemia 0.3.5, svrn-docs
+# EUPHEMIA_ARCS.md "The MVP"): its session-start hook prints the window's
+# frame and last message before its brief, so this hook no longer injects
+# sovereign's frames. Two systems carrying one frame was two deciders for
+# one job (ARCH_PRINCIPLES 8). sovereign's frame store stays readable
+# (`sovereign session frames`) until the week's measurement says delete it.
+prov["frame_selection"] = "euphemia"
 
 # ── Tier 2c: open work orders (comaintainer artifact 4) ────────────────
 # One line per OPEN order under .sovereign/features/*/order.md — the

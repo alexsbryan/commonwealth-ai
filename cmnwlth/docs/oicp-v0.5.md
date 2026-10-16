@@ -177,7 +177,7 @@ an error, never a default.
 - `coverage` is the quotation's tokens matched exactly over its tokens, in
   `[0, 1]`. A host returns only alignments at or above its own floor, best
   first.
-- `aligner` names the aligner and its normalisation (`align/2 norm/0` on the
+- `aligner` names the aligner and its normalisation (`align/3 norm/0` on the
   reference host). It changes whenever the same input could align
   differently, so a client keys cached alignments on it.
 - How a host picks candidate texts is its own (the reference host takes the
@@ -372,6 +372,9 @@ declaration for one.
 A host claims v0.5 conformance by passing `oicp-conformance` at each feature
 it advertises. Each check below is gated on its feature except
 `auth.local_peer`, which runs against every host and fails the run when red.
+A failed `must` check or a failed check of an advertised feature makes the run
+`NON-CONFORMANT` (exit 1, the failing ids named); a check that could not be
+judged is skipped, named in the verdict line, and is neither a pass nor a fail.
 Each was watched red against a host fake that breaks exactly its law,
 `cmnwlth/crates/oicp-conformance/src/fake_host.rs`.
 

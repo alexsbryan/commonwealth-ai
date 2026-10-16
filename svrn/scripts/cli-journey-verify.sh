@@ -273,6 +273,9 @@ fix_value() {
   case "$1" in
   corpus)   printf '%s' "${SOVEREIGN_JOURNEY_CORPUS:-}" ;;
   question) printf '%s' "${SOVEREIGN_JOURNEY_QUESTION:-what is this corpus about?}" ;;
+  # A file of prose for `verify` to judge; any text serves, the step asserts
+  # the verdict line and not a verdict. Default is a doc beside this script.
+  claim_file) printf '%s' "${SOVEREIGN_JOURNEY_CLAIM_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../docs/KNOWLEDGE_BASES.md}" ;;
   tool)     printf '%s' "${SOVEREIGN_JOURNEY_TOOL:-symbols}" ;;
   # Paired with {tool}: `tools call symbols` needs a name to look up. Default
   # to a symbol this repo actually defines, so the step proves a real lookup
