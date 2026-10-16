@@ -37,3 +37,8 @@ row's own command (9 local questions, zero external tokens) and spends nothing f
 may drop lines 294-313 of the store if it should not stand.
 
 </details>
+
+**Correction to every-kind-finish-2 (2026-10-15, operator's seat).** "Local, zero external tokens" was wrong:
+`commonwealth/primary` is the daemon's remote engine, `deepseek-flash` (`~/.svrnmesh/config.toml` `[engine]`,
+since the 2026-10-13 ceiling test), so the 9 RESOLVE answers were DeepSeek Flash calls. The operator kept them,
+labelled in `research/ontology-apps/saltgrass/resolve-labels.jsonl` (6901ea816, whose message also says "local").
