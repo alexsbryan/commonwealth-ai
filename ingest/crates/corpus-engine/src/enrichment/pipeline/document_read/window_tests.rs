@@ -571,8 +571,9 @@ async fn a_reply_points_to_the_document_it_quotes() {
 /// read two counterparties (arm c123-verify, 2026-10-15). A thing a document
 /// says has another name is written with both, joined by " / "
 /// (window_prompt.md); a reference so written resolves by either name, to the
-/// record the document's fields name or to words it holds, and a subject's
-/// sourced identity is found by either name too.
+/// record the document's fields name (its identity is the value) or to words
+/// it holds (every name written is the value, so RESOLVE shows the other name
+/// too), and a subject's sourced identity is found by either name too.
 #[tokio::test]
 async fn a_reference_written_with_two_names_resolves_by_either() {
     let ontology: crate::enrichment::ontology::OntologyV1 = toml::from_str(
@@ -649,7 +650,14 @@ subject = "firm"
         "{:?}",
         read.documents[0]
     );
-    assert_eq!(party(1), Some(json!("Bayside")), "{:?}", read.documents[1]);
+    assert_eq!(
+        party(1),
+        Some(json!("Coastline / Bayside")),
+        "found by the name its document holds, a reading keeps both for RESOLVE to show \
+         (arm bundle1-fresh: \"Pellica Chemical / Elk Bluff Cement Company\" reached \
+         RESOLVE as \"Pellica Chemical\"): {:?}",
+        read.documents[1]
+    );
     let remark = read.documents[0]
         .claims
         .iter()

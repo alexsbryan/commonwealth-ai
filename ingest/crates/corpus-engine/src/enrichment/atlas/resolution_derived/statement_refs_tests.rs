@@ -225,6 +225,55 @@ attributes = [{ name = "speaker", type = "ref", of = "character" }]
 /// no mention of her read. A name read nowhere is not held, and says why.
 #[tokio::test]
 async fn a_window_ref_holds_the_record_its_window_read_under_that_name() {
+    let (claims, lines) = accounts_derived("Maren").await;
+    let claim = |id: &str| claims.iter().find(|c| c.id.as_str() == id).unwrap();
+    let (told, heard) = (claim("told"), claim("heard"));
+    let record_of = |c: &Claim| c.subject.as_ref().map(|s| s.as_str().to_string());
+    assert!(
+        record_of(heard).is_some(),
+        "the account is about Maren's record"
+    );
+    assert_ne!(record_of(told), record_of(heard), "Tabb and Maren are two");
+    assert_eq!(
+        told.attributes.get("speaker"),
+        record_of(heard).map(Value::String).as_ref(),
+        "`speaker` holds Maren's record, not her name"
+    );
+    assert_eq!(
+        heard.attributes.get("speaker"),
+        None,
+        "no statement is read about Pellow"
+    );
+    let line = lines.iter().find(|l| l.atom == "heard").expect("a line");
+    assert_eq!(line.unresolved.len(), 1, "{line:?}");
+    assert_eq!(line.unresolved[0].words, json!("Pellow"));
+}
+
+/// Failing input, named: world-s5's window wrote a counterparty "Pellica
+/// Chemical / Elk Bluff Cement Company" for a thing a document said had a new
+/// name (arm bundle1-fresh, 2026-10-16); a reading so written folded whole
+/// named nothing. Written with two names (the window prompt's " / "), a
+/// reading lands by either: `told`'s speaker "Mrs Ashquill / Maren" holds the
+/// record of the statement read about Maren.
+#[tokio::test]
+async fn a_reading_written_with_two_names_lands_by_either() {
+    let (claims, _) = accounts_derived("Mrs Ashquill / Maren").await;
+    let claim = |id: &str| claims.iter().find(|c| c.id.as_str() == id).unwrap();
+    let (told, heard) = (claim("told"), claim("heard"));
+    assert_eq!(
+        told.attributes.get("speaker"),
+        heard
+            .subject
+            .as_ref()
+            .map(|s| Value::String(s.as_str().to_string()))
+            .as_ref(),
+        "`speaker` holds Maren's record by her second name"
+    );
+}
+
+/// The two accounts of `TOLD` and `HEARD`, resolved and derived, `told`'s
+/// speaker read as `told_speaker`: the claims and the derivation lines.
+async fn accounts_derived(told_speaker: &str) -> (Vec<Claim>, Vec<DerivedValue>) {
     let p = OntologyBlock {
         version: 1,
         body: toml::from_str(ACCOUNT).unwrap(),
@@ -246,7 +295,7 @@ async fn a_window_ref_holds_the_record_its_window_read_under_that_name() {
             Some("account"),
             "tabb",
             "Tabb",
-            json!({ "speaker": read("Maren") }),
+            json!({ "speaker": read(told_speaker) }),
             json!({ SUBJECT_NAME_ATTRIBUTE: "Tabb" }),
         ),
         handed(
@@ -304,26 +353,5 @@ async fn a_window_ref_holds_the_record_its_window_read_under_that_name() {
         &mut |v| lines.push(v.clone()),
     )
     .unwrap();
-
-    let claim = |id: &str| claims.iter().find(|c| c.id.as_str() == id).unwrap();
-    let (told, heard) = (claim("told"), claim("heard"));
-    let record_of = |c: &Claim| c.subject.as_ref().map(|s| s.as_str().to_string());
-    assert!(
-        record_of(heard).is_some(),
-        "the account is about Maren's record"
-    );
-    assert_ne!(record_of(told), record_of(heard), "Tabb and Maren are two");
-    assert_eq!(
-        told.attributes.get("speaker"),
-        record_of(heard).map(Value::String).as_ref(),
-        "`speaker` holds Maren's record, not her name"
-    );
-    assert_eq!(
-        heard.attributes.get("speaker"),
-        None,
-        "no statement is read about Pellow"
-    );
-    let line = lines.iter().find(|l| l.atom == "heard").expect("a line");
-    assert_eq!(line.unresolved.len(), 1, "{line:?}");
-    assert_eq!(line.unresolved[0].words, json!("Pellow"));
+    (claims, lines)
 }

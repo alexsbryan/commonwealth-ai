@@ -238,7 +238,8 @@ particular's field changed, and does not say it is replaced, speaks of that one 
 (the sameness lines tell two particulars apart, not one before and after a stated change); and a thing a document
 says has another name is written with both names, joined by " / ", wherever the reader names it, and code reads
 such a reference, a subject's sourced identity and an unstated particular's line by either name
-(`window_refs.rs::names_in`). The
+(`document_read::names_in`); the reading keeps every name written (a listed record answers its identity), and
+a reference reading lands on a record by either name (`read_fields.rs::record_read`). The
 model names each particular once across the window and cites each claim by its document and exact words;
 code keeps the contract: every declared field answered or unknown with a reason, a closed value one of its
 declared values, a reference a record the document's fields name or words it holds, each field's evidence in

@@ -13,7 +13,9 @@
 //! RESOLVE put the same document's mention of those words on
 //! (`decides_mentions`). One that names no mention is a window read's name
 //! for a subject: it counts as the record RESOLVE put the same document's
-//! statements read under that name on (`SUBJECT_NAME_ATTRIBUTE`). One that
+//! statements read under that name on (`SUBJECT_NAME_ATTRIBUTE`). A reading
+//! written with several names (`names_in`, the window prompt's " / ") lands by
+//! the whole, then by each name. One that
 //! names none of these is never held and never
 //! minted into a record: it stays on the derivation line, cited
 //! (`UnresolvedReading`).
@@ -34,7 +36,8 @@ use crate::enrichment::atlas::resolution_sources::key_name;
 use crate::enrichment::ontology::derived::{FoldBy, SetDecl};
 use crate::enrichment::ontology::{AttrDecl, AttrFamily, OntologyPolicies, TypeIndex};
 use crate::enrichment::pipeline::document_read::{
-    field_readings, mention_words, window_subject_name, DocumentReadField, SUBJECT_FIELDS_ATTRIBUTE,
+    field_readings, mention_words, names_in, window_subject_name, DocumentReadField,
+    SUBJECT_FIELDS_ATTRIBUTE,
 };
 
 /// Every `(type, attribute, by)` a declaration folds onto its records.
@@ -80,6 +83,9 @@ struct Folded {
 /// one record `doc`'s statements whose window-read subject name folds equal to
 /// `value` are on; or why there is none. Keyed by the document, never by words
 /// across documents.
+/// A reading written with several names (`names_in`) lands by the whole,
+/// then by each name in order: the first that names a record holds it, and
+/// one that names several records is the error it was for a single name.
 fn record_read(
     graph: &Graph<'_>,
     doc: Option<&str>,
@@ -87,10 +93,33 @@ fn record_read(
     value: &Value,
 ) -> Result<usize, String> {
     let doc = doc.ok_or("the statement is in no one document")?;
-    let want = value
-        .as_str()
-        .and_then(fold_identity_value)
-        .ok_or("the reading is no name")?;
+    let words = value.as_str().ok_or("the reading is no name")?;
+    let whole = fold_identity_value(words).ok_or("the reading is no name")?;
+    for name in names_in(words) {
+        let Some(want) = fold_identity_value(name) else {
+            continue;
+        };
+        if let Some(record) = record_named(graph, doc, of, &want)? {
+            if want != whole {
+                debug!(document = doc, words, name, "atlas/derived: a reading written with several names lands on a record by one");
+            }
+            return Ok(record);
+        }
+    }
+    Err(format!(
+        "no `{of}` the document's fields name or its text mentions is {whole:?}"
+    ))
+}
+
+/// The one record of type `of` that `doc` names `want` by (its fields, a
+/// mention's words, or a window subject name, in that order), `None` when
+/// none does, or why several do.
+fn record_named(
+    graph: &Graph<'_>,
+    doc: &str,
+    of: &str,
+    want: &str,
+) -> Result<Option<usize>, String> {
     let keys = graph.index.effective_identity(of);
     let named: BTreeSet<usize> = graph
         .participants
@@ -107,7 +136,7 @@ fn record_read(
         })
         .collect();
     match named.len() {
-        1 => return Ok(*named.first().unwrap()),
+        1 => return Ok(Some(*named.first().unwrap())),
         0 => {}
         n => {
             return Err(format!(
@@ -134,7 +163,7 @@ fn record_read(
         })
         .collect();
     match mentioned.len() {
-        1 => return Ok(*mentioned.first().unwrap()),
+        1 => return Ok(Some(*mentioned.first().unwrap())),
         0 => {}
         n => {
             return Err(format!(
@@ -161,10 +190,8 @@ fn record_read(
         })
         .collect();
     match subjects.len() {
-        1 => Ok(*subjects.first().unwrap()),
-        0 => Err(format!(
-            "no `{of}` the document's fields name or its text mentions is {want:?}"
-        )),
+        1 => Ok(Some(*subjects.first().unwrap())),
+        0 => Ok(None),
         n => Err(format!(
             "the document's statements about {want:?} are on {n} `{of}` records"
         )),

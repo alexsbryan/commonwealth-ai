@@ -162,6 +162,19 @@ pub fn window_subject_name(attributes: &Map<String, Value>) -> Option<&str> {
         .and_then(Value::as_str)
 }
 
+/// The names a reader wrote for one thing: the whole, then, when it wrote
+/// several joined by " / " (the window prompt's notation for a thing a
+/// document says has another name), each of them in order. The one reading
+/// of the notation: the window reader resolves a reference by it, and a
+/// reference reading lands on a record by it (`resolution_derived/read_fields.rs`).
+pub fn names_in(words: &str) -> Vec<&str> {
+    let mut out = vec![words];
+    if words.contains(" / ") {
+        out.extend(words.split(" / ").map(str::trim).filter(|n| !n.is_empty()));
+    }
+    out
+}
+
 /// The value of each supported reading among `fields`, by field.
 pub fn supported_values(fields: &BTreeMap<String, DocumentReadField>) -> Map<String, Value> {
     fields
