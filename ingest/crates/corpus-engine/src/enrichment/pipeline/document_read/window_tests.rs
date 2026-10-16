@@ -531,16 +531,16 @@ async fn a_reply_points_to_the_document_it_quotes() {
     let raw = read(&both, &policies, &classes, &infer).await.unwrap();
     let user = seen.lock().unwrap()[0].user.clone();
     let d2 = &user[user.find("=== d2 ===").unwrap()..];
-    assert!(d2.contains("Issue 42 is now closed.\n[quotes d1]"), "{d2}");
+    assert!(d2.contains("Issue 42 is now closed.\n[quoted from d1]"), "{d2}");
     assert!(!d2.contains("in uv is open"), "{d2}");
     assert_eq!(
-        d2.matches("[quotes").count(),
+        d2.matches("[quoted from").count(),
         1,
         "one pointer per run: {d2}"
     );
     assert!(
-        user.contains("[quotes d3] stands in for them"),
-        "the prompt says what a pointer means"
+        !user.contains("answers d") && !user.contains("[quotes d3]"),
+        "the pointer says what it is; no prompt line explains it or assumes a reply"
     );
     let mut extraction = parse_response(&raw, &policies)
         .unwrap()
@@ -560,7 +560,7 @@ async fn a_reply_points_to_the_document_it_quotes() {
     read(&alone, &policies, &classes, &infer).await.unwrap();
     let user = seen.lock().unwrap()[0].user.clone();
     assert!(
-        user.contains("[quotes a document of 2001-05-14T16:00:00Z outside this window]"),
+        user.contains("[quoted from a document of 2001-05-14T16:00:00Z, outside this window]"),
         "{user}"
     );
 }

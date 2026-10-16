@@ -678,7 +678,8 @@ question the pipeline asks about a type is a method on the resolved
   words: a header line before the document's `body_start` and a line inside
   one of its `segments`, an embedded reply or forward
   (`extractors/email_segments.rs`). The window reader shows, in place of each run of lines a document quotes
-  from an earlier one, a pointer to that document (`[quotes d3]` in the window, its date outside it;
+  from an earlier one, a pointer to that document (`[quoted from d3]` in the window, its date outside it;
+  self-describing, so no prompt line explains it or assumes the document is a reply;
   `document_read/window_text.rs::shown_text`, `LineClasses::sources`), so a reply's referent is read where it
   was written while the quoted text stays unshown and uncitable: a claim whose quote is in the lines its
   document quotes or embeds and not in its own is refused by name (`window.rs::envelope`, `quoted_text`;

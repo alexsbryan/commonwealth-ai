@@ -75,9 +75,10 @@ pub(super) fn labels<'a>(
 
 /// What the reader is shown of a document: its own lines (`own_text`'s), and
 /// in place of each run of lines it quotes from an earlier document, one
-/// pointer to that document: its label in the window (`[quotes d3]`), else
-/// its date on the declared clock. The quoted text stays unshown and uncitable; the pointer says
-/// which document the reply answers, so what it refers to is read there.
+/// pointer to that document: its label in the window (`[quoted from d3]`),
+/// else its date on the declared clock. The pointer says what it is, so no
+/// prompt line explains it; the quoted text stays unshown, and code refuses a
+/// claim that cites it (`quoted_text`, `envelope`).
 /// A header line, and embedded text no earlier document holds, leave none.
 pub(super) fn shown_text(
     doc: &SourceDocument,
@@ -104,11 +105,11 @@ pub(super) fn shown_text(
                 last = Some(from);
                 pointers += 1;
                 shown.push(match (labels.get(from), classes.date_of(from)) {
-                    (Some(label), _) => format!("[quotes {label}]"),
+                    (Some(label), _) => format!("[quoted from {label}]"),
                     (None, Some(date)) => {
-                        format!("[quotes a document of {date} outside this window]")
+                        format!("[quoted from a document of {date}, outside this window]")
                     }
-                    (None, None) => "[quotes a document outside this window]".to_string(),
+                    (None, None) => "[quoted from a document outside this window]".to_string(),
                 });
             }
             _ => {}

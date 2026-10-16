@@ -137,7 +137,7 @@ classes hold no word of any format (`document_read/line_classes.rs`). Nor is a l
 `body_start` (a header block, whose facts are declared) or inside a segment the extractor marks as an embedded
 message (what it says is that message's, dated and authored by its own header): the format knowledge stays in
 the extractor that writes those offsets into the document's metadata (amended 2026-10-12, delivery slice 1). The window
-reader shows a pointer to the earlier document in place of each run of quoted lines (`[quotes d3]`, or that
+reader shows a pointer to the earlier document in place of each run of quoted lines (`[quoted from d3]`, or that
 document's date when it is outside the window), so a reply's referent is read where it was written, and the quoted
 text stays unshown and uncitable (2026-10-15): code refuses a claim whose quote is in its document's quoted or
 embedded lines and not its own (2026-10-16), so no prompt line carries that guarantee. The rest is asked a

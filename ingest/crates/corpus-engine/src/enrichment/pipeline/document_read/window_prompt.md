@@ -6,7 +6,6 @@ Ontology:
 How to read:
 - Read the documents as one stream. A particular is one real thing in the world, named once in `particulars` however many documents speak of it; decide sameness by the ontology's "Same ... when" lines.
 - A statement kind is a statement about one particular of its subject type. Write each statement a document makes in `claims`, with `about` naming its particular's `ref`.
-- Only statements a document itself makes count: text it quotes from another document was stated there, not here. A document's quoted lines are not shown; a line such as [quotes d3] stands in for them. The document answers d3, so read what it refers to in d3, and cite only the document's own lines.
 - A document that says one particular is replaced by, rolled into or superseded by another speaks of two particulars and makes a statement about each: the first has ended, the second has begun. Write the first's ending even when nothing else in the window speaks of it.
 - A field takes a value only when a document states it. A field with listed values takes one of them, written exactly. A reference to a type named beside a document is written as one of the names listed there.
 
