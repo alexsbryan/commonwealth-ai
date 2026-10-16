@@ -257,7 +257,14 @@ impl Reindexer {
         // Startup signal below — we spawn the worker with a fresh
         // in-memory graph as a placeholder so tools don't race.
         let db_path = self.indexes_dir.join(&corpus_id).join("scip_graph.db");
-        let initial_graph = match ScipGraph::open_with_integrity(&db_path, &corpus_id) {
+        // Off the worker: the integrity check over a large graph is seconds,
+        // and inline it held the runtime's driver (corpus-engine-scip `off_worker.rs`).
+        let initial_graph = match ScipGraph::open_with_integrity_off_worker(
+            db_path,
+            corpus_id.clone(),
+        )
+        .await
+        {
             Ok(g) => g,
             Err(e) => {
                 tracing::warn!(
@@ -1347,7 +1354,8 @@ async fn execute_rebuild(ctx: &RebuildCtx, req: &RebuildRequest) -> Result<Rebui
     };
 
     // Re-open from the renamed live path, swap into the handle.
-    let live = ScipGraph::open_with_integrity(&live_path, &corpus_id)
+    let live = ScipGraph::open_with_integrity_off_worker(live_path.clone(), corpus_id.clone())
+        .await
         .map_err(|e| format!("open live after rename: {e}"))?;
     ctx.graph.store(Arc::new(live));
     ctx.state.mark_graph_updated();

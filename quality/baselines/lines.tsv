@@ -58,7 +58,7 @@
 582	code/crates/corpus-engine-archaeology::tests
 5016	code/crates/corpus-engine-notes
 5927	code/crates/corpus-engine-notes::tests
-3543	code/crates/corpus-engine-watchers
+3549	code/crates/corpus-engine-watchers
 825	code/crates/corpus-engine-watchers::tests
 7449	code/crates/sovereign-agent-bench
 3147	code/crates/sovereign-agent-bench::tests
@@ -116,8 +116,8 @@
 818	shared/crates/commonwealth-rail-core::tests
 11384	shared/crates/corpus-engine-atlas-reader
 2340	shared/crates/corpus-engine-atlas-reader::tests
-6227	shared/crates/corpus-engine-scip
-3357	shared/crates/corpus-engine-scip::tests
+6512	shared/crates/corpus-engine-scip
+3360	shared/crates/corpus-engine-scip::tests
 524	shared/crates/corpus-engine-sections
 228	shared/crates/corpus-engine-sections::tests
 102	shared/crates/corpus-engine-yield

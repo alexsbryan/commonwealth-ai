@@ -654,7 +654,8 @@ async fn run_exporters_collect(
             // Parse this language's SCIP file and COLLECT its rows. We do not
             // touch the graph here — the atomic replace happens once at the
             // end, only if the whole export proves viable.
-            let (symbols, refs) = parse_scip_file(&scip_path, exporter.language_id)?;
+            let (symbols, refs) =
+                parse_scip_file_off_worker(scip_path.clone(), exporter.language_id).await?;
             let sym_count = symbols.len();
             let ref_count = refs.len();
 
@@ -831,6 +832,20 @@ fn export_is_viable(
 }
 
 // ─── SCIP file parsing ──────────────────────────────────────
+
+/// [`parse_scip_file`] on the blocking pool: decoding a large index is seconds
+/// of CPU, and inline in the rebuild it held the runtime's driver
+/// ([`crate::off_worker`]).
+pub(crate) async fn parse_scip_file_off_worker(
+    path: std::path::PathBuf,
+    language_id: &'static str,
+) -> Result<(Vec<ScipSymbolRecord>, Vec<ScipRefRecord>)> {
+    crate::off_worker::run("parse_scip_file", move || {
+        parse_scip_file(&path, language_id)
+    })
+    .await
+    .map_err(Error::Database)?
+}
 
 /// Parse a SCIP protobuf file and extract symbols + references.
 ///

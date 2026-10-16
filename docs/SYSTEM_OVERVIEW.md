@@ -1316,7 +1316,11 @@ so updates are visible to `symbols`/`callers`/`blast` live. Each debounced
 save runs an embed-free tree-sitter overlay; the heavy rust-analyzer export is
 demoted (spawned, rate-limited, quiescence-gated, `nice +10`) and is
 one-writer, staging and renaming under a cross-process flock so a query in
-flight always sees a complete graph. **One project owns one workspace**:
+flight always sees a complete graph. The export's synchronous tail (index
+decode, bulk writes, the integrity-checked open, the merged import) runs on
+tokio's blocking pool (`shared/crates/corpus-engine-scip/src/off_worker.rs`):
+inline, it left the daemon runtime's I/O driver unpolled for the whole tail,
+up to 113 s per rebuild here, and every request and timer waited on it. **One project owns one workspace**:
 registration refuses a root that is an ancestor or descendant of a registered
 one, because nested registrations collapse the freshness pipeline.
 

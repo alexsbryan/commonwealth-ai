@@ -18,9 +18,10 @@
 //! ## Threading
 //!
 //! `ScipGraph` wraps a synchronous `rusqlite::Connection` in a
-//! `tokio::sync::Mutex`. All operations complete in microseconds so the
-//! async mutex is negligible overhead — no `spawn_blocking` needed for
-//! individual queries. Bulk ingestion uses `spawn_blocking`.
+//! `tokio::sync::Mutex`. Individual queries complete in microseconds, so
+//! they run inline under the async mutex. Bulk work (every write loop, the
+//! import read, the integrity-checked open) runs on the blocking pool through
+//! `bulk` and [`crate::off_worker`]: inline it held the runtime's driver.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -476,6 +477,34 @@ impl ScipGraph {
             corpus_id: corpus_id.to_string(),
             stale_files: Arc::new(RwLock::new(stale)),
         })
+    }
+
+    /// [`open_with_integrity`](Self::open_with_integrity) on the blocking
+    /// pool, for async callers: `PRAGMA integrity_check` over a large graph
+    /// is seconds of I/O ([`crate::off_worker`]).
+    pub async fn open_with_integrity_off_worker(
+        db_path: PathBuf,
+        corpus_id: String,
+    ) -> std::result::Result<Self, OpenError> {
+        crate::off_worker::run("open_with_integrity", move || {
+            Self::open_with_integrity(&db_path, &corpus_id)
+        })
+        .await
+        .map_err(OpenError::Database)?
+    }
+
+    /// Bulk statement work against this graph's connection, on the blocking
+    /// pool and holding the connection lock throughout. Every write loop goes
+    /// through here, never inline in an async fn ([`crate::off_worker`]).
+    async fn bulk<R, F>(&self, op: &'static str, work: F) -> Result<R>
+    where
+        F: FnOnce(&Connection) -> Result<R> + Send + 'static,
+        R: Send + 'static,
+    {
+        let conn = Arc::clone(&self.conn);
+        crate::off_worker::run(op, move || work(&conn.blocking_lock()))
+            .await
+            .map_err(Error::Database)?
     }
 
     /// Try to acquire an exclusive lock guarding a SCIP rebuild. The
@@ -1362,54 +1391,55 @@ impl ScipGraph {
         symbols: Vec<ScipSymbolRecord>,
         refs: Vec<ScipRefRecord>,
     ) -> Result<()> {
-        let conn = self.conn.lock().await;
         let corpus = self.corpus_id.clone();
+        self.bulk("ingest_symbols_and_refs", move |conn| {
+            conn.execute_batch("BEGIN TRANSACTION")
+                .map_err(|e| Error::Database(format!("begin: {e}")))?;
 
-        conn.execute_batch("BEGIN TRANSACTION")
-            .map_err(|e| Error::Database(format!("begin: {e}")))?;
+            for sym in &symbols {
+                conn.execute(
+                    "INSERT INTO symbols (corpus_id, name, qualified_name, kind, file_path, line_start, line_end, language)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    params![
+                        corpus,
+                        sym.name,
+                        sym.qualified_name,
+                        sym.kind,
+                        sym.file_path,
+                        sym.line_start,
+                        sym.line_end,
+                        sym.language,
+                    ],
+                )
+                .map_err(|e| Error::Database(format!("insert symbol: {e}")))?;
+            }
 
-        for sym in &symbols {
-            conn.execute(
-                "INSERT INTO symbols (corpus_id, name, qualified_name, kind, file_path, line_start, line_end, language)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                params![
-                    corpus,
-                    sym.name,
-                    sym.qualified_name,
-                    sym.kind,
-                    sym.file_path,
-                    sym.line_start,
-                    sym.line_end,
-                    sym.language,
-                ],
-            )
-            .map_err(|e| Error::Database(format!("insert symbol: {e}")))?;
-        }
+            for r in &refs {
+                conn.execute(
+                    REFS_INSERT_SQL,
+                    params![
+                        corpus,
+                        r.caller_symbol,
+                        r.callee_symbol,
+                        r.caller_qualified,
+                        r.callee_qualified,
+                        r.file_path,
+                        r.line,
+                        r.start_col,
+                        r.end_line,
+                        r.end_col,
+                        r.ref_kind,
+                    ],
+                )
+                .map_err(|e| Error::Database(format!("insert ref: {e}")))?;
+            }
 
-        for r in &refs {
-            conn.execute(
-                REFS_INSERT_SQL,
-                params![
-                    corpus,
-                    r.caller_symbol,
-                    r.callee_symbol,
-                    r.caller_qualified,
-                    r.callee_qualified,
-                    r.file_path,
-                    r.line,
-                    r.start_col,
-                    r.end_line,
-                    r.end_col,
-                    r.ref_kind,
-                ],
-            )
-            .map_err(|e| Error::Database(format!("insert ref: {e}")))?;
-        }
+            conn.execute_batch("COMMIT")
+                .map_err(|e| Error::Database(format!("commit: {e}")))?;
 
-        conn.execute_batch("COMMIT")
-            .map_err(|e| Error::Database(format!("commit: {e}")))?;
-
-        Ok(())
+            Ok(())
+        })
+        .await
     }
 
     /// Clear all symbols and references for a fresh re-import.
@@ -1434,57 +1464,58 @@ impl ScipGraph {
         symbols: Vec<ScipSymbolRecord>,
         refs: Vec<ScipRefRecord>,
     ) -> Result<()> {
-        let conn = self.conn.lock().await;
         let corpus = self.corpus_id.clone();
+        self.bulk("replace_all", move |conn| {
+            conn.execute_batch("BEGIN TRANSACTION")
+                .map_err(|e| Error::Database(format!("replace_all begin: {e}")))?;
 
-        conn.execute_batch("BEGIN TRANSACTION")
-            .map_err(|e| Error::Database(format!("replace_all begin: {e}")))?;
-
-        let txn: std::result::Result<(), rusqlite::Error> = (|| {
-            conn.execute("DELETE FROM refs WHERE corpus_id = ?", params![corpus])?;
-            conn.execute("DELETE FROM symbols WHERE corpus_id = ?", params![corpus])?;
-            for sym in &symbols {
-                conn.execute(
-                    "INSERT INTO symbols (corpus_id, name, qualified_name, kind, file_path, line_start, line_end, language)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    params![corpus, sym.name, sym.qualified_name, sym.kind, sym.file_path, sym.line_start, sym.line_end, sym.language],
-                )?;
-            }
-            for r in &refs {
-                conn.execute(
-                    REFS_INSERT_SQL,
-                    params![
-                        corpus,
-                        r.caller_symbol,
-                        r.callee_symbol,
-                        r.caller_qualified,
-                        r.callee_qualified,
-                        r.file_path,
-                        r.line,
-                        r.start_col,
-                        r.end_line,
-                        r.end_col,
-                        r.ref_kind
-                    ],
-                )?;
-            }
-            Ok(())
-        })();
-
-        match txn {
-            Ok(()) => {
-                conn.execute_batch("COMMIT")
-                    .map_err(|e| Error::Database(format!("replace_all commit: {e}")))?;
+            let txn: std::result::Result<(), rusqlite::Error> = (|| {
+                conn.execute("DELETE FROM refs WHERE corpus_id = ?", params![corpus])?;
+                conn.execute("DELETE FROM symbols WHERE corpus_id = ?", params![corpus])?;
+                for sym in &symbols {
+                    conn.execute(
+                        "INSERT INTO symbols (corpus_id, name, qualified_name, kind, file_path, line_start, line_end, language)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        params![corpus, sym.name, sym.qualified_name, sym.kind, sym.file_path, sym.line_start, sym.line_end, sym.language],
+                    )?;
+                }
+                for r in &refs {
+                    conn.execute(
+                        REFS_INSERT_SQL,
+                        params![
+                            corpus,
+                            r.caller_symbol,
+                            r.callee_symbol,
+                            r.caller_qualified,
+                            r.callee_qualified,
+                            r.file_path,
+                            r.line,
+                            r.start_col,
+                            r.end_line,
+                            r.end_col,
+                            r.ref_kind
+                        ],
+                    )?;
+                }
                 Ok(())
+            })();
+
+            match txn {
+                Ok(()) => {
+                    conn.execute_batch("COMMIT")
+                        .map_err(|e| Error::Database(format!("replace_all commit: {e}")))?;
+                    Ok(())
+                }
+                Err(e) => {
+                    // Roll back so the prior graph survives a mid-swap failure.
+                    let _ = conn.execute_batch("ROLLBACK");
+                    Err(Error::Database(format!(
+                        "replace_all failed (rolled back, graph preserved): {e}"
+                    )))
+                }
             }
-            Err(e) => {
-                // Roll back so the prior graph survives a mid-swap failure.
-                let _ = conn.execute_batch("ROLLBACK");
-                Err(Error::Database(format!(
-                    "replace_all failed (rolled back, graph preserved): {e}"
-                )))
-            }
-        }
+        })
+        .await
     }
 
     /// Incrementally merge a re-export of ONLY the given `files`: delete each
@@ -1508,10 +1539,10 @@ impl ScipGraph {
         if files.is_empty() {
             return Ok(());
         }
-        {
-            let conn = self.conn.lock().await;
-            let corpus = self.corpus_id.clone();
-
+        let corpus = self.corpus_id.clone();
+        let named = files.to_vec();
+        self.bulk("replace_files", move |conn| {
+            let files = &named;
             conn.execute_batch("BEGIN TRANSACTION")
                 .map_err(|e| Error::Database(format!("replace_files begin: {e}")))?;
 
@@ -1565,7 +1596,9 @@ impl ScipGraph {
                     )));
                 }
             }
-        } // conn lock dropped here before touching the stale-set lock
+            Ok(())
+        })
+        .await?; // the connection lock is released before the stale-set lock
 
         // These files are now fresh — drop them from the stale set so the
         // staleness caution stops firing for them.
@@ -1769,126 +1802,131 @@ impl ScipGraph {
             return Ok((0, 0));
         }
 
-        let other_conn = Connection::open(other_path)
-            .map_err(|e| Error::Database(format!("import open: {e}")))?;
+        // The read is seconds on a large graph: on the pool, like the write.
+        let path = other_path.to_path_buf();
+        let read = crate::off_worker::run("import_from_path", move || -> Result<_> {
+            let other_conn = Connection::open(&path)
+                .map_err(|e| Error::Database(format!("import open: {e}")))?;
 
-        // Discover the source's corpus_id. Priority:
-        //   1. `scip_meta.corpus_id` (set by `record_rebuild`).
-        //   2. First symbol row's `corpus_id` column.
-        //   3. Empty string (legacy v1 DB without per-row ids).
-        // The replace step uses this key to scope the DELETE.
-        let source_corpus = other_conn
-            .query_row(
-                "SELECT value FROM scip_meta WHERE key = 'corpus_id'",
-                [],
-                |row| row.get::<_, String>(0),
-            )
-            .ok()
-            .or_else(|| {
-                other_conn
-                    .query_row("SELECT corpus_id FROM symbols LIMIT 1", [], |row| {
-                        row.get::<_, String>(0)
-                    })
-                    .ok()
-            })
-            .unwrap_or_default();
+            // Discover the source's corpus_id. Priority:
+            //   1. `scip_meta.corpus_id` (set by `record_rebuild`).
+            //   2. First symbol row's `corpus_id` column.
+            //   3. Empty string (legacy v1 DB without per-row ids).
+            // The replace step uses this key to scope the DELETE.
+            let source_corpus = other_conn
+                .query_row(
+                    "SELECT value FROM scip_meta WHERE key = 'corpus_id'",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .ok()
+                .or_else(|| {
+                    other_conn
+                        .query_row("SELECT corpus_id FROM symbols LIMIT 1", [], |row| {
+                            row.get::<_, String>(0)
+                        })
+                        .ok()
+                })
+                .unwrap_or_default();
 
-        let mut symbols = Vec::new();
-        {
-            let mut stmt = other_conn
+            let mut symbols = Vec::new();
+            {
+                let mut stmt = other_conn
                 .prepare(
                     "SELECT name, qualified_name, kind, file_path, line_start, line_end, language FROM symbols",
                 )
                 .map_err(|e| Error::Database(format!("import read symbols: {e}")))?;
-            let rows = stmt
-                .query_map([], |row| {
-                    Ok(ScipSymbolRecord {
-                        name: row.get(0)?,
-                        qualified_name: row.get(1)?,
-                        kind: row.get(2)?,
-                        file_path: row.get(3)?,
-                        line_start: row.get(4)?,
-                        line_end: row.get(5)?,
-                        language: row.get(6)?,
+                let rows = stmt
+                    .query_map([], |row| {
+                        Ok(ScipSymbolRecord {
+                            name: row.get(0)?,
+                            qualified_name: row.get(1)?,
+                            kind: row.get(2)?,
+                            file_path: row.get(3)?,
+                            line_start: row.get(4)?,
+                            line_end: row.get(5)?,
+                            language: row.get(6)?,
+                        })
                     })
-                })
-                .map_err(|e| Error::Database(format!("import query symbols: {e}")))?;
-            for row in rows.flatten() {
-                symbols.push(row);
+                    .map_err(|e| Error::Database(format!("import query symbols: {e}")))?;
+                for row in rows.flatten() {
+                    symbols.push(row);
+                }
             }
-        }
 
-        let mut refs = Vec::new();
-        {
-            // The SOURCE graph may predate the span migration (a peer's older
-            // export, or a file copied off another host), so try the span-aware
-            // read and fall back rather than failing the whole import. Spans
-            // that aren't there arrive as -1 and the next local export fills
-            // them — never as 0, which a rewriter would read as column zero.
-            const WITH_SPANS: &str = "SELECT caller_symbol, callee_symbol, caller_qualified, \
+            let mut refs = Vec::new();
+            {
+                // The SOURCE graph may predate the span migration (a peer's older
+                // export, or a file copied off another host), so try the span-aware
+                // read and fall back rather than failing the whole import. Spans
+                // that aren't there arrive as -1 and the next local export fills
+                // them — never as 0, which a rewriter would read as column zero.
+                const WITH_SPANS: &str = "SELECT caller_symbol, callee_symbol, caller_qualified, \
                  callee_qualified, file_path, line, ref_kind, start_col, end_line, end_col \
                  FROM refs";
-            const LEGACY: &str = "SELECT caller_symbol, callee_symbol, caller_qualified, \
+                const LEGACY: &str = "SELECT caller_symbol, callee_symbol, caller_qualified, \
                  callee_qualified, file_path, line, ref_kind FROM refs";
-            let (mut stmt, has_spans) = match other_conn.prepare(WITH_SPANS) {
-                Ok(st) => (st, true),
-                Err(_) => (
-                    other_conn
-                        .prepare(LEGACY)
-                        .map_err(|e| Error::Database(format!("import read refs: {e}")))?,
-                    false,
-                ),
-            };
-            let rows = stmt
-                .query_map([], |row| {
-                    Ok(ScipRefRecord {
-                        caller_symbol: row.get(0)?,
-                        callee_symbol: row.get(1)?,
-                        caller_qualified: row.get(2)?,
-                        callee_qualified: row.get(3)?,
-                        file_path: row.get(4)?,
-                        line: row.get(5)?,
-                        ref_kind: row.get(6)?,
-                        start_col: if has_spans {
-                            row.get(7).unwrap_or(-1)
-                        } else {
-                            -1
-                        },
-                        end_line: if has_spans {
-                            row.get(8).unwrap_or(-1)
-                        } else {
-                            -1
-                        },
-                        end_col: if has_spans {
-                            row.get(9).unwrap_or(-1)
-                        } else {
-                            -1
-                        },
+                let (mut stmt, has_spans) = match other_conn.prepare(WITH_SPANS) {
+                    Ok(st) => (st, true),
+                    Err(_) => (
+                        other_conn
+                            .prepare(LEGACY)
+                            .map_err(|e| Error::Database(format!("import read refs: {e}")))?,
+                        false,
+                    ),
+                };
+                let rows = stmt
+                    .query_map([], |row| {
+                        Ok(ScipRefRecord {
+                            caller_symbol: row.get(0)?,
+                            callee_symbol: row.get(1)?,
+                            caller_qualified: row.get(2)?,
+                            callee_qualified: row.get(3)?,
+                            file_path: row.get(4)?,
+                            line: row.get(5)?,
+                            ref_kind: row.get(6)?,
+                            start_col: if has_spans {
+                                row.get(7).unwrap_or(-1)
+                            } else {
+                                -1
+                            },
+                            end_line: if has_spans {
+                                row.get(8).unwrap_or(-1)
+                            } else {
+                                -1
+                            },
+                            end_col: if has_spans {
+                                row.get(9).unwrap_or(-1)
+                            } else {
+                                -1
+                            },
+                        })
                     })
-                })
-                .map_err(|e| Error::Database(format!("import query refs: {e}")))?;
-            for row in rows.flatten() {
-                refs.push(row);
+                    .map_err(|e| Error::Database(format!("import query refs: {e}")))?;
+                for row in rows.flatten() {
+                    refs.push(row);
+                }
             }
-        }
 
-        let sym_count = symbols.len();
-        let ref_count = refs.len();
-
-        // Carry the source's export time across with the rows. Without
-        // this the merged graph's freshness clock never advances: the
-        // daemon's merged handle only ever RECEIVES imports, never
-        // records a rebuild of its own, so `last_export_at` stayed at
-        // whatever set it when the handle was built — daemon startup.
-        // Every code-intel tool then reported a staleness equal to
-        // daemon uptime while serving fresh data.
-        let source_export_at = other_conn
-            .query_row(
-                "SELECT value FROM scip_meta WHERE key = 'last_export_at'",
-                [],
-                |row| row.get::<_, String>(0),
-            )
-            .ok();
+            // Carry the source's export time across with the rows. Without
+            // this the merged graph's freshness clock never advances: the
+            // daemon's merged handle only ever RECEIVES imports, never
+            // records a rebuild of its own, so `last_export_at` stayed at
+            // whatever set it when the handle was built — daemon startup.
+            // Every code-intel tool then reported a staleness equal to
+            // daemon uptime while serving fresh data.
+            let source_export_at = other_conn
+                .query_row(
+                    "SELECT value FROM scip_meta WHERE key = 'last_export_at'",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .ok();
+            Ok((source_corpus, symbols, refs, source_export_at))
+        });
+        let (source_corpus, symbols, refs, source_export_at) =
+            read.await.map_err(Error::Database)??;
+        let (sym_count, ref_count) = (symbols.len(), refs.len());
 
         self.replace_corpus(&source_corpus, symbols, refs).await?;
 
@@ -1943,63 +1981,65 @@ impl ScipGraph {
         symbols: Vec<ScipSymbolRecord>,
         refs: Vec<ScipRefRecord>,
     ) -> Result<()> {
-        let conn = self.conn.lock().await;
+        let source_corpus_id = source_corpus_id.to_string();
+        self.bulk("replace_corpus", move |conn| {
+            conn.execute_batch("BEGIN TRANSACTION")
+                .map_err(|e| Error::Database(format!("replace begin: {e}")))?;
 
-        conn.execute_batch("BEGIN TRANSACTION")
-            .map_err(|e| Error::Database(format!("replace begin: {e}")))?;
-
-        conn.execute(
-            "DELETE FROM symbols WHERE corpus_id = ?",
-            params![source_corpus_id],
-        )
-        .map_err(|e| Error::Database(format!("replace delete symbols: {e}")))?;
-        conn.execute(
-            "DELETE FROM refs WHERE corpus_id = ?",
-            params![source_corpus_id],
-        )
-        .map_err(|e| Error::Database(format!("replace delete refs: {e}")))?;
-
-        for sym in &symbols {
             conn.execute(
-                "INSERT INTO symbols (corpus_id, name, qualified_name, kind, file_path, line_start, line_end, language)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                params![
-                    source_corpus_id,
-                    sym.name,
-                    sym.qualified_name,
-                    sym.kind,
-                    sym.file_path,
-                    sym.line_start,
-                    sym.line_end,
-                    sym.language,
-                ],
+                "DELETE FROM symbols WHERE corpus_id = ?",
+                params![source_corpus_id],
             )
-            .map_err(|e| Error::Database(format!("replace insert symbol: {e}")))?;
-        }
-
-        for r in &refs {
+            .map_err(|e| Error::Database(format!("replace delete symbols: {e}")))?;
             conn.execute(
-                REFS_INSERT_SQL,
-                params![
-                    source_corpus_id,
-                    r.caller_symbol,
-                    r.callee_symbol,
-                    r.caller_qualified,
-                    r.callee_qualified,
-                    r.file_path,
-                    r.line,
-                    r.start_col,
-                    r.end_line,
-                    r.end_col,
-                    r.ref_kind,
-                ],
+                "DELETE FROM refs WHERE corpus_id = ?",
+                params![source_corpus_id],
             )
-            .map_err(|e| Error::Database(format!("replace insert ref: {e}")))?;
-        }
+            .map_err(|e| Error::Database(format!("replace delete refs: {e}")))?;
 
-        conn.execute_batch("COMMIT")
-            .map_err(|e| Error::Database(format!("replace commit: {e}")))?;
-        Ok(())
+            for sym in &symbols {
+                conn.execute(
+                    "INSERT INTO symbols (corpus_id, name, qualified_name, kind, file_path, line_start, line_end, language)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    params![
+                        source_corpus_id,
+                        sym.name,
+                        sym.qualified_name,
+                        sym.kind,
+                        sym.file_path,
+                        sym.line_start,
+                        sym.line_end,
+                        sym.language,
+                    ],
+                )
+                .map_err(|e| Error::Database(format!("replace insert symbol: {e}")))?;
+            }
+
+            for r in &refs {
+                conn.execute(
+                    REFS_INSERT_SQL,
+                    params![
+                        source_corpus_id,
+                        r.caller_symbol,
+                        r.callee_symbol,
+                        r.caller_qualified,
+                        r.callee_qualified,
+                        r.file_path,
+                        r.line,
+                        r.start_col,
+                        r.end_line,
+                        r.end_col,
+                        r.ref_kind,
+                    ],
+                )
+                .map_err(|e| Error::Database(format!("replace insert ref: {e}")))?;
+            }
+
+            conn.execute_batch("COMMIT")
+                .map_err(|e| Error::Database(format!("replace commit: {e}")))?;
+            Ok(())
+        })
+        .await
     }
 
     /// Compute the transitive blast radius for a symbol: all callers at every
@@ -2263,8 +2303,10 @@ impl ScipGraph {
         ));
         let _ = std::fs::remove_file(&staging_path);
 
-        let new_graph = Self::open_with_integrity(&staging_path, corpus_id)
-            .map_err(|e| format!("open staging: {e}"))?;
+        let new_graph =
+            Self::open_with_integrity_off_worker(staging_path.clone(), corpus_id.to_string())
+                .await
+                .map_err(|e| format!("open staging: {e}"))?;
 
         let tempdir = tempfile::tempdir().map_err(|e| format!("tempdir: {e}"))?;
         let export_out = tempdir.path().join("scip");
