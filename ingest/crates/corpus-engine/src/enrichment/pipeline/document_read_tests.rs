@@ -547,12 +547,12 @@ fn a_repeated_local_reference_with_a_changed_label_is_refused_not_fatal() {
         .contains("changes label"));
 }
 
+/// The window reader decides sameness inside a window, so it is shown each
+/// decided type's identity criterion ("Same case when: ...",
+/// `window.rs::ontology_text`): a criterion change is a new read contract and
+/// re-reads. The identity keys are RESOLVE's alone and reuse the read.
 #[test]
-fn undeclared_claim_kinds_are_refused_and_identity_changes_reuse_read_contract() {
-    // Still the passes reader's: the window reader shows the reader each
-    // decided type's identity criterion (`window.rs::ontology_text`), so a
-    // criterion change changes its read contract; a key change does not.
-    let _passes = super::pin(super::Reader::Passes);
+fn undeclared_claim_kinds_are_refused_and_a_criterion_change_rereads_where_a_key_change_does_not() {
     let rows = [row(
         1,
         "doc-a",
@@ -569,20 +569,28 @@ fn undeclared_claim_kinds_are_refused_and_identity_changes_reuse_read_contract()
     assert!(parse_response(&undeclared, &policies).is_err());
 
     let first = contract_fingerprint(&policies);
-    let mut changed_identity = policies.clone();
-    let record = changed_identity
+    let mut changed_keys = policies.clone();
+    let record = changed_keys
         .shape
         .types
         .iter_mut()
         .find(|ty| ty.name == "case")
         .unwrap();
-    record.identity_criterion = Some("a revised resolution rule".into());
     record.identity = vec!["number".into(), "external_key".into()];
-    changed_identity
+    changed_keys
         .identity
         .identity
         .insert("case".into(), vec!["external_key".into()]);
-    assert_eq!(first, contract_fingerprint(&changed_identity));
+    assert_eq!(first, contract_fingerprint(&changed_keys));
+    let mut changed_criterion = policies.clone();
+    changed_criterion
+        .shape
+        .types
+        .iter_mut()
+        .find(|ty| ty.name == "case")
+        .unwrap()
+        .identity_criterion = Some("a revised resolution rule".into());
+    assert_ne!(first, contract_fingerprint(&changed_criterion));
 
     let read = response(json!([{
         "document_id":"doc-a",
@@ -592,7 +600,8 @@ fn undeclared_claim_kinds_are_refused_and_identity_changes_reuse_read_contract()
     let mut result = parse_response(&read, &policies).unwrap();
     let extraction = result.section_extraction.as_mut().unwrap();
     validate_and_stamp(&chapter, &policies, extraction).unwrap();
-    assert!(cache_matches_chapter(&chapter, extraction, &changed_identity).is_ok());
+    assert!(cache_matches_chapter(&chapter, extraction, &changed_keys).is_ok());
+    assert!(cache_matches_chapter(&chapter, extraction, &changed_criterion).is_err());
 
     let changed_author_rows = [row(
         1,
