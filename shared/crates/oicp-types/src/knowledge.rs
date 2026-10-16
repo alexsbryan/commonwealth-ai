@@ -784,7 +784,10 @@ mod tests {
         assert_eq!(q[1].behind[1].pending, None);
         let mut written = serde_json::to_value(&r).unwrap();
         // `behind` is written empty for the embedding corpus.
-        written["sentence_queue"][0].as_object_mut().unwrap().remove("behind");
+        written["sentence_queue"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("behind");
         assert_eq!(written, reply);
         let old = serde_json::json!({"results": [], "corpora_searched": []});
         let r: KnowledgeSearchResponse = serde_json::from_value(old).unwrap();

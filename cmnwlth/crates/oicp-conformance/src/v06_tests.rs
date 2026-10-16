@@ -223,7 +223,10 @@ async fn knowledge_sentence_queue_is_red_against_a_queued_corpus_answered_embedd
         ),
     ] {
         let b = bench(breaks).await;
-        red(&check_knowledge_sentence_queue(&b.host, &b.manifest).await, says);
+        red(
+            &check_knowledge_sentence_queue(&b.host, &b.manifest).await,
+            says,
+        );
     }
     let mut m = b.manifest.clone();
     m.features.retain(|f| f != "knowledge:sentences");

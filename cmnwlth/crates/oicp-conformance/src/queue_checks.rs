@@ -8,9 +8,7 @@
 
 use std::time::Duration;
 
-use oicp_types::{
-    features, IndexPlace, KnowledgeSearchResponse, ProviderManifest, SentenceRoute,
-};
+use oicp_types::{features, IndexPlace, KnowledgeSearchResponse, ProviderManifest, SentenceRoute};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -115,7 +113,11 @@ pub async fn check_knowledge_sentence_queue(host: &Host, m: &ProviderManifest) -
     let id = "knowledge.sentence_queue";
     let fail = |why: String| Check::fail(id, Level::Feature, why);
     if !m.has_feature(features::KNOWLEDGE_SENTENCE_QUEUE) {
-        return Check::skip(id, Level::Feature, "knowledge:sentence_queue not advertised");
+        return Check::skip(
+            id,
+            Level::Feature,
+            "knowledge:sentence_queue not advertised",
+        );
     }
     let (Some(k), true) = (m.knowledge.as_ref(), m.has_feature(features::INGEST_RECIPE)) else {
         return Check::skip(
@@ -146,7 +148,11 @@ pub async fn check_knowledge_sentence_queue(host: &Host, m: &ProviderManifest) -
             Err(e) => return fail(e),
         };
         if r.status == 503 {
-            return Check::skip(id, Level::Feature, format!("could not judge: {}", r.brief()));
+            return Check::skip(
+                id,
+                Level::Feature,
+                format!("could not judge: {}", r.brief()),
+            );
         }
         if r.status != 200 {
             return fail(format!("sentence search: {}", r.brief()));
