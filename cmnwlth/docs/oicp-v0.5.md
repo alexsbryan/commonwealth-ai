@@ -372,6 +372,9 @@ declaration for one.
 A host claims v0.5 conformance by passing `oicp-conformance` at each feature
 it advertises. Each check below is gated on its feature except
 `auth.local_peer`, which runs against every host and fails the run when red.
+A failed `must` check or a failed check of an advertised feature makes the run
+`NON-CONFORMANT` (exit 1, the failing ids named); a check that could not be
+judged is skipped, named in the verdict line, and is neither a pass nor a fail.
 Each was watched red against a host fake that breaks exactly its law,
 `cmnwlth/crates/oicp-conformance/src/fake_host.rs`.
 

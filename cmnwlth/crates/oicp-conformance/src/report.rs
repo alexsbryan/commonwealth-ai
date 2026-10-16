@@ -79,13 +79,53 @@ pub struct Report {
 }
 
 impl Report {
-    /// A run is conformant when no `must`-level check FAILED. `should` failures
-    /// and skips do not sink the run (they surface in the summary).
+    /// A run is conformant when no `must` check and no `feat` check FAILED. A
+    /// host that advertises a feature takes on its checks, so a red feature
+    /// check sinks the run exactly as a red `must` does. `should` failures and
+    /// skips do not (they surface in the summary; a skip is could-not-judge,
+    /// never a pass: see [`Report::verdict_line`]).
     pub fn is_conformant(&self) -> bool {
-        !self
+        self.failed_ids(Level::Must).is_empty() && self.failed_ids(Level::Feature).is_empty()
+    }
+
+    fn failed_ids(&self, level: Level) -> Vec<&str> {
+        self.checks
+            .iter()
+            .filter(|c| c.level == level && c.status == CheckStatus::Fail)
+            .map(|c| c.id.as_str())
+            .collect()
+    }
+
+    /// The verdict sentence. Names the failing ids and the skipped ids, so a
+    /// green line never hides a check nobody judged.
+    pub fn verdict_line(&self) -> String {
+        let musts = self.failed_ids(Level::Must);
+        let feats = self.failed_ids(Level::Feature);
+        let mut line = if self.is_conformant() {
+            "CONFORMANT".to_string()
+        } else {
+            let mut why = Vec::new();
+            if !musts.is_empty() {
+                why.push(format!("a `must` failed: {}", musts.join(", ")));
+            }
+            if !feats.is_empty() {
+                why.push(format!("an advertised feature failed: {}", feats.join(", ")));
+            }
+            format!("NON-CONFORMANT ({})", why.join("; "))
+        };
+        let skipped: Vec<&str> = self
             .checks
             .iter()
-            .any(|c| c.level == Level::Must && c.status == CheckStatus::Fail)
+            .filter(|c| c.status == CheckStatus::Skip)
+            .map(|c| c.id.as_str())
+            .collect();
+        if !skipped.is_empty() {
+            line.push_str(&format!(
+                "; could not judge (skipped, not passed): {}",
+                skipped.join(", ")
+            ));
+        }
+        line
     }
 
     pub fn counts(&self) -> (usize, usize, usize) {
@@ -160,6 +200,37 @@ mod tests {
         ]);
         assert!(rep.is_conformant());
         assert_eq!(rep.counts(), (1, 1, 1));
+    }
+
+    #[test]
+    fn a_failed_feature_check_sinks_conformance_and_is_named() {
+        let rep = r(vec![
+            Check::pass("a", Level::Must, ""),
+            Check::fail("evidence.verify_sentences", Level::Feature, ""),
+            Check::skip("evidence.verify_correction", Level::Feature, ""),
+        ]);
+        assert!(!rep.is_conformant());
+        let line = rep.verdict_line();
+        assert!(
+            line.starts_with(
+                "NON-CONFORMANT (an advertised feature failed: evidence.verify_sentences)"
+            ),
+            "{line}"
+        );
+        assert!(
+            line.contains("skipped, not passed): evidence.verify_correction"),
+            "{line}"
+        );
+    }
+
+    #[test]
+    fn a_green_run_with_a_skip_names_the_skip() {
+        let rep = r(vec![
+            Check::pass("a", Level::Must, ""),
+            Check::skip("b", Level::Feature, ""),
+        ]);
+        assert!(rep.is_conformant());
+        assert!(rep.verdict_line().starts_with("CONFORMANT; could not judge"));
     }
 
     #[test]

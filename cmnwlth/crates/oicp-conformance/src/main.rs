@@ -159,11 +159,7 @@ fn print_summary(report: &Report) {
     }
     eprintln!(
         "\n{pass} passed, {fail} failed, {skip} skipped — {}",
-        if report.is_conformant() {
-            "CONFORMANT"
-        } else {
-            "NON-CONFORMANT (a `must` failed)"
-        }
+        report.verdict_line()
     );
 }
 
