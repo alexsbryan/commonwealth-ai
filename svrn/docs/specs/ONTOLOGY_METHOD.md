@@ -233,7 +233,8 @@ beside the second's beginning (supersession). The
 model names each particular once across the window and cites each claim by its document and exact words;
 code keeps the contract: every declared field answered or unknown with a reason, a closed value one of its
 declared values, a reference a record the document's fields name or words it holds, each field's evidence in
-the claim's own document, and a claim whose words are not in its document refused by validation. A window's
+the claim's own document, and a claim whose words are not in its document refused by validation. A malformed
+value in the answer costs the particular or claim that holds it, counted, never the window. A window's
 particular reaches RESOLVE as a sufficient key over its chapter (`CHAPTER_SUBJECT_KEY`), so RESOLVE decides
 identity only across windows, statement by statement against bounded candidates. Two particulars the reader read
 in one document stay two: a record holding one is never offered the other (`apart.rs::read_beside`); whether

@@ -416,3 +416,77 @@ attributes = [{ name = "speaker", type = "ref", of = "person" }]
         "{firm:?}"
     );
 }
+
+/// Failing input, named: a local model's window answer wrote a price as
+/// `"value":.02` (runs/loop/local35b-s4-think-w10k, window 5). JSON requires
+/// the leading zero, so the strict parse refused the whole window. The number
+/// is read as written, counted; text inside a string is never rewritten.
+#[test]
+fn a_bare_fraction_reads_as_its_number() {
+    let parsed = super::answer::parse(
+        r#"{"particulars": [{"ref": "p1", "fields": {"amount": {"value": .02, "quote": "at .02"},
+            "low": {"value":-.5, "quote": "down .5 \".5\""}, "list": [.1, 2]}}], "claims": []}"#,
+        "sec_1",
+    )
+    .unwrap();
+    let f = &parsed.value["particulars"][0]["fields"];
+    assert_eq!(f["amount"]["value"], json!(0.02));
+    assert_eq!(f["low"]["value"], json!(-0.5));
+    assert_eq!(f["list"], json!([0.1, 2]));
+    assert_eq!(f["amount"]["quote"], json!("at .02"));
+    assert_eq!(f["low"]["quote"], json!("down .5 \".5\""));
+    assert_eq!((parsed.repaired, parsed.dropped), (3, 0));
+}
+
+/// Failing input, named: one element of a window answer that is not JSON
+/// (a missing comma) failed the strict parse and lost every statement of the
+/// window. Each element is parsed on its own: the malformed particular and
+/// the malformed claim are dropped and counted, a claim about the dropped
+/// particular goes with it, and the rest of the window is read.
+#[tokio::test]
+async fn one_malformed_element_costs_only_itself() {
+    use std::sync::Arc;
+    let raw = r#"{"particulars": [
+        {"ref": "p1", "type": "case", "name": "issue 42", "fields": {}},
+        {"ref": "p2", "type": "case" "name": "issue 7", "fields": {}}],
+      "claims": [
+        {"kind": "membership", "about": "p1", "document": "d1", "quote": "Issue 42 in uv is open.", "fields": {}},
+        {"kind": "reported_status", "about": "p2", "document": "d2", "quote": "Issue 42 is now closed.",
+         "fields": {"status": "Closed"}},
+        {"kind": "reported_status", "about": "p1", "document": "d2" "quote": "Issue 42 is now closed."}]}"#;
+    let parsed = super::answer::parse(raw, "sec_1").unwrap();
+    assert_eq!(
+        parsed.value["particulars"].as_array().map(Vec::len),
+        Some(1)
+    );
+    assert_eq!(parsed.value["claims"].as_array().map(Vec::len), Some(1));
+    assert_eq!((parsed.repaired, parsed.dropped), (0, 3));
+
+    let policies = policies();
+    let chapter = window();
+    let infer: crate::InferenceFn =
+        Arc::new(move |_, _| Box::pin(async move { Ok(raw.to_string()) }));
+    let out = read(&chapter, &policies, &Default::default(), &infer)
+        .await
+        .expect("the window is read without its malformed elements");
+    let mut extraction = parse_response(&out, &policies)
+        .unwrap()
+        .section_extraction
+        .unwrap();
+    validate_and_stamp(&chapter, &policies, &mut extraction).unwrap();
+    let read = extraction.document_read.as_ref().unwrap();
+    assert_eq!(read.documents[0].claims.len(), 1, "{:?}", read.documents);
+    assert!(read.documents[1].claims.is_empty(), "{:?}", read.documents);
+    assert!(
+        read.documents.iter().all(|d| d.refused.is_empty()),
+        "a dropped element is lost, not refused: {:?}",
+        read.documents
+    );
+}
+
+/// An answer with no array to read element by element fails the window as
+/// before, with the parse error.
+#[test]
+fn an_answer_with_no_readable_array_still_fails() {
+    assert!(super::answer::parse(r#"{"particulars": "none" "claims"}"#, "sec_1").is_err());
+}

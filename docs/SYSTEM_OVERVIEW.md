@@ -642,7 +642,10 @@ question the pipeline asks about a type is a method on the resolved
   (`sovereign-enrichment-build/src/window_manifest.rs`, `WINDOW_CHARS`). The window reader names each
   particular once across its chapter; its envelope says so (`DocumentRead.subjects = Chapter`), the projection
   carries the reference (`CHAPTER_SUBJECT_ATTRIBUTE`), and RESOLVE links a chapter's statements by it as a
-  sufficient key (`resolution_records.rs::CHAPTER_SUBJECT_KEY`), deciding only across windows. Two particulars the reader
+  sufficient key (`resolution_records.rs::CHAPTER_SUBJECT_KEY`), deciding only across windows. A malformed value
+  in the answer costs at most the element holding it (`window_answer.rs`): a bare fraction (`.02`) is read with
+  its leading zero, and if the answer still does not parse each particular and claim is parsed alone, the ones
+  that fail (and the claims about a failed particular) dropped and counted as `lost`. Two particulars the reader
   read in one document stay two: a record holding one is never offered the other, folded or joined earlier in the
   same document (`resolve_records/apart.rs::read_beside`, tracked in `select::choose`); and a statement follows its
   own particular, joining by key the record that already holds its reference whatever sibling a question let it

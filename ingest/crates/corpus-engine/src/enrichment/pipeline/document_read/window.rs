@@ -336,16 +336,23 @@ pub(super) async fn read(
             raw.len()
         ))
     };
-    let answer: Value = prepare_phase_json(&raw, "phase 1 (window read)")
+    let parsed = prepare_phase_json(&raw, "phase 1 (window read)")
         .map_err(|e| failed(e.to_string()))
-        .and_then(|json| serde_json::from_str(&json).map_err(|e| failed(e.to_string())))?;
+        .and_then(|json| answer::parse(&json, &chapter.chapter_id).map_err(failed))?;
     let owns: Vec<String> = chapter
         .source_documents
         .iter()
         .map(|doc| shown::own_text(doc, classes))
         .collect();
     let documents = envelope(
-        chapter, policies, &index, &contract, &labels, &owns, &answer,
+        chapter,
+        policies,
+        &index,
+        &contract,
+        &labels,
+        &owns,
+        &parsed.value,
+        parsed.dropped,
     );
     serde_json::to_string(&json!({ "documents": documents, "subjects": SubjectScope::Chapter }))
         .map_err(|e| Error::Serialization(format!("window reader envelope: {e}")))
@@ -597,7 +604,8 @@ fn particular_fields(
 
 /// One outcome per supplied document, in order, from the window's answer.
 /// `owns` are the documents' own lines (`own_text`), each claim's quote
-/// widened to its sentence in them (`sentence_of`).
+/// widened to its sentence in them (`sentence_of`); `dropped` elements of the
+/// answer did not parse (`answer::parse`) and count as lost.
 fn envelope(
     chapter: &ChapterInput,
     policies: &OntologyPolicies,
@@ -606,6 +614,7 @@ fn envelope(
     labels: &[String],
     owns: &[String],
     answer: &Value,
+    dropped: usize,
 ) -> Vec<DocumentReadOutcome> {
     let empty = Vec::new();
     let particulars = answer["particulars"].as_array().unwrap_or(&empty);
@@ -632,7 +641,7 @@ fn envelope(
             )
         })
         .collect();
-    let mut lost = 0usize;
+    let mut lost = dropped;
     for claim in claims {
         let kind = text(&claim["kind"]);
         let Some(k) = labels.iter().position(|l| *l == text(&claim["document"])) else {
@@ -772,3 +781,6 @@ mod particulars;
 
 #[path = "window_text.rs"]
 mod shown;
+
+#[path = "window_answer.rs"]
+mod answer;
