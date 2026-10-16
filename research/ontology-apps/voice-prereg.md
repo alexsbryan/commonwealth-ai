@@ -32,3 +32,13 @@ replay of the code before the change.
 
 Development corpora only. If it passes, the change stands for every corpus, held-out included; the held-out reads
 come after, once.
+
+## Revisions
+
+**2026-10-16, after the first measurement (note 2dde9c77), before any read below; operator: iterate.** Bars 1-3
+passed (7 of 8 pairs; saltgrass-asked 27 and 38; teacher 35) and bar 4 failed (world-s3 23/27 + ward-story 3/14 =
+26 against 34): offered "a particular's ref", ward-story's first window minted a person per sender (50 persons and
+4 deals, against 4 and 10). Change: `said_by` is the document's own words for who says it, or "the document"; no
+particular is offered (a label written anyway still reads as its name). Inner ring first, one fresh read of
+ward-story (about 0.06M output tokens); it passes when ward-story serves at least 6 of 14 and its first window
+writes at least 8 deal particulars. Only then the four bars above, unchanged, on fresh reads of the same set.
