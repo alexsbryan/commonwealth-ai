@@ -177,8 +177,7 @@ fn knowledge_search_thin_client_shape_deserializes() {
     // OICP v0.4 §6.1: a thin client sends only `query` — no embedding,
     // and the OICP field name `query` (not `query_text`).
     let req: KnowledgeSearchRequest =
-        serde_json::from_value(serde_json::json!({"query": "stoic virtue", "limit": 3}))
-            .unwrap();
+        serde_json::from_value(serde_json::json!({"query": "stoic virtue", "limit": 3})).unwrap();
     assert_eq!(req.query_text, "stoic virtue");
     assert!(req.query_embedding.is_empty(), "host embeds when absent");
     assert_eq!(req.effective_limit(), 3);
@@ -318,7 +317,10 @@ fn priority_stays_off_the_wire_when_absent_and_refuses_what_it_does_not_name() {
     let old = serde_json::json!({"query": "q", "limit": 3});
     let req: KnowledgeSearchRequest = serde_json::from_value(old.clone()).unwrap();
     assert_eq!(req.priority, None);
-    assert!(serde_json::to_value(&req).unwrap().get("priority").is_none());
+    assert!(serde_json::to_value(&req)
+        .unwrap()
+        .get("priority")
+        .is_none());
 
     for p in [RequestPriority::Interactive, RequestPriority::Background] {
         let mut asks = old.clone();
@@ -334,7 +336,10 @@ fn priority_stays_off_the_wire_when_absent_and_refuses_what_it_does_not_name() {
 
     let verify = serde_json::json!({"unit": "u", "tier": "fast"});
     let req: crate::verify::VerifyRequest = serde_json::from_value(verify.clone()).unwrap();
-    assert!(serde_json::to_value(&req).unwrap().get("priority").is_none());
+    assert!(serde_json::to_value(&req)
+        .unwrap()
+        .get("priority")
+        .is_none());
     let mut asks = verify;
     asks["priority"] = "background".into();
     let req: crate::verify::VerifyRequest = serde_json::from_value(asks).unwrap();
