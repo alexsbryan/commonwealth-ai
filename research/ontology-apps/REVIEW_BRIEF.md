@@ -87,7 +87,16 @@ The percentages are my estimates, not measurements.
    call grows with the corpus. Measure with `run_world.sh` on the five worlds and Ward. No new test world (operator,
    2026-10-13: the instruments in hand are enough).
 3. **Saltgrass** through the same commands: write the recipe, `recipe validate`, score against its fact ledger.
-4. **The model track.** Engineer the system down to the local model.
+4. **The model track.** Engineer the system down to the local model. Filed 2026-10-15 (Qwen 35B-A3B, thinking
+   on, product window reader, world-s4; `runs/loop/local35b-s4-think{,-w20k,-w10k}`): 3/15 at the default 40k-char
+   window, 5/15 at 20k, against DeepSeek's 9-10/15. The losses are per call, not the design: the model plans a
+   window's claims in its reasoning and drops some writing one long answer (9 of 38 on the densest window), and
+   gold-document recall rises as windows shrink (67%, 75%, 86% at 40k, 20k, 10k). Window size is the first knob.
+   The passes pipeline served 1/15 locally, so retiring it closes no door. One system defect found here: one
+   malformed number (`"value":.02`) fails the strict JSON parse and loses the whole window (2 of 2 samples at 10k).
+
+The one-shot reference under the current scorer (c138d09b1) is 68/93 served and 237/328 attached on the worlds,
+not the race table's 66/93 and 247/328.
 
 ## Rules
 
