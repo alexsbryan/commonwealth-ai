@@ -6,8 +6,7 @@ use super::*;
 
 #[tokio::test]
 async fn cached_document_read_replays_without_calling_inference() {
-    let _passes = super::super::pin(super::super::Reader::Passes);
-    use std::sync::{atomic::Ordering, Arc};
+    use std::sync::Arc;
 
     let rows = [row(
         1,
@@ -18,7 +17,7 @@ async fn cached_document_read_replays_without_calling_inference() {
     let chapter = input_chapter(&rows);
     let policies = policies();
     let temp = tempfile::tempdir().unwrap();
-    let (first_chat, calls) = counted(CLOSED);
+    let (first_chat, prompts) = counted();
     reader_runner(temp.path(), &policies, first_chat, true)
         .phase_1_extract_questions(
             &[chapter.clone()],
@@ -27,7 +26,7 @@ async fn cached_document_read_replays_without_calling_inference() {
         )
         .await
         .unwrap();
-    assert_eq!(calls.load(Ordering::SeqCst), 7);
+    assert_eq!(calls(&prompts), 1);
 
     let panic_chat: crate::types::InferenceFn =
         Arc::new(|_, _| panic!("identical accountable read must use the section cache"));
@@ -40,7 +39,7 @@ async fn cached_document_read_replays_without_calling_inference() {
         .await
         .unwrap();
     assert_eq!(replay.output.questions_by_chapter.len(), 1);
-    assert_eq!(calls.load(Ordering::SeqCst), 7);
+    assert_eq!(calls(&prompts), 1);
 
     let mut identity_policy = policies.clone();
     identity_policy
@@ -58,13 +57,12 @@ async fn cached_document_read_replays_without_calling_inference() {
         .await
         .unwrap();
     assert_eq!(replay.output.questions_by_chapter.len(), 1);
-    assert_eq!(calls.load(Ordering::SeqCst), 7);
+    assert_eq!(calls(&prompts), 1);
 }
 
 #[tokio::test]
 #[should_panic(expected = "changed author must reject cached accountable read")]
 async fn changed_author_does_not_reuse_a_cached_document_read() {
-    let _passes = super::super::pin(super::super::Reader::Passes);
     use std::sync::Arc;
 
     let body = "Issue 842 was closed by pull request #1380.";
@@ -72,7 +70,7 @@ async fn changed_author_does_not_reuse_a_cached_document_read() {
     let changed = [row(1, "doc-a", body, r#"{"author":"Bob"}"#)];
     let policies = policies();
     let temp = tempfile::tempdir().unwrap();
-    let (first, _) = counted(CLOSED);
+    let (first, _) = counted();
     reader_runner(temp.path(), &policies, first, true)
         .phase_1_extract_questions(
             &[input_chapter(&original)],
@@ -96,7 +94,6 @@ async fn changed_author_does_not_reuse_a_cached_document_read() {
 #[tokio::test]
 #[should_panic(expected = "changed body must reject cached accountable read")]
 async fn changed_body_does_not_reuse_a_cached_document_read() {
-    let _passes = super::super::pin(super::super::Reader::Passes);
     use std::sync::Arc;
 
     let metadata = r#"{"author":"Alice"}"#;
@@ -114,7 +111,7 @@ async fn changed_body_does_not_reuse_a_cached_document_read() {
     )];
     let policies = policies();
     let temp = tempfile::tempdir().unwrap();
-    let (first, _) = counted(CLOSED);
+    let (first, _) = counted();
     reader_runner(temp.path(), &policies, first, true)
         .phase_1_extract_questions(
             &[input_chapter(&original)],
@@ -138,7 +135,6 @@ async fn changed_body_does_not_reuse_a_cached_document_read() {
 #[tokio::test]
 #[should_panic(expected = "changed READ contract must reject cached accountable read")]
 async fn changed_read_contract_does_not_reuse_a_cached_document_read() {
-    let _passes = super::super::pin(super::super::Reader::Passes);
     use std::sync::Arc;
 
     let rows = [row(
@@ -150,7 +146,7 @@ async fn changed_read_contract_does_not_reuse_a_cached_document_read() {
     let chapter = input_chapter(&rows);
     let policies = policies();
     let temp = tempfile::tempdir().unwrap();
-    let (first, _) = counted(CLOSED);
+    let (first, _) = counted();
     reader_runner(temp.path(), &policies, first, true)
         .phase_1_extract_questions(
             &[chapter.clone()],
