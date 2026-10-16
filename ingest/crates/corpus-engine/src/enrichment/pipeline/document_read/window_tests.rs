@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use super::super::tests::{input_chapter, policies, row, scripted};
 use super::super::{
     parse_response, validate_and_stamp, DocumentReadField, DocumentReadStatus, SubjectScope,
-    CHAPTER_SUBJECT_ATTRIBUTE,
+    CHAPTER_SUBJECT_ATTRIBUTE, SAID_BY_ATTRIBUTE,
 };
 use super::{read, WINDOW_PHASE};
 
@@ -629,5 +629,132 @@ async fn a_claim_citing_lines_its_document_quotes_is_refused() {
     assert!(
         reasons.iter().any(|r| r.contains("not an exact passage")),
         "a quote found nowhere is validation's to refuse: {reasons:?}"
+    );
+}
+
+/// Failing input, named: saltgrass-asked's readers dropped "They took Severin
+/// Quenholt at The Cold Lantern that evening" in all four reads ("Speaker?
+/// narrator. Not character. Maybe omit."). Who says a statement is read beside
+/// it and never costs it: a particular's label reads as a name its document
+/// holds, words the document holds are kept, the document's own voice names
+/// no one, and a voice the document does not hold is dropped with its claim
+/// kept. A grade is one of its kind's grades, as declared, or none.
+#[tokio::test]
+async fn who_says_a_statement_is_read_beside_it_and_never_costs_it() {
+    let ontology: crate::enrichment::ontology::OntologyV1 = toml::from_str(
+        r#"
+[[types]]
+name = "case"
+kind = "entity"
+identity_criterion = "same issue number"
+
+[[types]]
+name = "person"
+kind = "entity"
+
+[[types]]
+name = "remark"
+kind = "claim"
+force = "assertive"
+subject = "case"
+grades = ["saw it", "heard it"]
+"#,
+    )
+    .unwrap();
+    let policies = ontology.into_policies();
+    let chapter = input_chapter(&[
+        row(1, "doc-a", "Mara Vell says issue 42 is open.", "{}"),
+        row(
+            2,
+            "doc-b",
+            "Issue 42 is open, as several users swore.",
+            "{}",
+        ),
+        row(3, "doc-c", "They closed issue 42 that evening.", "{}"),
+        row(4, "doc-d", "Issue 42 stays closed.", "{}"),
+        row(5, "doc-e", "Issue 42 was reopened.", "{}"),
+    ]);
+    let remark = |document: &str, quote: &str, said_by: Value, grade: Value| {
+        json!({"kind": "remark", "about": "p1", "document": document, "quote": quote,
+               "said_by": said_by, "grade": grade, "fields": {}})
+    };
+    let answer = json!({
+        "particulars": [
+            {"ref": "p1", "type": "case", "name": "issue 42", "fields": {}},
+            {"ref": "p2", "type": "person", "name": "Mara Vell", "fields": {}}],
+        "claims": [
+            remark("d1", "Mara Vell says issue 42 is open.", json!("p2"), json!("Saw it")),
+            remark("d2", "Issue 42 is open, as several users swore.", json!("several users"), json!("heard it")),
+            remark("d3", "They closed issue 42 that evening.", json!("the document"), json!("vibes")),
+            remark("d4", "Issue 42 stays closed.", json!("the board"), Value::Null),
+            remark("d5", "Issue 42 was reopened.", Value::Null, Value::Null)]});
+    let (infer, seen) = scripted(vec![answer]);
+    let raw = read(&chapter, &policies, &Default::default(), &infer)
+        .await
+        .unwrap();
+    let mut extraction = parse_response(&raw, &policies)
+        .unwrap()
+        .section_extraction
+        .unwrap();
+    validate_and_stamp(&chapter, &policies, &mut extraction).unwrap();
+
+    let read = extraction.document_read.as_ref().unwrap();
+    let kept: Vec<(Option<&str>, Option<&str>)> = read
+        .documents
+        .iter()
+        .map(|d| {
+            assert_eq!(
+                d.claims.len(),
+                1,
+                "a voice never costs a claim: {:?}",
+                d.refused
+            );
+            (d.claims[0].speaker.as_deref(), d.claims[0].grade.as_deref())
+        })
+        .collect();
+    assert_eq!(
+        kept,
+        [
+            (Some("Mara Vell"), Some("saw it")),
+            (Some("several users"), Some("heard it")),
+            (None, None),
+            (None, None),
+            (None, None)
+        ]
+    );
+    let remarks: Vec<_> = extraction
+        .claims
+        .iter()
+        .filter(|c| c.claim_kind.as_deref() == Some("remark"))
+        .collect();
+    let said: Vec<Option<&Value>> = remarks
+        .iter()
+        .map(|c| c.attributes.get(SAID_BY_ATTRIBUTE))
+        .collect();
+    assert_eq!(
+        said,
+        [
+            Some(&json!("Mara Vell")),
+            Some(&json!("several users")),
+            None,
+            None,
+            None
+        ]
+    );
+    assert_eq!(remarks[1].attributes.get("grade"), Some(&json!("heard it")));
+    let bound: Vec<Option<&str>> = remarks.iter().map(|c| c.attributed_to.as_deref()).collect();
+    assert_eq!(
+        bound,
+        [Some("Mara Vell"), Some("several users"), None, None, None],
+        "the same words go to the build's binding, which holds them only for a sourced record"
+    );
+    let prompt = &seen.lock().unwrap()[0].user;
+    assert!(
+        prompt.contains("  Grade, its evidence, strongest first: saw it | heard it."),
+        "{prompt}"
+    );
+    assert!(
+        prompt.contains(&format!("\"{}\"", super::voice::OWN_VOICE)),
+        "the answer's word for the document's own voice is the one code reads"
     );
 }

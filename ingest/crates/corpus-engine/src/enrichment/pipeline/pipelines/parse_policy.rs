@@ -193,8 +193,9 @@ pub(super) fn state_is_of_relation(policies: &OntologyPolicies, t: &OntologyType
 /// Defined beside its reader, `governance_view::project_claim`, in the
 /// atlas-reader leaf since fp-60; one spelling is the point (§10.6).
 pub(crate) use corpus_engine_atlas_reader::governance_view::ATTR_DEONTIC;
-/// Reserved attribute key carrying a claim's evidence grade.
-pub(super) const ATTR_GRADE: &str = "grade";
+/// Reserved attribute key carrying a claim's evidence grade, owned by the
+/// atlas-reader leaf beside the row that shows it.
+pub(crate) use corpus_engine_atlas_reader::records::ATTR_GRADE;
 
 impl ParsePolicy {
     /// Derive the reader's policy from a corpus's declared ontology.
@@ -481,7 +482,7 @@ pub(super) fn validated_attributes(
 /// Keep a reserved claim attribute (`deontic`, `grade`) only when it names one
 /// of the values the claim type declared. Validated, never synthesised: an
 /// undeclared mode is a drop, not a guess.
-pub(super) fn validated_choice(
+pub(crate) fn validated_choice(
     raw: &mut serde_json::Map<String, serde_json::Value>,
     out: &mut serde_json::Map<String, serde_json::Value>,
     key: &str,

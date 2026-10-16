@@ -170,6 +170,12 @@ fn ontology_text(
             kind.name, subject.name, kind.description
         ));
         out.extend(read_attrs(index, kind).iter().map(|a| attr_line(a)));
+        if !kind.grades.is_empty() {
+            out.push(format!(
+                "  Grade, its evidence, strongest first: {}.",
+                kind.grades.join(" | ")
+            ));
+        }
     }
     for subject in &contract.subjects {
         out.push(format!("- {}: {}", subject.name, subject.description));
@@ -549,6 +555,7 @@ fn envelope(
         .collect();
     let mut lost = dropped;
     let mut carried = 0usize;
+    let mut voices: std::collections::BTreeMap<voice::Voice, usize> = Default::default();
     for claim in claims {
         let kind = text(&claim["kind"]);
         let Some(k) = labels.iter().position(|l| *l == text(&claim["document"])) else {
@@ -611,6 +618,8 @@ fn envelope(
             }
             None => quote,
         };
+        let (speaker, voiced) = voice::said_by(&claim["said_by"], document, particulars);
+        *voices.entry(voiced).or_default() += 1;
         let fields = read_attrs(index, decl)
             .iter()
             .map(|a| {
@@ -661,7 +670,8 @@ fn envelope(
             subject_type: subject.name.clone(),
             subject_local_ref: format!("{}/{about}", chapter.chapter_id),
             subject_name: name,
-            speaker: None,
+            speaker,
+            grade: voice::grade(claim, decl),
             evidence: quote,
             fields,
             subject_fields,
@@ -680,7 +690,7 @@ fn envelope(
     );
     let read: usize = outcomes.iter().map(|(o, _)| o.claims.len()).sum();
     let refused: usize = outcomes.iter().map(|(o, _)| o.refused.len()).sum();
-    info!(chapter = %chapter.chapter_id, documents = outcomes.len(), particulars = particulars.len(), claims = claims.len(), read, refused, carried, lost, "document_read/window: chapter read");
+    info!(chapter = %chapter.chapter_id, documents = outcomes.len(), particulars = particulars.len(), claims = claims.len(), read, refused, carried, lost, ?voices, "document_read/window: chapter read");
     outcomes
         .into_iter()
         .map(|(mut o, _)| {
@@ -726,3 +736,6 @@ mod answer;
 
 #[path = "window_refs.rs"]
 mod refs;
+
+#[path = "window_voice.rs"]
+mod voice;

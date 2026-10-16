@@ -8,6 +8,7 @@ use crate::enrichment::pipeline::atlas::{
     ClaimScope, ClaimSketch, EnrichmentDepth, EpistemicStatus, SectionExtraction,
 };
 use crate::enrichment::pipeline::pipelines::literary::prepare_phase_json;
+use crate::enrichment::pipeline::pipelines::parse_policy::ATTR_GRADE;
 use crate::enrichment::pipeline::types::Phase1ChapterResult;
 use crate::error::{Error, Result};
 
@@ -16,7 +17,7 @@ use super::validation;
 use super::{
     supported_values, DocumentRead, DocumentReadOutcome, DocumentReadParticular, SubjectScope,
     ABOUT_ATTRIBUTE, CHAPTER_SUBJECT_ATTRIBUTE, CLAIM_FIELDS_ATTRIBUTE, LOCAL_REF_ATTRIBUTE,
-    OTHER_NAMES_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE,
+    OTHER_NAMES_ATTRIBUTE, SAID_BY_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE,
     SUBJECT_NAME_ATTRIBUTE,
 };
 
@@ -149,6 +150,12 @@ pub(super) fn project_compatibility_sketches(
                     ))
                 })?,
             );
+            if let Some(speaker) = &claim.speaker {
+                attributes.insert(SAID_BY_ATTRIBUTE.into(), Value::String(speaker.clone()));
+            }
+            if let Some(grade) = &claim.grade {
+                attributes.insert(ATTR_GRADE.into(), Value::String(grade.clone()));
+            }
             // A state or relation statement asserts what it reads; only a
             // claim kind declares a force.
             let force = match decl.kind {

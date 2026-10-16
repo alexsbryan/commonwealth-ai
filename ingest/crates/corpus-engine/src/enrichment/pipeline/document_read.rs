@@ -83,6 +83,11 @@ pub fn window_subject_name(attributes: &Map<String, Value>) -> Option<&str> {
 /// (`resolve_records::Described`), never compares them, and a reference
 /// reading lands on a record by any of them (`resolution_derived/read_fields.rs`).
 pub const OTHER_NAMES_ATTRIBUTE: &str = "__document_read_other_names";
+/// Who a window read says asserts a statement, kept on the claim and shown by
+/// its row (the atlas-reader leaf owns the key). `attributed_to` binds the
+/// same words at build only to a sourced record; a window read's other
+/// records come from RESOLVE, so the reading as read stays here.
+pub use corpus_engine_atlas_reader::records::SAID_BY_ATTRIBUTE;
 
 /// The other names `attributes` records for `name` ([`OTHER_NAMES_ATTRIBUTE`]),
 /// matched as identity values are (`fold_identity_value`); none when it
@@ -228,9 +233,15 @@ pub struct DocumentReadClaim {
     pub subject_type: String,
     pub subject_local_ref: String,
     pub subject_name: String,
-    /// The voice in the passage, when stated. It is never inferred from metadata.author.
+    /// Who asserts the claim, as the window read gave it (`said_by`): words
+    /// its document holds. None for the document's own voice, or when no
+    /// voice was read or the one read is not in the document. It is never
+    /// inferred from metadata.author.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub speaker: Option<String>,
+    /// One of the grades its kind declares, as declared (`window_voice::grade`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grade: Option<String>,
     /// Exact source-body passage supporting the assertion.
     pub evidence: String,
     /// Non-derived attributes declared on the claim type.

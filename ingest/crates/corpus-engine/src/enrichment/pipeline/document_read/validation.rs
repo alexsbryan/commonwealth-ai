@@ -320,6 +320,14 @@ fn fields_cited(
     Ok(())
 }
 
+/// Whether `speaker` is words `document`'s body holds, whitespace and case
+/// aside: what a claim's voice must be. The window reader keeps a voice only
+/// when it is (`window_voice.rs`), so this check never costs it a claim.
+pub(super) fn speaker_in_body(document: &SourceDocument, speaker: &str) -> bool {
+    let speaker = fold_ws(speaker);
+    !speaker.is_empty() && fold_ws(&document.raw_body()).contains(&speaker)
+}
+
 /// Why one claim cannot be projected, or `Ok(())` when its citation, voice
 /// and fields all verify against THIS document.
 fn verify_claim(
@@ -350,10 +358,11 @@ fn verify_claim(
             document.key()
         ));
     }
-    if claim.speaker.as_deref().is_some_and(|speaker| {
-        let speaker = fold_ws(speaker);
-        speaker.is_empty() || !fold_ws(&document.raw_body()).contains(&speaker)
-    }) {
+    if claim
+        .speaker
+        .as_deref()
+        .is_some_and(|speaker| !speaker_in_body(document, speaker))
+    {
         return Err(format!(
             "claim `{}` names a speaker not present in the source body; metadata.author is context only",
             claim.kind

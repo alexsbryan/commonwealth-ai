@@ -50,7 +50,10 @@ for t in types:
             records.append(r); by_id[rec["id"]] = r
 for kind, rec in claims:
     subj = next((r["id"] for r in rec.get("refs") or [] if r.get("attribute") == "subject"), None)
-    c = dict(kind=kind, quote=rec.get("text") or rec.get("name"), attributes={k: v for k, v in plain(rec).items() if k != "subject"})
+    # Who says a statement and its grade are row keys beside its attributes (records.rs), shown with them.
+    voice = {k: rec[k] for k in ("said_by", "grade") if rec.get(k)}
+    c = dict(kind=kind, quote=rec.get("text") or rec.get("name"),
+             attributes={**{k: v for k, v in plain(rec).items() if k != "subject"}, **voice})
     if subj in by_id: by_id[subj]["claims"].append(c)
     else: records.append(dict(type=kind, name=c["quote"], attributes=c["attributes"], claims=[]))
 json.dump(dict(records=records, capped=capped), open(out, "w"), indent=1)

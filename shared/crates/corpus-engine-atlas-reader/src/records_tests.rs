@@ -85,7 +85,8 @@ fn atoms() -> Vec<AtomEnvelope> {
             "discourse_act": "assert", "epistemic_status": "attributed", "scope": "universal",
             "evidence": [{"chunk_id": "sec_00003"}], "subject": "entity-order",
             "claim_kind": "order_update", "enrichment_depth": "extracted",
-            "attributes": {"document_date": "2026-03-06T18:20:00Z"}}},
+            "attributes": {"document_date": "2026-03-06T18:20:00Z",
+                "__document_read_said_by": "the workshop", "grade": "quoted"}}},
     ]))
     .unwrap()
 }
@@ -154,4 +155,21 @@ fn a_statement_row_carries_its_link_and_a_record_its_inbound_refs() {
         "{company}"
     );
     assert!(company.get("folds").is_none(), "{company}");
+}
+
+/// Who asserts a statement and its grade belong to no declared attribute, so
+/// a statement's row shows them beside its attributes, and only when read.
+#[test]
+fn a_statement_row_shows_who_says_it_and_its_grade_when_read() {
+    let atoms = atoms();
+    let p = policies();
+    let view = RecordView::new(&atoms, Some(&p));
+    let said = view.row(view.atom("claim-2").unwrap());
+    assert_eq!(said["said_by"], "the workshop", "{said}");
+    assert_eq!(said["grade"], "quoted", "{said}");
+    let unsaid = view.row(view.atom("claim-1").unwrap());
+    assert!(
+        unsaid.get("said_by").is_none() && unsaid.get("grade").is_none(),
+        "{unsaid}"
+    );
 }

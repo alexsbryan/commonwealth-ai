@@ -161,12 +161,19 @@ superseded by another speaks of two, and states the first's end beside the secon
 thing a document says has another name is a typed field, not a prompt rule (2026-10-16): a particular lists its
 `other_names`, and code reads a reference, a subject's sourced identity and an unstated particular's line by any of
 them, carries them on each statement (`OTHER_NAMES_ATTRIBUTE`) for RESOLVE to show and never compare, and lands a
-reference reading on a record by any (`read_fields.rs::record_read`). No name is split.
+reference reading on a record by any (`read_fields.rs::record_read`). No name is split. Who asserts a statement is
+likewise a typed fact on every claim, never a condition of writing it (2026-10-16, note 14546b4d: readers dropped
+narrated and unnamed-voice statements, a third of their drop lines on a novel): `said_by` is a particular, the
+document's own words for one it does not name, or the document's own voice; and a kind that declares grades gets
+one of them (`window_voice.rs`).
 
 Code keeps the contract: every declared field answered or unknown with a reason; a closed value one of its declared
 values; a reference a record the document's fields name, a particular's label, or words the document holds
 (`window_refs.rs`); each field's evidence in the claim's own document; a claim whose words are not in its document
-refused by validation. A malformed value costs the particular or claim holding it, counted, never the window
+refused by validation; a voice words the document holds, else dropped with its claim kept (`speaker_in_body`), kept
+on the claim (`SAID_BY_ATTRIBUTE`, shown by its row) and bound at build only to a sourced record (`attributed_to`);
+a grade one of its kind's, by the general extractor's rule (`validated_choice`). A malformed value costs the
+particular or claim holding it, counted, never the window
 (`window_answer.rs`). A particular no claim is about reaches RESOLVE as a statement of its own, a claim of no kind
 citing the line that names it, so the document is a member of its record. A state or relation whose holder RESOLVE
 decides is read as a statement about it (2026-10-15): a state carries its value, a field named for the state type,
