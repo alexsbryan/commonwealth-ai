@@ -118,6 +118,7 @@ impl MeshKnowledgeSource for MeshKnowledgeClient {
             limit: Some(limit as u32),
             documents: Vec::new(),
             granularity: oicp_types::Granularity::Passage,
+            priority: None,
         };
         let url = format!("{}/v1/knowledge/search", self.base_url);
         let response = match self.http.post(&url).json(&body).send().await {

@@ -27,7 +27,9 @@ sizes an inline library before it sends one (§2.12), and a span says
 spoken in (§2.14). Verify can find a claim's candidates **by meaning**,
 name its specifics by kind, and say which figure a source states otherwise
 (§2.15). For an install that allows it, a document's DOI or ISBN fills in
-its **record**, under what the recipe declared (§2.16).
+its **record**, under what the recipe declared (§2.16). A request can say
+who waits on it, so a person's typing is **served first** over a client's
+background work (§2.17).
 
 As in v0.5, everything v0.6 adds is a serde-defaulted field, an optional
 endpoint, or a feature string, and **feature presence, not the version
@@ -52,6 +54,7 @@ string, gates behaviour**. The types are in
 | `evidence:verify_sentences` | verify's candidates are §2.11's sentences, each claim names its specifics by kind, the fast tier's literal miss is a hint, and a contradicted passage names what differs (§2.15) | `evidence:verify`, `knowledge:sentences` |
 | `ingest:lookups` | for an install that allows it, a document's identifiers are looked up and its record merged under its declared metadata, listed on progress and on its hits (§2.16) | `ingest:documents`, `ingest:recipe` |
 | `ingest:transcripts` | a recipe `[[document]]` takes `format = "transcript"`, read by turn, each turn's start and speaker the locator of its spans (§2.14) | `knowledge:locator`, `ingest:recipe` |
+| `knowledge:priority` | knowledge search, and verify where offered, take `priority`; while an `interactive` request's model work is in flight a `background` request starts none (§2.17) | none |
 
 ```rust
 EvidenceEndpoints {
@@ -687,6 +690,45 @@ The reference host does not advertise `ingest:lookups` yet. When it does,
 its data file maps `DOI` to Crossref and `ISBN` to Open Library, and its
 records keep CSL-JSON field names as the resolvers return them.
 
+### 2.17 The writer's request first
+
+A client that checks a draft while its writer types sends the host two kinds
+of work at once: searches a person waits on, and checks nobody is watching.
+On a host whose models share one accelerator, the checks' model work slows
+every search the writer makes. A request can say which it is.
+
+```
+KnowledgeSearchRequest { …, priority: Option<RequestPriority> }   // never written when absent
+VerifyRequest          { …, priority: Option<RequestPriority> }   // §2.6; never written when absent
+RequestPriority = "interactive" | "background"
+```
+
+- **Who waits.** `interactive`: a person waits on the answer as they type.
+  `background`: the client runs it on its own schedule, such as a draft's
+  checks. A request without `priority` is neither: it is served as before
+  this section, neither waiting nor waited for.
+- **The writer's first.** A request's model work is what it asks of the
+  host's models: the query's embedding, a verify's embeddings and its
+  checker's completions. While an `interactive` request's model work is in
+  flight, a `background` request starts none: each of its steps waits until
+  no interactive model work is in flight, then starts. Work already started
+  finishes; nothing is preempted.
+- **Bounded.** A background step waits at most the host's hold ceiling,
+  then starts, so interactive requests in a row cannot starve it. The
+  reference host's ceiling is 2 s.
+- **When, never what.** The same request with either priority, or none, is
+  answered the same; only when its model work starts differs.
+- **Refused, never defaulted.** A value outside the set is refused (`400`
+  or `422`), never read as absent.
+- **Seen.** The host says at debug, for each background step that waited,
+  how long and behind how many interactive steps, and when the ceiling sent
+  it on.
+
+The reference host does not advertise `knowledge:priority` yet. When it
+does, it holds background steps at its embedding slot and at the admission
+of its generation slots, the two places its search and verify start model
+work.
+
 ## 6. Conformance (additions)
 
 | check | holds | red against |
@@ -703,6 +745,7 @@ records keep CSL-JSON field names as the resolvers return them.
 | `evidence.verify_sentences` | installs its own library (`fixture/claims.json`, a ledger of figure sentences) and verifies five units at each served tier: every specific is an exact range of the unit inside its claim; each listed figure, date or quantity is covered, a parenthesised one too; nothing inside `(Okafor 2019)` or `(page 14)` is a specific; the fast tier never says `supported` or `contradicted` and says `unsupported` only with no evidence; a unit restating the library's figure in another form is `abstained` at `fast` and `supported` at `checker`; another figure is `contradicted`, naming the pair, each side read back; a concept the library lacks is `unsupported` with no evidence. A checker that answers `could_not_judge` is could-not-judge | a claim settled from the fast tier's literal miss; a citation's year made a specific; a figure inside parentheses left out; a contradiction that names no differing specific |
 | `ingest.lookups` | installs its own library (`fixture/records.json`: a document declaring a title and a DOI that resolves, one declaring a DOI that does not, one declaring none) allowing lookups, and again as another corpus not allowing them; reads each record off progress: every field has an origin, every declared field kept as `declared`, the resolving DOI `resolved`, the other `unresolved` with nothing taken, the undeclared document no looked-up field; every lookup of the second install `not_allowed` with nothing taken; with `knowledge:document`, a hit carries the record progress lists. A resolver `unreachable` is could-not-judge | a field invented for an identifier that did not resolve; a declared title overwritten by the looked-up one; a lookup sent for an install that did not allow it |
 | `ingest.transcript` | installs its own library (`fixture/transcripts.json`: a paragraph transcript with three header shapes and an opening, Whisper's JSON with a sentence across segments, and a declared transcript in neither shape) and aligns each listed quotation verbatim; each span's `locator` is its turn's start and speaker, a Whisper segment's with none; with `ingest:documents`, the one in neither shape is listed `failed: not a transcript` and the others `ready`. Needs `evidence:align`, could-not-judge without | a header line read into the turn before it (the turn given the previous speaker); a speaker invented for a Whisper segment; a document in neither shape stored as plain text |
+| `knowledge.priority` | each fixture signature searched with `priority: interactive`, with `background` and with none returns the same hits in the same order; with `evidence:verify`, the fixture unit verified at the first served tier with each priority returns the same verdicts; a priority outside the set is `400` or `422` | a host that answers differently by priority; a host that reads an unknown priority as absent |
 
 `manifest.features` checks §2.1's co-occurrence: `evidence:verify` iff
 `verify_endpoint`, with a non-empty `verify_tiers`, and never without
@@ -716,7 +759,7 @@ never without `knowledge:sentences`; `knowledge:locator` never
 without `knowledge:range`; `ingest:transcripts` never without
 `knowledge:locator` and `ingest:recipe`; `evidence:verify_sentences` never
 without `evidence:verify` and `knowledge:sentences`; `ingest:lookups` never
-without `ingest:documents` and `ingest:recipe`.
+without `ingest:documents` and `ingest:recipe`; `knowledge:priority` never without a knowledge plane.
 
 ## 7. Backward compatibility
 
@@ -744,6 +787,10 @@ without `ingest:documents` and `ingest:recipe`.
   when absent, so a v0.5 install request and a v0.5 document read and write
   back unchanged; a host without `ingest:lookups` ignores the allowance
   and sends no lookup.
+- `priority` is never written when absent, so a v0.5 search or a §2.6
+  verify request reads and writes back unchanged. A client sends it only
+  to a host advertising `knowledge:priority`; a host without it may refuse
+  the field or ignore it, serving the request as one without.
 - A client sends `format = "transcript"` only to a host advertising
   `ingest:transcripts`; a host without it may refuse the recipe or read the
   document as plain text, its spans then carrying no turn.

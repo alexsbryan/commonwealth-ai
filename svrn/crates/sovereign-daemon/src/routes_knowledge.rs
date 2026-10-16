@@ -546,6 +546,7 @@ async fn fanout_one_peer(
         limit: Some(limit),
         documents,
         granularity: oicp_types::Granularity::Passage,
+        priority: None,
     };
     // Hex-encode the requester id for the `X-Node-Id` header.
     // Matches the format `sovereign_contracts::principal::claimed_node_id`

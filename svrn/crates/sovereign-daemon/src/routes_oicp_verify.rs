@@ -139,6 +139,7 @@ impl Retrieval<'_> {
             limit: Some(CANDIDATES_K as u32),
             documents: Vec::new(),
             granularity: Granularity::Sentence,
+            priority: None,
         };
         let reply = crate::routes_knowledge_sentences::sentences(
             self.state.clone(),

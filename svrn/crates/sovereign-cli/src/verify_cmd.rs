@@ -79,6 +79,7 @@ pub async fn run(args: &[String]) -> i32 {
             corpora: opts.corpora.clone(),
             tier,
             span_context: None,
+            priority: None,
         };
         let reply = match post(&http, &format!("{base}{endpoint}"), &req).await {
             Ok(r) => r,

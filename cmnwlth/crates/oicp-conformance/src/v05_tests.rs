@@ -23,8 +23,8 @@ pub(crate) struct Bench {
     pub(crate) host: Host,
     pub(crate) manifest: ProviderManifest,
     args: Args,
-    lib: Library,
-    fixture: FixtureState,
+    pub(crate) lib: Library,
+    pub(crate) fixture: FixtureState,
 }
 
 pub(crate) async fn bench(breaks: Breaks) -> Bench {
