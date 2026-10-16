@@ -60,7 +60,7 @@ pub(crate) struct PlanInput {
     /// load's refusal carry identical numbers. `None` when the projection was
     /// unavailable (no backend in this process, or it failed); the fit is then
     /// weights-only, exactly like the live gate's own fallback.
-    pub(crate) overheads: Option<sovereign_inference::embedded::PlanOverheads>,
+    pub(crate) overheads: Option<sovereign_inference::rpc_warm_cache::PlanOverheads>,
 }
 
 /// What `mesh plan` can honestly say about speed.
@@ -117,7 +117,7 @@ pub(crate) struct DeviceRow {
     /// gate runs. That is the whole point: this command exists to preview a
     /// load, and a preview computing its own answer is a preview that can
     /// disagree with the thing it previews. It did, until 2026-07-28.
-    pub(crate) fit: sovereign_inference::embedded::ShardFit,
+    pub(crate) fit: sovereign_inference::rpc_warm_cache::ShardFit,
 }
 
 impl DeviceRow {
@@ -309,7 +309,7 @@ pub(crate) fn build_report(
     peers: &[crate::mesh_measurements::ForeignRecord],
     current_build: &str,
 ) -> PlanReport {
-    use sovereign_inference::embedded as inf;
+    use sovereign_inference::rpc_warm_cache as inf;
 
     let PlanInput {
         model_name,

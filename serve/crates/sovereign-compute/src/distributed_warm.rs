@@ -12,7 +12,8 @@
 use kernel_types::NodeId;
 use mesh_reach::{PeerEndpoint, TrafficClass};
 use serde::{Deserialize, Serialize};
-use sovereign_inference::embedded::{build_manifest, tensor_device, NodeShard, RpcWarmPlan};
+use sovereign_inference::embedded::RpcWarmPlan;
+use sovereign_inference::rpc_warm_cache::{build_manifest, tensor_device, NodeShard};
 use sovereign_serving_host::rpc_discovery::MeshPorts;
 
 #[cfg(test)]

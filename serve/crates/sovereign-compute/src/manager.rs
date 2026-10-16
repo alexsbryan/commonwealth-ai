@@ -1449,7 +1449,7 @@ pub fn build_compute_layer_with_distributed(
 #[cfg(test)]
 mod distributed_slot_tests {
     use super::*;
-    use sovereign_inference::embedded::NodeShard;
+    use sovereign_inference::rpc_warm_cache::NodeShard;
 
     fn spec(dir: &Path) -> DistributedPrimarySpec {
         DistributedPrimarySpec {

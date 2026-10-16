@@ -232,7 +232,7 @@ async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize, Option<Stri
 /// "could this mesh ever run this model" versus "would a load right now succeed".
 /// Picking one on the operator's behalf hid a real cut mismatch for weeks.
 pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
-    use sovereign_inference::embedded as inf;
+    use sovereign_inference::rpc_warm_cache as inf;
     // Kept as the raw spec, not a PathBuf: it may be `hf:<owner>/<repo>/<variant>`,
     // which `remote_gguf::resolve` turns into header-only stand-ins below.
     let mut model_spec: Option<String> = None;
@@ -407,7 +407,7 @@ pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
         let named_split = model
             .file_name()
             .and_then(|n| n.to_str())
-            .and_then(sovereign_inference::embedded::split_shard_names)
+            .and_then(sovereign_inference::rpc_warm_cache::split_shard_names)
             .map(|v| v.len());
         match named_split {
             Some(want) if resolved.shards < want => {

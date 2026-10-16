@@ -7,7 +7,7 @@
 
 use std::path::PathBuf;
 
-use sovereign_inference::embedded::{default_cache_dir, warm_cache_from_gguf};
+use sovereign_inference::rpc_warm_cache::{default_cache_dir, warm_cache_from_gguf};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();

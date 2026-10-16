@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use sovereign_contracts::rpc_warm::{RpcShardWarmer, WarmReach};
-use sovereign_inference::embedded::{cache_file_name, warm_cache_for_device, Fnv1a};
+use sovereign_inference::rpc_warm_cache::{cache_file_name, warm_cache_for_device, Fnv1a};
 
 use super::{RpcWarmShardRequest, RpcWarmShardResponse, RpcWarmSource, TensorRange};
 
@@ -23,7 +23,8 @@ use super::{RpcWarmShardRequest, RpcWarmShardResponse, RpcWarmSource, TensorRang
 /// is a standing invitation to disagree. This wrapper only adds the
 /// non-split fallback the fetch path wants.
 fn split_sibling_names(name: &str) -> Vec<String> {
-    sovereign_inference::embedded::split_shard_names(name).unwrap_or_else(|| vec![name.to_string()])
+    sovereign_inference::rpc_warm_cache::split_shard_names(name)
+        .unwrap_or_else(|| vec![name.to_string()])
 }
 
 /// The cache dir the in-process RPC worker actually reads, so the bytes we
@@ -38,7 +39,7 @@ fn split_sibling_names(name: &str) -> Vec<String> {
 /// apart again (ARCH §10.6). What stays here is the REFUSAL — the message an
 /// operator reads — because only this caller has a host to fall back for.
 fn worker_cache_dir() -> Result<PathBuf, String> {
-    sovereign_inference::embedded::default_cache_dir().ok_or_else(|| {
+    sovereign_inference::rpc_warm_cache::default_cache_dir().ok_or_else(|| {
         "RPC tensor cache is disabled (SOVEREIGN_RPC_CACHE_DIR=off) — \
          cannot auto-warm; the host will load local-only"
             .to_string()

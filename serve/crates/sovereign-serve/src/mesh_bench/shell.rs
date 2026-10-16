@@ -515,7 +515,7 @@ async fn run_bench(args: BenchArgs) -> i32 {
 /// Read a GGUF's block count and tensor table — the header parse both the
 /// fingerprint and `mesh plan` are built on.
 fn read_model_header(path: &Path) -> Result<(u32, Vec<(String, Option<u32>, u64)>), String> {
-    use sovereign_inference::embedded as inf;
+    use sovereign_inference::rpc_warm_cache as inf;
     let n_layer = match inf::gguf_block_count(path) {
         Ok(Some(n)) if n > 0 => n,
         Ok(_) => {

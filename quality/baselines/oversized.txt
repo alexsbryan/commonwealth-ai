@@ -55,8 +55,7 @@
 4406	serve/crates/sovereign-inference/src/embedded/engine.rs
 1319	serve/crates/sovereign-inference/src/embedded/gates.rs
 6146	serve/crates/sovereign-inference/src/embedded/model_slot.rs
-3512	serve/crates/sovereign-inference/src/embedded/rpc_distribution.rs
-1952	serve/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs
+3367	serve/crates/sovereign-inference/src/embedded/rpc_distribution.rs
 1545	serve/crates/sovereign-scheduler/src/decision_log.rs
 1351	serve/crates/sovereign-scheduler/src/scheduler_core.rs
 1578	serve/crates/sovereign-serving-host/src/inference_adapter.rs
@@ -68,7 +67,7 @@
 2328	shared/crates/corpus-index/src/index/mod.rs
 1245	shared/crates/corpus-index/src/index/search.rs
 1568	shared/crates/kernel-types/src/quality/instruments.rs
-2426	shared/crates/oicp-client/src/lib.rs
+2422	shared/crates/oicp-client/src/lib.rs
 2071	shared/crates/sovereign-contracts/src/setup_config.rs
 1540	shared/crates/sovereign-contracts/src/skills.rs
 2055	shared/crates/sovereign-contracts/src/traits.rs

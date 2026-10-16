@@ -24,6 +24,7 @@ pub mod remote {
     pub use oicp_client::*;
 }
 pub mod reranker_standalone;
+pub mod rpc_warm_cache;
 pub mod rpc_worker_main;
 pub mod served_kind;
 pub mod url_constraint;
@@ -31,6 +32,8 @@ pub mod vocab_cache;
 
 #[cfg(test)]
 mod decode_allowlist_parity_tests;
+#[cfg(test)]
+mod ggml_type_size_golden_tests;
 #[cfg(test)]
 mod llg_parity_corpus_tests;
 #[cfg(test)]
