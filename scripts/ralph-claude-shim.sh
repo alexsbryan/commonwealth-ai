@@ -82,6 +82,14 @@ export RALPH_SESSION_CWD="$PWD"
 # lane sessions on the Halo (svrn-docs EUPHEMIA_AFTER_PILOT.md, "Reach").
 # Lessons and other sessions' claims still reach it.
 export EUPHEMIA_NUDGE=off
+# A worker IS asked, once, at its first stop, whether it learned something a
+# later session would rediscover: the 119 silent lane sessions were never
+# asked and could not record, so whether an asked one answers is untested
+# (svrn-docs EUTROPIA_WITH_EUPHEMIA_WEEK1.md, change 2). A probe is not a
+# session: eutropia names the role it starts (EUTROPIA_ROLE), and a probe
+# gets no brief, as ralph's probe_model sets by hand (320a3ea66).
+export EUPHEMIA_CAPTURE=ask
+[ "${EUTROPIA_ROLE:-}" = probe ] && export EUPHEMIA_BRIEF=off
 # RALPH_PERMISSION_BRIDGE=0 falls back to refusing the gray zone outright.
 #
 # MCP is pinned: the WORKDIR's own .mcp.json plus the bridge, and nothing
