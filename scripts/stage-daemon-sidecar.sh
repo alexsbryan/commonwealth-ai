@@ -146,6 +146,38 @@ stage() {
 # (`daemon run`, setup's probe) is the build the GPU backend is chosen on.
 stage sovereign-cli-daemon "$SIDECAR_NAME"
 stage sovereign-stock "$LOADER_NAME" "${SOVEREIGN_SIDECAR_FEATURES:-}"
+
+# The llama-server the daemon runs on `kind = "llama-server"` (ENGINE_SWAP_PLAN
+# D3): every binary PIN.toml names, built by build.sh in the backend this
+# target ships, staged per triple like the two above. The manifest is not an
+# executable, so it is staged untripled for `bundle.resources`, and
+# `daemon_binary::stable_daemon_binary` installs it beside the servers.
+# build.sh builds Release whatever $PROFILE says, and has no Windows mode.
+SERVER_SRC="$REPO_ROOT/serve/crates/sovereign-compute/llama-server"
+case "$TARGET" in
+    aarch64-apple-darwin) SERVER_BACKEND=metal SERVER_ARCH=arm64 ;;
+    x86_64-apple-darwin)  SERVER_BACKEND=cpu   SERVER_ARCH=x86_64 ;;
+    *-linux-*)            SERVER_BACKEND=vulkan SERVER_ARCH= ;;
+    *) echo "stage-daemon-sidecar: build.sh has no llama-server build for $TARGET — refusing to stage a bundle without the server" >&2
+       exit 1 ;;
+esac
+SERVER_OUT="$TARGET_DIR/llama-server-stage/$TARGET"
+echo "stage-daemon-sidecar: llama-server backend=$SERVER_BACKEND out=$SERVER_OUT"
+if ! env ${SERVER_ARCH:+CMAKE_OSX_ARCHITECTURES=$SERVER_ARCH} \
+        sh "$SERVER_SRC/build.sh" --backend "$SERVER_BACKEND" --install-dir "$SERVER_OUT"; then
+    echo "stage-daemon-sidecar: llama-server build FAILED — refusing to stage a stale or absent server" >&2
+    exit 1
+fi
+for bin in $(sed -n 's/^binaries *= *\[\(.*\)\]/\1/p' "$SERVER_SRC/PIN.toml" | tr -d '",'); do
+    dest="$DESKTOP_BIN_DIR/${bin}-${TARGET}"
+    rm -f "$dest"
+    cp "$SERVER_OUT/$bin" "$dest" || { echo "stage-daemon-sidecar: cp $bin failed" >&2; exit 1; }
+    echo "stage-daemon-sidecar: staged $(basename "$dest") ($(wc -c < "$dest" | tr -d ' ') bytes)"
+done
+rm -f "$DESKTOP_BIN_DIR/llama-server.manifest.toml"
+cp "$SERVER_OUT/llama-server.manifest.toml" "$DESKTOP_BIN_DIR/" \
+    || { echo "stage-daemon-sidecar: cp the manifest failed" >&2; exit 1; }
+echo "stage-daemon-sidecar: staged llama-server.manifest.toml"
 echo
 echo "Next:"
 echo "  cd clients/desktop"

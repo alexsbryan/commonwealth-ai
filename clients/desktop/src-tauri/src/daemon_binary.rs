@@ -46,6 +46,25 @@ pub(crate) const SIDECAR_BINARY: &str = "sovereign-cli-daemon";
 /// `daemon run` could exec.
 pub(crate) const LOADER_SIDECAR: &str = "sovereign-stock";
 
+/// The llama-server build a `kind = "llama-server"` daemon runs, found beside
+/// the daemon's own executable and checked against the manifest beside it
+/// (`sovereign_compute::llama_router::build_pin::verify`). These are
+/// `PIN.toml`'s `binaries`, each a further `externalBin`; the packaging test
+/// holds the three lists equal.
+pub(crate) const SERVER_SIDECARS: [&str; 2] = ["llama-server", "ggml-rpc-server"];
+
+/// `build_pin::MANIFEST`. Not an executable, so it ships as a resource under
+/// `binaries/` and gets its place beside the servers only at the install.
+pub(crate) const SERVER_MANIFEST: &str = "llama-server.manifest.toml";
+
+/// The bundle's resource directory, which only the Tauri app can answer;
+/// `main`'s setup publishes it before anything resolves a daemon.
+static RESOURCE_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+pub(crate) fn publish_resource_dir(dir: PathBuf) {
+    let _ = RESOURCE_DIR.set(dir);
+}
+
 /// Names that mean "a binary that understands `daemon run`", in preference
 /// order within any one directory.
 ///
@@ -134,19 +153,7 @@ pub(crate) fn stable_daemon_binary() -> Option<PathBuf> {
         return Some(resolved);
     }
     let dir = sovereign_contracts::rebrand::svrnmesh_root().join("bin");
-    // The loader first: a stable sidecar with no loader beside it would find
-    // nothing to exec. Absent from the bundle, it is reported, and the
-    // sidecar's own refusal names it when `daemon run` is asked for.
-    let loader =
-        resolved.with_file_name(format!("{LOADER_SIDECAR}{}", std::env::consts::EXE_SUFFIX));
-    if let Err(reason) = install_to(&loader, &dir) {
-        tracing::warn!(
-            loader = %loader.display(),
-            dir = %dir.display(),
-            %reason,
-            "daemon-binary: could not install the loader beside the sidecar's stable copy"
-        );
-    }
+    install_siblings(&resolved, RESOURCE_DIR.get().map(PathBuf::as_path), &dir);
     match install_to(&resolved, &dir) {
         Ok(stable) => {
             tracing::info!(
@@ -169,6 +176,43 @@ pub(crate) fn stable_daemon_binary() -> Option<PathBuf> {
     }
 }
 
+/// Install what the sidecar needs beside it into `dir`, before the sidecar
+/// itself: the loader it execs, then the servers, then the manifest last, so
+/// the manifest never names a binary not yet in place (as `build.sh` writes
+/// them). Each one absent from the bundle is reported and the rest go on:
+/// the loader's absence is named by the sidecar's refusal of `daemon run`,
+/// a server's or the manifest's by the daemon's refusal of
+/// `kind = "llama-server"`, and the default engine needs neither.
+fn install_siblings(sidecar: &Path, resource_dir: Option<&Path>, dir: &Path) {
+    let suffix = std::env::consts::EXE_SUFFIX;
+    let mut wanted: Vec<Option<PathBuf>> = std::iter::once(LOADER_SIDECAR)
+        .chain(SERVER_SIDECARS)
+        .map(|name| Some(sidecar.with_file_name(format!("{name}{suffix}"))))
+        .collect();
+    wanted.push(resource_dir.map(|r| r.join("binaries").join(SERVER_MANIFEST)));
+    for src in wanted {
+        let Some(src) = src else {
+            tracing::warn!(
+                dir = %dir.display(),
+                "daemon-binary: no resource directory was published, so {SERVER_MANIFEST} \
+                 is not installed and kind = \"llama-server\" will refuse the server"
+            );
+            continue;
+        };
+        match install_to(&src, dir) {
+            Ok(to) => {
+                tracing::debug!(from = %src.display(), to = %to.display(), "daemon-binary: installed beside the sidecar")
+            }
+            Err(reason) => tracing::warn!(
+                from = %src.display(),
+                dir = %dir.display(),
+                %reason,
+                "daemon-binary: could not install beside the sidecar's stable copy"
+            ),
+        }
+    }
+}
+
 /// Is this the self-contained daemon this app SHIPS — the only thing that may
 /// be moved to a stable path?
 ///
@@ -180,7 +224,7 @@ pub(crate) fn stable_daemon_binary() -> Option<PathBuf> {
 /// — which is exactly what a dev tree would hit, where the desktop's
 /// `current_exe()` is `target/debug/` and `sovereign-cli` is sitting right
 /// there next to it. Only `SIDECAR_BINARY` is portable: it moves together
-/// with its one sibling, the loader ([`LOADER_SIDECAR`]), which
+/// with its siblings, the loader ([`LOADER_SIDECAR`]) and the servers, which
 /// [`stable_daemon_binary`] installs beside it.
 ///
 /// The first condition — inside the bundle — is what stops the install
@@ -458,6 +502,44 @@ mod tests {
         );
     }
 
+    #[test]
+    fn the_server_and_its_manifest_land_beside_the_stable_sidecar() {
+        // The layout `build_pin::verify` checks: the router, every binary the
+        // manifest names, and the manifest, in one directory with the daemon.
+        let bundle = tmp("siblings-bundle");
+        let resources = tmp("siblings-resources");
+        let stable = tmp("siblings-stable");
+        let sidecar = touch(&bundle, SIDECAR_BINARY);
+        for name in std::iter::once(LOADER_SIDECAR).chain(SERVER_SIDECARS) {
+            touch(&bundle, name);
+        }
+        touch(&resources.join("binaries"), SERVER_MANIFEST);
+        install_siblings(&sidecar, Some(&resources), &stable);
+        for name in std::iter::once(LOADER_SIDECAR)
+            .chain(SERVER_SIDECARS)
+            .chain([SERVER_MANIFEST])
+        {
+            assert!(
+                stable.join(name).is_file(),
+                "{name} is not beside the stable sidecar"
+            );
+        }
+    }
+
+    #[test]
+    fn a_server_absent_from_the_bundle_does_not_stop_the_rest() {
+        // A bundle without the server still installs its loader: the default
+        // engine needs no server, and kind = "llama-server" names the absence.
+        let bundle = tmp("no-server-bundle");
+        let stable = tmp("no-server-stable");
+        let sidecar = touch(&bundle, SIDECAR_BINARY);
+        touch(&bundle, LOADER_SIDECAR);
+        install_siblings(&sidecar, None, &stable);
+        assert!(stable.join(LOADER_SIDECAR).is_file());
+        assert!(!stable.join(SERVER_SIDECARS[0]).exists());
+        assert!(!stable.join(SERVER_MANIFEST).exists());
+    }
+
     /// The Rust name and the packaging name are one fact spelled in two
     /// files. Nothing at runtime would report their disagreement — the app
     /// would resolve no binary and silently lose the ability to bring a
@@ -489,6 +571,52 @@ mod tests {
                      find nothing beside the app and the bring-up would be silently lost"
                 );
             }
+        }
+
+        /// `PIN.toml`'s `binaries` and `build_pin::MANIFEST`, which this
+        /// crate does not link, held equal to what the release config ships.
+        #[test]
+        fn the_release_config_ships_the_pinned_server_and_its_manifest() {
+            let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .ancestors()
+                .nth(3)
+                .expect("clients/desktop/src-tauri sits three below the repo root");
+            let server = repo.join("serve/crates/sovereign-compute");
+            let pin: toml::Value = toml::from_str(
+                &std::fs::read_to_string(server.join("llama-server/PIN.toml")).unwrap(),
+            )
+            .unwrap();
+            let pinned: Vec<&str> = pin["binaries"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter_map(|b| b.as_str())
+                .collect();
+            assert_eq!(pinned, SERVER_SIDECARS, "PIN.toml ships other binaries");
+            let build_pin =
+                std::fs::read_to_string(server.join("src/llama_router/build_pin.rs")).unwrap();
+            assert!(
+                build_pin.contains(&format!(
+                    "pub const MANIFEST: &str = \"{SERVER_MANIFEST}\";"
+                )),
+                "build_pin::MANIFEST is not {SERVER_MANIFEST}"
+            );
+
+            let cfg = release_config();
+            let bins = cfg["bundle"]["externalBin"].as_array().unwrap();
+            for name in SERVER_SIDECARS {
+                let want = format!("binaries/{name}");
+                assert!(
+                    bins.iter().any(|b| b.as_str() == Some(want.as_str())),
+                    "externalBin {bins:?} does not stage {want}"
+                );
+            }
+            let want = format!("binaries/{SERVER_MANIFEST}");
+            let resources = cfg["bundle"]["resources"].as_array().unwrap();
+            assert!(
+                resources.iter().any(|r| r.as_str() == Some(want.as_str())),
+                "resources {resources:?} do not ship {want}"
+            );
         }
 
         #[test]

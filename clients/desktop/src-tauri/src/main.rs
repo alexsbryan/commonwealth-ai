@@ -335,6 +335,12 @@ fn main() -> ExitCode {
             // any daemon that answers, whoever started it, so a host reached
             // here is a host it attaches to — which is why svt-1 changes no
             // line of `bootstrap`.
+            // The server's manifest ships as a resource; the install beside
+            // the sidecar's stable copy reads it from here.
+            match app.path().resource_dir() {
+                Ok(dir) => daemon_binary::publish_resource_dir(dir),
+                Err(e) => tracing::warn!(error = %e, "daemon-binary: no resource directory"),
+            }
             tauri::async_runtime::block_on(serving_host::ensure_reachable());
 
             let bootstrap_mode = tauri::async_runtime::block_on(bootstrap::detect());
