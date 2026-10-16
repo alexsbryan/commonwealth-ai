@@ -33,6 +33,9 @@ pub mod synthesize;
 use audit::{assess_claim, split_claims, ClaimAudit};
 use budget::{SpendDecider, FAMILY_WEB_FETCH, FAMILY_WEB_SEARCH, KEY_FETCH_PAGES};
 use containment::{strip_citation_spans, ContainmentConfig};
+// The word→digit table (order deep-research-t6d) is the runtime's one
+// number-word reader, shared with the verify specifics finder.
+use crate::runtime::number_words::{is_number_word, magnitude_of_digits, number_phrase};
 use fetch::fetch_round;
 use icd::{
     AcquisitionPlan, AlignmentRecord, BudgetTotals, Charter, CharterValues, CustodyPolicy, Draft,
@@ -730,67 +733,6 @@ fn figure_runs(s: &str) -> Vec<FigureRun> {
     out
 }
 
-/// One entry in the word→digit table (order deep-research-t6d): a
-/// spelled number word's digit value, and whether it is a scale word
-/// (hundred, thousand — multiplicative).
-struct NumberWord {
-    value: u64,
-    scale: bool,
-}
-
-/// The word→digit inversion (order deep-research-t6d, pre-registered):
-/// every word in the adversarial generator's NUMBER_WORDS/ORDINAL_WORDS
-/// (sovereign-eval/src/flywheel/generators/adversarial.rs:588) maps to
-/// its digit value — closed with the units/teens/tens ranges the
-/// generator's words imply: the battery's frozen shapes carry
-/// "seventeen" and "ninety-five", which the literal arrays lack.
-/// Ordinals share the cardinals' values ("twentieth" → 20). Matched
-/// case-insensitively, whole-word (the generator's find_word_ci
-/// convention). Deterministic, no model.
-fn number_word_value(w: &str) -> Option<NumberWord> {
-    let (value, scale) = match w.to_ascii_lowercase().as_str() {
-        "one" | "first" => (1, false),
-        "two" | "second" => (2, false),
-        "three" | "third" => (3, false),
-        "four" | "fourth" => (4, false),
-        "five" | "fifth" => (5, false),
-        "six" | "sixth" => (6, false),
-        "seven" | "seventh" => (7, false),
-        "eight" | "eighth" => (8, false),
-        "nine" | "ninth" => (9, false),
-        "ten" | "tenth" => (10, false),
-        "eleven" | "eleventh" => (11, false),
-        "twelve" | "twelfth" => (12, false),
-        "thirteen" | "thirteenth" => (13, false),
-        "fourteen" | "fourteenth" => (14, false),
-        "fifteen" | "fifteenth" => (15, false),
-        "sixteen" | "sixteenth" => (16, false),
-        "seventeen" | "seventeenth" => (17, false),
-        "eighteen" | "eighteenth" => (18, false),
-        "nineteen" | "nineteenth" => (19, false),
-        "twenty" | "twentieth" => (20, false),
-        "thirty" | "thirtieth" => (30, false),
-        "forty" | "fortieth" => (40, false),
-        "fifty" | "fiftieth" => (50, false),
-        "sixty" | "sixtieth" => (60, false),
-        "seventy" | "seventieth" => (70, false),
-        "eighty" | "eightieth" => (80, false),
-        "ninety" | "ninetieth" => (90, false),
-        "hundred" => (100, true),
-        "thousand" => (1000, true),
-        _ => return None,
-    };
-    Some(NumberWord { value, scale })
-}
-
-/// Is this word a number word or a hyphen-compound of number words
-/// ("fifty-eight", "twenty-first")? A hyphen-compound counts only if
-/// EVERY hyphen-separated part is a number word — "state-of-the-art"
-/// is not a figure.
-fn is_number_word(w: &str) -> bool {
-    w.split('-').all(|part| number_word_value(part).is_some())
-}
-
 /// The word-number class decoder (order deep-research-t6d,
 /// pre-registered): replace spelled-out figures with their digit forms
 /// so the digit-run extractor reads word forms and digit forms
@@ -873,7 +815,15 @@ fn normalize_word_figures(s: &str) -> String {
             }
         }
 
-        if is_number_word(w) {
+        let run: Vec<&str> = words[i..]
+            .iter()
+            .map(|(w, _, _)| *w)
+            .take_while(|w| is_number_word(w) || w.eq_ignore_ascii_case("and"))
+            .collect();
+        // A scale word after digits is their magnitude ("$32 billion"),
+        // carried as prose like any word the run does not read.
+        let magnitude = magnitude_of_digits(i.checked_sub(1).map(|k| words[k].0), w);
+        if let Some(phrase) = number_phrase(&run).filter(|_| !magnitude) {
             // The maximal phrase run: consecutive number words with
             // optional "and" connectors. The word's own leading
             // separator stays (word forms glue to their prose exactly
@@ -882,35 +832,8 @@ fn normalize_word_figures(s: &str) -> String {
             // BETWEEN the absorbed words are consumed by advancing
             // the cursor past the run's last word ("one hundred"
             // never re-emits "hundred" as prose).
-            let mut j = i;
-            let mut parts: Vec<(u64, bool)> = Vec::new();
-            while j < words.len() {
-                let (nw, _, _) = words[j];
-                if is_number_word(nw) {
-                    for part in nw.split('-') {
-                        let nwv = number_word_value(part).expect("is_number_word checked");
-                        parts.push((nwv.value, nwv.scale));
-                    }
-                    j += 1;
-                } else if nw.eq_ignore_ascii_case("and") && !parts.is_empty() {
-                    j += 1; // connector — absorbed into the span
-                } else {
-                    break;
-                }
-            }
-            let mut total = 0u64;
-            let mut current = 0u64;
-            for (v, scale) in &parts {
-                if *scale {
-                    current = if current == 0 { 1 } else { current } * v;
-                    total += current;
-                    current = 0;
-                } else {
-                    current += v;
-                }
-            }
-            total += current;
-            out.push_str(&total.to_string());
+            let j = i + phrase.words;
+            out.push_str(&phrase.value.to_string());
             prev_figure = true;
             cursor = words[j - 1].2;
             i = j;

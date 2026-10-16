@@ -401,3 +401,84 @@ async fn sentence_search_is_asked_the_claim_without_its_citations() {
         log.lock().unwrap()
     );
 }
+
+/// A host holding two sentences of prose that write their figures in words
+/// (Smith, Wealth of Nations, I.1 and IV.7), indexed.
+async fn prose_host() -> (tempfile::TempDir, AppState, Fixture) {
+    let fx = Fixture {
+        shelf: Shelf {
+            corpus_id: "prose-figures".into(),
+            documents: vec![Doc {
+                name: "wealth-of-nations.txt".into(),
+                metadata: None,
+                text: format!("{PINS} {BRAZILS}"),
+            }],
+        },
+        claims: Vec::new(),
+    };
+    let tmp = tempfile::tempdir().unwrap();
+    let indexes = tmp.path().join("indexes");
+    std::fs::create_dir_all(&indexes).unwrap();
+    install(&indexes, &fx.shelf.corpus_id, &fx.shelf.documents, true).await;
+    let state = state_with_concepts(indexes).await;
+    sentences_indexed(&state, &fx.shelf.corpus_id).await;
+    (tmp, state, fx)
+}
+
+const PINS: &str = "Those ten persons, therefore, could make among them upwards of forty-eight thousand pins in a day.";
+const BRAZILS: &str = "It was more than a hundred years after the first settlement of the Brazils, before any silver, gold, or diamond mines were discovered there.";
+
+/// Failing inputs (live 2026-10-15, the daemon at :9741, `checker`, corpus
+/// zoracite-v1-pull-demo): "Ten workers in a small pin factory made 9,000
+/// pins a day between them." against the source's "forty-eight thousand" was
+/// `unsupported` with `differing: []`, and the claim restating the source's
+/// words was `abstained` at `class/no-specifics`. A figure written in words is
+/// a specific on either side, so the digits against the words come back
+/// `contradicted`, naming the pair, each side read back from its text.
+#[tokio::test]
+async fn a_source_figure_in_words_contradicts_a_claim_in_digits() {
+    let (_tmp, state, fx) = prose_host().await;
+    let ledger = &fx.shelf.documents[0].text;
+    for (unit, claim_figure, source_figure) in [
+        (
+            "Ten workers in a small pin factory made 9,000 pins a day between them.",
+            "9,000",
+            "forty-eight thousand",
+        ),
+        (
+            "Silver, gold or diamond mines were found in Brazil fewer than 50 years after its first settlement.",
+            "50",
+            "a hundred",
+        ),
+    ] {
+        let (c, r) = verify_one(&state, &fx, unit, "checker").await;
+        assert_eq!(c.verdict, VerifyVerdict::Contradicted, "{unit}: {r:?}");
+        let p = c
+            .evidence
+            .iter()
+            .find(|p| p.verdict == VerifyVerdict::Contradicted)
+            .unwrap_or_else(|| panic!("a contradicted sentence: {c:?}"));
+        let [d] = p.differing.as_slice() else {
+            panic!("one specific differs: {p:?}")
+        };
+        assert_eq!(
+            (d.claim.exact.as_str(), d.source.exact.as_str()),
+            (claim_figure, source_figure),
+            "{unit}"
+        );
+        assert_eq!((d.claim.kind, d.source.kind), (ClaimSpecificKind::Quantity, ClaimSpecificKind::Quantity));
+        assert_eq!(cp(unit, d.claim.start, d.claim.end), claim_figure);
+        assert_eq!(cp(ledger, d.source.start, d.source.end), source_figure);
+    }
+
+    let words =
+        "Ten workers in a small pin factory could make upwards of forty-eight thousand pins a day.";
+    let (c, r) = verify_one(&state, &fx, words, "checker").await;
+    assert_eq!(c.verdict, VerifyVerdict::Supported, "{r:?}");
+    assert!(
+        c.specifics
+            .iter()
+            .any(|s| s.exact == "forty-eight thousand" && s.kind == ClaimSpecificKind::Quantity),
+        "{c:?}"
+    );
+}

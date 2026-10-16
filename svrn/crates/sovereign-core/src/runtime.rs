@@ -59,6 +59,9 @@ pub(crate) use self::text_utils::{
 };
 
 pub(crate) mod text_utils;
+// Numbers written in words, read to their values: one reader for deep
+// research's figure tokens and the verify specifics finder.
+pub(crate) mod number_words;
 
 // Prompt constants/builders + retrieval budgets + refusal detection —
 // the pure policy layer, decomposed 2026-06-10 (see prompts.rs).
