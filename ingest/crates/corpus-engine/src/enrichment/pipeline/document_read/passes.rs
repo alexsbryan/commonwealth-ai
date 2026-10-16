@@ -59,7 +59,6 @@ pub async fn read(
 ) -> Result<String> {
     match super::reader() {
         super::Reader::Window => super::window::read(chapter, policies, classes, infer).await,
-        super::Reader::Waves => super::waves::read(chapter, policies, classes, infer).await,
         super::Reader::Passes => by_plan(chapter, policies, classes, infer).await,
     }
 }
@@ -659,7 +658,6 @@ pub fn read_fields(
 pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
     match super::reader() {
         super::Reader::Window => super::window::contract_value(policies),
-        super::Reader::Waves => super::waves::contract_value(policies),
         super::Reader::Passes => plan_contract_value(policies),
     }
 }

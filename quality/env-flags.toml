@@ -1128,7 +1128,7 @@ name = "SOVEREIGN_READER"
 cluster = "inference"
 default = "unset"
 status = "shipped"
-purpose = "Which reader reads declared documents; one decider, document_read::reader (a closed Reader). Unset or =window (the default since 2026-10-15, DEFAULTS_LEDGER): each chapter in one call (document_read/window.rs), and `enrich init` cuts the corpus into windows in clock order (sovereign-enrichment-build window_manifest.rs). =passes: the generated plan of small questions per document (document_read/passes.rs). =waves: the compiled reader (document_read/waves.rs), the declaration compiled into levels of closed questions, particulars first, each round its questions reasoned through (RESOLVE's bounded reason-then-choose) then read as one forced-choice wave off one document prefix. Any other value is warned and the window reader reads. Read per chapter (passes::read) and in the read contract's fingerprint, so cached reads of one reader are never served to another."
+purpose = "Which reader reads declared documents; one decider, document_read::reader (a closed Reader). Unset or =window (the default since 2026-10-15, DEFAULTS_LEDGER): each chapter in one call (document_read/window.rs), and `enrich init` cuts the corpus into windows in clock order (sovereign-enrichment-build window_manifest.rs). =passes: the generated plan of small questions per document (document_read/passes.rs). Any other value (=waves since the compiled reader was deleted, 2026-10-16) is warned and the window reader reads. Read per chapter (passes::read) and in the read contract's fingerprint, so cached reads of one reader are never served to another."
 [[flag]]
 name = "SOVEREIGN_RERANK_MODEL_PATH"
 cluster = "inference"

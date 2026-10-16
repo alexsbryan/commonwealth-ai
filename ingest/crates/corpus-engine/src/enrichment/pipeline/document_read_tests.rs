@@ -678,6 +678,7 @@ fn the_window_reader_reads_unless_another_is_named() {
     assert_eq!(reader_named(None), Reader::Window);
     assert_eq!(reader_named(Some("window")), Reader::Window);
     assert_eq!(reader_named(Some("passes")), Reader::Passes);
-    assert_eq!(reader_named(Some("waves")), Reader::Waves);
+    // The compiled waves reader was deleted (2026-10-16): its name is warned and the window reader reads.
+    assert_eq!(reader_named(Some("waves")), Reader::Window);
     assert_eq!(reader_named(Some("pases")), Reader::Window);
 }

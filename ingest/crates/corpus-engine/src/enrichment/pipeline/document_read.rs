@@ -24,10 +24,6 @@ mod projection;
 mod runner_support;
 mod schema;
 mod validation;
-mod waves;
-mod waves_forms;
-mod waves_jobs;
-mod waves_readings;
 mod window;
 
 pub use cache::{
@@ -57,12 +53,10 @@ pub enum Reader {
     Window,
     /// The generated plan of small questions per document (`passes.rs`).
     Passes,
-    /// The declaration compiled into levels of forced-choice waves (`waves.rs`).
-    Waves,
 }
 
 /// Which reader reads declared documents: the window reader, unless
-/// `SOVEREIGN_READER` names `passes` or `waves`. The one decider, read by
+/// `SOVEREIGN_READER` names `passes`. The one decider, read by
 /// `enrich init` (the window manifest), the reader and the read contract's
 /// fingerprint. A value that names no reader is warned and the window
 /// reader reads: never a silent fallback to another reader.
@@ -82,11 +76,10 @@ fn reader_named(value: Option<&str>) -> Reader {
     match value {
         None | Some("window") => Reader::Window,
         Some("passes") => Reader::Passes,
-        Some("waves") => Reader::Waves,
         Some(other) => {
             tracing::warn!(
                 value = other,
-                "SOVEREIGN_READER names no reader (window, passes, waves); the window reader reads"
+                "SOVEREIGN_READER names no reader (window, passes); the window reader reads"
             );
             Reader::Window
         }

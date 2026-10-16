@@ -57,7 +57,12 @@ Ward's served deals by more than single-run noise (~3 of 14). Then it becomes
 the one reader and passes and waves are deleted (operator, 2026-10-13).
 Refuted, this row moves to Rejected and the window files are deleted.
 
-### `SOVEREIGN_READER=waves` — the compiled reader, off until measured (2026-10-12)
+### ~~`SOVEREIGN_READER=waves`~~ — RETIRED 2026-10-16: the window reader graduated first; deleted unmeasured
+
+The window reader became the default (2026-10-15) before this row's experiment ran, so the compiled reader
+was deleted without one. Its value is now warned and the window reader reads. The row
+below is the record of what shipped dark.
+
 
 **What ships.** `document_read/waves.rs`: the declaration compiled into levels
 of closed questions, particulars first (count, then each pointed at), then per
