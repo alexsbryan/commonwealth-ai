@@ -678,9 +678,10 @@ subject = "firm"
         "an unstated particular is placed by either name: {:?}",
         read.documents[1]
     );
-    assert!(seen.lock().unwrap()[0]
-        .user
-        .contains("not one particular before and after a stated change"));
+    assert!(
+        !seen.lock().unwrap()[0].user.contains("stated change"),
+        "the prompt carries no amendment rule: a stated change is the recipe's to declare"
+    );
 }
 
 /// Failing input, named: a reply's quoted history is hidden from the reader,
