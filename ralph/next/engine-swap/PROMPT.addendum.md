@@ -24,7 +24,7 @@ depends on that habit, accept the server's behaviour and delete our side; do
 not port the habit. Equivalence with the embedded engine is a stronger
 question than the rows ask. Extend what exists (ARCH principle 11): the
 router, its preset, `RouterProvider`, the supervisor and the served-kind
-registry are the surfaces; a second implementation of any of them stops (§6, `ralph-result needs-human`).
+registry are the surfaces; a second implementation of any of them stops (§6, `{{result}} needs-human`).
 
 <!-- section: facts after=intro -->
 ## 0. Standing facts (do not re-derive)
@@ -90,26 +90,26 @@ registry are the surfaces; a second implementation of any of them stops (§6, `r
    commit's body carries every PLANT's red line and anything the row says to
    paste.
 6. When the proof is green and every change is committed, end the session
-   with `ralph-result done`. The loop merges your branch and marks the row; you
+   with `{{result}} done`. The loop merges your branch and marks the row; you
    never mark it, and you write no `.done` file. A dirty tree is refused at
    the call, so you can still commit.
 
 Commit as soon as a coherent piece compiles. A killed session with commits
 resumes; one holding an hour of uncommitted work is lost. When your session
 budget runs low with the outcome unfinished, commit what compiles and end
-with `ralph-result continue <what remains>`: the note opens the next session.
+with `{{result}} continue <what remains>`: the note opens the next session.
 A run longer than about ten minutes (a full battery, a container build) is
-handed to the loop: `ralph-result await <budget> -- <command>`, and the next
+handed to the loop: `{{result}} await <budget> -- <command>`, and the next
 session is told its exit code and log.
 
 <!-- section: stopping -->
 ## 6. Stopping
 
-End every session with exactly one `ralph-result` call:
-- `ralph-result done`: the unit is finished and committed (§3 step 6).
-- `ralph-result continue <note>`: progress committed, more remains.
-- `ralph-result await <budget> -- <cmd>`: a long run the loop holds for you.
-- `ralph-result needs-human [--operator] --package {{log_dir}}/package.md <why>`:
+End every session with exactly one `{{result}}` call:
+- `{{result}} done`: the unit is finished and committed (§3 step 6).
+- `{{result}} continue <note>`: progress committed, more remains.
+- `{{result}} await <budget> -- <cmd>`: a long run the loop holds for you.
+- `{{result}} needs-human [--operator] --package {{log_dir}}/package.md <why>`:
   a decision the row and the plan do not make. The package is a decision, not a
   question: (a) the unit id and its row; (b) the exact commands you ran and
   their ACTUAL output, trimmed; (c) what must be decided, numbered, with
@@ -146,7 +146,7 @@ Outside a lane (a REVIEW row in the main tree), mint the same way and run
 | `es-` | build the unit (§3) |
 | `REVIEW-audit-es-` | full gate and principles review (§4); the loop inserts one every 8 units |
 | `REVIEW-DEMO-es-` (the pool runs every `REVIEW-` row in the main tree, alone; this queue has one, the last) | run the row's command in the MAIN workdir; paste its output; anything but its expected verdict is §6 |
-| `HUMAN-es-` | never do it and never mark it: the loop holds these for the seat. If you are given one, end with `ralph-result needs-human --operator <the row>` |
+| `HUMAN-es-` | never do it and never mark it: the loop holds these for the seat. If you are given one, end with `{{result}} needs-human --operator <the row>` |
 
 <!-- section: checks-queue-1 -->
 | ROUTER-E2E | `scripts/ralph-check.sh router-e2e` — **E2E** on the shipped binary, its own daemon and small models | exit=0, `test result: ok.` with `0 failed`; paste the `booted:` line |
