@@ -12,9 +12,10 @@
 //! the word before the stop is one capital (an initial, "J. S. Mill") or a
 //! locator's or citation's abbreviation before a digit ("p. 4", "et al.
 //! 2019"). A number is a word carrying a digit, with its currency sign and
-//! percent sign; it is a `Figure` (with a unit when a percent or currency
-//! marks it), a `Date` (a year, a day beside a month), or a `Quantity` (a
-//! number before the noun it counts). A name is a run of name-shaped words
+//! percent sign, or a cardinal written in words ([`spelled`]); it is a
+//! `Figure` (with a unit when a percent or currency marks it), a `Date` (a
+//! year, a day beside a month; digits only), or a `Quantity` (a number
+//! before the noun it counts). A name is a run of name-shaped words
 //! ([`super::judge::cap_name`]), less the words that are never names
 //! ([`super::judge::non_name_word`]), where a run that opens the sentence
 //! counts only once it is two words long.
@@ -66,6 +67,10 @@ pub struct Specific {
     /// bare figure, a date and a name. Two specifics differ only when their
     /// kinds and units agree ([`differing_specifics`]).
     pub unit: Option<String>,
+    /// A number's value in canonical digits, by which two specifics are
+    /// compared: `48000` for "48,000" and for "forty-eight thousand".
+    /// `None` for a name, and for a number compared as written ("1990s").
+    pub value: Option<String>,
 }
 
 /// The sentences of `text`, as code-point ranges with their surrounding
@@ -178,6 +183,7 @@ pub fn sentence_specifics(sentence: &str) -> Vec<Specific> {
                 text: r.words.join(" "),
                 range: r.range,
                 unit: None,
+                value: None,
             });
         }
     }
@@ -186,7 +192,12 @@ pub fn sentence_specifics(sentence: &str) -> Vec<Specific> {
     let mut out = Vec::new();
     let mut run: Option<Run> = None;
     let mut first = true;
+    // Words a number written in words already took.
+    let mut taken = 0;
     for (n, &(word, at)) in words.iter().enumerate() {
+        if n < taken {
+            continue;
+        }
         let Some((trimmed, lead)) = trim_word(word) else {
             flush(&mut run, &mut out);
             continue;
@@ -212,6 +223,12 @@ pub fn sentence_specifics(sentence: &str) -> Vec<Specific> {
             if let Some(s) = number_specific(bare, a, &around) {
                 out.push(s);
             }
+            continue;
+        }
+        if let Some((took, s)) = spelled::word_number(sentence, &words, n, opens_sentence) {
+            flush(&mut run, &mut out);
+            out.extend(s);
+            taken = n + took;
             continue;
         }
         // A month beside a number is part of a written date, never a name.
@@ -375,10 +392,9 @@ fn number_specific(bare: &str, a: usize, w: &Around<'_>) -> Option<Specific> {
         text.push('%');
     }
     let range = start..start + text.chars().count();
-    let (next, next2, prev) = (plain(w.after), plain(w.after2), plain(w.before));
-    let percent_word = matches!(next.as_str(), "percent" | "percentage" | "pct")
-        || (next == "per" && next2 == "cent");
-    let (kind, unit) = if percent_sign || percent_word {
+    let (next, prev) = (plain(w.after), plain(w.before));
+    let noun = || (!w.possessive && !bare.contains('.')).then(|| counted_noun(w.after));
+    let (kind, unit) = if percent_sign || percent_follows(w.after, w.after2) {
         (SpecificKind::Figure, Some("percent".to_string()))
     } else if let Some(c) = currency {
         (SpecificKind::Figure, Some(c.to_string()))
@@ -386,15 +402,8 @@ fn number_specific(bare: &str, a: usize, w: &Around<'_>) -> Option<Specific> {
         (SpecificKind::Date, None)
     } else if bare.len() <= 2 && (is_month(&next) || is_month(&prev)) {
         (SpecificKind::Date, None)
-    } else if !w.possessive
-        && !bare.contains('.')
-        && !next.is_empty()
-        && next.chars().all(char::is_lowercase)
-        && !NOT_COUNTED.contains(&next.as_str())
-        && w.after
-            .is_some_and(|x| x.starts_with(|c: char| c.is_lowercase()))
-    {
-        (SpecificKind::Quantity, Some(singular(&next)))
+    } else if let Some(Some(noun)) = noun() {
+        (SpecificKind::Quantity, Some(noun))
     } else {
         (SpecificKind::Figure, None)
     };
@@ -403,10 +412,30 @@ fn number_specific(bare: &str, a: usize, w: &Around<'_>) -> Option<Specific> {
     }
     Some(Specific {
         kind,
+        value: super::number_presence::numeric_value(&text),
         text,
         range,
         unit,
     })
+}
+
+/// Whether the words after a number mark it a percentage: "percent",
+/// "percentage", "pct", "per cent".
+fn percent_follows(after: Option<&str>, after2: Option<&str>) -> bool {
+    let next = plain(after);
+    matches!(next.as_str(), "percent" | "percentage" | "pct")
+        || (next == "per" && plain(after2) == "cent")
+}
+
+/// The noun a number counts, singular, when the word after it is one: lower
+/// case as written and not one of [`NOT_COUNTED`].
+fn counted_noun(after: Option<&str>) -> Option<String> {
+    let next = plain(after);
+    (!next.is_empty()
+        && next.chars().all(char::is_lowercase)
+        && !NOT_COUNTED.contains(&next.as_str())
+        && after.is_some_and(|x| x.starts_with(|c: char| c.is_lowercase())))
+    .then(|| singular(&next))
 }
 
 /// A counted noun's singular, by shape: "sailings" and "sailing" count one thing.
@@ -596,9 +625,7 @@ pub fn differing_specifics(
     passage: &[Specific],
     passage_text: &str,
 ) -> Vec<(Specific, Specific)> {
-    let value = |s: &Specific| {
-        super::number_presence::numeric_value(&s.text).unwrap_or_else(|| s.text.to_lowercase())
-    };
+    let value = |s: &Specific| s.value.clone().unwrap_or_else(|| s.text.to_lowercase());
     let counted = |s: &&Specific| s.kind != SpecificKind::Name;
     let passage_values: HashSet<String> = passage.iter().filter(counted).map(value).collect();
     let claim_values: HashSet<String> = claim.iter().filter(counted).map(value).collect();
@@ -677,6 +704,10 @@ fn strip_possessive(w: &str) -> &str {
         .or_else(|| w.strip_suffix("\u{2019}s"))
         .unwrap_or(w)
 }
+
+// Cardinals written in words, read by the runtime's one number-word reader.
+#[path = "specifics_spelled.rs"]
+mod spelled;
 
 // The finder's tests live in a sibling file, keeping this one under its
 // size ceiling. `#[path]`, so the names are unchanged.

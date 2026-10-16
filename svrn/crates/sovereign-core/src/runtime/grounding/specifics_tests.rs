@@ -309,3 +309,145 @@ fn another_periods_figure_and_an_unanchored_date_are_no_difference() {
     )
     .is_empty());
 }
+
+/// The specific of `sentence` whose range reads `exact`.
+fn found(sentence: &str, exact: &str) -> Option<Specific> {
+    sentence_specifics(sentence)
+        .into_iter()
+        .find(|x| at(sentence, &x.range) == exact)
+}
+
+/// Failing input (live 2026-10-15, the daemon at :9741, Wealth of Nations):
+/// "…upwards of forty-eight thousand pins a day." was `abstained` at
+/// `class/no-specifics`, its figure written in words read as no specific. A
+/// cardinal in words is a figure or a quantity like its digits, its range the
+/// words as written ("a hundred" with its article), its text that range.
+#[test]
+fn a_cardinal_written_in_words_is_a_figure_or_a_quantity_at_its_words() {
+    use SpecificKind::{Figure, Quantity};
+    for (sentence, exact, kind, unit) in [
+        (
+            "Ten workers in a small pin factory could make upwards of forty-eight thousand pins a day.",
+            "forty-eight thousand",
+            Quantity,
+            Some("pin"),
+        ),
+        (
+            "Ten workers in a small pin factory could make upwards of forty-eight thousand pins a day.",
+            "Ten",
+            Quantity,
+            Some("worker"),
+        ),
+        (
+            "It was more than a hundred years after the first settlement of the colony.",
+            "a hundred",
+            Quantity,
+            Some("year"),
+        ),
+        (
+            "The town held eight hundred and fifty thousand people.",
+            "eight hundred and fifty thousand",
+            Quantity,
+            Some("people"),
+        ),
+        ("The debt came to one million.", "one million", Figure, None),
+        ("Late sailings rose by twenty percent.", "twenty", Figure, Some("percent")),
+        ("Those ten persons, therefore, could make it.", "ten", Quantity, Some("person")),
+        ("The ships numbered twelve, and no more.", "twelve", Figure, None),
+    ] {
+        let x = found(sentence, exact)
+            .unwrap_or_else(|| panic!("no specific at `{exact}` in `{sentence}`: {:?}", sentence_specifics(sentence)));
+        assert_eq!((x.kind, x.unit.as_deref()), (kind, unit), "{sentence}: {x:?}");
+        assert_eq!(x.text, exact, "a number's text is its range");
+    }
+}
+
+/// The words that look like numbers and assert none: a pronoun or a
+/// determiner "one", an article, an ordinal, a fraction, a bare number word
+/// under ten, a number word inside a name.
+#[test]
+fn a_pronoun_an_article_an_ordinal_and_a_bare_small_number_word_are_no_specifics() {
+    for s in [
+        "One of the workmen draws out the wire.",
+        "Then one of the workmen draws out the wire.",
+        "A man could hardly make one in a day.",
+        "One must admit that the division of labour helps.",
+        "No one could make it alone.",
+        "It was after the first settlement of the colony.",
+        "They paid a tenth part of the produce.",
+        "The twenty-first year passed quietly.",
+        "It was made in two, and then sold.",
+        "They fought the Seven Years War.",
+    ] {
+        let numbers: Vec<_> = sentence_specifics(s)
+            .into_iter()
+            .filter(|x| x.kind != SpecificKind::Name)
+            .collect();
+        assert!(numbers.is_empty(), "{s}: {numbers:?}");
+    } // A scale word after digits is their magnitude, not a number of its own.
+    assert_eq!(
+        texts("Wiz sold for $32 billion in cash."),
+        vec![(SpecificKind::Figure, "$32".into())]
+    );
+}
+
+/// "two or three distinct operations": by §2.15 each is a number with a
+/// counted noun, so both ends of the alternation are quantities counting what
+/// the last counts. A claim restating either end is no difference.
+#[test]
+fn both_ends_of_a_number_alternation_count_what_the_last_counts() {
+    let s = "Making a pin is divided into two or three distinct operations.";
+    let got: Vec<_> = sentence_specifics(s)
+        .into_iter()
+        .filter(|x| x.kind != SpecificKind::Name)
+        .map(|x| (x.kind, x.text, x.unit))
+        .collect();
+    let distinct = Some("distinct".to_string());
+    assert_eq!(
+        got,
+        vec![
+            (SpecificKind::Quantity, "two".to_string(), distinct.clone()),
+            (SpecificKind::Quantity, "three".to_string(), distinct),
+        ]
+    );
+    assert!(differ("Making a pin takes 2 distinct operations.", s).is_empty());
+}
+
+/// Failing inputs (live 2026-10-15, :9741): a claim's digits against a
+/// source's words were `unsupported` with `differing: []`, never
+/// `contradicted`. Figures pair by value across the two forms, and the same
+/// value in either form is no difference.
+#[test]
+fn a_figure_in_words_pairs_by_value_with_one_in_digits() {
+    let pins = "Those ten persons, therefore, could make among them upwards of forty-eight thousand pins in a day.";
+    assert_eq!(
+        differ(
+            "Ten workers in a small pin factory made 9,000 pins a day between them.",
+            pins
+        ),
+        vec![("9,000".to_string(), "forty-eight thousand".to_string())]
+    );
+    assert_eq!(
+        differ(
+            "Silver, gold or diamond mines were found in Brazil fewer than 50 years after its first settlement.",
+            "It was more than a hundred years after the first settlement of the Brazils, before any silver, gold, or diamond mines were discovered there."
+        ),
+        vec![("50".to_string(), "a hundred".to_string())]
+    );
+    assert!(differ("Ten workers made 48,000 pins a day.", pins).is_empty());
+    assert!(differ("It took 100 years.", "It took a hundred years.").is_empty());
+    let town = "The town held eight hundred and fifty thousand people.";
+    assert!(differ("The town held 850,000 people.", town).is_empty());
+    assert_eq!(
+        differ("The town held 850 people.", town),
+        vec![(
+            "850".to_string(),
+            "eight hundred and fifty thousand".to_string()
+        )]
+    );
+    assert!(differ(
+        "The town held one million people.",
+        "The town held 1,000,000 people."
+    )
+    .is_empty());
+}

@@ -256,7 +256,7 @@ async fn the_checker_maps_its_judges_support_and_names_its_model() {
     let (_, body) = verify_on(
         judged(),
         serde_json::json!({
-            "unit": "Okafor surveyed 14 agreements on the shared gauges.",
+            "unit": "Okafor surveyed 14 rivers on the shared gauges.",
             "tier": "checker",
         }),
     )
@@ -270,6 +270,29 @@ async fn the_checker_maps_its_judges_support_and_names_its_model() {
         !c.evidence.is_empty(),
         "the judged passages are named: {body}"
     );
+
+    // The library counts the agreements in words ("The survey of eleven
+    // agreements finds the opposite."), so another count of them differs.
+    let (_, body) = verify_on(
+        judged(),
+        serde_json::json!({
+            "unit": "Okafor surveyed 14 agreements on the shared gauges.",
+            "tier": "checker",
+        }),
+    )
+    .await;
+    let r = reply(&body);
+    let [c] = r.claims.as_slice() else {
+        panic!("{body}")
+    };
+    assert_eq!(c.verdict, VerifyVerdict::Contradicted, "{body}");
+    let differing: Vec<(&str, &str)> = c
+        .evidence
+        .iter()
+        .flat_map(|p| &p.differing)
+        .map(|d| (d.claim.exact.as_str(), d.source.exact.as_str()))
+        .collect();
+    assert_eq!(differing, vec![("14", "eleven")], "{body}");
 }
 
 /// The checker reads its candidates one at a time, so how many it judges is
@@ -444,7 +467,7 @@ async fn a_judged_claim_is_journaled_by_reference_and_a_correction_names_it() {
             .layer(axum::Extension(VerifyJudge(Arc::new(TideTableJudge))))
             .layer(axum::Extension(VerifyJournal(journal.path().to_path_buf())))
     };
-    let unit = "Okafor surveyed 14 agreements on the shared gauges.";
+    let unit = "Okafor surveyed 14 rivers on the shared gauges.";
     let (status, body) = post_on(
         router(),
         "/oicp/v1/verify",
@@ -479,7 +502,8 @@ async fn a_judged_claim_is_journaled_by_reference_and_a_correction_names_it() {
     assert_eq!(d["action"], "checker/sentence-support");
     assert_eq!(d["chunks"], c.evidence.len());
     // "14" only: a one-word name opening the sentence is not a specific
-    // (`sentence_specifics`), and the notes say eleven, so it is absent.
+    // (`sentence_specifics`), and the library counts no rivers, so it is
+    // absent.
     assert_eq!(
         d["specifics"],
         serde_json::json!({"checked": 1, "absent": 1}),

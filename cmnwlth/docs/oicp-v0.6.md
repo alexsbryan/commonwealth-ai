@@ -596,7 +596,11 @@ DifferingSpecific { claim: ClaimSpecific,              // in the unit
   an exact range of the unit inside the claim: a `figure` (a number with
   or without a unit, a percentage, a currency amount), a `date` (a year, a
   written date), a `quantity` (a number with a counted noun), a `name` (a
-  run of name-shaped words). A number inside a citation is none of them:
+  run of name-shaped words). A number is written in digits or in words:
+  `forty-eight thousand pins` is a quantity as `48,000 pins` is, its range
+  the words as written, and the two are compared by value. An ordinal
+  (`the first settlement`) is no number, nor is a lone `one`, more often a
+  pronoun than a count. A number inside a citation is none of them:
   an author-date citation (`(Okafor 2019)`, `(Okafor, 2019, p. 4)`) or a
   citekey (`[@okafor2019]`). Nor is one inside a locator (`(page 14)`, `(p.
   3)`, `(§ 4)`, `(chapter 2)`). A figure inside any other parentheses is a
@@ -627,7 +631,8 @@ evidence), then `fast/value-presence` as a hint (`abstained`), then
 differing figure, date or quantity making `contradicted`; its specifics
 finder (`sentence_specifics`, in
 `svrn/crates/sovereign-core/src/runtime/grounding/specifics.rs`) splits its
-numbers into the three kinds and leaves citations and locators out.
+numbers, in digits or in cardinal words, into the three kinds (a number in
+words is never a date) and leaves citations and locators out.
 
 ### 2.16 Records by identifier
 
