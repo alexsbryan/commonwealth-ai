@@ -3923,6 +3923,9 @@ impl InferenceProvider for EmbeddedLlamaCpp {
     async fn embed(&self, text: &str) -> Result<Vec<f32>> {
         let asked = Instant::now();
         let slot = self.embed_handle("embed").await?;
+        let step = crate::priority_gate::PriorityGate::process()
+            .step("embed")
+            .await;
         let text_len = text.len();
         let text = text.to_string();
 
@@ -3931,6 +3934,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         // `done` under the caller's span; `slot_wait`: the slot's load or hand-over, then its context.
         let span = tracing::Span::current();
         tokio::task::spawn_blocking(sovereign_contracts::engine_observe::carry(move || {
+            let _step = step;
             let _in_caller = span.enter();
             let start = Instant::now();
             let mut ctx_lock = slot.contexts[0].blocking_lock();
@@ -3975,9 +3979,13 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
     async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
         let slot = self.embed_handle("embed_query").await?;
+        let step = crate::priority_gate::PriorityGate::process()
+            .step("embed_query")
+            .await;
         let query = query.to_string();
 
         tokio::task::spawn_blocking(sovereign_contracts::engine_observe::carry(move || {
+            let _step = step;
             let mut ctx_lock = slot.contexts[0].blocking_lock();
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 EmbedSlot::embed_query_sync(
@@ -4005,9 +4013,13 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
     async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let slot = self.embed_handle("embed_batch").await?;
+        let step = crate::priority_gate::PriorityGate::process()
+            .step("embed_batch")
+            .await;
         let texts = texts.to_vec();
 
         tokio::task::spawn_blocking(sovereign_contracts::engine_observe::carry(move || {
+            let _step = step;
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 EmbedSlot::run_embed_batch_sync(&slot, &texts)
             }));

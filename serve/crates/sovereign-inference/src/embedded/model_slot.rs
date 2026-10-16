@@ -1220,6 +1220,8 @@ pub(crate) struct SlotPermit {
     _permit: tokio::sync::OwnedSemaphorePermit,
     queue: Arc<SlotQueue>,
     started: std::time::Instant,
+    /// The turn's step at the priority gate (OICP v0.6 §2.17), held with it.
+    _step: crate::priority_gate::Step,
 }
 
 impl std::fmt::Debug for SlotPermit {
@@ -1276,6 +1278,9 @@ pub(super) async fn acquire_with_queue_gauge(
 ) -> Result<SlotPermit> {
     use std::sync::atomic::Ordering;
 
+    let step = crate::priority_gate::PriorityGate::process()
+        .step(phase)
+        .await;
     let grant = |permit| {
         // ONE place a turn's start is stamped, so the permit's own clock and
         // the queue's view of "how far along is the holder" cannot disagree.
@@ -1285,6 +1290,7 @@ pub(super) async fn acquire_with_queue_gauge(
             _permit: permit,
             queue: Arc::clone(queue),
             started,
+            _step: step,
         }
     };
 

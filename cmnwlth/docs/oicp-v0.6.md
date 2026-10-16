@@ -724,10 +724,11 @@ RequestPriority = "interactive" | "background"
   how long and behind how many interactive steps, and when the ceiling sent
   it on.
 
-The reference host does not advertise `knowledge:priority` yet. When it
-does, it holds background steps at its embedding slot and at the admission
+The reference host holds steps at its embedding slot and at the admission
 of its generation slots, the two places its search and verify start model
-work.
+work. It runs a request's background steps one at a time, so at most one
+stands between an interactive step and the stage it queues at: background
+steps already queued at a stage would otherwise be served first.
 
 ## 6. Conformance (additions)
 

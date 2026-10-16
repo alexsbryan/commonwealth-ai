@@ -51,6 +51,9 @@ pub mod engine_config;
 pub mod engine_observe;
 /// serve's engine-state wire (pb-svrn-dials-serve).
 pub mod engine_state;
+/// Who waits on the request a call serves (OICP v0.6 §2.17), carried with
+/// the call to where the engine starts model work.
+pub mod request_priority;
 // The egress boundary — the ONE choke point for remote-model calls and
 // search-query egress (order deep-research-t2a, R10; moved down from
 // `sovereign-core` by ei-5a-build-cut so a crate can gate its egress without
