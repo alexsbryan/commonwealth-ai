@@ -42,7 +42,19 @@ class ScoreContractTests(unittest.TestCase):
             path.write_text(json.dumps({"atoms": atoms}))
             pred, counts = S.atlas_pred(str(path), claim_kind="membership")
         self.assertEqual(pred, {"member": "case"})
-        self.assertEqual(counts["claims_without_case_record"], 1)
+        self.assertEqual(counts["claims_without_record"], 1)
+
+    def test_a_record_holds_its_thread_documents_beside_its_claims_documents(self):
+        atoms = [
+            {"atom_type": "Entity", "data": {"id": "c1", "entity_type": "case",
+                                             "attributes": {"thread_documents": ["quiet", "both"]}}},
+            {"atom_type": "Entity", "data": {"id": "c2", "entity_type": "case"}},
+            {"atom_type": "Claim", "data": {"claim_kind": "case_state", "subject": "c1", "attributes": {"document_id": "said"}}},
+            {"atom_type": "Claim", "data": {"claim_kind": "case_state", "subject": "c2", "attributes": {"document_id": "both"}}},
+        ]
+        pred, counts = S.atlas_pred(atoms)
+        self.assertEqual(pred, {"said": "c1", "quiet": "c1"})
+        self.assertEqual((counts["documents_by_thread"], counts["documents_in_several_records"]), (2, 1))
 
     def test_shared_cli_penalizes_partial_recovery_and_noise(self):
         gold = {"a": "g1", "b": "g1", "c": "g2", "d": "g2"}

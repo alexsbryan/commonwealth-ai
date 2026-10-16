@@ -70,6 +70,52 @@ async fn a_host_that_samples_the_label_is_answered_from_its_logprobs() {
     );
 }
 
+/// A hosted vendor as DeepSeek answered on 2026-10-13: it refuses the
+/// forced-choice schema (400 as `response_format`, 400 as a forced function,
+/// which takes only an object) and reasons unless thinking is switched off,
+/// spending the one token on it and answering no logprobs. Asked first
+/// through its logprobs with thinking off, it answers; the schema never goes.
+#[tokio::test]
+async fn a_third_party_is_asked_through_its_logprobs_first_with_thinking_off() {
+    let schema_sent = Arc::new(AtomicUsize::new(0));
+    let s = schema_sent.clone();
+    let chat = move |axum::Json(body): axum::Json<Value>| {
+        let schema = body.get("response_format").is_some() || body.get("tools").is_some();
+        if schema {
+            s.fetch_add(1, SeqCst);
+        }
+        let thinking_off = body.get("thinking") == Some(&json!({"type": "disabled"}));
+        async move {
+            if schema {
+                let refusal =
+                    json!({"error": {"message": "This response_format type is unavailable now"}});
+                return (axum::http::StatusCode::BAD_REQUEST, axum::Json(refusal));
+            }
+            let answer = if thinking_off {
+                json!({"choices": [{"message": {"content": "A"}, "logprobs": {"content": [{"token": "A",
+                    "top_logprobs": [{"token": "A", "logprob": 0.8f64.ln()}, {"token": "B", "logprob": 0.2f64.ln()}]}]}}]})
+            } else {
+                json!({"choices": [{"message": {"content": "", "reasoning_content": "We"}, "logprobs": {"content": []}}]})
+            };
+            (axum::http::StatusCode::OK, axum::Json(answer))
+        }
+    };
+    let url = serve(chat).await;
+    let provider = RemoteApiProvider::third_party(&url, None, "m", 8192).unwrap();
+    let request = CompletionRequest {
+        prompt: "is it A or B?".into(),
+        structured_output: Some(forced_choice::schema(&["A", "B"])),
+        ..Default::default()
+    };
+    let d = forced_choice::parse(&provider.complete(&request).await.unwrap().text).unwrap();
+    assert!((d["A"] - 0.8).abs() < 1e-9, "{d:?}");
+    assert_eq!(
+        schema_sent.load(SeqCst),
+        0,
+        "a vendor is never sent the schema of a forced choice"
+    );
+}
+
 /// A host that answers with the map (a Sovereign daemon) is asked once.
 #[tokio::test]
 async fn a_host_that_answers_with_the_map_is_asked_once() {

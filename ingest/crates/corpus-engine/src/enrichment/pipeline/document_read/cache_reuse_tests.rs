@@ -26,7 +26,7 @@ async fn cached_document_read_replays_without_calling_inference() {
         )
         .await
         .unwrap();
-    assert_eq!(calls.load(Ordering::SeqCst), 4);
+    assert_eq!(calls.load(Ordering::SeqCst), 7);
 
     let panic_chat: crate::types::InferenceFn =
         Arc::new(|_, _| panic!("identical accountable read must use the section cache"));
@@ -39,7 +39,7 @@ async fn cached_document_read_replays_without_calling_inference() {
         .await
         .unwrap();
     assert_eq!(replay.output.questions_by_chapter.len(), 1);
-    assert_eq!(calls.load(Ordering::SeqCst), 4);
+    assert_eq!(calls.load(Ordering::SeqCst), 7);
 
     let mut identity_policy = policies.clone();
     identity_policy
@@ -57,7 +57,7 @@ async fn cached_document_read_replays_without_calling_inference() {
         .await
         .unwrap();
     assert_eq!(replay.output.questions_by_chapter.len(), 1);
-    assert_eq!(calls.load(Ordering::SeqCst), 4);
+    assert_eq!(calls.load(Ordering::SeqCst), 7);
 }
 
 #[tokio::test]

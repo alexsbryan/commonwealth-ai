@@ -1628,6 +1628,7 @@ impl EmbeddedDaemon {
         // question afresh; the serve task publishes the outcome below.
         self.client_listener.send_replace(ClientListener::Pending);
         let listener_outcome = self.client_listener.clone();
+        let verify_judge = self.runtime().map(|r| Arc::clone(&r.inference));
         let serve_handle = tokio::spawn(async move {
             // `/mcp` and every mounted family behind the one auth layer, the
             // keyed seal last (`client_surface::operator_listener_router`).
@@ -1636,6 +1637,7 @@ impl EmbeddedDaemon {
                 mcp_mount,
                 posture,
                 mounted,
+                verify_judge,
             );
             // ConnectInfo: `internal_principal_layer` reads the peer address as
             // half the "is this my own acceptor's hop" tie, and fails closed

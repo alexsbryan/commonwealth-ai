@@ -1,0 +1,229 @@
+# The Saltgrass Ledger — a mystery novel in sixteen chapters, set in the
+# salvage port of Glasswater Stave on the Hethering coast.
+#
+# Built for the author: to keep track of who says they saw what, what the
+# tide ledger records, what the village believes about Corwin Pellow's death,
+# and where those disagree — in the order the book tells them.
+
+[corpus]
+id = "saltgrass-asked"
+name = "The Saltgrass Ledger"
+description = "A sixteen-chapter mystery manuscript, read as its people, vessels and objects, the accounts villagers give, the tide ledger's entries, the village's verdicts on the harbormaster's death, and the motives behind them, in reading order."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# One manuscript exported as markdown, each chapter a heading-bounded section,
+# chapters in reading order (the clock is narrative, not the calendar).
+# SOURCE_PATH is a placeholder for where the manuscript sits.
+[acquire]
+type = "local_file"
+path = "/Users/alexsbryan/.svrnmesh/bench-corpora/chaos-saltgrass/saltgrass-ledger.txt"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "village-mystery-novel"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This is a mystery novel. In Glasswater Stave, a salvage port with a gated lock
+basin, the harbormaster Corwin Pellow is found floating in the basin at dawn,
+and the village decides by breakfast that it was no accident. Maren Ashquill
+keeps the tide ledger: every opening of the gates, every vessel through them,
+every height of water against the painted gauge. Everything here is true only
+inside the story. What matters is who says what, how they could know it, and
+whether the ledger agrees: villagers are sure of things they cannot have seen,
+and some of them are lying. An account is one person placing someone somewhere
+at some hour; a sighting is the same for a vessel; a ledger entry is what the ledger records of one opening of the
+gates; a verdict is what someone holds about how a death or other incident came
+about; a motive is a reason someone had to want something done. Keep what was
+seen apart from what was heard, inferred or repeated. The narrator is not a
+character.
+"""
+must_not = [
+  "Treat anything said inside the story as a real-world fact, or Glasswater Stave and its people as real.",
+  "Name who killed Corwin Pellow as settled unless the text itself settles it; a villager's certainty is a claim, not the answer.",
+]
+
+# ── Shape ────────────────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "character"
+kind = "entity"
+role_of = "person"
+description = "A person of the story: villager, harbor hand, salvager, visitor, the dead man."
+attributes = [
+  { name = "occupation", type = "text", description = "What they do in the port (harbormaster, ledger-keeper, salvager, publican).", by = "most" },
+]
+identity_criterion = "One person when their name, surname, nickname or office points to them: 'Pellow', 'Corwin' and 'the harbormaster' are one man while he holds the office. A title held by someone else after his death names the new holder. Two people sharing a surname are different people unless the text makes them one."
+
+[[enrichment.ontology.types]]
+name = "vessel"
+kind = "entity"
+description = "A boat or ship that passes the lock gates or lies in the basin."
+attributes = [
+  { name = "craft", type = "text", description = "What sort of vessel (salvage lighter, smack, dinghy, coaster).", by = "most" },
+  { name = "owner", type = "ref", of = "character", by = "most" },
+]
+identity_criterion = "One vessel when its name matches, ignoring 'the' and case; a vessel described but not named ('the black lighter') is the named one only when the text ties them. A renamed vessel is one vessel."
+
+[[enrichment.ontology.types]]
+name = "object"
+kind = "entity"
+description = "A physical thing the story lingers on: a ledger page, the gauge, a rope, a lantern, a coat, a key."
+attributes = [
+  { name = "owner", type = "ref", of = "character" },
+]
+identity_criterion = "One object when the text treats it as the same thing ('the ledger', 'Maren's ledger'); two of a kind (two lanterns, two keys) are different unless the text makes them one."
+
+[[enrichment.ontology.types]]
+name = "incident"
+kind = "event"
+description = "Something that happened that the village talks about: Pellow's death above all, and any break-in, fire, quarrel or disappearance."
+participants = { victim = "character", finder = "character", place = "place" }
+identity_criterion = "One incident when it is the same happening to the same person or place: every mention of Pellow's drowning, however worded, is one incident."
+
+[[enrichment.ontology.types]]
+name = "gate_opening"
+kind = "event"
+description = "One opening of the lock gates, on one tide."
+participants = { vessel = "vessel", keeper = "character" }
+identity_criterion = "One opening when it is the same tide and hour; a ledger line and a character's memory of 'the gates at dawn' are one opening when they name the same tide."
+
+[[enrichment.ontology.types]]
+name = "inner_state"
+kind = "state"
+of = "character"
+description = "A condition a character is in — doubt, fear, guilt, resolve — changing in the order of the book."
+
+# ── Assertion ────────────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "account"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "character"
+description = "Someone placing a person somewhere at some hour, or saying what they were doing: 'I saw him cross the cobbles at six.' The subject is the person placed."
+grades = ["saw it", "heard it", "inferred", "hearsay"]
+attributes = [
+  { name = "speaker", type = "ref", of = "character" },
+  { name = "place", type = "ref", of = "place" },
+  { name = "at", type = "time", description = "The hour or tide named, as written." },
+  { name = "doing", type = "text" },
+]
+
+[[enrichment.ontology.types]]
+name = "ledger_entry"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "gate_opening"
+description = "What the tide ledger records of one opening of the gates: the hour, the vessel, the direction, the water against the painted gauge, the hand that wrote it."
+grades = ["written at the time", "written after", "altered"]
+attributes = [
+  { name = "at", type = "time" },
+  { name = "vessel", type = "ref", of = "vessel" },
+  { name = "direction", type = "text", values = ["inward", "outward", "no vessel"] },
+  { name = "gauge", type = "quantity", unit = "ft", description = "Height of water against the painted gauge." },
+  { name = "hand", type = "ref", of = "character", description = "Who wrote the entry." },
+]
+
+[[enrichment.ontology.types]]
+name = "sighting"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "vessel"
+description = "Someone saying where a vessel was, at what hour, and who was aboard: 'the lighter was off the gates before first light.' The subject is the vessel."
+grades = ["saw it", "heard it", "inferred", "hearsay"]
+attributes = [
+  { name = "speaker", type = "ref", of = "character" },
+  { name = "place", type = "ref", of = "place" },
+  { name = "at", type = "time", description = "The hour or tide named, as written." },
+  { name = "aboard", type = "ref", of = "character" },
+]
+
+[[enrichment.ontology.types]]
+name = "verdict"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "incident"
+description = "What someone holds about how an incident came about — accident, murder — and whom they blame."
+grades = ["from evidence", "from reasoning", "village talk"]
+attributes = [
+  { name = "speaker", type = "ref", of = "character" },
+  { name = "cause", type = "text", values = ["accident", "murder", "self-inflicted", "undecided"] },
+  { name = "blamed", type = "ref", of = "character" },
+  { name = "aloud", type = "text", values = ["said openly", "whispered", "kept to themselves"] },
+]
+
+[[enrichment.ontology.types]]
+name = "motive"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "character"
+description = "A reason someone had to want harm done, or a secret kept: debts, salvage disputes, what Pellow wrote down about them. The subject is the person with the reason."
+grades = ["shown", "told", "suspected"]
+attributes = [
+  { name = "against", type = "ref", of = "character" },
+  { name = "reason", type = "text", values = ["debt", "salvage", "smuggling", "family", "love", "office", "secret"] },
+  { name = "speaker", type = "ref", of = "character" },
+]
+
+[[enrichment.ontology.types]]
+name = "notice"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "object"
+description = "What the page shows or someone reports of an object: where it was, in what state, who had it."
+grades = ["shown", "reported"]
+attributes = [
+  { name = "place", type = "ref", of = "place" },
+  { name = "holder", type = "ref", of = "character" },
+  { name = "condition", type = "text" },
+  { name = "speaker", type = "ref", of = "character" },
+]
+
+[enrichment.ontology.voices]
+not_entities = ["the narrator"]
+
+# ── Change ───────────────────────────────────────────────────────────────
+# Nothing supersedes: a later account does not retire an earlier one; a story
+# that changes is a lie exposed, and both stay, in tension.
+
+[enrichment.ontology.change]
+clock = "narrative"
+
+# ── Derivation ───────────────────────────────────────────────────────────
+
+[enrichment.ontology.tension]
+label = "contradiction"
+between = ["account", "sighting", "ledger_entry", "verdict"]
+same = []
+not_conflicts = [
+  "Two accounts placing the same person in different places at different hours of the same morning.",
+  "A ledger entry and an account about different tides or different days.",
+  "The same rumour repeated by several villagers — it is one claim spreading, not corroboration and not a contradiction.",
+  "A character's verdict changing between chapters as they learn more, when they say why.",
+]
+
+[enrichment.ontology.derive]
+configurations = true

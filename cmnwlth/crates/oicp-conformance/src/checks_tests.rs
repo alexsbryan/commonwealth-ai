@@ -79,8 +79,10 @@ fn ingest_feature_must_match_ingest_section() {
             install_endpoint: "/oicp/v1/corpus/install".into(),
             progress_endpoint: "/oicp/v1/corpus/progress".into(),
             test_endpoint: None,
+            max_install_bytes: None,
         }),
         evidence: None,
+        sentence_scorer: None,
     });
     assert!(feature_failures(&m).is_empty());
 }

@@ -37,6 +37,7 @@ use corpus_engine_atlas_reader::inventory::AtlasInventory;
 use corpus_engine_atlas_reader::opener::open_walk_provider;
 use corpus_engine_atlas_reader::provider::AtlasProvider;
 use corpus_engine_atlas_reader::raw::read_atlas_ontology;
+use corpus_engine_atlas_reader::records::{atom_text, truncate};
 use corpus_engine_atlas_reader::summary::read_current_summary;
 use corpus_index::fs_source::FsIndexSource;
 use corpus_index::index::CorpusIndex;
@@ -44,9 +45,10 @@ use corpus_index::types::{EmbedFn, ScoredChunk};
 use serde_json::{json, Value};
 use understanding_vocab::atoms::AtomEnvelope;
 use understanding_vocab::ontology::AtlasOntologyFile;
-use understanding_vocab::read::read_atlas_atoms;
 
 use crate::host::HostProfile;
+
+mod records;
 
 /// The kit's, since corpus-mcp serves through its dispatcher (phase-b pb-mcp).
 pub use host_kit::mcp::ToolOutcome;
@@ -231,14 +233,17 @@ impl Server {
             },
             {
                 "name": "atoms_lookup",
-                "description": "Look up atlas atoms (Entity, Claim, Event, Question, Position, …) a corpus's enrichment produced, by kind and/or name substring. Reads atlas/atoms.json; says so if the corpus has none.",
+                "description": "Look up the records a corpus's enrichment produced (atlas/atoms.json), by id, declared type, kind or name. Each row is the record under the corpus's ontology: declared attributes, refs to other records with the identity values they are known by, the records that point at it, how each attribute was folded with every reading cited (a tie or conflict shown as itself, never as a value), and for a statement how its subject was decided. Says so if the corpus has none.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "corpus": corpus_prop,
-                        "query": { "type": "string", "description": "Case-insensitive substring matched against each atom's display name and text." },
+                        "query": { "type": "string", "description": "Case-insensitive substring matched against each atom's display name, aliases and text." },
+                        "ids": { "type": "array", "items": { "type": "string" }, "description": "Atom ids to fetch exactly, as a row's refs and referenced_by name them; ids not in the atlas are listed as absent." },
+                        "type": { "type": "string", "description": "A type the corpus's ontology declares (e.g. an entity type or claim kind); only its records." },
                         "kind": { "type": "string", "description": "Atom kind label: entity, event, state, relation, claim, question, configuration, argument, position, opposition, asset." },
-                        "limit": { "type": "integer", "description": "Max atoms (default 20)." }
+                        "limit": { "type": "integer", "description": "Max atoms (default 20)." },
+                        "offset": { "type": "integer", "description": "Skip this many matching atoms (paging; the answer gives next_offset)." }
                     },
                     "required": ["corpus"]
                 }
@@ -593,79 +598,11 @@ impl Server {
         self.indexes_dir.join(corpus).join("atlas")
     }
 
-    fn atlas_path(&self, corpus: &str, file: &str) -> PathBuf {
-        self.atlas_dir(corpus).join(file)
-    }
-
     fn atoms_lookup(&self, args: &Value) -> ToolOutcome {
         let Some(corpus) = args["corpus"].as_str() else {
             return refuse("atoms_lookup needs `corpus`");
         };
-        let path = self.atlas_path(corpus, "atoms.json");
-        let missing = format!(
-            "no atlas at {} — this corpus's enrichment was not built or pulled on this machine",
-            path.display()
-        );
-        let file = match read_atlas_atoms(&self.atlas_dir(corpus)) {
-            Ok(f) => f,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return refuse(&missing),
-            Err(e) => return refuse(&e.to_string()),
-        };
-        let needle = args["query"].as_str().map(str::to_lowercase);
-        let kind = args["kind"].as_str().map(str::to_lowercase);
-        let limit = args["limit"].as_u64().map(|l| l as usize).unwrap_or(20);
-
-        let total = file.atoms().len();
-        let matched: Vec<&AtomEnvelope> = file
-            .atoms()
-            .iter()
-            .filter(|a| kind.as_deref().is_none_or(|k| a.atom_type().label() == k))
-            .filter(|a| {
-                needle.as_deref().is_none_or(|q| {
-                    a.display_name(None).to_lowercase().contains(q)
-                        || atom_text(a).to_lowercase().contains(q)
-                })
-            })
-            .take(limit)
-            .collect();
-        let rows: Vec<Value> = matched
-            .iter()
-            .map(|a| {
-                json!({
-                    "id": a.id(),
-                    "kind": a.atom_type().label(),
-                    "name": a.display_name(Some(120)),
-                    "text": truncate(atom_text(a), 400),
-                    "evidence_chunks": a.evidence().iter().map(|c| c.chunk_id.clone()).collect::<Vec<_>>(),
-                })
-            })
-            .collect();
-        let text = if matched.is_empty() {
-            format!(
-                "No atoms matched in `{corpus}` ({total} atoms in {}).",
-                path.display()
-            )
-        } else {
-            let mut t = format!(
-                "{} of {total} atoms in `{corpus}` (schema {}):\n",
-                matched.len(),
-                file.schema_version
-            );
-            for a in &matched {
-                t.push_str(&format!(
-                    "- [{}] {} — {} ({})\n",
-                    a.atom_type().label(),
-                    a.display_name(Some(120)),
-                    truncate(atom_text(a), 200),
-                    a.id().as_str()
-                ));
-            }
-            t
-        };
-        ToolOutcome::answer(
-            text.trim_end(),
-            Some(json!({ "corpus": corpus, "total_atoms": total, "atoms": rows })),
-        )
+        records::lookup(corpus, &self.atlas_dir(corpus), args)
     }
 
     fn corpus_ontology(&self, args: &Value) -> ToolOutcome {
@@ -880,29 +817,8 @@ fn tag<T: serde::Serialize>(t: T) -> String {
 
 /// The prose an atom carries, by kind. Entity/Event/Configuration describe;
 /// Claim/Question/Position state; the rest have only their name.
-fn atom_text(a: &AtomEnvelope) -> &str {
-    match a {
-        AtomEnvelope::Entity(e) => &e.description,
-        AtomEnvelope::Event(e) => &e.description,
-        AtomEnvelope::Configuration(c) => &c.description,
-        AtomEnvelope::Claim(c) => &c.content,
-        AtomEnvelope::Question(q) => &q.content,
-        AtomEnvelope::Position(p) => &p.content,
-        _ => "",
-    }
-}
-
 fn refuse(msg: &str) -> ToolOutcome {
     ToolOutcome::refusal(msg)
-}
-
-fn truncate(s: &str, max: usize) -> String {
-    let s = s.trim();
-    if s.chars().count() <= max {
-        s.to_string()
-    } else {
-        format!("{}…", s.chars().take(max).collect::<String>().trim_end())
-    }
 }
 
 #[cfg(test)]

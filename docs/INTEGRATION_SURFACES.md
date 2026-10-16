@@ -48,8 +48,13 @@ v0.3 as fallback) is CC0 — implement it freely on either side. Under
 `ingest:recipe` (v0.5), `POST /oicp/v1/corpus/install` takes the recipe
 itself as `recipe_toml` and answers its `recipe_sha256`: the same recipe
 twice is `spawned: false`, a different one reingests, and a recipe that
-does not load is a 400. The host advertises `auth:named_client` too: a
-presented named credential decides, from any address.
+does not load is a 400. Under `ingest:documents` (v0.6 §2.9) progress lists
+an install from the poll right after its reply, and once it has returned,
+each document it read, `ready` under its text name or `failed` with why. An
+install body may be as large as `knowledge.ingest.max_install_bytes` (64 MiB
+on the reference host, v0.6 §2.12), past the 8 MiB every other route reads;
+one past it is `413 install too large`. The host advertises `auth:named_client` too: a presented named credential
+decides, from any address.
 `oicp-conformance` (a repo-root sibling of `oicp-types`) is a
 standalone certifier you
 can lift wholesale to test your own implementation. The v0.5 draft
@@ -63,10 +68,25 @@ not held`, `texts not stored`, `text not stored`, `range outside text`).
 stored texts of those same corpora: each span is a code-point range with
 its `exact` slice and each difference is named, under the aligner's id and
 a `texts_digest` per corpus searched, and a corpus that could not be
-searched is named with its reason. Every knowledge-search hit carries
+searched is named with its reason. `POST /oicp/v1/verify`
+(`evidence:verify`, v0.6 §2.6) judges a unit claim by claim against the same
+corpora at the tiers the manifest names (`fast` with no model, `checker` with
+the daemon's judge): each claim an exact range of the unit with one of five
+verdicts, the rung that decided, the passages it judged as spans, and an
+`uncalibrated` operating point. Under `evidence:verify_sentences` (§2.15) a
+claim's candidates are its sentences from sentence search, each claim names
+its specifics by kind, the fast tier's miss is a hint, and a contradicted
+sentence names the figure it states otherwise. A decided claim carries an `episode_id`, and
+`POST /oicp/v1/verify/correction` (`evidence:verify_corrections`, §2.10) takes
+a client's correction of it, with an optional witness range the host reads
+back; both are kept by reference in the operator's grounding journal. Every knowledge-search hit carries
 `document`, its text's record with the metadata the extractor or the recipe
 declared (`knowledge:document`), local and peer-served alike, or names why
-it has none in `document_absent`. Recipes may carry their documents inline
+it has none in `document_absent`. Under v0.6 §2.8 a search may name the texts
+its hits must come from (`documents`, by text name, `knowledge:scoped`), and
+every hit carries `span`, its code-point range of its stored text, or names
+why not in `span_absent` (`knowledge:range`); `svrn search --document` is the
+CLI client. Recipes may carry their documents inline
 (`[acquire] type = "inline"`) so a host that shares no disk with you can
 install them.
 

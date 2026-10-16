@@ -2,6 +2,7 @@ use serde_json::{json, Value};
 
 use super::super::tests::{input_chapter, policies, row, scripted};
 use super::*;
+use crate::enrichment::pipeline::document_read::locate::locate_system;
 use crate::enrichment::pipeline::document_read::DocumentReadField;
 
 /// The reader over `chapter`, its line classes indexed over the chapter alone.
@@ -33,6 +34,8 @@ fn the_plan_is_generated_from_the_contract() {
     let plan = Plan::of(&p);
     let kinds: Vec<&str> = plan.kinds.iter().map(|k| k.decl.name.as_str()).collect();
     assert_eq!(kinds, ["membership", "reported_status"]);
+    let decided: Vec<&str> = plan.decided.iter().map(|t| t.name.as_str()).collect();
+    assert_eq!(decided, ["case"], "About asks of each decided subject once");
     let status = &plan.kinds[1];
     assert_eq!(status.subject.name, "case");
     assert!(
@@ -41,7 +44,7 @@ fn the_plan_is_generated_from_the_contract() {
     let subject: Vec<(&str, Option<&str>)> = status
         .subject_fields
         .iter()
-        .map(|f| (f.name(), f.pass()))
+        .flat_map(|f| f.names().into_iter().map(|n| (n, f.pass())))
         .collect();
     assert_eq!(
         subject,
@@ -86,6 +89,8 @@ async fn a_located_line_becomes_a_claim_that_validation_keeps() {
     let (infer, seen) = scripted(vec![
         none(),
         json!({"A": 0.1, "B": 0.85, "0": 0.05}),
+        none(),
+        // About: the document is about no case, so the statement is its own.
         none(),
         json!({"A": 0.1, "B": 0.8, "0": 0.1}),
         // `number` is pointed at: none of the statement's five words.
@@ -137,8 +142,8 @@ async fn a_located_line_becomes_a_claim_that_validation_keeps() {
     let prompts = seen.lock().unwrap();
     assert_eq!(
         prompts.len(),
-        6,
-        "three lines located, then status chosen, number pointed at, project chosen"
+        7,
+        "three lines located, About asked, then status chosen, number pointed at, project chosen"
     );
     assert_eq!(
         prompts[0].phase_id.as_deref(),
@@ -152,24 +157,28 @@ async fn a_located_line_becomes_a_claim_that_validation_keeps() {
         .contains("A membership\nB reported_status\n   status: open, closed\n0 none of them"));
     assert_eq!(
         prompts[3].phase_id.as_deref(),
-        Some("document_passes_choose")
-    );
-    assert!(prompts[3]
-        .user
-        .contains("Type: reported_status\nAttribute: status"));
-    assert!(
-        prompts[3].user.contains("[[The case is closed now.]]"),
-        "{}",
-        prompts[3].user
+        Some("document_passes_about")
     );
     assert_eq!(
         prompts[4].phase_id.as_deref(),
-        Some("document_passes_point")
+        Some("document_passes_choose")
     );
     assert!(prompts[4]
         .user
-        .contains("Type: case (A support case.)\nAttribute: number, words of the statement"));
+        .contains("Type: reported_status\nAttribute: status"));
+    assert!(
+        prompts[4].user.contains("[[The case is closed now.]]"),
+        "{}",
+        prompts[4].user
+    );
+    assert_eq!(
+        prompts[5].phase_id.as_deref(),
+        Some("document_passes_point")
+    );
     assert!(prompts[5]
+        .user
+        .contains("Type: case (A support case.)\nAttribute: number, words of the statement"));
+    assert!(prompts[6]
         .user
         .contains("Type: case (A support case.)\nAttribute: project"));
 }
@@ -220,6 +229,8 @@ fn the_locate_system_prompt_names_values_only_when_a_kind_shows_them() {
             .filter(|k| k.fields.is_empty())
             .collect(),
         picked: Vec::new(),
+        decided: Vec::new(),
+        identifying: Default::default(),
     };
     assert_eq!(bare.kinds.len(), 1, "membership declares no field");
     let without = locate_system(&bare);
@@ -259,27 +270,179 @@ async fn facts_open_every_question_and_a_quoted_line_is_never_located() {
     let (infer, seen) = scripted(vec![
         none(),
         json!({"A": 0.1, "B": 0.85, "0": 0.05}),
+        // About doc-1: no case.
+        none(),
         json!({"A": 0.1, "B": 0.8, "0": 0.1}),
         json!({"A": 0.02, "B": 0.02, "C": 0.02, "D": 0.02, "E": 0.02, "0": 0.9}),
         json!({"A": 0.2, "B": 0.1, "0": 0.7}),
         none(),
+        // About doc-2: no case.
+        none(),
     ]);
     read_all(&chapter, &p, &infer).await.unwrap();
     let prompts = seen.lock().unwrap();
-    assert_eq!(prompts.len(), 6, "doc-2's quoted line is not asked");
+    assert_eq!(prompts.len(), 8, "doc-2's quoted line is not asked");
     for (i, prompt) in prompts.iter().enumerate() {
-        let from = if i < 5 { "a@x" } else { "b@y" };
+        let from = if i < 6 { "a@x" } else { "b@y" };
         assert!(
             prompt.user.starts_with(&format!(
                 "Declared facts of this document:\ndate: 2026-01-0{}\nfrom: {from}.example\n\n",
-                if i < 5 { 1 } else { 2 }
+                if i < 6 { 1 } else { 2 }
             )),
             "{}",
             prompt.user
         );
     }
-    assert!(prompts[5].user.contains("Line 2: \"Thanks\""));
+    assert!(prompts[6].user.contains("Line 2: \"Thanks\""));
     assert!(!prompts
         .iter()
         .any(|p| p.user.contains("Line 1: \"> The case")));
+}
+
+/// A subject its type's metadata source names (ONTOLOGY_METHOD §Reading): a
+/// promise's person is picked among the people the message's fields name, not
+/// pointed at in the promising sentence, and the pick is written as the
+/// person's identity reading, which validation keeps.
+#[tokio::test]
+async fn a_sourced_subject_is_picked_among_the_records_its_source_reads() {
+    let p: OntologyPolicies = toml::from_str::<crate::enrichment::ontology::OntologyV1>(
+        r#"
+[[types]]
+name = "person"
+kind = "entity"
+attributes = [{ name = "address", type = "text" }]
+identity = ["address"]
+source = { metadata = ["sender", "copied"], attributes = { address = "address" } }
+
+[[types]]
+name = "promise"
+kind = "claim"
+force = "commissive"
+subject = "person"
+"#,
+    )
+    .unwrap()
+    .into_policies();
+    let plan = Plan::of(&p);
+    assert!(
+        plan.decided.is_empty(),
+        "a sourced subject's particulars are its source's, never asked About"
+    );
+    let promise = &plan.kinds[0];
+    assert!(
+        matches!(&promise.subject_fields[..], [FieldPlan::Subject(k, "person", keys)]
+            if k.name == "promise" && keys.iter().map(|a| a.name.as_str()).eq(["address"])),
+        "the person is picked, never pointed at"
+    );
+    let body = "Hello\nI will send the signed contract by Friday.\nAnn";
+    let metadata = r#"{"sender": "Ann <ann@away.example>", "copied": "Bo <bo@desk.example>"}"#;
+    let chapter = input_chapter(&[row(1, "doc-1", body, metadata)]);
+    let (infer, seen) = scripted(vec![
+        json!({"A": 0.05, "0": 0.95}),
+        json!({"A": 0.9, "0": 0.1}),
+        json!({"A": 0.05, "0": 0.95}),
+        json!({"A": 0.9, "B": 0.05, "0": 0.05}),
+    ]);
+    let envelope = read_all(&chapter, &p, &infer).await.unwrap();
+    let mut extraction = super::super::parse_response(&envelope, &p)
+        .unwrap()
+        .section_extraction
+        .unwrap();
+    super::super::validate_and_stamp(&chapter, &p, &mut extraction).unwrap();
+    let outcome = &extraction.document_read.as_ref().unwrap().documents[0];
+    assert_eq!(outcome.status, DocumentReadStatus::Read, "{outcome:?}");
+    assert!(outcome.refused.is_empty(), "{:?}", outcome.refused);
+    assert_eq!(
+        outcome.claims[0].subject_fields["address"],
+        DocumentReadField::Supported {
+            value: json!("ann@away.example"),
+            evidence: "Ann <ann@away.example>".into(),
+            by: Some(crate::enrichment::atlas::precision::SourcePrecision::new(
+                "reader_pick",
+                crate::enrichment::atlas::precision::Precision::Unmeasured
+            )),
+        }
+    );
+    let prompts = seen.lock().unwrap();
+    assert_eq!(
+        prompts.len(),
+        4,
+        "three lines located, then the subject picked"
+    );
+    assert_eq!(prompts[3].phase_id.as_deref(), Some(pick::PICK_PHASE));
+    assert!(
+        prompts[3]
+            .user
+            .contains("Type: promise\nAttribute: subject, one person")
+            && prompts[3].user.contains(
+                "Which person does the statement's subject refer to?\n\
+                 A person ann@away.example, named in the field `sender`\n\
+                 B person bo@desk.example, named in the field `copied`\n"
+            ),
+        "{}",
+        prompts[3].user
+    );
+}
+
+/// Every declared kind is read (operator, 2026-10-15): a state of a decided
+/// subject and a relation from it become statement kinds about it, the state
+/// carrying its value (a Point named for the state type) and the relation its
+/// other endpoint (`to`, a Pick of that type). A state of a type RESOLVE cannot
+/// decide stays unread, and `unread_types` names it with its holder.
+#[test]
+fn states_and_relations_of_a_decided_holder_are_read_kinds() {
+    let ontology: crate::enrichment::ontology::OntologyV1 = toml::from_str(
+        r#"
+[[types]]
+name = "case"
+kind = "entity"
+identity_criterion = "same issue number"
+
+[[types]]
+name = "team"
+kind = "entity"
+
+[[types]]
+name = "report"
+kind = "claim"
+force = "assertive"
+subject = "case"
+
+[[types]]
+name = "urgency"
+kind = "state"
+of = "case"
+description = "How pressing a case is."
+
+[[types]]
+name = "blocks"
+kind = "relation"
+from = "case"
+to = "case"
+
+[[types]]
+name = "morale"
+kind = "state"
+of = "team"
+"#,
+    )
+    .unwrap();
+    let p = ontology.into_policies();
+    let plan = Plan::of(&p);
+    let kinds: Vec<&str> = plan.kinds.iter().map(|k| k.decl.name.as_str()).collect();
+    assert_eq!(kinds, ["report", "urgency", "blocks"]);
+    assert!(plan.kinds.iter().all(|k| k.subject.name == "case"));
+    assert!(matches!(
+        &plan.kinds[1].fields[..],
+        [FieldPlan::Point(a)] if a.name == "urgency" && a.description == "How pressing a case is."
+    ));
+    assert!(matches!(
+        &plan.kinds[2].fields[..],
+        [FieldPlan::Pick(a, "case")] if a.name == understanding_vocab::ontology::decl::STATEMENT_TO
+    ));
+    let unread: Vec<&str> = super::super::schema::unread_types(&p)
+        .iter()
+        .map(|t| t.name.as_str())
+        .collect();
+    assert_eq!(unread, ["team", "morale"]);
 }

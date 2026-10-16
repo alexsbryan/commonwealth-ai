@@ -24,7 +24,7 @@ use super::ask::Ask;
 use super::passes::{argmax, render};
 use super::DocumentReadField;
 use crate::enrichment::atlas::precision::{Precision, SourcePrecision};
-use crate::enrichment::atlas::resolve_records::{decision_call, marked_context, LABELS, NONE};
+use crate::enrichment::atlas::resolve_records::{decision_call, LABELS, NONE};
 use crate::enrichment::ontology::{metadata_date, AttrDecl, AttrFamily, OntologyTypeDecl};
 use crate::enrichment::pipeline::types::ChatPrompt;
 use crate::InferenceFn;
@@ -143,11 +143,41 @@ pub(super) async fn point_span(
         debug!(document = p.document, item = p.item, phase = p.phase, best, prob, dist = %render(&dist), "document_read/point: end");
         start + best
     };
-    Ok(Some(all[start].start..all[end].end))
+    Ok(Some(trimmed(text, all[start].start..all[end].end)))
+}
+
+/// `span` of `text` from its first to its last letter or digit, as a line is
+/// compared (`line_classes::line_key`), keeping a closing bracket or quote
+/// whose opener it holds: a pointed span is whole words, and a word carries
+/// the punctuation after it ("Trust," "April."), which is no part of what it
+/// names. A span with no letter or digit is returned as it is.
+pub(super) fn trimmed(text: &str, span: Range<usize>) -> Range<usize> {
+    let s = &text[span.clone()];
+    let Some(first) = s.find(char::is_alphanumeric) else {
+        return span;
+    };
+    let mut end = s
+        .char_indices()
+        .rev()
+        .find(|(_, c)| c.is_alphanumeric())
+        .map_or(s.len(), |(i, c)| i + c.len_utf8());
+    for (close, open) in [(')', '('), (']', '['), ('"', '"'), ('\u{201d}', '\u{201c}')] {
+        let held = &s[first..end];
+        let opened = held.matches(open).count();
+        let closed = if open == close {
+            0
+        } else {
+            held.matches(close).count()
+        };
+        if s[end..].starts_with(close) && opened > closed && (open != close || opened % 2 == 1) {
+            end += close.len_utf8();
+        }
+    }
+    span.start + first..span.start + end
 }
 
 /// How a family's value is named in the question.
-fn family_words(family: &AttrFamily) -> String {
+pub(super) fn family_words(family: &AttrFamily) -> String {
     match family {
         AttrFamily::Text { .. } => "words of the statement".into(),
         AttrFamily::Quantity { unit: Some(u) } => format!("a number, in {u}"),
@@ -233,15 +263,16 @@ pub(super) async fn point(
         }
     };
     let head = format!(
-        "Type: {}\nAttribute: {}, {}\n\nStatement, its words in [[ ]]: \"…{}…\"",
+        "Type: {}\nAttribute: {}, {}\n\n{}",
         described(&owner.name, &owner.description),
         described(&attr.name, &attr.description),
         family_words(&attr.family),
-        marked_context(ask.body, ask.at.start, ask.at.end)
+        ask.in_words()
     );
+    let prefix = ask.prefix();
     let pointing = Pointing {
         infer: ask.infer,
-        facts: ask.facts,
+        facts: &prefix,
         head,
         what: format!("the statement's {}", attr.name),
         phase: POINT_PHASE,
@@ -284,8 +315,14 @@ pub(super) async fn point(
 /// The Point question on a fixed sample, for the read contract's fingerprint.
 pub(super) fn contract_sample() -> Value {
     let start = question(
-        "",
-        "Type: type\nAttribute: attribute, words of the statement",
+        &super::ask::opening(
+            "",
+            &super::passes::numbered("words", &super::passes::lines("words")),
+        ),
+        &format!(
+            "Type: type\nAttribute: attribute, words of the statement\n\n{}",
+            super::ask::statement_words("words", (1, 1))
+        ),
         POINT_PHASE,
         "The words, each under a letter:\nA word\n0 none of these words\n",
         "At which word does the statement's attribute start?",

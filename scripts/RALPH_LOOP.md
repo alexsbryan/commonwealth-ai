@@ -81,7 +81,16 @@ director first too, unless it says `--operator`. With no charter, or after
 `<control>/parked/<row>.md`, the operator is notified once, and every row that
 does not depend on it keeps running. `ralph.py unpark <row>` (or deleting the
 package) releases it with its counters reset. HUMAN- rows and rows outside a
-frozen scope (`scope_file`) are held the same way.
+frozen scope (`scope_file`) are held the same way. A HUMAN- row whose act
+leaves a checkable fact can close itself: it names a check from the queue
+manifest's `[checks]` as `— closes-when=<check> —`, and once its dependencies
+are done the loop runs that check in the main tree at most once a minute
+(timeout `CLOSES_WHEN_TIMEOUT_S`). Exit 0 marks the row `[x]` with the commit
+`ralph: <id> done (closes-when <check> passed)`. A failure leaves it held, and
+a check that cannot run or finish is logged once and never marks or strikes.
+`status` shows the last run. A name the manifest does not declare is refused
+when the queue is read (the loop blocks on `queue`). The manifest is read at
+start, so restart the loop after adding a check.
 
 A detached run that will overrun its budget through no fault of its own (a
 slow row on a loaded host) can be given more time instead of being ended

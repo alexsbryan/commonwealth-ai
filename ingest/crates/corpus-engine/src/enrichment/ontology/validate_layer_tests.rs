@@ -130,7 +130,7 @@ fn every_field_a_pass_asks_is_named_with_its_pass_and_the_rest_is_warned() {
     let mv = note("move");
     for filled in [
         "subject `item` ← RESOLVE",
-        "step ← Choose on move",
+        "step ← Act on move",
         "move_id ← Point on move",
         "at ← Point on move",
         "holder ← Pick on move (candidates: `party`'s source records, Mention)",
@@ -251,5 +251,97 @@ fn a_folded_read_field_is_named_and_a_misplaced_by_refuses() {
             "{says}: {:#?}",
             v.errors
         );
+    }
+}
+
+/// A protocol's transitions: `by` names a declared path (who may move),
+/// `from` and `initial` name states of the derived attribute's closed set,
+/// and a document field may be walked backwards (`^from`: the documents a
+/// party wrote). Each misnamed one refuses on its own.
+#[test]
+fn a_transition_names_its_mover_by_path_and_its_states_from_the_closed_set() {
+    let when = "when = { step = \"open\" }\n";
+    let machine = |by: &str, from: &str, initial: &str| {
+        fixture()
+            .replace(
+                "effective_time = \"at\"\n",
+                &format!("effective_time = \"at\"\ninitial = \"{initial}\"\n"),
+            )
+            .replace(when, &format!("{when}by = \"{by}\"\nfrom = [\"{from}\"]\n"))
+            .replace(
+                "path = \"batch / tag\"\n",
+                "path = \"batch / tag\"\n\n[[enrichment.ontology.paths]]\nid = \"wrote\"\npath = \"document / from / ^from\"\n",
+            )
+    };
+    let v = validated(&machine("wrote", "shut", "open"));
+    assert!(
+        !v.errors
+            .iter()
+            .any(|e| e.contains("protocol") || e.contains("backwards")),
+        "{:#?}",
+        v.errors
+    );
+    for (recipe, says) in [
+        (
+            machine("owner_of_item", "shut", "open"),
+            "names no declared path",
+        ),
+        (machine("wrote", "ajar", "open"), "moves from `ajar`"),
+        (
+            machine("wrote", "shut", "ajar"),
+            "`protocol.initial` `ajar`",
+        ),
+    ] {
+        let v = validated(&recipe);
+        assert!(
+            v.errors.iter().any(|e| e.contains(says)),
+            "{says}: {:#?}",
+            v.errors
+        );
+    }
+}
+
+/// A sourced type a reference targets: without an identity criterion its
+/// mentions stay Pick's proposals and its identity line says what would
+/// change that; with one, the line says RESOLVE decides them.
+#[test]
+fn a_referenced_sourced_type_says_who_decides_its_mentions() {
+    let line = |v: &super::super::OntologyValidation| {
+        v.notes
+            .iter()
+            .find(|n| n.starts_with("identity: party"))
+            .cloned()
+            .expect("party's identity line")
+    };
+    let bare = line(&validated(&fixture()));
+    assert!(bare.contains("stay Pick's proposals"), "{bare}");
+    let decided = line(&validated(&fixture().replace(
+        "name = \"party\"\nkind = \"entity\"\n",
+        "name = \"party\"\nkind = \"entity\"\nidentity_criterion = \"the same party\"\n",
+    )));
+    assert!(
+        decided.contains("RESOLVE decides its mentions"),
+        "{decided}"
+    );
+}
+
+/// A declaration the document reader reads makes no record of a type no
+/// statement is about and no source supplies: `lot`, which `move` only
+/// references, is named. A state of `item` is read since 2026-10-15 (its
+/// holder is decided), so it is not; nor are `item`, `move` and the sourced
+/// `party`. The general extractor reads every kind, so a template it reads
+/// warns of nothing (`recipe_templates_all_ten_parse`).
+#[test]
+fn a_type_the_document_reader_makes_no_record_of_is_warned() {
+    let v = validated(&fixture().replace(
+        "[[enrichment.ontology.types]]\nname = \"move\"",
+        "[[enrichment.ontology.types]]\nname = \"mood\"\nkind = \"state\"\nof = \"item\"\n\n\
+         [[enrichment.ontology.types]]\nname = \"move\"",
+    ));
+    let unread = warned(&v, "makes no record of");
+    assert_eq!(unread.len(), 1, "{:#?}", v.warnings);
+    assert!(unread[0].contains("`lot` (entity)"), "{}", unread[0]);
+    for read in ["`mood`", "`item`", "`move`", "`party`"] {
+        assert!(!unread[0].contains(read), "{read}: {}", unread[0]);
     }
 }

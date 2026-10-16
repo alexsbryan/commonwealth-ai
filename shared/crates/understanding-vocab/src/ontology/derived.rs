@@ -89,6 +89,10 @@ pub struct ProtocolFoldDecl {
     /// Explicit claim qualifications map to application state values.
     #[serde(default)]
     pub rules: Vec<ProtocolRuleDecl>,
+    /// The state a record holds before any move, for the rules' `from`
+    /// alone: a record no cited move reaches still holds nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initial: Option<String>,
 }
 
 /// One application-data mapping from a qualified claim to a scalar state.
@@ -107,6 +111,13 @@ pub struct ProtocolRuleDecl {
     /// An optional field whose supported identity must name a prior transition.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub corrects: Option<String>,
+    /// Who may make this move: a declared path walked from the claim, the
+    /// move counting only when it reaches something. Absent: anyone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub by: Option<String>,
+    /// The states this move may leave. Empty: any state, and none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub from: Vec<String>,
 }
 
 /// The fold registry. Closed: a new function is a variant here and an arm in
@@ -199,6 +210,16 @@ impl DerivedPolicy {
             }
         }
         out
+    }
+
+    /// The declared exclusion sets over type `of`: a record in one is never
+    /// a Pick candidate nor a value a record's reference to `of` holds.
+    pub fn exclusions_of(&self, of: &str) -> Vec<&SetDecl> {
+        let ids = self.exclusion_sets();
+        self.sets
+            .iter()
+            .filter(|s| s.of == of && ids.contains(s.id.as_str()))
+            .collect()
     }
 
     /// The parsed expressions a path or fold id evaluates.

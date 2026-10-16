@@ -1,0 +1,10 @@
+measure: ontology-layer/layer-identity-gvc  failed  value=0.515  ref=artifact  log=/Users/alexsbryan/.sovereign/comaintainer/measure/2026-10-11T061315+0000.layer-identity-gvc.log
+measure: ontology-layer/layer-identity-ward  failed  value=0.806  ref=artifact  log=/Users/alexsbryan/.sovereign/comaintainer/measure/2026-10-11T061315+0000.layer-identity-ward.log
+measure: ontology-layer/layer-identity-uv  could-not-judge  reason=exit 1  ref=unattributed  log=/Users/alexsbryan/.sovereign/comaintainer/measure/2026-10-11T061319+0000.layer-identity-uv.log
+measure: ontology-layer/layer-estimator  could-not-judge  reason=artifact-absent  ref=unattributed  log=/Users/alexsbryan/.sovereign/comaintainer/measure/2026-10-11T061320+0000.layer-estimator.log
+measure: ontology-layer/layer-no-tuning  met  value=0.0  ref=unattributed  log=/Users/alexsbryan/.sovereign/comaintainer/measure/2026-10-11T061320+0000.layer-no-tuning.log
+measure: ontology-layer/layer-default-path  met  value=3.0  ref=artifact  log=/Users/alexsbryan/.sovereign/comaintainer/measure/2026-10-11T061321+0000.layer-default-path.log
+measure: ontology-layer/layer-author-gap  could-not-judge  reason=exit 1  ref=unattributed  log=/Users/alexsbryan/.sovereign/comaintainer/measure/2026-10-11T061323+0000.layer-author-gap.log
+measure: ontology-layer/layer-invariants  met  value=6.0  ref=head  log=/Users/alexsbryan/.sovereign/comaintainer/measure/2026-10-11T061323+0000.layer-invariants.log
+{"subject":"co-lineage","verdict":"passed","reason":"8 instrumented bar(s) across 1 campaign(s) each wrote a measurement row","as_of":1791699258}
+measure exit=0

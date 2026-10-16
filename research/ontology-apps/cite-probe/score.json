@@ -1,0 +1,242 @@
+{
+ "ward": {
+  "locate": {
+   "hit": 29.0,
+   "n": 37,
+   "rate": 0.784,
+   "chance": 0.199,
+   "mean_lines_in_top3": 3.0,
+   "stage_update_by_document": [
+    24.0,
+    26
+   ]
+  },
+  "Lv": {
+   "hit": 18.0,
+   "n": 37,
+   "rate": 0.486,
+   "chance": 0.199,
+   "mean_lines_in_top3": 3.0,
+   "stage_update_by_document": [
+    14.0,
+    26
+   ]
+  },
+  "Uv": {
+   "hit": 25.0,
+   "n": 37,
+   "rate": 0.676,
+   "chance": 0.443,
+   "mean_lines_in_top3": 5.35,
+   "stage_update_by_document": [
+    19.0,
+    26
+   ]
+  },
+  "UFv": {
+   "hit": 25.0,
+   "n": 37,
+   "rate": 0.676,
+   "chance": 0.419,
+   "mean_lines_in_top3": 5.24,
+   "stage_update_by_document": [
+    19.0,
+    26
+   ]
+  },
+  "Lk": {
+   "hit": 14.0,
+   "n": 37,
+   "rate": 0.378,
+   "chance": 0.199,
+   "mean_lines_in_top3": 3.0,
+   "stage_update_by_document": [
+    12.0,
+    26
+   ]
+  },
+  "Uk": {
+   "hit": 23.0,
+   "n": 37,
+   "rate": 0.622,
+   "chance": 0.443,
+   "mean_lines_in_top3": 5.27,
+   "stage_update_by_document": [
+    18.0,
+    26
+   ]
+  },
+  "UFk": {
+   "hit": 23.0,
+   "n": 37,
+   "rate": 0.622,
+   "chance": 0.419,
+   "mean_lines_in_top3": 5.14,
+   "stage_update_by_document": [
+    18.0,
+    26
+   ]
+  },
+  "furniture": {
+   "units": 19579,
+   "marked": 3635,
+   "share": 0.1857,
+   "gold_units": 89,
+   "gold_marked": 3,
+   "bar2_passed": false
+  }
+ },
+ "uv": {
+  "locate": {
+   "hit": 117.95,
+   "n": 125,
+   "rate": 0.944,
+   "chance": 0.822,
+   "mean_lines_in_top3": 1.58,
+   "informative": [
+    22.95,
+    30,
+    0.765
+   ]
+  },
+  "Lv": {
+   "hit": 100.0,
+   "n": 125,
+   "rate": 0.8,
+   "chance": 0.822,
+   "mean_lines_in_top3": 1.58,
+   "informative": [
+    5.0,
+    30,
+    0.167
+   ]
+  },
+  "Uv": {
+   "hit": 95.0,
+   "n": 125,
+   "rate": 0.76,
+   "chance": 0.776,
+   "mean_lines_in_top3": 1.69,
+   "informative": [
+    11.0,
+    30,
+    0.367
+   ]
+  },
+  "UFv": {
+   "hit": 105.0,
+   "n": 125,
+   "rate": 0.84,
+   "chance": 0.859,
+   "mean_lines_in_top3": 1.73,
+   "informative": [
+    10.0,
+    30,
+    0.333
+   ]
+  },
+  "Lk": {
+   "hit": 99.0,
+   "n": 125,
+   "rate": 0.792,
+   "chance": 0.822,
+   "mean_lines_in_top3": 1.58,
+   "informative": [
+    4.0,
+    30,
+    0.133
+   ]
+  },
+  "Uk": {
+   "hit": 92.0,
+   "n": 125,
+   "rate": 0.736,
+   "chance": 0.776,
+   "mean_lines_in_top3": 1.55,
+   "informative": [
+    8.0,
+    30,
+    0.267
+   ]
+  },
+  "UFk": {
+   "hit": 104.0,
+   "n": 125,
+   "rate": 0.832,
+   "chance": 0.859,
+   "mean_lines_in_top3": 1.58,
+   "informative": [
+    9.0,
+    30,
+    0.3
+   ]
+  },
+  "furniture": {
+   "units": 13657,
+   "marked": 1288,
+   "share": 0.0943,
+   "gold_units": 173,
+   "gold_marked": 14,
+   "bar2_passed": false
+  }
+ },
+ "gvc": {
+  "locate": {
+   "hit": 207.11,
+   "n": 289,
+   "rate": 0.717,
+   "chance": 0.46,
+   "mean_lines_in_top3": 3.0
+  },
+  "Lv": {
+   "hit": 254.0,
+   "n": 289,
+   "rate": 0.879,
+   "chance": 0.46,
+   "mean_lines_in_top3": 3.0
+  },
+  "Uv": {
+   "hit": 259.0,
+   "n": 289,
+   "rate": 0.896,
+   "chance": 0.597,
+   "mean_lines_in_top3": 4.34
+  },
+  "UFv": {
+   "hit": 259.0,
+   "n": 289,
+   "rate": 0.896,
+   "chance": 0.594,
+   "mean_lines_in_top3": 4.33
+  },
+  "Lk": {
+   "hit": 207.5,
+   "n": 289,
+   "rate": 0.718,
+   "chance": 0.46,
+   "mean_lines_in_top3": 3.0
+  },
+  "Uk": {
+   "hit": 227.0,
+   "n": 289,
+   "rate": 0.785,
+   "chance": 0.597,
+   "mean_lines_in_top3": 4.33
+  },
+  "UFk": {
+   "hit": 227.0,
+   "n": 289,
+   "rate": 0.785,
+   "chance": 0.594,
+   "mean_lines_in_top3": 4.32
+  },
+  "furniture": {
+   "units": 12858,
+   "marked": 2672,
+   "share": 0.2078,
+   "gold_units": 1162,
+   "gold_marked": 147,
+   "bar2_passed": false
+  }
+ }
+}

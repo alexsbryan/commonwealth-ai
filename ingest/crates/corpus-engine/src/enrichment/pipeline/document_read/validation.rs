@@ -106,14 +106,15 @@ fn validate_outcome(
     policies: &OntologyPolicies,
 ) -> Result<bool> {
     match outcome.status {
-        DocumentReadStatus::Read if outcome.claims.is_empty() => {
+        DocumentReadStatus::Read if outcome.claims.is_empty() && outcome.particulars.is_empty() => {
             return Err(Error::Serialization(format!(
-                "document `{}` says read but emitted no claims",
+                "document `{}` says read but emitted no claims and no particulars",
                 outcome.document_id
             )))
         }
         DocumentReadStatus::NothingApplicable
             if !outcome.claims.is_empty()
+                || !outcome.particulars.is_empty()
                 || outcome.reason.as_deref().is_none_or(str::is_empty) =>
         {
             return Err(Error::Serialization(format!(
@@ -123,6 +124,7 @@ fn validate_outcome(
         }
         DocumentReadStatus::CouldNotJudge | DocumentReadStatus::NotRead
             if !outcome.claims.is_empty()
+                || !outcome.particulars.is_empty()
                 || outcome.reason.as_deref().is_none_or(str::is_empty) =>
         {
             return Err(Error::Serialization(format!(
@@ -137,7 +139,7 @@ fn validate_outcome(
         .shape
         .types
         .iter()
-        .filter(|ty| super::schema::eligible_claim(ty, policies))
+        .filter(|ty| super::schema::read_kind(ty, policies))
         .map(|ty| (ty.name.as_str(), ty))
         .collect();
     let before = outcome.claims.len();
@@ -186,15 +188,110 @@ fn validate_outcome(
             }
         }
     }
+    // A particular no claim is about: a claim sharing its reference is about
+    // it, so the reader would not have emitted it.
+    let offered = outcome.particulars.len();
+    let mut particulars = Vec::with_capacity(offered);
+    for particular in outcome.particulars.drain(..) {
+        let key = (
+            particular.subject_type.clone(),
+            particular.subject_local_ref.clone(),
+        );
+        let refusal = if local_subjects.contains_key(&key) {
+            Some(format!(
+                "particular `{}` is one a claim of document `{}` is about",
+                particular.subject_local_ref, outcome.document_id
+            ))
+        } else {
+            verify_particular(&particular, document, policies, &index).err()
+        };
+        match refusal {
+            None => particulars.push(particular),
+            Some(reason) => {
+                tracing::warn!(document = %outcome.document_id, of = %particular.subject_type, reason = %reason, "phase1.document_read_particular_refused");
+                refused.push(super::DocumentReadRefusal {
+                    kind: particular.subject_type,
+                    reason,
+                });
+            }
+        }
+    }
+    let changed = before > kept.len() || offered > particulars.len();
     outcome.claims = kept;
-    outcome.refused = refused;
-    if outcome.status == DocumentReadStatus::Read && outcome.claims.is_empty() {
+    outcome.particulars = particulars;
+    // A reader's own refusals (the window reader's) stay beside validation's.
+    outcome.refused.extend(refused);
+    if outcome.status == DocumentReadStatus::Read
+        && outcome.claims.is_empty()
+        && outcome.particulars.is_empty()
+    {
         outcome.status = DocumentReadStatus::CouldNotJudge;
         outcome.reason = Some(format!(
-            "every claim ({before}) was refused: its citation did not verify in this document"
+            "every claim ({before}) and particular ({offered}) was refused: its citation did not \
+             verify in this document"
         ));
     }
-    Ok(before > outcome.claims.len())
+    Ok(changed)
+}
+
+/// Why a particular no claim is about cannot be projected, or `Ok(())` when
+/// its type is one RESOLVE decides and its words and fields verify against
+/// THIS document.
+fn verify_particular(
+    particular: &super::DocumentReadParticular,
+    document: &SourceDocument,
+    policies: &OntologyPolicies,
+    index: &TypeIndex,
+) -> std::result::Result<(), String> {
+    let of = particular.subject_type.as_str();
+    if !crate::enrichment::atlas::resolution_records::decides(index, of)
+        && !crate::enrichment::atlas::resolution_records::decides_mentions(index, of)
+    {
+        return Err(format!(
+            "`{of}` is not a type RESOLVE decides, so no particular of it is read"
+        ));
+    }
+    if particular.subject_local_ref.trim().is_empty() || particular.subject_name.trim().is_empty() {
+        return Err(format!("a particular of `{of}` lacks its local reference"));
+    }
+    if !claim_evidence_exists(document, &particular.evidence) {
+        return Err(format!(
+            "the line naming it is not an exact passage in document `{}`",
+            document.key()
+        ));
+    }
+    if let Some(words) = &particular.words {
+        if words.trim().is_empty() || !particular.evidence.contains(words.as_str()) {
+            return Err(format!(
+                "the mention's words {words:?} are not on the line it cites"
+            ));
+        }
+    }
+    validate_fields(
+        &particular.subject_fields,
+        super::schema::subject_read_attributes(policies, index, of),
+        &format!("subject `{of}` fields"),
+    )
+    .map_err(|error| error.to_string())?;
+    fields_cited(&particular.subject_fields, document)
+}
+
+/// `Ok(())` when every supported field's evidence is in the document.
+fn fields_cited(
+    fields: &BTreeMap<String, DocumentReadField>,
+    document: &SourceDocument,
+) -> std::result::Result<(), String> {
+    for field in fields.values() {
+        if let DocumentReadField::Supported { evidence, .. } = field {
+            if !field_evidence_exists(document, evidence) {
+                return Err(format!(
+                    "field evidence {evidence:?} is not present in document `{}` body or metadata",
+                    document.key()
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Why one claim cannot be projected, or `Ok(())` when its citation, voice
@@ -209,7 +306,7 @@ fn verify_claim(
     let decl = eligible
         .get(claim.kind.as_str())
         .ok_or_else(|| format!("claim kind `{}` is not eligible in this recipe", claim.kind))?;
-    let subject_type = decl.subject.as_deref().unwrap_or_default();
+    let subject_type = decl.read_subject().unwrap_or_default();
     if claim.subject_type != subject_type
         || claim.subject_local_ref.trim().is_empty()
         || claim.subject_name.trim().is_empty()
@@ -235,9 +332,10 @@ fn verify_claim(
             claim.kind
         ));
     }
+    let attrs = super::schema::statement_attributes(index, decl);
     validate_fields(
         &claim.fields,
-        index.extracted_attributes(&decl.name),
+        attrs.iter().map(|a| &**a).collect(),
         &format!("claim `{}` fields", decl.name),
     )
     .map_err(|error| error.to_string())?;
@@ -248,19 +346,8 @@ fn verify_claim(
         &format!("subject `{subject_type}` fields"),
     )
     .map_err(|error| error.to_string())?;
-    for fields in [&claim.fields, &claim.subject_fields] {
-        for field in fields.values() {
-            if let DocumentReadField::Supported { evidence, .. } = field {
-                if !field_evidence_exists(document, evidence) {
-                    return Err(format!(
-                        "field evidence {evidence:?} is not present in document `{}` body or metadata",
-                        document.key()
-                    ));
-                }
-            }
-        }
-    }
-    Ok(())
+    fields_cited(&claim.fields, document)?;
+    fields_cited(&claim.subject_fields, document)
 }
 
 /// A claim may cite the document itself by an exact identity value (its key,

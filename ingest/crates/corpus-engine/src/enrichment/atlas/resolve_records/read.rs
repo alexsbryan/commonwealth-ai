@@ -59,6 +59,12 @@ pub(super) fn provided(
                 );
             }
         }
+        if let Some(subject) = of(statement).get(super::CHAPTER_SUBJECT_KEY) {
+            out[i]
+                .entry(super::CHAPTER_SUBJECT_KEY.to_string())
+                .or_default()
+                .insert(subject.clone());
+        }
     }
     out
 }
@@ -97,8 +103,10 @@ pub(super) async fn read(
                 &criterion.description,
                 necessary,
                 &labels,
-                doc.body,
-                s.start..s.end,
+                &format!(
+                    "Statement, its words in [[ ]]: \"…{}…\"",
+                    marked_context(doc.body, s.start, s.end)
+                ),
                 "resolve_read",
             );
             out.calls += 1;
@@ -147,8 +155,7 @@ pub(crate) fn choice_question(
     type_description: &str,
     attr: &ClosedAttr,
     labels: &[&str],
-    body: &str,
-    span: std::ops::Range<usize>,
+    statement: &str,
     phase: &str,
 ) -> ChatPrompt {
     let mut u = format!("Type: {type_name}");
@@ -160,8 +167,7 @@ pub(crate) fn choice_question(
         u.push_str(&format!(" ({})", attr.description));
     }
     u.push_str(&format!(
-        "\n\nStatement, its words in [[ ]]: \"…{}…\"\n\nWhich {} do the words in [[ ]] refer to?\n",
-        marked_context(body, span.start, span.end),
+        "\n\n{statement}\n\nWhich {} do the words in [[ ]] refer to?\n",
         attr.name
     ));
     for (v, l) in attr.values.iter().zip(labels) {

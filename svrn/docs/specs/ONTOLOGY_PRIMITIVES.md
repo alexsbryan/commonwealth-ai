@@ -742,7 +742,7 @@ commitment a run of acts builds (a request, an indication, a counter, an
 accept, a confirm); a support case is the tickets and requests one customer
 files about one feature (§1.10). No single section carries their identity or
 their state, so Phase 1 cannot extract them. Measured on the crm-proof
-baseline (`quality/campaigns/crm-proof.toml`): 22 deal atoms for 79 gold
+baseline (`quality/campaigns/closed/crm-proof.toml`): 22 deal atoms for 79 gold
 transactions, 153 of 222 stage claims with no subject, 0 of 206 holdout
 stage updates matched. Header structure alone regroups the gold deals at
 B-cubed F1 0.60 (thread subject; counterparty domain 0.57).
@@ -822,6 +822,20 @@ exact duplicate reports are marked on the audit line while all cited members
 stay in history. A correction uses a declared `corrects` field that names an
 existing transition identity. A later report with a new identity (such as a
 reopen) may change the current projection without retracting older evidence.
+
+**Transitions (built 2026-10-11).** A rule is a move into its state. `by`
+names a declared path walked from the claim; the move counts only when it
+reaches something (who may make it: a maintainer is `document / author /
+^author [maintainer_post]`, the inverse field step reaching the documents the
+author wrote, so an event with no association takes its actor's role).
+`from` lists the states the move may leave, and `initial` is the state a record
+holds before any move, read for `from` alone. A protocol with either is replayed
+in report-time order; a report no move admits is kept in history as
+`unauthorized` or `not_from_state`, never as the state. Several rules a claim
+matches into one state are one move. Prereg H4 on uv (converge-s3 replay, no
+model): 13 -> 15 of 44 served right, killed by its own bar, since one right case
+turned wrong: a duplicate's close read as a decline (an identity act read as a
+state), whose old answer came from a misread later message winning by date.
 
 `change.document.date` supplies the report-time clock: `as_of_report_time` says
 what the record reported as of that document time. A configured claim

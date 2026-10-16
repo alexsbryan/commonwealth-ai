@@ -26,7 +26,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use serde_json::{Map, Value};
 
-use crate::enrichment::atlas::atoms::{AtomEnvelope, Claim, Entity, Relation};
+use crate::enrichment::atlas::atoms::{AtomEnvelope, Claim, Entity, Event, Relation};
 use crate::enrichment::atlas::fold;
 use crate::enrichment::ontology::{OntologyPolicies, TypeIndex};
 
@@ -41,6 +41,8 @@ use super::typed_check::{
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Atom<'a> {
     Entity(&'a Entity),
+    /// A declared event type's record (a novel's incident, a filing's hearing).
+    Event(&'a Event),
     Claim(&'a Claim),
 }
 
@@ -48,14 +50,17 @@ impl<'a> Atom<'a> {
     pub(super) fn id(self) -> &'a str {
         match self {
             Atom::Entity(e) => e.id.as_str(),
+            Atom::Event(e) => e.id.as_str(),
             Atom::Claim(c) => c.id.as_str(),
         }
     }
 
-    /// What a row calls the atom: an entity's canonical name, a claim's content.
+    /// What a row calls the atom: an entity's canonical name, an event's
+    /// description, a claim's content.
     pub(super) fn name(self) -> &'a str {
         match self {
             Atom::Entity(e) => &e.canonical_name,
+            Atom::Event(e) => &e.description,
             Atom::Claim(c) => &c.content,
         }
     }
@@ -63,6 +68,7 @@ impl<'a> Atom<'a> {
     pub(super) fn attributes(self) -> &'a Map<String, Value> {
         match self {
             Atom::Entity(e) => &e.attributes,
+            Atom::Event(e) => &e.attributes,
             Atom::Claim(c) => &c.attributes,
         }
     }
@@ -72,6 +78,7 @@ impl<'a> Atom<'a> {
     fn subtype(self) -> &'a str {
         match self {
             Atom::Entity(e) => e.entity_type.as_str_repr(),
+            Atom::Event(e) => e.event_type.as_str_repr(),
             Atom::Claim(c) => c.claim_kind.as_deref().unwrap_or(""),
         }
     }
@@ -81,7 +88,7 @@ impl<'a> Atom<'a> {
     pub(super) fn rank(a: Atom<'_>, b: Atom<'_>) -> Ordering {
         let s = |x: Atom<'_>| match x {
             Atom::Entity(e) => Some(e.salience),
-            Atom::Claim(_) => None,
+            Atom::Event(_) | Atom::Claim(_) => None,
         };
         match (s(a), s(b)) {
             (Some(x), Some(y)) => y.partial_cmp(&x).unwrap_or(Ordering::Equal),
@@ -99,6 +106,7 @@ impl<'a> Atom<'a> {
     pub(super) fn chunk_ids(self) -> Vec<String> {
         let envelope = match self {
             Atom::Entity(e) => AtomEnvelope::Entity(e.clone()),
+            Atom::Event(e) => AtomEnvelope::Event(e.clone()),
             Atom::Claim(c) => AtomEnvelope::Claim(c.clone()),
         };
         envelope
@@ -153,6 +161,7 @@ impl<'a> Judge<'a> {
             .entities
             .iter()
             .map(Atom::Entity)
+            .chain(atlas.events.iter().map(Atom::Event))
             .chain(atlas.claims.iter().map(Atom::Claim))
             .collect();
         let by_id = all.iter().map(|a| (a.id(), *a)).collect();

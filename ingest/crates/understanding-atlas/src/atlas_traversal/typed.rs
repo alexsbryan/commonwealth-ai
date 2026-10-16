@@ -391,6 +391,7 @@ pub fn execute(query: &TypedQuery, atlas: AtlasView<'_>) -> TraversalResult {
     for (atom, _) in &answer {
         match atom {
             Atom::Entity(e) => result.entities.push((*e).clone()),
+            Atom::Event(e) => result.events.push((*e).clone()),
             Atom::Claim(c) => result.claims.push((*c).clone()),
         }
     }

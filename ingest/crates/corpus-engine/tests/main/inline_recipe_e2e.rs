@@ -50,6 +50,7 @@ fn documents() -> Vec<(String, String, Option<String>)> {
                 name,
                 text,
                 metadata,
+                ..
             } => (name, text, metadata),
             DeclaredDocument::File { .. } => panic!("the fixture is inline"),
         })

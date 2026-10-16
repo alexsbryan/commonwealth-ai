@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::enrichment::ontology::{OntologyPolicies, TypeIndex};
+use crate::enrichment::ontology::{Force, OntologyPolicies, TypeIndex, TypeKind};
 use crate::enrichment::pipeline::atlas::{
     ClaimScope, ClaimSketch, EnrichmentDepth, EpistemicStatus, SectionExtraction,
 };
@@ -14,14 +14,17 @@ use crate::error::{Error, Result};
 use super::schema;
 use super::validation;
 use super::{
-    supported_values, DocumentRead, DocumentReadOutcome, CLAIM_FIELDS_ATTRIBUTE,
-    LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE,
+    supported_values, DocumentRead, DocumentReadOutcome, DocumentReadParticular, SubjectScope,
+    ABOUT_ATTRIBUTE, CHAPTER_SUBJECT_ATTRIBUTE, CLAIM_FIELDS_ATTRIBUTE, LOCAL_REF_ATTRIBUTE,
+    SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE, WORDS_ATTRIBUTE,
 };
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawRead {
     documents: Vec<DocumentReadOutcome>,
+    #[serde(default)]
+    subjects: SubjectScope,
 }
 
 /// Parse only the dedicated document envelope; no generic facet or question is required.
@@ -38,6 +41,7 @@ pub fn parse_response(response: &str, policies: &OntologyPolicies) -> Result<Pha
             contract_fingerprint: super::cache::contract_fingerprint(policies),
             context_fingerprint: String::new(),
             documents: raw.documents,
+            subjects: raw.subjects,
         }),
         ..Default::default()
     };
@@ -61,7 +65,7 @@ pub(super) fn project_compatibility_sketches(
         .shape
         .types
         .iter()
-        .filter(|ty| schema::eligible_claim(ty, policies));
+        .filter(|ty| schema::read_kind(ty, policies));
     let claim_decls: HashMap<&str, _> = claims.map(|ty| (ty.name.as_str(), ty)).collect();
     let mut sketches = Vec::new();
     let read = extraction.document_read.as_ref().ok_or_else(|| {
@@ -75,7 +79,7 @@ pub(super) fn project_compatibility_sketches(
                     claim.kind
                 ))
             })?;
-            let subject_type = decl.subject.as_deref().ok_or_else(|| {
+            let subject_type = decl.read_subject().ok_or_else(|| {
                 Error::Serialization(format!(
                     "claim type `{}` has no subject declaration",
                     decl.name
@@ -87,9 +91,10 @@ pub(super) fn project_compatibility_sketches(
                     claim.kind, claim.subject_type
                 )));
             }
+            let attrs = schema::statement_attributes(&index, decl);
             validation::validate_fields(
                 &claim.fields,
-                index.extracted_attributes(&decl.name),
+                attrs.iter().map(|a| &**a).collect(),
                 &format!("claim `{}` fields", decl.name),
             )?;
             policies.type_decl(subject_type).ok_or_else(|| {
@@ -115,6 +120,12 @@ pub(super) fn project_compatibility_sketches(
                 LOCAL_REF_ATTRIBUTE.into(),
                 Value::String(claim.subject_local_ref.clone()),
             );
+            if read.subjects == SubjectScope::Chapter {
+                attributes.insert(
+                    CHAPTER_SUBJECT_ATTRIBUTE.into(),
+                    Value::String(claim.subject_local_ref.clone()),
+                );
+            }
             attributes.insert(
                 SOURCE_DOCUMENT_ATTRIBUTE.into(),
                 Value::String(outcome.document_id.clone()),
@@ -130,12 +141,23 @@ pub(super) fn project_compatibility_sketches(
                     ))
                 })?,
             );
-            let force = decl.force.ok_or_else(|| {
-                Error::Serialization(format!(
-                    "claim type `{}` has no declared force for document reading",
-                    decl.name
-                ))
-            })?;
+            // A state or relation statement asserts what it reads; only a
+            // claim kind declares a force.
+            let force = match decl.kind {
+                TypeKind::Claim => decl.force.ok_or_else(|| {
+                    Error::Serialization(format!(
+                        "claim type `{}` has no declared force for document reading",
+                        decl.name
+                    ))
+                })?,
+                TypeKind::State | TypeKind::Relation => Force::Assertive,
+                TypeKind::Entity | TypeKind::Event => {
+                    return Err(Error::Serialization(format!(
+                        "`{}` is an {:?} type, not a statement kind",
+                        decl.name, decl.kind
+                    )))
+                }
+            };
             let discourse_act =
                 crate::enrichment::pipeline::pipelines::parse_policy::discourse_act_for(force);
             let scope = decl
@@ -155,9 +177,61 @@ pub(super) fn project_compatibility_sketches(
                 attributes,
             });
         }
+        for particular in &outcome.particulars {
+            sketches.push(particular_sketch(particular, &outcome.document_id)?);
+        }
     }
     extraction.claims.extend(sketches);
     Ok(())
+}
+
+/// A particular no claim is about, as the claim RESOLVE reads: the document
+/// asserts it is about the particular, at the words that first name it. It
+/// declares no claim kind; its type rides on [`ABOUT_ATTRIBUTE`], and its
+/// reference, document and identifying readings as a claim's do. A mention's
+/// words ride on [`WORDS_ATTRIBUTE`].
+fn particular_sketch(
+    particular: &DocumentReadParticular,
+    document_id: &str,
+) -> Result<ClaimSketch> {
+    let mut attributes = serde_json::Map::new();
+    attributes.insert(
+        ABOUT_ATTRIBUTE.into(),
+        Value::String(particular.subject_type.clone()),
+    );
+    attributes.insert(
+        LOCAL_REF_ATTRIBUTE.into(),
+        Value::String(particular.subject_local_ref.clone()),
+    );
+    attributes.insert(
+        SOURCE_DOCUMENT_ATTRIBUTE.into(),
+        Value::String(document_id.to_string()),
+    );
+    if let Some(words) = &particular.words {
+        attributes.insert(WORDS_ATTRIBUTE.into(), Value::String(words.clone()));
+    }
+    attributes.insert(
+        SUBJECT_FIELDS_ATTRIBUTE.into(),
+        serde_json::to_value(&particular.subject_fields).map_err(|error| {
+            Error::Serialization(format!(
+                "document-read particular field evidence cannot be serialized: {error}"
+            ))
+        })?,
+    );
+    Ok(ClaimSketch {
+        content: particular.evidence.trim().to_string(),
+        discourse_act: crate::enrichment::pipeline::pipelines::parse_policy::discourse_act_for(
+            crate::enrichment::ontology::Force::Assertive,
+        ),
+        epistemic_status: EpistemicStatus::Attributed,
+        attributed_to: None,
+        quotable_excerpt: Some(particular.evidence.clone()),
+        anchor: particular.evidence.clone(),
+        claim_kind: None,
+        subject: Some(particular.subject_name.clone()),
+        scope: Some(ClaimScope::Universal),
+        attributes,
+    })
 }
 
 #[cfg(test)]

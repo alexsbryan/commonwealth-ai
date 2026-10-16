@@ -1136,6 +1136,12 @@ pub(super) async fn run_daemon(
 
     bootstrap::install_foreground_yield_hook(Arc::clone(&daemon), code_yield);
 
+    // OICP v0.6 §2.11: a corpus sentence-indexed before this start is loaded
+    // from its sidecar and finished, not embedded again.
+    if let Some(state) = daemon.app_state().await {
+        state.inner.node.sentences.resume_stored(&state);
+    }
+
     eprintln!(
         "svrn daemon running — http://localhost:{}/v1 + /mcp",
         config.daemon.client_port

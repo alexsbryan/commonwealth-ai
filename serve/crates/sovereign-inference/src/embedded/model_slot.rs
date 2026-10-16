@@ -827,7 +827,7 @@ fn env_tensor_buft_overrides() -> Vec<(
     out
 }
 
-fn inference_deadline_secs() -> u64 {
+pub(crate) fn inference_deadline_secs() -> u64 {
     use std::sync::OnceLock;
     static DEADLINE: OnceLock<u64> = OnceLock::new();
     *DEADLINE.get_or_init(|| {
@@ -2694,6 +2694,21 @@ impl ModelSlot {
             SlotInferenceMode::SingleToken { ctx } => ctx,
             SlotInferenceMode::Speculative { target_ctx, .. } => target_ctx,
         };
+        // A forced-choice wave: several closed questions off one decoded
+        // prompt, each answered as its single request would be.
+        if let Some(wave) = request.forced_choice_wave() {
+            let branches =
+                wave.map_err(|e| Error::InvalidInput(format!("forced_choice wave: {e}")))?;
+            return super::decide_wave::decide_wave(
+                model,
+                model_id,
+                ctx,
+                cached_tokens,
+                request,
+                &branches,
+                quirks,
+            );
+        }
         let (full_prompt, turn_opener) =
             format_prompt(model, model_id, request, quirks)?.into_parts();
 
@@ -2754,8 +2769,7 @@ impl ModelSlot {
         if let Some(cands) = forced_choice_candidates(request) {
             let probs = forced_choice_probs(model, ctx, &cands)?;
             let map: std::collections::BTreeMap<String, f32> = probs.into_iter().collect();
-            let text = serde_json::to_string(&map)
-                .map_err(|e| Error::Inference(format!("forced_choice serialize: {e}")))?;
+            let text = oicp_types::forced_choice::answer(&map);
             return Ok(GenerationOutcome {
                 text,
                 prompt_tokens: tokens.len(),

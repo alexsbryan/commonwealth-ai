@@ -6,9 +6,13 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+mod about;
+mod act;
 mod ask;
 mod cache;
+mod folded;
 mod line_classes;
+mod locate;
 mod mention;
 mod passes;
 mod pick;
@@ -18,6 +22,11 @@ mod projection;
 mod runner_support;
 mod schema;
 mod validation;
+mod waves;
+mod waves_forms;
+mod waves_jobs;
+mod waves_readings;
+mod window;
 
 pub use cache::{
     cache_matches_chapter, checkpoint_processed_ids, context_fingerprint, contract_fingerprint,
@@ -32,12 +41,13 @@ pub(super) use runner_support::{
     missing_source_documents as runner_missing_source_documents,
     phase1_inputs as runner_phase1_inputs, validate_response as runner_validate_response,
 };
-pub use schema::compose;
+pub use schema::{compose, statement_attributes, unread_types};
 pub use validation::field_evidence_exists;
 pub use validation::validate_and_stamp;
+pub use window::chosen as window_chosen;
 
 #[cfg(test)]
-use schema::eligible_claim;
+use schema::read_kind;
 
 /// Internal attributes carried only between Phase 1 projection and RESOLVE.
 pub const LOCAL_REF_ATTRIBUTE: &str = "__document_read_local_ref";
@@ -48,8 +58,31 @@ pub const SOURCE_DOCUMENT_ATTRIBUTE: &str = "__document_read_source_document";
 /// sourced subject by them (`resolution_identity/source_subject.rs`), and
 /// they stay on the claim, cited. No stage writes them onto the record.
 pub const SUBJECT_FIELDS_ATTRIBUTE: &str = "__document_read_subject_fields";
+/// The chapter-wide subject a window read gave a claim ([`SubjectScope::Chapter`]):
+/// claims in different documents that carry one value are one particular as
+/// the reader read them, and RESOLVE keys them together (`resolution_records`).
+pub const CHAPTER_SUBJECT_ATTRIBUTE: &str = "__document_read_chapter_subject";
 /// Source-supported claim fields retained beside the flattened compatibility values.
 pub const CLAIM_FIELDS_ATTRIBUTE: &str = "__document_read_fields";
+/// The type of the particular a document is about, on the claim projected
+/// from a [`DocumentReadParticular`]: such a claim declares no claim kind, so
+/// this is where its subject's type is read ([`about_type`]).
+pub const ABOUT_ATTRIBUTE: &str = "__document_read_about";
+/// A mention's words, on the claim projected from a mention particular: its
+/// statement is these words on its line (RESOLVE), and a reference reading
+/// that names them lands on its record (`resolution_derived/read_fields.rs`).
+/// Stays on the claim after RESOLVE, cited by its evidence.
+pub const WORDS_ATTRIBUTE: &str = "__document_read_words";
+
+/// The type a claim projected from a [`DocumentReadParticular`] is about.
+pub fn about_type(attributes: &Map<String, Value>) -> Option<&str> {
+    attributes.get(ABOUT_ATTRIBUTE).and_then(Value::as_str)
+}
+
+/// The words a mention particular's claim names its particular by.
+pub fn mention_words(attributes: &Map<String, Value>) -> Option<&str> {
+    attributes.get(WORDS_ATTRIBUTE).and_then(Value::as_str)
+}
 
 /// The value of each supported reading among `fields`, by field.
 pub fn supported_values(fields: &BTreeMap<String, DocumentReadField>) -> Map<String, Value> {
@@ -78,6 +111,29 @@ pub struct DocumentRead {
     pub context_fingerprint: String,
     /// Exactly one entry for each source document supplied to the reader.
     pub documents: Vec<DocumentReadOutcome>,
+    /// How far a claim's `subject_local_ref` reaches. Reads cached before
+    /// 2026-10-13 carry none: a document's own.
+    #[serde(default, skip_serializing_if = "SubjectScope::is_document")]
+    pub subjects: SubjectScope,
+}
+
+/// The closed set of reaches a reader's local subject reference has.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SubjectScope {
+    /// One reference is one particular within one document; across documents
+    /// it says nothing and RESOLVE alone decides (the passes reader).
+    #[default]
+    Document,
+    /// One reference is one particular across the chapter's documents: the
+    /// window reader read them together (`window.rs`).
+    Chapter,
+}
+
+impl SubjectScope {
+    pub fn is_document(&self) -> bool {
+        *self == SubjectScope::Document
+    }
 }
 
 /// One answer about one supplied document.
@@ -94,6 +150,33 @@ pub struct DocumentReadOutcome {
     /// the read (never projected) so a refusal is inspectable, not silent.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub refused: Vec<DocumentReadRefusal>,
+    /// Particulars the document is about that no claim of it is about.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub particulars: Vec<DocumentReadParticular>,
+}
+
+/// A particular a document is about that no claim of the document is about
+/// (`document_read/about.rs`): an issue that opens its thread is about a case
+/// before any line says where the case stands. Its type is one RESOLVE
+/// decides; `evidence` is the line that first names it, its words are in its
+/// reference, and its identifying fields are read at them. It reaches RESOLVE as a statement of its own, so
+/// the document belongs to the particular's record whether or not a line
+/// states a claim kind.
+///
+/// Or a mention (`document_read/mention.rs`) of a type whose source names
+/// only who took part (`resolution_records::decides_mentions`): its `words`
+/// are the line's own, its statement is those words on that line, and it
+/// reads no field.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct DocumentReadParticular {
+    pub subject_type: String,
+    pub subject_local_ref: String,
+    pub subject_name: String,
+    pub evidence: String,
+    pub subject_fields: BTreeMap<String, DocumentReadField>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub words: Option<String>,
 }
 
 /// One claim refused by evidence verification, with the reason it failed.

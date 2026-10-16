@@ -354,9 +354,9 @@ overlap_chars = 256
 #
 # ── Eliciting the ontology (interview the partner) ──
 # The ontology is the PARTNER's domain knowledge — you cannot write it from the
-# charter alone. Five questions, one per axis (ONTOLOGY_PRIMITIVES.md §4). ASK
-# ONLY WHAT THE CHARTER DOESN'T ANSWER, and ask in their language, not the
-# schema's:
+# charter alone. Five questions, one per axis (ONTOLOGY_PRIMITIVES.md §4), then
+# one that checks them. ASK ONLY WHAT THE CHARTER DOESN'T ANSWER, and ask in
+# their language, not the schema's:
 #   • Shape — "What is this material about, and what would you want to know
 #     about each kind of thing? Is any of them a kind of another, or a part
 #     something plays? Do you already have any of it in a table?"
@@ -384,6 +384,14 @@ overlap_chars = 256
 #   • Derivation — "What should it notice that no single document says —
 #     contradictions, patterns, larger structures? What looks like a
 #     contradiction but isn't?"         (→ tension, patterns, derive)
+#   • Questions — "Once it is read, what will you ask of it? Name a few
+#     questions you would put to it." A charter rarely says. This checks the
+#     ontology; it does not shape it. Walk each question to the type,
+#     attribute or claim kind its answer lands in. One that nothing declared
+#     can hold points at a kind of thing in the material the declaration left
+#     out: declare that kind as what it is (an object, a place, a condition),
+#     never a type named for the question.
+#                        (→ the kinds of thing the material holds)
 # Asking these IS the work, not stalling — but keep it focused (not a survey),
 # and skip any the charter already answers. Write the answers as declared types
 # via recipe_write_structured, then RUN `svrn recipe validate <path> --corpus

@@ -601,5 +601,8 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     ("bench/crates/sovereign-cli-bench/src/bench_cmd/engine_conformance/server.rs", Class::LocalDaemon, 1),
     ("ingest/crates/sovereign-pipeline/src/bench_atlas.rs", Class::LocalDaemon, 1),
     ("ingest/crates/sovereign-pipeline/src/alignment_cmd.rs", Class::LocalDaemon, 1),
+    // `corpus install --inline` (OICP v0.6 §2.12): the daemon's manifest,
+    // install and progress, at the client daemon base.
+    ("ingest/crates/sovereign-pipeline/src/corpus_cmd/inline_install.rs", Class::LocalDaemon, 1),
 
 ];

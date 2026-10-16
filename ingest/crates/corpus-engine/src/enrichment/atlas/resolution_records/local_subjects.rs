@@ -4,8 +4,12 @@
 //! reference local to its document. Within one document and type, claims that
 //! share a reference are the reader's statement that they concern one
 //! particular, wherever their passages fall; they become one statement located
-//! at the earliest span. Across documents a reference carries nothing: RESOLVE
-//! alone decides there. Claims of one reference that disagree on a supplied
+//! at the earliest span. Across documents a reference carries nothing, and
+//! RESOLVE alone decides there, unless the reader read the documents together:
+//! a window read's reference reaches its chapter (`SubjectScope::Chapter`) and
+//! is a sufficient key across it, and two of its references never join
+//! (`CHAPTER_SUBJECT_KEY`, resolve_records.rs).
+//! Claims of one reference that disagree on a supplied
 //! identity value are not joined; each span stays its own statement and the
 //! disagreement is reported.
 

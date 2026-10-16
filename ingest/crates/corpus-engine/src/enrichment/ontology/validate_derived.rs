@@ -350,6 +350,14 @@ fn validate_protocol(
             _ => None,
         })
         .unwrap_or_default();
+    if let Some(initial) = protocol.initial.as_deref() {
+        if !states.contains(initial) {
+            fail(
+                errors,
+                format!("`protocol.initial` `{initial}` is outside the target attribute's closed values"),
+            );
+        }
+    }
     let mut rule_ids = BTreeSet::new();
     for rule in &protocol.rules {
         validate_protocol_rule(
@@ -409,6 +417,29 @@ fn validate_protocol_rule(
                 rule.id, rule.state
             ),
         );
+    }
+    for from in rule.from.iter().filter(|f| !states.contains(f.as_str())) {
+        fail(
+            errors,
+            format!(
+                "protocol rule `{}` moves from `{from}`, outside the target attribute's closed values",
+                rule.id
+            ),
+        );
+    }
+    if let Some(by) = &rule.by {
+        if !matches!(
+            policies.derivation.derived.get(by),
+            Some(Named::PathDecl(_))
+        ) {
+            fail(
+                errors,
+                format!(
+                    "protocol rule `{}`: `by = \"{by}\"` names no declared path (who may make the move)",
+                    rule.id
+                ),
+            );
+        }
     }
     let Some(claim) = policies.type_decl(&rule.claim_kind) else {
         fail(
@@ -587,7 +618,6 @@ fn step_error(
             .any(|f| matches!(f, AttrFamily::Ref { .. }))
             .then_some(())
             .map_or_else(|| Some(format!("`{name}` is no `ref` attribute; a step reaches particulars through one")), |()| None),
-        _ if fields.contains(name) && inverse => Some(format!("`^{name}`: a document field is not walked backwards")),
         _ if fields.contains(name) => None,
         _ => Some(format!("`{name}` is no step keyword, declared id, `ref` attribute or field a metadata source reads")),
     }

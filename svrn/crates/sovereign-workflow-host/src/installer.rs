@@ -307,8 +307,10 @@ mod tests {
                 install_endpoint: "/oicp/v1/corpus/install".into(),
                 progress_endpoint: "/oicp/v1/corpus/progress".into(),
                 test_endpoint: Some("/oicp/v1/recipe/test".into()),
+                max_install_bytes: None,
             }),
             evidence: None,
+            sentence_scorer: None,
         }
     }
 

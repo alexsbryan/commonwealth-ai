@@ -16,8 +16,10 @@ Behaviour
 - ctx >= RED (500k): inject a hard directive every prompt.
   - frame fresh (<= FRAME_FRESH_S) AND provenance is self-reported or
     hand-written -> "finish step, final upsert, tell the operator to split".
-  - otherwise -> "upsert your frame NOW via session_state, then split".
-    (A distilled frame never authorizes a split — provenance, not score.)
+  - otherwise -> "write your frame NOW with commons_frame, then split".
+    The frame is euphemia's since 2026-10-15 (euphemia 0.3.5): this hook
+    reads its age from euphemia's frame store, and the frame comes with the
+    session's last message, so a split is cheap at any boundary.
 - ctx >= YELLOW (250k): one gentle nudge per session (marker file dedups),
   reminding the agent to keep the frame current at the next boundary.
 - below thresholds: silent, zero output.
@@ -141,22 +143,25 @@ def last_context_size(transcript_path: Path) -> int:
     return 0
 
 
+def euphemia_frames() -> Path:
+    """euphemia's frame store (euphemia 0.3.5, `Paths::frames`): the frame is
+    euphemia's since 2026-10-15 (svrn-docs EUPHEMIA_ARCS.md, "The MVP")."""
+    data = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+    return Path(data) / "euphemia" / "frames"
+
+
 def frame_info(session_id: str) -> tuple[int | None, str]:
     """(age_seconds, provenance) of this session's frame; (None, "none")
-    when absent. Provenance is read from the frontmatter because only
-    self-reported/hand-written frames authorize a split (spec §3a)."""
-    frame = SESSIONS_ROOT / session_id / "frame.md"
+    when absent. euphemia's frame is written by the agent through
+    commons_frame, so it is always self-reported: a distilled one no longer
+    exists to be mistaken for it (spec §3a)."""
+    name = "".join(c if c.isascii() and (c.isalnum() or c == "-") else "_" for c in session_id)[:128]
+    frame = euphemia_frames() / f"{name}.json"
     try:
         age_s = max(0, int(time.time() - frame.stat().st_mtime))
-        head = frame.read_text(encoding="utf-8", errors="replace")[:2000]
     except OSError:
         return None, "none"
-    provenance = "unknown"
-    for line in head.splitlines():
-        if line.startswith("provenance:"):
-            provenance = line.split(":", 1)[1].strip()
-            break
-    return age_s, provenance
+    return age_s, "self-reported"
 
 
 def log_event(
@@ -191,10 +196,11 @@ def render(ctx: int, age_s: int | None, provenance: str, level: str, directive: 
             f"<split-protocol level=red>\n"
             f"Context is {ctx_k} (>= {RED // 1000}k red threshold) and your session frame is "
             f"{frame_desc}. Per SESSION_CONTINUITY §3a: finish the current step — do "
-            f"not start new work — make a final small session_state upsert if anything "
+            f"not start new work — make a final small commons_frame update if anything "
             f"changed since the last one, then tell the operator to split now "
-            f"(/clear or a new session). The boot hook hands your frame to the "
-            f"successor; every further turn at this context size re-bills ~{ctx_k} "
+            f"(/clear or a new session). euphemia's session-start hook hands your "
+            f"frame and last message to the successor in this window; every further "
+            f"turn at this context size re-bills ~{ctx_k} "
             f"of cache-read.\n"
             f"</split-protocol>"
         )
@@ -207,16 +213,15 @@ def render(ctx: int, age_s: int | None, provenance: str, level: str, directive: 
         return (
             f"<split-protocol level=red>\n"
             f"Context is {ctx_k} (>= {RED // 1000}k red threshold) but {frame_desc} — not fresh "
-            f"enough to authorize a split (spec §3a: only a recent self-reported or "
-            f"hand-written frame does; a distilled frame is rescue-only). Call the "
-            f"session_state tool NOW with your current goal/state/next/decisions/"
-            f"invariants, then tell the operator to split (/clear or a new session).\n"
+            f"enough to authorize a split (spec §3a: only a recent frame the agent wrote "
+            f"does). Call commons_frame NOW with your current objective/state/next/"
+            f"decisions/invariants, then tell the operator to split (/clear or a new session).\n"
             f"</split-protocol>"
         )
     return (
         f"<split-protocol level=yellow>\n"
         f"Context is {ctx_k} (>= {YELLOW // 1000}k). At the next natural boundary (step done, "
-        f"blocker hit), upsert your session frame via session_state so a red-zone "
+        f"blocker hit), update your frame with commons_frame so a red-zone "
         f"split stays cheap. This nudge fires once per session.\n"
         f"</split-protocol>"
     )

@@ -1,8 +1,12 @@
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 
 use serde_json::{json, Value};
 
-use crate::enrichment::ontology::{AttrDecl, OntologyPolicies, SourceDecl, TypeIndex, TypeKind};
+use crate::enrichment::atlas::resolution_records::decides;
+use crate::enrichment::ontology::{
+    AttrDecl, OntologyPolicies, OntologyTypeDecl, SourceDecl, TypeIndex, TypeKind,
+};
 use crate::enrichment::pipeline::types::{ChapterInput, ChatPrompt};
 
 /// v4: one reader remains (passes); the one-shot prompt, its decoder schema and
@@ -27,7 +31,7 @@ pub fn compose(chapter: &ChapterInput, policies: &OntologyPolicies, phase_id: &s
             .shape
             .types
             .iter()
-            .filter(|claim| eligible_claim(claim, policies))
+            .filter(|claim| read_kind(claim, policies))
             .count(),
         "phase1.document_read_plan_composed"
     );
@@ -46,15 +50,15 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
         .shape
         .types
         .iter()
-        .filter(|claim| eligible_claim(claim, policies))
+        .filter(|claim| read_kind(claim, policies))
         .map(|claim| {
             json!({
                 "name": claim.name,
                 "description": claim.description,
                 "force": claim.force,
-                "subject": claim.subject,
+                "subject": claim.read_subject(),
                 "scope": claim.scope,
-                "attributes": attrs_value(index.extracted_attributes(&claim.name)),
+                "attributes": attrs_value(statement_attributes(&index, claim).iter().map(|a| &**a).collect()),
             })
         })
         .collect();
@@ -71,12 +75,19 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
                 && subject_names.contains(ty.name.as_str())
         })
         .map(|ty| {
-            json!({
+            let mut subject = json!({
                 "name": ty.name,
                 "description": ty.description,
                 "source": ty.source,
                 "attributes": attrs_value(subject_read_attributes(policies, &index, &ty.name)),
-            })
+            });
+            // A subject its metadata source names is picked among the
+            // source's records, no longer pointed at in the statement's words
+            // (2026-10-11): only such a contract's fingerprint moves.
+            if matches!(ty.source, Some(SourceDecl::Metadata(_))) {
+                subject["read"] = json!("pick");
+            }
+            subject
         })
         .collect();
     let metadata_sources: Vec<Value> = policies
@@ -138,9 +149,62 @@ pub(super) fn subject_read_attributes<'a>(
     }
 }
 
-pub(super) fn eligible_claim(
-    claim: &crate::enrichment::ontology::OntologyTypeDecl,
+/// Whether the reader reads statements of `ty`: an eligible claim, or a state or
+/// relation whose holder RESOLVE decides (`OntologyTypeDecl::is_read_statement`).
+pub(super) fn read_kind(ty: &OntologyTypeDecl, policies: &OntologyPolicies) -> bool {
+    ty.is_read_statement(&policies.shape.types)
+}
+
+/// The fields a read statement of `decl` carries: those its shape implies (a
+/// state's value, a relation's `to`: `OntologyTypeDecl::implied_fields`), then
+/// its declared attributes.
+pub fn statement_attributes<'a>(
+    index: &TypeIndex<'a>,
+    decl: &'a OntologyTypeDecl,
+) -> Vec<Cow<'a, AttrDecl>> {
+    decl.implied_fields()
+        .into_iter()
+        .map(Cow::Owned)
+        .chain(
+            index
+                .extracted_attributes(&decl.name)
+                .into_iter()
+                .map(Cow::Borrowed),
+        )
+        .collect()
+}
+
+/// The declared types a document read makes no record of. It reads the
+/// statement kinds `read_kind` admits (claims, and states and relations whose
+/// holder RESOLVE decides), the types they are about, and every type RESOLVE
+/// decides (About, the window's particulars), each with its `specializes`
+/// kin; so a state or relation whose holder RESOLVE cannot decide, or an
+/// entity with no identity criterion no statement is about, gets none unless
+/// a source supplies it. Empty when the general extractor reads the
+/// declaration, which reads every kind.
+pub fn unread_types(
     policies: &OntologyPolicies,
-) -> bool {
-    claim.is_document_reading_eligible(&policies.shape.types)
+) -> Vec<&crate::enrichment::ontology::OntologyTypeDecl> {
+    if !policies.reads_documents() {
+        return Vec::new();
+    }
+    let index = TypeIndex::from_policies(policies);
+    let read: Vec<&str> = policies
+        .shape
+        .types
+        .iter()
+        .filter(|t| read_kind(t, policies) || decides(&index, &t.name))
+        .flat_map(|c| std::iter::once(c.name.as_str()).chain(c.read_subject()))
+        .collect();
+    policies
+        .shape
+        .types
+        .iter()
+        .filter(|t| t.source.is_none())
+        .filter(|t| {
+            !read
+                .iter()
+                .any(|r| index.is_a(&t.name, r) || index.is_a(r, &t.name))
+        })
+        .collect()
 }

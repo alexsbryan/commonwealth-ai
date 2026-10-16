@@ -13056,6 +13056,7 @@ name = "sovereign-pipeline"
 version = "0.8.0"
 dependencies = [
  "anyhow",
+ "axum",
  "chrono",
  "clap",
  "corpus-engine",

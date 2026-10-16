@@ -31,6 +31,19 @@ pub(super) fn layer_warnings(
                 .join(", ")
         ));
     }
+    let unread: Vec<String> = crate::enrichment::pipeline::document_read::unread_types(policies)
+        .into_iter()
+        .filter(|t| !orphans.contains(&t.name))
+        .map(|t| format!("`{}` ({})", t.name, super::validate::kind_key(t.kind)))
+        .collect();
+    if !unread.is_empty() {
+        warnings.push(format!(
+            "the document reader reads statement kinds, the types they are about and every type \
+             RESOLVE decides, so it makes no record of {}: no statement kind is about them, \
+             RESOLVE decides none of them and no source supplies them.",
+            unread.join(", ")
+        ));
+    }
     for (key, instead) in crate::recipe_ontology::language::retired_keys(&block.body) {
         warnings.push(format!(
             "[enrichment.ontology] `{key}` is retired and ignored: {instead}. Remove the key."
@@ -41,6 +54,35 @@ pub(super) fn layer_warnings(
             "ontology type `{t}`: `{key}` is retired and ignored: {instead}. Remove the key."
         ));
     }
+}
+
+/// What `recipe validate` says of a metadata-sourced type's mentions in text
+/// (ONTOLOGY_METHOD §Reading, Mention): RESOLVE decides them when the type
+/// declares an `identity_criterion`; a referenced one without leaves them
+/// Pick's proposals, and the line says what would change that.
+pub(super) fn mentions_note(policies: &OntologyPolicies, type_name: &str) -> Option<String> {
+    let index = TypeIndex::from_policies(policies);
+    let t = index.get(type_name)?;
+    if !matches!(t.source, Some(SourceDecl::Metadata(_))) {
+        return None;
+    }
+    if crate::enrichment::atlas::resolution_records::decides_mentions(&index, type_name) {
+        return Some(
+            "; RESOLVE decides its mentions in text under its identity_criterion, starting \
+             from its source's records"
+                .into(),
+        );
+    }
+    let referenced = policies.shape.types.iter().any(|o| {
+        o.attributes
+            .iter()
+            .any(|a| matches!(&a.family, AttrFamily::Ref { of } if of == type_name))
+    });
+    (referenced && t.identity_criterion.is_none()).then(|| {
+        "; its mentions in text stay Pick's proposals and name no record: declare an \
+         identity_criterion for RESOLVE to decide them"
+            .into()
+    })
 }
 
 /// How one declared attribute gets a value on the default path.

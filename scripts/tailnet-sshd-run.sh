@@ -36,6 +36,8 @@ POLL_SECS="${TAILNET_SSHD_POLL_SECS:-30}"
 say() { printf '%s tailnet-sshd-run[%s]: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$DIR")" "$*"; }
 
 [ -f "$CONF" ] || { say "FATAL: no $CONF — run the channel setup script"; exit 78; }
+PORT="$(awk '$1=="Port"{print $2; exit}' "$CONF")"
+[ -n "$PORT" ] || { say "FATAL: no Port in $CONF"; exit 78; }
 
 # ONE override, ONE name, and it lives in a FILE rather than the environment.
 # Two reasons. A launchd job inherits none of the operator's shell env — the
@@ -45,17 +47,26 @@ say() { printf '%s tailnet-sshd-run[%s]: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" 
 # per-channel STATE: $DIR/listen.override, written by that channel's setup
 # script. A name that steered both channels at once would be the same bug in a
 # different costume.
+# An address counts only once an interface HOLDS it. The Tailscale CLI answers
+# from the control plane, ahead of the interface, and on failure prints its
+# error to stdout. Both reached listen.conf on this host: 28,807 renders of
+# "The Tailscale CLI failed to start…" (each failing sshd -t), and on
+# 2026-10-09 an address not yet up, so the bind failed and both channels served
+# loopback for five days.
+held() { [ -n "$1" ] && ifconfig 2>/dev/null | awk '/inet /{print $2}' | grep -qxF "$1"; }
+
 tailnet_addr() {
   local ts ip
   if [ -s "$DIR/listen.override" ]; then
     ip="$(tr -d '[:space:]' < "$DIR/listen.override")"
-    [ -n "$ip" ] && { printf '%s' "$ip"; return 0; }
+    held "$ip" && { printf '%s' "$ip"; return 0; }
+    return 1   # a pinned address not yet up is waited for, never swapped
   fi
   for ts in tailscale /usr/local/bin/tailscale \
             /Applications/Tailscale.app/Contents/MacOS/Tailscale; do
     if command -v "$ts" >/dev/null 2>&1; then
       ip="$("$ts" ip -4 2>/dev/null | head -1)"
-      [ -n "$ip" ] && { printf '%s' "$ip"; return 0; }
+      held "$ip" && { printf '%s' "$ip"; return 0; }
     fi
   done
   ip="$(ifconfig 2>/dev/null | awk '/inet 100\./{print $2; exit}')"
@@ -100,6 +111,14 @@ while kill -0 "$CHILD" 2>/dev/null; do
     kill "$CHILD" 2>/dev/null
     wait "$CHILD" 2>/dev/null
     exit 0    # KeepAlive restarts us; we re-render against the new address
+  fi
+  # A steady address is not a bound one: sshd keeps running on loopback alone
+  # when the tailnet bind fails. Assert the listener peers actually connect to.
+  if ! lsof -nP -a -p "$CHILD" -iTCP@"$ADDR":"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+    say "sshd (pid $CHILD) is not listening on $ADDR:$PORT — restarting to rebind"
+    kill "$CHILD" 2>/dev/null
+    wait "$CHILD" 2>/dev/null
+    exit 0
   fi
 done
 

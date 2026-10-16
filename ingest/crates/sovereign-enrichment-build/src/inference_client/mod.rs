@@ -290,12 +290,7 @@ impl DaemonInferenceClient {
     /// tagged with `phase_id`. Returns the override if present;
     /// otherwise the default `chat_model`.
     fn resolve_model_for_phase(&self, phase_id: Option<&str>) -> &str {
-        if let Some(id) = phase_id {
-            if let Some(model) = self.chat_models_by_phase.get(id) {
-                return model.as_str();
-            }
-        }
-        self.chat_model.as_str()
+        model_for_phase(&self.chat_model, &self.chat_models_by_phase, phase_id)
     }
 
     /// Build a client from `EnrichConfig`, threading both the
@@ -518,8 +513,25 @@ impl DaemonInferenceClient {
         asker: corpus_engine::enrichment::asker::Asker,
         enrichment_dir: &std::path::Path,
     ) -> std::result::Result<(EmbedFn, InferenceFn), String> {
-        let (embed, chat) = self.into_closures();
-        corpus_engine::enrichment::asker::answering(asker, enrichment_dir, embed, chat)
+        // The model each question is routed to, stamped on its answer.
+        let by: corpus_engine::enrichment::asker::AnsweredBy = {
+            let (chat_model, by_phase) =
+                (self.chat_model.clone(), self.chat_models_by_phase.clone());
+            let embed_model = self.embed_model.clone();
+            Arc::new(move |port: &str, phase: Option<&str>| match port {
+                "embed" => embed_model.clone(),
+                _ => model_for_phase(&chat_model, &by_phase, phase).to_string(),
+            })
+        };
+        let (embed, mut chat) = self.into_closures();
+        // A/B valve and rollback hatch for forced-choice waves: the daemon is
+        // asked each question of a wave alone, the request pattern before
+        // waves, with the same questions, keys and answers.
+        if std::env::var("SOVEREIGN_WAVES_ONE_BY_ONE").is_ok_and(|v| v == "1") {
+            tracing::info!("inference_client: SOVEREIGN_WAVES_ONE_BY_ONE=1 — each wave's questions go to the daemon one by one");
+            chat = corpus_engine::enrichment::atlas::resolve_records::one_by_one(chat);
+        }
+        corpus_engine::enrichment::asker::answering(asker, enrichment_dir, by, embed, chat)
             .map_err(|e| format!("the {} asker: {e}", asker.label()))
     }
 
@@ -562,6 +574,19 @@ fn v1_base(raw: &str) -> String {
     } else {
         format!("{}/v1", raw.trim_end_matches('/'))
     }
+}
+
+/// The chat model a prompt tagged with `phase_id` is routed to: its phase's
+/// override, else `default`. The one rule for the client's requests and the
+/// Asker's stamps.
+fn model_for_phase<'a>(
+    default: &'a str,
+    by_phase: &'a BTreeMap<String, String>,
+    phase_id: Option<&str>,
+) -> &'a str {
+    phase_id
+        .and_then(|id| by_phase.get(id))
+        .map_or(default, String::as_str)
 }
 
 #[cfg(test)]

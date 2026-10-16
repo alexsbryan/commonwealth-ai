@@ -106,29 +106,6 @@
           }
         ]
       }
-    ],
-    "PreCompact": [
-      {
-        "hooks": [
-          {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-frame.sh",
-            "type": "command",
-            "timeout": 15,
-            "statusMessage": "Snapshotting session frame before compaction"
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-frame.sh",
-            "type": "command",
-            "timeout": 15
-          }
-        ]
-      }
     ]
   },
   "enabledMcpjsonServers": [

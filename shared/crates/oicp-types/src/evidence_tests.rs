@@ -13,6 +13,7 @@ fn document(metadata: Option<serde_json::Value>) -> Document {
             sha256: Some(SHA.into()),
         },
         metadata,
+        record: None,
     }
 }
 
@@ -52,6 +53,7 @@ fn align_response_round_trips_with_every_field() {
                 exact: "the river keeps its own counsel".into(),
                 prefix: "and ".into(),
                 suffix: ".".into(),
+                locator: None,
             },
             differences: vec![Difference {
                 kind: DifferenceKind::Substituted,
@@ -129,6 +131,9 @@ fn evidence_endpoints_omit_an_absent_align_endpoint() {
     let e = EvidenceEndpoints {
         text_endpoint: "/oicp/v1/text".into(),
         align_endpoint: None,
+        verify_endpoint: None,
+        verify_tiers: Vec::new(),
+        verify_correction_endpoint: None,
     };
     assert_eq!(
         serde_json::to_value(&e).unwrap(),

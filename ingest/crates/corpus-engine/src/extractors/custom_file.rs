@@ -88,10 +88,10 @@ impl Iterator for CustomFileIterator {
                 }
                 Err(e) => {
                     return Some(Err(Error::Extraction(format!(
-                        "custom extractor '{kind}' failed on {p}: {e}",
+                        "custom extractor '{kind}' failed: {e}",
                         kind = self.kind,
-                        p = path.display(),
-                    ))))
+                    ))
+                    .of_source(path.display())))
                 }
             }
         }

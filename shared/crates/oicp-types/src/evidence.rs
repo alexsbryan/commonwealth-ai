@@ -44,6 +44,23 @@ pub mod reasons {
 
     /// Every reason a hit may give for carrying no `document` (§3).
     pub const HIT_ABSENCES: [&str; 3] = [TEXTS_NOT_STORED, TEXT_NOT_STORED, DOCUMENT_UNREADABLE];
+
+    /// A passage's text is not an exact slice of its stored text, so no span
+    /// is given for it (v0.6 §2.6, §2.8).
+    pub const NOT_AN_EXACT_SLICE: &str = "not an exact slice";
+    /// A passage names no stored text it was cut from, so no span is given
+    /// (v0.6 §2.6, §2.8).
+    pub const PASSAGE_NAMES_NO_TEXT: &str = "passage names no text";
+
+    /// Every reason a passage may give for carrying no span (v0.6 §2.6,
+    /// §2.8): the hit absences, and the two of a text that was read.
+    pub const SPAN_ABSENCES: [&str; 5] = [
+        TEXTS_NOT_STORED,
+        TEXT_NOT_STORED,
+        DOCUMENT_UNREADABLE,
+        NOT_AN_EXACT_SLICE,
+        PASSAGE_NAMES_NO_TEXT,
+    ];
 }
 
 /// Context, in code points, a host puts on each side of a span or slice when
@@ -62,6 +79,18 @@ pub struct EvidenceEndpoints {
     /// host advertises `evidence:align`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub align_endpoint: Option<String>,
+    /// `POST {verify_endpoint}`, taking a [`crate::verify::VerifyRequest`].
+    /// Present iff the host advertises `evidence:verify` (v0.6 §2.6).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verify_endpoint: Option<String>,
+    /// The tiers `verify_endpoint` serves. Empty iff it is absent.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub verify_tiers: Vec<crate::verify::VerifyTier>,
+    /// `POST {verify_correction_endpoint}`, taking a
+    /// [`crate::verify::VerifyCorrection`] (v0.6 §2.10). Present iff
+    /// `evidence:verify_corrections`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verify_correction_endpoint: Option<String>,
 }
 
 /// One stored text, and where it came from.
@@ -78,6 +107,11 @@ pub struct Document {
     /// verbatim. `None` when neither declared any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<serde_json::Value>,
+    /// v0.6 §2.16 (`ingest:lookups`): `metadata` merged with what a
+    /// resolver returned for an identifier it carries, each field's origin
+    /// named; the same record progress lists beside the document.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub record: Option<crate::record::MergedRecord>,
 }
 
 /// The source of a stored text.
@@ -111,6 +145,11 @@ pub struct Span {
     pub prefix: String,
     /// Up to the requested context of code points after `end`.
     pub suffix: String,
+    /// v0.6 §2.13 (`knowledge:locator`): where the extraction that stored
+    /// the text found `start` (a heading path, a transcript turn, a page, a
+    /// row). Absent when it found none, never invented.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locator: Option<crate::locator::SpanLocator>,
 }
 
 /// `GET {text_endpoint}/{text_sha256}` response: the whole text, or a range

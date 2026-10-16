@@ -93,6 +93,10 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     ("svrn/crates/sovereign-cli/src/session_cmd.rs", Class::LocalDaemon, 1),
     ("svrn/crates/sovereign-cli/src/serve_cmd.rs", Class::LocalDaemon, 1),
     ("svrn/crates/sovereign-cli/src/project_init/mod.rs", Class::LocalDaemon, 1),
+    // `svrn search` / `svrn verify`: OICP clients of the local daemon's knowledge
+    // search and verify, one client each (v0.6 §2.8, §2.6); loopback only.
+    ("svrn/crates/sovereign-cli/src/search_cmd.rs", Class::LocalDaemon, 1),
+    ("svrn/crates/sovereign-cli/src/verify_cmd.rs", Class::LocalDaemon, 1),
     // code_index_cmd.rs is gone (pb-code-index): `svrn code` execs the code
     // program, sovereign-cli-dev.
 

@@ -509,7 +509,7 @@ fn undeclared_names_are_refused() {
         ),
         (
             r#"{"target_type":"holds_coins_of"}"#,
-            "a typed query answers over entity or claim types",
+            "a typed query answers over entity, event or claim types",
         ),
         (
             r#"{"target_type":"hoard","filters":[{"attribute":"mint","op":"eq","value":"x"}]}"#,
@@ -618,4 +618,51 @@ fn the_brief_is_a_cited_table() {
         text.contains("note: 1 matching hoard atom(s) carry no readable buried"),
         "{text}"
     );
+}
+
+/// A declared event type is listed as entities and claims are, with its
+/// attributes. Failing input, named: saltgrass's recipe declares `incident`
+/// as an event; its 12 incident records were refused by the typed query
+/// ("answers over entity or claim types"), then, let through, matched no
+/// atom, so the public surface could not show them (2026-10-14).
+#[test]
+fn a_declared_event_type_is_listed() {
+    let vocab = OntologyV1 {
+        types: vec![OntologyTypeDecl {
+            name: "excavation".into(),
+            kind: TypeKind::Event,
+            attributes: vec![attr("site", AttrFamily::Text { values: vec![] })],
+            ..Default::default()
+        }],
+        ..Default::default()
+    }
+    .into_policies();
+    let event: crate::enrichment::atlas::atoms::Event = serde_json::from_value(serde_json::json!({
+        "id": "event-dig", "description": "the 1964 excavation at the findspot",
+        "event_type": "excavation", "section_position": {"section_id": "sec_00001"},
+        "enrichment_depth": "extracted", "attributes": {"site": "Asia Minor"}
+    }))
+    .expect("an event atom parses");
+    let query: TypedQuery = serde_json::from_str(r#"{"target_type":"excavation"}"#).unwrap();
+    let r = execute(
+        &query,
+        AtlasView {
+            entities: &[],
+            events: std::slice::from_ref(&event),
+            states: &[],
+            relations: &[],
+            claims: &[],
+            questions: &[],
+            configurations: &[],
+            edges: &[],
+            positions: &[],
+            oppositions: &[],
+            vocab: Some(&vocab),
+        },
+    );
+    let rows = r.table.expect("a table").rows;
+    assert_eq!(rows.len(), 1, "{}", r.headline);
+    assert_eq!(rows[0].name, "the 1964 excavation at the findspot");
+    assert_eq!(rows[0].attributes["site"], "Asia Minor");
+    assert_eq!(r.events.len(), 1);
 }

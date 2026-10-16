@@ -23,6 +23,16 @@
 //! Who wrote a line decides nothing: a passage an author sends twice, a
 //! signature included, is read where it first appears. Each class is counted
 //! where the reader traces a document.
+//!
+//! Two more classes come from what the extractor wrote, never from the words:
+//! a **header line** before the document's `body_start` (its facts open every
+//! question as declared facts, so asking it would ask what declared structure
+//! supplies, C1), and a line of an **embedded message** inside one of its
+//! `segments` (what it says is that message's, dated and authored by its own
+//! header, never by the document carrying it). Both are offsets into the
+//! canonical text, so they apply only where the store gave it
+//! (`SourceDocument::stored_text`); elsewhere they are not applied and the
+//! run says so.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -38,6 +48,10 @@ pub(super) enum LineClass {
     Passage,
     /// It is a line of a document dated earlier, under a mark that line lacks.
     Marked,
+    /// It is before the document's `body_start`: a header line.
+    Field,
+    /// It is inside one of the document's `segments`: an embedded message.
+    Embedded,
 }
 
 impl LineClass {
@@ -45,6 +59,93 @@ impl LineClass {
         match self {
             Self::Passage => "quoted passage",
             Self::Marked => "marked quote",
+            Self::Field => "header line",
+            Self::Embedded => "embedded message",
+        }
+    }
+}
+
+/// What the extractor wrote of a document's layout, checked against its
+/// canonical text: where the author's own text begins, and the spans of the
+/// messages it embeds.
+#[derive(Debug, Default)]
+struct Layout {
+    body_start: usize,
+    /// Each embedded message: (start, where its own header block ends, end).
+    segments: Vec<(usize, usize, usize)>,
+}
+
+impl Layout {
+    /// The layout `d`'s metadata states, when it has a canonical text the
+    /// offsets index and they agree with it: `body_start` ends a line, and
+    /// every segment lies inside the text on character boundaries.
+    fn of(d: &SourceDocument) -> Result<Option<Self>, &'static str> {
+        let fields = d.metadata();
+        let stated = fields.contains_key("body_start") || fields.contains_key("segments");
+        // A part of a document (read across windows) is not the text the
+        // extractor's offsets index: its lines are classed from its own text.
+        if !stated || d.is_part() {
+            return Ok(None);
+        }
+        let Some(text) = d.stored_text() else {
+            return Err("no canonical text for its offsets");
+        };
+        let at = |v: &serde_json::Value| v.as_u64().map(|n| n as usize);
+        // No `body_start` stated: the document has no header block to skip.
+        let body_start = match fields.get("body_start") {
+            None => 0,
+            Some(v) => at(v).ok_or("body_start is not an offset")?,
+        };
+        if body_start > text.len()
+            || !text.is_char_boundary(body_start)
+            || (body_start > 0 && !text[..body_start].ends_with('\n'))
+        {
+            return Err("body_start does not end a line of its text");
+        }
+        let mut segments = Vec::new();
+        for s in fields
+            .get("segments")
+            .and_then(serde_json::Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let (Some(start), Some(end)) = (s.get("start").and_then(at), s.get("end").and_then(at))
+            else {
+                return Err("a segment without its offsets");
+            };
+            // No header end stated: the segment has no header block of its own.
+            let header_end = match s.get("header_end") {
+                None => start,
+                Some(v) => at(v).ok_or("a segment's header_end is not an offset")?,
+            };
+            if start >= end
+                || end > text.len()
+                || !(start..=end).contains(&header_end)
+                || !text.is_char_boundary(start)
+                || !text.is_char_boundary(end)
+            {
+                return Err("a segment outside its text");
+            }
+            segments.push((start, header_end, end));
+        }
+        Ok(Some(Self {
+            body_start,
+            segments,
+        }))
+    }
+
+    /// A line's class by where it starts: the document's header block or an
+    /// embedded message's is a header line; the rest of an embedded message
+    /// is embedded.
+    fn class(&self, line_start: usize) -> Option<LineClass> {
+        let in_header = |&(s, h, _): &(usize, usize, usize)| (s..h).contains(&line_start);
+        let in_segment = |&(s, _, e): &(usize, usize, usize)| (s..e).contains(&line_start);
+        if line_start < self.body_start || self.segments.iter().any(in_header) {
+            Some(LineClass::Field)
+        } else if self.segments.iter().any(in_segment) {
+            Some(LineClass::Embedded)
+        } else {
+            None
         }
     }
 }
@@ -79,6 +180,9 @@ pub struct LineClasses {
     /// Two texts' ids, the second the next line after the first → the
     /// documents holding them so.
     passages: HashMap<(u32, u32), Holders>,
+    /// Document key → its layout, for documents whose extractor stated one
+    /// that agrees with their canonical text.
+    layouts: HashMap<String, Layout>,
 }
 
 /// A line's text as compared: from its first to its last letter or digit,
@@ -139,9 +243,24 @@ impl LineClasses {
                 (d, date)
             })
             .collect();
+        let (mut laid, mut unlaid) = (0usize, 0usize);
         for (index, (d, _)) in read.iter().enumerate() {
             out.docs.insert(d.key().to_string(), (index as u32, None));
             out.keys.push(d.key().to_string());
+            match Layout::of(d) {
+                Ok(Some(layout)) => {
+                    laid += 1;
+                    out.layouts.insert(d.key().to_string(), layout);
+                }
+                Ok(None) => {}
+                Err(why) => {
+                    unlaid += 1;
+                    tracing::debug!(document = d.key(), why, "document_read/line_classes: the extractor's layout is not applied; its header and embedded lines are read as any other");
+                }
+            }
+        }
+        if unlaid > 0 {
+            tracing::warn!(laid, unlaid, "document_read/line_classes: documents whose stated layout could not be applied; their header and embedded lines are asked");
         }
         let ranks: BTreeSet<&str> = read
             .iter()
@@ -192,8 +311,35 @@ impl LineClasses {
         out
     }
 
-    /// Each of `lines`, the lines of `document` in order, that is carried.
-    pub(super) fn classes(&self, document: &str, lines: &[&str]) -> Vec<Option<Carried<'_>>> {
+    /// Each of `lines`, the lines of `document` (`raw`, as the reader reads
+    /// it) in order, that is not asked: a header or embedded line by its
+    /// document's layout, else a line carried from an earlier document.
+    pub(super) fn classes(
+        &self,
+        document: &str,
+        raw: &str,
+        lines: &[super::passes::Line],
+    ) -> Vec<Option<Carried<'_>>> {
+        let texts: Vec<&str> = lines.iter().map(|l| &raw[l.start..l.end]).collect();
+        let mut out = self.carried(document, &texts);
+        if let (Some(layout), Some(&(me, _))) =
+            (self.layouts.get(document), self.docs.get(document))
+        {
+            for (slot, line) in out.iter_mut().zip(lines) {
+                if let Some(class) = layout.class(line.start) {
+                    *slot = Some(Carried {
+                        class,
+                        from: &self.keys[me as usize],
+                    });
+                }
+            }
+        }
+        out
+    }
+
+    /// Each of `lines`, the texts of `document`'s lines in order, that is
+    /// carried from an earlier document.
+    fn carried(&self, document: &str, lines: &[&str]) -> Vec<Option<Carried<'_>>> {
         let mut out = vec![None; lines.len()];
         let Some(&(me, Some(rank))) = self.docs.get(document) else {
             return out;
@@ -247,8 +393,7 @@ impl LineClasses {
             out.push_str(d.key());
             let raw = d.raw_body();
             let lines = super::passes::lines(&raw);
-            let texts: Vec<&str> = lines.iter().map(|l| &raw[l.start..l.end]).collect();
-            for (line, carried) in lines.iter().zip(self.classes(d.key(), &texts)) {
+            for (line, carried) in lines.iter().zip(self.classes(d.key(), &raw, &lines)) {
                 if let Some(carried) = carried {
                     out.push_str(&format!(" {}:{}", line.n, carried.class.label()));
                 }

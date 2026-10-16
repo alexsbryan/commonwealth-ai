@@ -37,6 +37,18 @@ pub async fn claim_chunk_support(
     judge::claim_chunk_support(&**inference, passage, claim, posture).await
 }
 
+/// [`claim_chunk_support`] with the call's error kept, for a caller that
+/// answers a queue shed as backpressure (`POST /oicp/v1/verify`); `Ok(None)`
+/// is a reply that did not parse.
+pub async fn claim_chunk_support_checked(
+    inference: &Arc<dyn InferenceProvider>,
+    passage: &str,
+    claim: &str,
+    posture: crate::oicp::ShardingPrivacy,
+) -> crate::error::Result<Option<f64>> {
+    judge::claim_chunk_support_checked(&**inference, passage, claim, posture).await
+}
+
 /// The gate's JOINT per-claim register, exported for the judge-replay
 /// harness (`svrn bench judge-replay`) — the third seam in the
 /// [`extract_claim_list`] / [`claim_chunk_support`] family, for the same

@@ -30,7 +30,7 @@ use tower::ServiceExt;
 
 use crate::common::ledger_double::RecordingLedger;
 
-const RECIPE_A: &str = "[corpus]\nid = \"notes\"\nname = \"Notes\"\n";
+pub(crate) const RECIPE_A: &str = "[corpus]\nid = \"notes\"\nname = \"Notes\"\n";
 const RECIPE_B: &str = "[corpus]\nid = \"notes\"\nname = \"Notes, revised\"\n";
 
 /// The double's install of a supplied recipe: a stand-in loader (the real
@@ -52,8 +52,9 @@ fn engine(indexes: std::path::PathBuf) -> IngestPortDouble {
                 run: Box::new(move |_progress| {
                     Box::pin(async move {
                         let corpus = Corpus::named(&dir, &id).expect("an id");
-                        std::fs::create_dir_all(corpus.root()).unwrap();
-                        std::fs::write(corpus.meta_path(), "{}").unwrap();
+                        // A real index: an install whose records cannot be made is
+                        // unreadable, never held as "kept none".
+                        crate::common::fixture_library::install(&dir, &id, &[], true).await;
                         corpus.stamp_recipe_sha256(&recipe_sha256(&toml)).unwrap();
                         Ok(IngestResult {
                             corpus_id: id,
@@ -61,6 +62,8 @@ fn engine(indexes: std::path::PathBuf) -> IngestPortDouble {
                             index_size_bytes: 0,
                             duration_secs: 0,
                             docs_skipped: 0,
+                            documents: Vec::new(),
+                            documents_unlisted: 0,
                         })
                     })
                 }),
@@ -87,11 +90,19 @@ fn state(engine: Arc<IngestPortDouble>) -> AppState {
 }
 
 /// POST `/oicp/v1/corpus/install` from loopback; the status and the body.
-async fn install(state: AppState, body: serde_json::Value) -> (StatusCode, serde_json::Value) {
+pub(crate) async fn install(
+    state: AppState,
+    body: serde_json::Value,
+) -> (StatusCode, serde_json::Value) {
+    install_raw(state, body.to_string()).await
+}
+
+/// [`install`] with the body as sent, so a test sets its size to the byte.
+async fn install_raw(state: AppState, body: String) -> (StatusCode, serde_json::Value) {
     let mut req = Request::post("/oicp/v1/corpus/install")
         .header("host", "127.0.0.1:9741")
         .header("content-type", "application/json")
-        .body(Body::from(body.to_string()))
+        .body(Body::from(body))
         .unwrap();
     req.extensions_mut().insert(ConnectInfo(
         "127.0.0.1:55003".parse::<SocketAddr>().unwrap(),
@@ -108,7 +119,7 @@ async fn install(state: AppState, body: serde_json::Value) -> (StatusCode, serde
 }
 
 /// Wait until no install of `corpus_id` is in flight.
-async fn settled(state: &AppState, corpus_id: &str) {
+pub(crate) async fn settled(state: &AppState, corpus_id: &str) {
     for _ in 0..200 {
         if !state
             .inner
@@ -231,4 +242,329 @@ async fn by_id_an_unknown_corpus_is_404_and_bad_parameters_are_400() {
 
 fn state_from(engine: IngestPortDouble) -> AppState {
     state(Arc::new(engine))
+}
+
+/// GET `/oicp/v1/corpus/progress` from loopback.
+pub(crate) async fn progress(state: AppState) -> oicp_types::CorpusProgressResponse {
+    let mut req = Request::get("/oicp/v1/corpus/progress")
+        .header("host", "127.0.0.1:9741")
+        .body(Body::empty())
+        .unwrap();
+    req.extensions_mut().insert(ConnectInfo(
+        "127.0.0.1:55003".parse::<SocketAddr>().unwrap(),
+    ));
+    let resp = client_router(state).oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    serde_json::from_slice(&bytes).unwrap()
+}
+
+/// OICP v0.6 §2.9: the install is listed on the first poll after its 202,
+/// before the engine has reported any progress, and once it returns its
+/// entry lists each document: the ready ones by their text names, the
+/// unreadable one failed with its reason, none dropped. Red against the
+/// parent, whose progress listed only what the engine's callback had
+/// written and carried no documents.
+#[tokio::test]
+async fn an_install_is_listed_from_its_spawn_and_then_lists_each_document() {
+    use corpus_index::ingest_port::daemon::{DocumentOutcome, DocumentState};
+    use kernel_types::Sha256Hash;
+    use oicp_types::{IngestDocumentState, IngestPhase};
+
+    let tmp = tempfile::tempdir().unwrap();
+    let release = Arc::new(tokio::sync::Notify::new());
+    let gate = release.clone();
+    let at = tmp.path().to_path_buf();
+    let engine = IngestPortDouble::new()
+        .with_index_dir(tmp.path().to_path_buf())
+        .on_prepare_recipe_install(move |id, toml| {
+            let (dir, id, toml, gate) =
+                (at.clone(), id.to_string(), toml.to_string(), gate.clone());
+            Ok(PreparedInstall {
+                opts_out_of_auto_enrichment: true,
+                run: Box::new(move |_progress| {
+                    Box::pin(async move {
+                        gate.notified().await;
+                        let corpus = Corpus::named(&dir, &id).expect("an id");
+                        // A real index: an install whose records cannot be made is
+                        // unreadable, never held as "kept none".
+                        crate::common::fixture_library::install(&dir, &id, &[], true).await;
+                        corpus.stamp_recipe_sha256(&recipe_sha256(&toml)).unwrap();
+                        Ok(IngestResult {
+                            corpus_id: id,
+                            chunks_created: 2,
+                            index_size_bytes: 0,
+                            duration_secs: 0,
+                            docs_skipped: 1,
+                            documents: vec![
+                                DocumentOutcome {
+                                    source: Some("okafor2019".into()),
+                                    state: DocumentState::Ready {
+                                        text_sha256: Some(Sha256Hash::of_str("okafor")),
+                                    },
+                                },
+                                DocumentOutcome {
+                                    source: Some("scans/broken.pdf".into()),
+                                    state: DocumentState::Failed {
+                                        reason: "custom extractor 'pdf' failed: no text layer"
+                                            .into(),
+                                    },
+                                },
+                            ],
+                            documents_unlisted: 0,
+                        })
+                    })
+                }),
+            })
+        });
+    let state = state(Arc::new(engine));
+
+    let (status, body) = install(
+        state.clone(),
+        serde_json::json!({"corpus_id": "notes", "recipe_toml": RECIPE_A}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["spawned"], true);
+    let first = progress(state.clone()).await;
+    let entry = first
+        .progress
+        .get("notes")
+        .unwrap_or_else(|| panic!("listed on the first poll after its 202: {first:?}"));
+    assert_eq!(entry.phase, IngestPhase::Pending);
+    assert!(entry.documents.is_empty(), "no documents before it returns");
+
+    release.notify_one();
+    settled(&state, "notes").await;
+    let done = progress(state.clone()).await;
+    let docs = &done.progress["notes"].documents;
+    assert_eq!(docs.len(), 2, "{done:?}");
+    assert_eq!(docs[0].source.as_deref(), Some("okafor2019"));
+    assert_eq!(
+        docs[0].state,
+        IngestDocumentState::Ready {
+            text_sha256: Some(Sha256Hash::of_str("okafor").to_hex()),
+            record: None,
+        }
+    );
+    assert_eq!(docs[1].source.as_deref(), Some("scans/broken.pdf"));
+    assert!(
+        matches!(&docs[1].state, IngestDocumentState::Failed { reason } if reason.contains("no text layer")),
+        "{:?}",
+        docs[1]
+    );
+    assert_eq!(done.progress["notes"].documents_unlisted, None);
+}
+
+/// The double's install of a supplied recipe that reads one document and
+/// fails on another, as `an_install_is_listed_from_its_spawn_…`'s does, with
+/// no gate: a library with one unreadable file.
+fn documented_engine(indexes: std::path::PathBuf) -> IngestPortDouble {
+    use corpus_index::ingest_port::daemon::{DocumentOutcome, DocumentState};
+    let at = indexes.clone();
+    let removes = indexes.clone();
+    IngestPortDouble::new()
+        .with_index_dir(indexes)
+        .on_prepare_recipe_install(move |id, toml| {
+            let (dir, id, toml) = (at.clone(), id.to_string(), toml.to_string());
+            Ok(PreparedInstall {
+                opts_out_of_auto_enrichment: true,
+                run: Box::new(move |_progress| {
+                    Box::pin(async move {
+                        let corpus = Corpus::named(&dir, &id).expect("an id");
+                        // A real index: an install whose records cannot be made is
+                        // unreadable, never held as "kept none".
+                        crate::common::fixture_library::install(
+                            &dir,
+                            &id,
+                            &[crate::common::fixture_library::Doc {
+                                name: "okafor2019".into(),
+                                metadata: None,
+                                text: "okafor".into(),
+                            }],
+                            true,
+                        )
+                        .await;
+                        corpus.stamp_recipe_sha256(&recipe_sha256(&toml)).unwrap();
+                        Ok(IngestResult {
+                            corpus_id: id,
+                            chunks_created: 1,
+                            index_size_bytes: 0,
+                            duration_secs: 0,
+                            docs_skipped: 1,
+                            documents: vec![
+                                DocumentOutcome {
+                                    source: Some("okafor2019".into()),
+                                    state: DocumentState::Ready {
+                                        text_sha256: Some(kernel_types::Sha256Hash::of_str(
+                                            "okafor",
+                                        )),
+                                    },
+                                },
+                                DocumentOutcome {
+                                    source: Some("scans/broken.pdf".into()),
+                                    state: DocumentState::Failed {
+                                        reason: "no text layer".into(),
+                                    },
+                                },
+                            ],
+                            documents_unlisted: 0,
+                        })
+                    })
+                }),
+            })
+        })
+        .on_remove_corpus_everything(move |id| {
+            let _ = std::fs::remove_dir_all(removes.join(id));
+            Ok(())
+        })
+}
+
+/// Platform row PH (zoracite orders/s6-lean-route): a held corpus's
+/// documents survive a restart. A corpus installed with one unreadable file,
+/// then a new daemon over the same indexes with nothing in memory: the same
+/// install is `spawned: false`, and progress still lists the corpus complete
+/// with the ready document and the failed one. Red against the parent, whose
+/// list lived only in the daemon's memory, so the restarted daemon listed no
+/// such corpus and §2.9 and v0.4 §5.3 rule 4 together said nothing of its
+/// documents.
+#[tokio::test]
+async fn a_held_corpus_lists_its_documents_after_a_restart() {
+    use oicp_types::{IngestDocumentState, IngestPhase};
+
+    let tmp = tempfile::tempdir().unwrap();
+    let indexes = tmp.path().to_path_buf();
+    let body = serde_json::json!({"corpus_id": "notes", "recipe_toml": RECIPE_A});
+
+    let before = state(Arc::new(documented_engine(indexes.clone())));
+    let (status, reply) = install(before.clone(), body.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert_eq!(reply["spawned"], true, "{reply}");
+    settled(&before, "notes").await;
+
+    let after = state(Arc::new(documented_engine(indexes)));
+    let (status, reply) = install(after.clone(), body).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert_eq!(reply["spawned"], false, "the corpus is held: {reply}");
+    let listed = progress(after).await;
+    let entry = listed
+        .progress
+        .get("notes")
+        .unwrap_or_else(|| panic!("a held corpus is listed after a restart: {listed:?}"));
+    assert_eq!(entry.phase, IngestPhase::Complete);
+    assert_eq!(entry.documents.len(), 2, "{entry:?}");
+    assert_eq!(entry.documents[0].source.as_deref(), Some("okafor2019"));
+    assert!(matches!(
+        entry.documents[0].state,
+        IngestDocumentState::Ready { .. }
+    ));
+    assert_eq!(
+        entry.documents[1].source.as_deref(),
+        Some("scans/broken.pdf")
+    );
+    assert!(matches!(
+        entry.documents[1].state,
+        IngestDocumentState::Failed { .. }
+    ));
+}
+
+/// A corpus stamped with the same recipe but holding no documents record (an
+/// install from before PH) is not answered `spawned: false`, which would
+/// leave its documents unknown for good: the install reads it again, and its
+/// documents are listed.
+#[tokio::test]
+async fn a_held_corpus_with_no_documents_record_is_read_again() {
+    let tmp = tempfile::tempdir().unwrap();
+    let indexes = tmp.path().to_path_buf();
+    let corpus = Corpus::named(&indexes, "notes").unwrap();
+    std::fs::create_dir_all(corpus.root()).unwrap();
+    std::fs::write(corpus.meta_path(), "{}").unwrap();
+    corpus
+        .stamp_recipe_sha256(&recipe_sha256(RECIPE_A))
+        .unwrap();
+
+    let state = state(Arc::new(documented_engine(indexes)));
+    let (status, reply) = install(
+        state.clone(),
+        serde_json::json!({"corpus_id": "notes", "recipe_toml": RECIPE_A}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert_eq!(reply["spawned"], true, "no documents record: {reply}");
+    settled(&state, "notes").await;
+    assert_eq!(progress(state).await.progress["notes"].documents.len(), 2);
+}
+
+/// The `max_install_bytes` the manifest states (OICP v0.6 §2.12).
+async fn stated_limit(state: AppState) -> usize {
+    let mut req = Request::get("/oicp/v1/capabilities")
+        .header("host", "127.0.0.1:9741")
+        .body(Body::empty())
+        .unwrap();
+    req.extensions_mut().insert(ConnectInfo(
+        "127.0.0.1:55003".parse::<SocketAddr>().unwrap(),
+    ));
+    let resp = client_router(state).oneshot(req).await.unwrap();
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    let m: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let limit = m["knowledge"]["ingest"]["max_install_bytes"].as_u64();
+    usize::try_from(limit.expect("the manifest states max_install_bytes")).unwrap()
+}
+
+/// An install of `notes` exactly `bytes` long: RECIPE_A's table, then a TOML
+/// comment padded with `x` to the size.
+fn padded_install(bytes: usize) -> String {
+    let head =
+        r#"{"corpus_id":"notes","recipe_toml":"[corpus]\nid = \"notes\"\nname = \"Notes\"\n# "#;
+    let tail = r#""}"#;
+    let pad = bytes - head.len() - tail.len();
+    format!("{head}{}{tail}", "x".repeat(pad))
+}
+
+/// v0.6 §2.12: an inline library whose install body is exactly the stated
+/// limit, far past the client surface's 8 MiB, is read and installed. Red
+/// against the parent's route, which read every body to the surface's bound
+/// and refused a 22,627,179-byte library `413` before the handler ran.
+#[tokio::test]
+async fn an_install_of_the_stated_size_past_the_surface_limit_installs() {
+    let tmp = tempfile::tempdir().unwrap();
+    let state = state(Arc::new(engine(tmp.path().to_path_buf())));
+    let limit = stated_limit(state.clone()).await;
+    assert!(
+        limit > sovereign_daemon::server::MAX_REQUEST_BODY_BYTES,
+        "the install limit must be past the surface's, or §2.12 changes nothing: {limit}"
+    );
+    let body = padded_install(limit);
+    assert_eq!(body.len(), limit);
+    let (status, reply) = install_raw(state.clone(), body).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert_eq!(reply["spawned"], true, "{reply}");
+    settled(&state, "notes").await;
+}
+
+/// One byte past the stated limit is `413 install too large`, naming the
+/// limit, never axum's unnamed 413 and never a prefix read.
+#[tokio::test]
+async fn an_install_one_byte_past_the_stated_limit_is_refused_by_name() {
+    let tmp = tempfile::tempdir().unwrap();
+    let state = state(Arc::new(engine(tmp.path().to_path_buf())));
+    let limit = stated_limit(state.clone()).await;
+    let (status, reply) = install_raw(state.clone(), padded_install(limit + 1)).await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE, "{reply}");
+    assert_eq!(reply["error"], "install too large", "{reply}");
+    assert_eq!(reply["max_install_bytes"], limit as u64, "{reply}");
+    assert!(
+        !state
+            .inner
+            .ingest
+            .active_ingests
+            .read()
+            .await
+            .contains("notes"),
+        "nothing of a refused install runs"
+    );
 }

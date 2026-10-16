@@ -3,14 +3,16 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde_json::{json, Value};
+use serde_json::Value;
 use tracing::debug;
 
+use super::protocol_moves as moves;
+use super::protocol_support::{
+    history_entry, matches_rule, report_time_class, set_disposition, source_field_value,
+};
 use super::{DerivedOutcome, DerivedProtocolAudit, Effects, Graph, Node};
 use crate::enrichment::ontology::derived::{FoldDecl, ProtocolRuleDecl};
-use crate::enrichment::pipeline::document_read::{
-    field_evidence_exists, DocumentReadField, CLAIM_FIELDS_ATTRIBUTE,
-};
+use crate::enrichment::pipeline::document_read::CLAIM_FIELDS_ATTRIBUTE;
 
 #[derive(Debug)]
 struct ProtocolCandidate {
@@ -22,6 +24,8 @@ struct ProtocolCandidate {
     report_time: Option<String>,
     effective_time: Option<String>,
     corrects: Option<String>,
+    /// The states the move may leave (`None`: any, and none).
+    from: Option<BTreeSet<String>>,
 }
 
 pub(super) fn derive(
@@ -166,7 +170,45 @@ pub(super) fn derive(
                 Err(reasons) => uncertain.push((*rule, reasons)),
             }
         }
-        if matching.len() != 1 || !uncertain.is_empty() {
+        let machine = moves::is_machine(protocol);
+        if machine {
+            let (may, may_not) =
+                moves::authorized(graph, std::mem::take(&mut matching), claim_index)?;
+            if may.is_empty() && !may_not.is_empty() && uncertain.is_empty() {
+                let reason = may_not
+                    .iter()
+                    .filter_map(|r| {
+                        let by = r.by.as_deref()?;
+                        Some(format!("`{}` is a move only `{by}` makes", r.id))
+                    })
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                rule_ids.extend(may_not.iter().map(|r| r.id.clone()));
+                history.push(history_entry(
+                    input,
+                    claim,
+                    document_id.as_deref(),
+                    report_time.as_deref(),
+                    Some(&may_not[0].id),
+                    Some(&may_not[0].state),
+                    None,
+                    None,
+                    "unauthorized",
+                    Some(&reason),
+                    field_evidence,
+                ));
+                continue;
+            }
+            matching = may;
+        }
+        // Rules a machine tells apart only by mover or prior state, into one
+        // state, are one move.
+        let one_move = machine
+            && matching.len() > 1
+            && matching
+                .iter()
+                .all(|r| r.state == matching[0].state && r.corrects == matching[0].corrects);
+        if (matching.len() != 1 && !one_move) || !uncertain.is_empty() {
             let mut reasons = BTreeSet::new();
             rule_ids.extend(matching.iter().map(|rule| rule.id.clone()));
             for (_, missing) in &uncertain {
@@ -222,7 +264,7 @@ pub(super) fn derive(
         }
 
         let rule = matching[0];
-        rule_ids.insert(rule.id.clone());
+        rule_ids.extend(matching.iter().map(|r| r.id.clone()));
         let identity = match source_field_value(claim, source_document, &protocol.identity) {
             Ok(value) if !value.is_empty() => value,
             Ok(_) => {
@@ -371,11 +413,16 @@ pub(super) fn derive(
             history_index,
             claim_id,
             identity,
-            rule_id: rule.id.clone(),
+            rule_id: matching
+                .iter()
+                .map(|r| r.id.as_str())
+                .collect::<Vec<_>>()
+                .join("+"),
             state: rule.state.clone(),
             report_time,
             effective_time,
             corrects,
+            from: moves::leaves(&matching).map(|f| f.into_iter().map(str::to_string).collect()),
         });
     }
 
@@ -581,6 +628,62 @@ pub(super) fn derive(
             values: alternatives.iter().cloned().collect(),
             reasons: pending.iter().cloned().collect(),
         };
+    } else if !active.is_empty() && moves::is_machine(protocol) {
+        let mut replayed_moves = Vec::with_capacity(active.len());
+        for (_, candidate) in &active {
+            replayed_moves.push(moves::Move {
+                at: candidate
+                    .report_time
+                    .as_deref()
+                    .ok_or_else(|| "protocol replay lost a report time".to_string())?,
+                state: &candidate.state,
+                from: candidate
+                    .from
+                    .as_ref()
+                    .map(|f| f.iter().map(String::as_str).collect()),
+            });
+        }
+        let replayed = moves::replay(&replayed_moves, protocol.initial.as_deref());
+        for (k, (_, candidate)) in active.iter().enumerate() {
+            set_disposition(
+                &mut history,
+                candidate.history_index,
+                replayed.dispositions[k],
+            );
+        }
+        if let Some((at, states)) = replayed.conflict {
+            pending.insert(format!("incompatible moves share report time `{at}`"));
+            outcome = DerivedOutcome::Conflict {
+                values: states.iter().cloned().collect(),
+            };
+            alternatives = states;
+        } else if let Some((at, state)) = replayed.state {
+            as_of_report_time = Some(at);
+            let mut documents = BTreeSet::new();
+            for (k, (_, candidate)) in active.iter().enumerate() {
+                if replayed.dispositions[k] != "selected" {
+                    continue;
+                }
+                rule_ids.insert(candidate.rule_id.clone());
+                if let Some(time) = &candidate.effective_time {
+                    effective_times.insert(time.clone());
+                }
+                if let Some(d) = history[candidate.history_index]["document"].as_str() {
+                    documents.insert(d.to_string());
+                }
+            }
+            let superseded: BTreeSet<String> = candidates
+                .iter()
+                .filter(|c| c.state != state)
+                .map(|c| c.state.clone())
+                .collect();
+            outcome = DerivedOutcome::Decided {
+                values: vec![state],
+                input: None,
+                documents: documents.into_iter().collect(),
+                superseded: superseded.into_iter().collect(),
+            };
+        }
     } else if !active.is_empty() {
         let latest = active
             .iter()
@@ -667,123 +770,4 @@ pub(super) fn derive(
         "atlas/derive: protocol fold evaluated"
     );
     Ok((outcome, audit))
-}
-
-fn matches_rule(
-    claim: &crate::enrichment::atlas::atoms::Claim,
-    source_document: Option<&crate::enrichment::atlas::SourceDocument>,
-    rule: &ProtocolRuleDecl,
-) -> Result<bool, Vec<String>> {
-    let mut missing = BTreeSet::new();
-    let mut mismatch = false;
-    for (field, expected) in &rule.when {
-        match source_field_value(claim, source_document, field) {
-            Ok(actual) if actual == *expected => {}
-            Ok(_) => mismatch = true,
-            Err(reason) => {
-                missing.insert(format!("`{field}`: {reason}"));
-            }
-        }
-    }
-    if mismatch {
-        Ok(false)
-    } else if missing.is_empty() {
-        Ok(true)
-    } else {
-        Err(missing.into_iter().collect())
-    }
-}
-
-fn source_field_value(
-    claim: &crate::enrichment::atlas::atoms::Claim,
-    source_document: Option<&crate::enrichment::atlas::SourceDocument>,
-    field: &str,
-) -> Result<String, String> {
-    let carrier = claim
-        .attributes
-        .get(CLAIM_FIELDS_ATTRIBUTE)
-        .ok_or_else(|| "DocumentRead field provenance is unavailable in this cache".to_string())?;
-    let fields = carrier
-        .as_object()
-        .ok_or_else(|| "DocumentRead field provenance is not an object".to_string())?;
-    let wire = fields
-        .get(field)
-        .cloned()
-        .ok_or_else(|| "DocumentRead did not provide this qualification".to_string())?;
-    let field: DocumentReadField = serde_json::from_value(wire)
-        .map_err(|error| format!("DocumentRead qualification is malformed: {error}"))?;
-    match field {
-        DocumentReadField::Unknown { reason } => Err(format!("source field is unknown: {reason}")),
-        DocumentReadField::Supported {
-            value, evidence, ..
-        } => {
-            if evidence.trim().is_empty() {
-                return Err("supported field has no field evidence".into());
-            }
-            let Some(document) = source_document else {
-                return Err("claim has no unique cited source document".into());
-            };
-            if !field_evidence_exists(document, &evidence) {
-                return Err("field evidence no longer resolves in the cited document".into());
-            }
-            match value {
-                Value::String(value) => Ok(value),
-                Value::Number(value) => Ok(value.to_string()),
-                _ => Err("supported qualification is not a scalar string or number".into()),
-            }
-        }
-    }
-}
-
-fn history_entry(
-    input: usize,
-    claim: &crate::enrichment::atlas::atoms::Claim,
-    document: Option<&str>,
-    report_time: Option<&str>,
-    rule: Option<&str>,
-    state: Option<&str>,
-    identity: Option<&str>,
-    effective_time: Option<&str>,
-    disposition: &str,
-    reason: Option<&str>,
-    field_evidence: Value,
-) -> Value {
-    let mut entry = json!({
-        "input": input,
-        "claim": claim.id.as_str(),
-        "claim_kind": claim.claim_kind,
-        "assigned_to": claim.subject.as_ref().map(|subject| subject.as_str()),
-        "document": document,
-        "report_time": report_time,
-        "effective_time": effective_time,
-        "identity": identity,
-        "rule": rule,
-        "state": state,
-        "citation": serde_json::to_value(&claim.evidence).unwrap_or(Value::Null),
-        "field_evidence": field_evidence,
-        "disposition": disposition,
-    });
-    if let Some(reason) = reason {
-        entry["reason"] = Value::String(reason.to_string());
-    }
-    entry
-}
-
-fn set_disposition(history: &mut [Value], index: usize, disposition: &str) {
-    if let Some(entry) = history.get_mut(index).and_then(Value::as_object_mut) {
-        entry.insert("disposition".into(), Value::String(disposition.to_string()));
-    }
-}
-
-fn report_time_class(time: &str) -> Option<&'static str> {
-    if time.len() == 10
-        && time.as_bytes().get(4) == Some(&b'-')
-        && time.as_bytes().get(7) == Some(&b'-')
-    {
-        Some("date")
-    } else if time.contains('T') && time.ends_with('Z') {
-        Some("utc")
-    } else {
-        None
-    }
 }

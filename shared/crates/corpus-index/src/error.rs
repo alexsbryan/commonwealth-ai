@@ -20,6 +20,13 @@ pub enum Error {
     #[error("Extraction error: {0}")]
     Extraction(String),
 
+    /// One document of a source could not be extracted, named by the source
+    /// it came from: an inline document's name, or a file's path. The ingest
+    /// loop reports it as that document failed (`DocumentOutcome`), so a
+    /// library with one unreadable file says which.
+    #[error("Extraction error in {document}: {reason}")]
+    ExtractionOf { document: String, reason: String },
+
     #[error("Embedding error: {0}")]
     Embed(String),
 
@@ -172,6 +179,21 @@ pub enum Error {
 }
 
 impl Error {
+    /// This error as [`Error::ExtractionOf`] `source`: the outermost reader
+    /// that knows the document names it, so an inline document is named by
+    /// its recipe name, not the temporary file its text was written to.
+    pub fn of_source(self, source: impl std::fmt::Display) -> Self {
+        let reason = match self {
+            Error::ExtractionOf { reason, .. } => reason,
+            Error::Extraction(m) => m,
+            other => other.to_string(),
+        };
+        Error::ExtractionOf {
+            document: source.to_string(),
+            reason,
+        }
+    }
+
     /// Build a [`Error::DownloadUnauthorized`] whose message tells the
     /// operator what to actually do about a 401/403.
     ///

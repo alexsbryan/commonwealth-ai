@@ -8,6 +8,7 @@ pub mod capabilities;
 mod chat_template;
 mod compute_backend;
 mod control_vector;
+mod decide_wave;
 mod embed_only;
 mod embed_slot;
 mod engine;

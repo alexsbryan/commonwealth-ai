@@ -2,17 +2,17 @@ use serde_json::json;
 
 use super::*;
 
-/// The model's choice (on y) and the proposed answer (on x) are weighed
-/// together at their estimated weights, three alternatives (x, y, none). A
-/// choice worth far more carries y, one as reliable as the proposed answer
-/// holds the statement (no record opens), and a choice agreeing with the
-/// proposed answer links x.
+/// The model's choice decides whatever the proposed answer and the weights
+/// say: on y against a proposed answer on x it puts the statement on y, at a
+/// weight that would have carried it and at one that would have held it
+/// (the weighed posterior, kept beside the choice, then sits below the bar),
+/// and agreeing with the proposed answer it puts it on x.
 #[tokio::test]
-async fn the_choice_and_the_proposed_answer_are_weighed_together_and_a_split_is_held() {
-    for (model, argmax, want, record) in [
-        ((0.99, 0.01), "B", "weighed", Some("y")),
-        ((0.6, 0.3), "B", "held", None),
-        ((0.9, 0.05), "A", "weighed", Some("x")),
+async fn the_models_choice_decides_whatever_the_proposed_answer_and_the_weights_say() {
+    for (model, argmax, record) in [
+        ((0.99, 0.01), "B", "y"),
+        ((0.6, 0.3), "B", "y"),
+        ((0.9, 0.05), "A", "x"),
     ] {
         let mut res = fire_downtown(weights(&[
             ("model_choice", model.0, model.1),
@@ -45,22 +45,28 @@ async fn the_choice_and_the_proposed_answer_are_weighed_together_and_a_split_is_
         let o = &r.outcomes[0].outcome;
         assert_eq!(
             (o.label(), o.record()),
-            (want, record),
+            ("chosen", Some(record)),
             "model {model:?} {argmax}"
         );
-        if let Outcome::Held(h) = o {
-            assert_eq!(h.sources.len(), 2);
-            assert_eq!(h.alternatives.len(), 2);
-            assert!(h.alternatives.iter().all(|(_, p)| *p < 0.5));
-            // Held is not opened: the two records are all there are.
-            assert_eq!(res.records().len(), 2);
-            assert!(r.outcomes[0].choice.is_some());
+        let Outcome::Decided(Decision::Chosen { posterior, .. }) = o else {
+            unreachable!()
+        };
+        if model == (0.6, 0.3) {
+            assert!(
+                *posterior < 0.5,
+                "the weights alone would have held it: {posterior}"
+            );
         }
+        assert_eq!(res.records().len(), 2, "no record opens");
+        assert!(r.outcomes[0].choice.is_some());
     }
 }
 
+/// The model's choice decides, said to be the model's at an unmeasured
+/// precision (C3); the sources that agreed with it are kept beside it at
+/// their estimated weights.
 #[tokio::test]
-async fn the_models_choice_is_weighed_at_its_estimated_weight_with_the_proposed_answer() {
+async fn the_models_choice_decides_and_the_sources_that_agreed_are_kept_at_their_estimates() {
     let (infer, _) = scripted(vec![json!({"A": 0.2, "B": 0.7, "0": 0.1})]);
     // A proposed answer that does not link alone, so the model is asked.
     let mut res = weights(&[("proposed_answer", 0.5, 0.4)]);
@@ -95,39 +101,40 @@ async fn the_models_choice_is_weighed_at_its_estimated_weight_with_the_proposed_
         .await;
     // The model's argmax (B) and the proposed answer (same wording) both name y.
     match &r.outcomes[0].outcome {
-        Outcome::Decided(Decision::Weighed {
+        Outcome::Decided(Decision::Chosen {
             record, sources, ..
         }) => {
             assert_eq!(record, "y");
-            let named: Vec<&str> = sources.iter().map(|v| v.source.as_str()).collect();
-            assert_eq!(named, ["model_choice", "proposed_answer"]);
+            let kept: Vec<(&str, f64)> = sources
+                .iter()
+                .map(|v| (v.source.as_str(), v.precision))
+                .collect();
+            assert_eq!(
+                kept,
+                [
+                    ("model_choice", est.precision("model_choice").unwrap()),
+                    ("proposed_answer", est.precision("proposed_answer").unwrap()),
+                ]
+            );
         }
         o => panic!("{o:?}"),
     }
-    // C3: each source's precision is said to be estimated, at the estimate.
+    // C3: the decision is the model's, its precision unmeasured.
     assert_eq!(
         r.outcomes[0].by,
-        [
-            SourcePrecision::new(
-                "model_choice",
-                crate::enrichment::atlas::precision::Precision::Estimated(
-                    est.precision("model_choice").unwrap()
-                )
-            ),
-            SourcePrecision::new(
-                "proposed_answer",
-                crate::enrichment::atlas::precision::Precision::Estimated(
-                    est.precision("proposed_answer").unwrap()
-                )
-            ),
-        ]
+        [SourcePrecision::new(
+            "model_choice",
+            crate::enrichment::atlas::precision::Precision::Unmeasured
+        )]
     );
     assert_eq!(res.records()[1].statements, ["y", "z"]);
 }
 
+/// A read kind that differs from the candidate's never forbids it: the
+/// candidate is offered, the model names it, and its choice decides.
 #[tokio::test]
-async fn a_read_kind_that_differs_weighs_against_a_candidate_and_never_forbids_it() {
-    for (read_as, want) in [("A", None), ("B", Some("x"))] {
+async fn a_read_kind_that_differs_never_forbids_a_candidate_the_model_picks() {
+    for read_as in ["A", "B"] {
         let mut res = weights(&[]);
         let a = "The victim died.";
         // d0's statement is READ as a death (B), then opens: no candidate.
@@ -161,33 +168,37 @@ async fn a_read_kind_that_differs_weighs_against_a_candidate_and_never_forbids_i
             .await;
         assert_eq!((r.vetoed, r.calls, seen.lock().unwrap().len()), (0, 2, 2));
         let o = &r.outcomes[0].outcome;
-        match want {
-            // A differing read outweighs the choice: opened.
-            None => assert_eq!((o.label(), o.record()), ("opened", Some("z"))),
-            Some(x) => assert_eq!((o.label(), o.record()), ("weighed", Some(x))),
-        }
+        assert_eq!(
+            (o.label(), o.record()),
+            ("chosen", Some("x")),
+            "read as {read_as}"
+        );
     }
 }
 
+/// Where the other sources would link on their own, the model is still asked
+/// and its choice decides: x when it names x, its own record when it names
+/// none. Nothing links on fitted weights alone.
 #[tokio::test]
-async fn where_the_other_sources_already_link_the_model_is_not_asked() {
-    let mut res = fire_downtown(weights(&[("proposed_answer", 0.9, 0.02)])).await;
-    let (infer, seen) = scripted(vec![]);
-    let b = "Fire downtown, again.";
-    let r = res
-        .resolve_document(
-            &barred(),
-            doc("d1", b),
-            &[stmt("z", b, "Fire downtown", 0, &[])],
-            &[similar("x", 0.6)],
-            Answerer::Select(&infer),
-        )
-        .await;
-    assert_eq!((r.calls, seen.lock().unwrap().len()), (0, 0));
-    match &r.outcomes[0].outcome {
-        Outcome::Decided(Decision::Weighed {
-            record, posterior, ..
-        }) => assert!(record == "x" && *posterior > 0.5),
-        o => panic!("{o:?}"),
+async fn the_model_is_asked_even_where_the_other_sources_would_link() {
+    for (answer, want) in [
+        (json!({"A": 0.9, "0": 0.1}), ("chosen", Some("x"))),
+        (json!({"A": 0.1, "0": 0.9}), ("opened", Some("z"))),
+    ] {
+        let mut res = fire_downtown(weights(&[("proposed_answer", 0.9, 0.02)])).await;
+        let (infer, seen) = scripted(vec![answer]);
+        let b = "Fire downtown, again.";
+        let r = res
+            .resolve_document(
+                &barred(),
+                doc("d1", b),
+                &[stmt("z", b, "Fire downtown", 0, &[])],
+                &[similar("x", 0.6)],
+                Answerer::Select(&infer),
+            )
+            .await;
+        assert_eq!((r.calls, seen.lock().unwrap().len()), (1, 1));
+        let o = &r.outcomes[0].outcome;
+        assert_eq!((o.label(), o.record()), want);
     }
 }

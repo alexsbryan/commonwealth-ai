@@ -22,6 +22,8 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Error, Result};
 use crate::index::{DocSource, DocumentInput};
 use crate::recipe::{AcquirerConfig, Recipe};
+use oicp_types::locator::HeadingOutline;
+use oicp_types::transcript::{reasons as transcript_reasons, DocumentFormat, TurnOutline};
 
 /// One `[[document]]` block. A closed set of two: the block carries its text,
 /// or names a file the acquirer reads. Anything else is refused at load.
@@ -36,6 +38,8 @@ pub enum DeclaredDocument {
         text: String,
         /// Declared metadata, JSON text, verbatim.
         metadata: Option<String>,
+        /// How its source is read, when the recipe says (v0.6 §2.14).
+        format: Option<DocumentFormat>,
     },
     /// `source` (+ `metadata`): metadata for one file under the source root.
     File {
@@ -43,6 +47,8 @@ pub enum DeclaredDocument {
         source: String,
         /// Declared metadata, JSON text, verbatim.
         metadata: Option<String>,
+        /// How it is read, when the recipe says (v0.6 §2.14).
+        format: Option<DocumentFormat>,
     },
 }
 
@@ -58,6 +64,9 @@ struct DocumentBlock {
     source: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     metadata: Option<String>,
+    /// A closed set (`DocumentFormat`): a value outside it fails the load.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    format: Option<DocumentFormat>,
 }
 
 impl TryFrom<DocumentBlock> for DeclaredDocument {
@@ -81,6 +90,7 @@ impl TryFrom<DocumentBlock> for DeclaredDocument {
                     name,
                     text,
                     metadata: b.metadata,
+                    format: b.format,
                 })
             }
             (None, Some(_), None) => {
@@ -91,6 +101,7 @@ impl TryFrom<DocumentBlock> for DeclaredDocument {
                 Ok(Self::File {
                     source,
                     metadata: b.metadata,
+                    format: b.format,
                 })
             }
             (Some(_), None, Some(source)) => Err(format!(
@@ -116,17 +127,24 @@ impl From<DeclaredDocument> for DocumentBlock {
                 name,
                 text,
                 metadata,
+                format,
             } => Self {
                 name: Some(name),
                 text: Some(text),
                 source: None,
                 metadata,
+                format,
             },
-            DeclaredDocument::File { source, metadata } => Self {
+            DeclaredDocument::File {
+                source,
+                metadata,
+                format,
+            } => Self {
                 name: None,
                 text: None,
                 source: Some(source),
                 metadata,
+                format,
             },
         }
     }
@@ -199,6 +217,17 @@ pub(crate) fn check_documents(recipe: &Recipe) -> Result<()> {
     Ok(())
 }
 
+/// What [`DeclaredMetadata::read`] gives: the text to store and the JSON
+/// `PlacedLocators` its spans are located by (a transcript's turns, a plain
+/// text's headings), `None` when it has neither.
+#[derive(Debug)]
+pub struct ReadText {
+    /// The words to store and chunk.
+    pub text: String,
+    /// Where each turn or heading starts, kept beside the stored text.
+    pub locators: Option<String>,
+}
+
 /// The recipe's declared metadata, indexed for the documents an ingest stores.
 /// Owned, so a path that loads its recipe late can hold it.
 #[derive(Debug, Default)]
@@ -209,6 +238,9 @@ pub struct DeclaredMetadata {
     by_source: HashMap<PathBuf, String>,
     /// The source root files are named relative to: the acquired path.
     root: Option<PathBuf>,
+    /// Declared formats, by inline name and by source path (v0.6 §2.14).
+    format_by_name: HashMap<String, DocumentFormat>,
+    format_by_source: HashMap<PathBuf, DocumentFormat>,
 }
 
 impl DeclaredMetadata {
@@ -224,24 +256,36 @@ impl DeclaredMetadata {
             match d {
                 DeclaredDocument::Inline {
                     name,
-                    metadata: Some(m),
+                    metadata,
+                    format,
                     ..
                 } => {
-                    out.by_name.insert(name.clone(), m.clone());
+                    if let Some(m) = metadata {
+                        out.by_name.insert(name.clone(), m.clone());
+                    }
+                    if let Some(f) = format {
+                        out.format_by_name.insert(name.clone(), *f);
+                    }
                 }
                 DeclaredDocument::File {
                     source,
-                    metadata: Some(m),
+                    metadata,
+                    format,
                 } => {
-                    out.by_source.insert(PathBuf::from(source), m.clone());
+                    if let Some(m) = metadata {
+                        out.by_source.insert(PathBuf::from(source), m.clone());
+                    }
+                    if let Some(f) = format {
+                        out.format_by_source.insert(PathBuf::from(source), *f);
+                    }
                 }
-                _ => {}
             }
         }
         tracing::debug!(
             corpus = %recipe.corpus.id,
             inline = out.by_name.len(),
             files = out.by_source.len(),
+            formats = out.format_by_name.len() + out.format_by_source.len(),
             root = ?out.root,
             "declared metadata indexed"
         );
@@ -275,22 +319,113 @@ impl DeclaredMetadata {
         }
     }
 
+    /// The words an ingest stores for one document and where its spans are
+    /// located (v0.6 §2.13, §2.14): THE rule that a document declared a
+    /// transcript is read by [`TurnOutline::read`], the one reader, and
+    /// stored as its words. An undeclared document is `content` as it is,
+    /// located by the heading paths [`HeadingOutline`] reads in it, and by
+    /// nothing when it has no headings. A declared one in neither shape is
+    /// `Err`, named as the recipe names it, never read as plain text.
+    pub fn read(&self, content: &str, source_id: &str, source: &DocSource) -> Result<ReadText> {
+        let format = match source {
+            DocSource::Hashed { .. } => self.format_by_name.get(source_id),
+            DocSource::File(path) => self
+                .relative(path)
+                .and_then(|rel| self.format_by_source.get(rel)),
+            DocSource::Record => None,
+        };
+        match format {
+            None => plain_text(content, source_id),
+            Some(DocumentFormat::Transcript) => {
+                let name = self.source_name(source_id, source);
+                let Some(outline) = TurnOutline::read(content) else {
+                    tracing::warn!(document = %name, "transcript: in neither shape; not stored");
+                    return Err(
+                        Error::Extraction(transcript_reasons::NOT_A_TRANSCRIPT.into())
+                            .of_source(name),
+                    );
+                };
+                let locators = serde_json::to_string(&outline.placed())
+                    .map_err(|e| Error::Serialization(format!("transcript locators: {e}")))?;
+                tracing::debug!(
+                    document = %name,
+                    shape = ?outline.shape,
+                    turns = outline.turns.len(),
+                    "transcript: read by turn"
+                );
+                Ok(ReadText {
+                    text: outline.text,
+                    locators: Some(locators),
+                })
+            }
+        }
+    }
+
     fn declared(&self, source_id: &str, source: &DocSource) -> Option<&str> {
         match source {
             // An inline document is stated by its acquirer, under its name.
             DocSource::Hashed { .. } => self.by_name.get(source_id).map(String::as_str),
-            DocSource::File(path) => {
-                let root = self.root.as_deref()?;
-                let rel = match path.strip_prefix(root) {
-                    Ok(rel) if rel.as_os_str().is_empty() => Path::new(path.file_name()?),
-                    Ok(rel) => rel,
-                    Err(_) => return None,
-                };
-                self.by_source.get(rel).map(String::as_str)
-            }
+            DocSource::File(path) => self.by_source.get(self.relative(path)?).map(String::as_str),
             DocSource::Record => None,
         }
     }
+
+    /// A document's name as the recipe names it (OICP v0.6 §2.9): a file by
+    /// its path relative to the acquired root, the rule [`Self::declared`]
+    /// keys on; any other by its source id (an inline document's name).
+    pub fn source_name(&self, source_id: &str, source: &DocSource) -> String {
+        match source {
+            DocSource::File(path) => self.name_of(&path.to_string_lossy()),
+            _ => source_id.to_string(),
+        }
+    }
+
+    /// The name of the document an extractor's error named
+    /// (`Error::ExtractionOf`): a path under the root, relative to it;
+    /// anything else, an inline document's name, as given.
+    pub fn name_of(&self, source: &str) -> String {
+        self.relative(Path::new(source))
+            .map_or_else(|| source.to_string(), |r| r.to_string_lossy().into_owned())
+    }
+
+    /// `path` relative to the acquired root; a root that is the file itself
+    /// names it by its file name.
+    fn relative<'p>(&self, path: &'p Path) -> Option<&'p Path> {
+        let root = self.root.as_deref()?;
+        match path.strip_prefix(root) {
+            Ok(rel) if rel.as_os_str().is_empty() => Some(Path::new(path.file_name()?)),
+            Ok(rel) => Some(rel),
+            Err(_) => None,
+        }
+    }
+}
+
+/// A plain text as it is, its heading paths (v0.6 §2.13) placed beside it by
+/// [`HeadingOutline`], the one rule; none for a text with no headings, so a
+/// span of it names no place rather than an invented one.
+fn plain_text(content: &str, source_id: &str) -> Result<ReadText> {
+    let outline = HeadingOutline::of(content);
+    if outline.heads().is_empty() {
+        tracing::debug!(
+            document = source_id,
+            "plain text: no headings; no locators kept"
+        );
+        return Ok(ReadText {
+            text: content.to_string(),
+            locators: None,
+        });
+    }
+    let locators = serde_json::to_string(&outline.placed())
+        .map_err(|e| Error::Serialization(format!("heading locators: {e}")))?;
+    tracing::debug!(
+        document = source_id,
+        headings = outline.heads().len(),
+        "plain text: heading paths kept"
+    );
+    Ok(ReadText {
+        text: content.to_string(),
+        locators: Some(locators),
+    })
 }
 
 #[cfg(test)]

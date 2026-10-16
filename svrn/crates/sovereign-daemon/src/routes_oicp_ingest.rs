@@ -13,19 +13,33 @@
 //! must present a bearer token (§5.5); loopback is free. Pause / cancel /
 //! expand stay internal-only (a spec'd non-goal).
 
+use axum::extract::rejection::JsonRejection;
 use axum::extract::State;
 use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use axum::Json;
+
+use std::collections::BTreeMap;
 
 use oicp_types::{
     CorpusIngestProgress, CorpusInstallRequest, CorpusInstallResponse, CorpusProgressResponse,
-    IngestPhase, RecipeTestReport, RecipeTestRequest,
+    IngestDocument, IngestDocumentState, IngestPhase, RecipeTestReport, RecipeTestRequest,
 };
 
 use crate::routes_internal::{
     install_status, progress_fraction, spawn_install, ErrorBody, InstallSource,
 };
 use crate::state::AppState;
+
+/// OICP v0.6 §2.12: the largest install body this host reads, stated as
+/// `knowledge.ingest.max_install_bytes` (`routes_oicp`) and set on the install
+/// route alone (`server::client_router`). Every other route on the client
+/// surface keeps `MAX_REQUEST_BODY_BYTES` (8 MiB), which refused a
+/// 22,627,179-byte inline library `413`. 64 MiB holds that library, escaped
+/// twice (TOML, then JSON), with room for one near three times its size; the
+/// body is buffered whole, so this is also the transient memory one install
+/// may take before its recipe is read.
+pub const MAX_INSTALL_BYTES: usize = 64 * 1024 * 1024;
 
 /// Default per-run sample when the client doesn't cap it — small enough to
 /// stay a quick dry run, large enough to exercise extraction + chunking.
@@ -41,9 +55,53 @@ const DEFAULT_TEST_SAMPLE: u32 = 20;
 /// different recipe reingests. An invalid recipe or invalid parameters are a
 /// 400 and an unknown id a 404, never a 200 `spawned: false`
 /// (`install_status`, the mapping the internal route shares).
+///
+/// A body past [`MAX_INSTALL_BYTES`] is `413 install too large` naming the
+/// limit (v0.6 §2.12), never axum's unnamed 413; any other body that does not
+/// decode keeps axum's rejection.
 pub async fn corpus_install(
     State(state): State<AppState>,
-    Json(req): Json<CorpusInstallRequest>,
+    req: Result<Json<CorpusInstallRequest>, JsonRejection>,
+) -> Response {
+    let req = match req {
+        Ok(Json(req)) => req,
+        Err(rejection) if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE => {
+            tracing::info!(
+                limit = MAX_INSTALL_BYTES,
+                "oicp install: refused, the body is past max_install_bytes"
+            );
+            return (
+                StatusCode::PAYLOAD_TOO_LARGE,
+                Json(serde_json::json!({
+                    "error": oicp_types::ingest::reasons::INSTALL_TOO_LARGE,
+                    "max_install_bytes": MAX_INSTALL_BYTES,
+                })),
+            )
+                .into_response();
+        }
+        Err(rejection) => {
+            tracing::info!(%rejection, "oicp install: refused, the body does not decode");
+            return rejection.into_response();
+        }
+    };
+    tracing::debug!(
+        corpus = %req.corpus_id,
+        recipe_bytes = req.recipe_toml.as_ref().map(String::len),
+        allow_lookups = req.allow_lookups,
+        "oicp install: request read"
+    );
+    match install(state, req).await {
+        Ok(reply) => reply.into_response(),
+        Err(refusal) => refusal.into_response(),
+    }
+}
+
+/// The install itself, once its body is read: the registry's recipe, or the
+/// one the request carried, through the outcome mapping both install routes
+/// share.
+async fn install(
+    state: AppState,
+    req: CorpusInstallRequest,
 ) -> Result<Json<CorpusInstallResponse>, (StatusCode, Json<ErrorBody>)> {
     let recipe_sha256 = req
         .recipe_toml
@@ -53,8 +111,23 @@ pub async fn corpus_install(
         Some(toml) => InstallSource::Recipe(toml),
         None => InstallSource::Registry,
     };
-    let outcome = spawn_install(state, req.corpus_id.clone(), req.parameters, source).await;
+    let outcome = spawn_install(
+        state.clone(),
+        req.corpus_id.clone(),
+        req.parameters,
+        source,
+        req.allow_lookups,
+    )
+    .await;
     let spawned = install_status(outcome, &req.corpus_id)?;
+    // v0.6 §2.11: every sentence of the installed texts embedded once the
+    // install returns (`sentence_index`); a corpus already held is queued now.
+    let sentences = &state.inner.node.sentences;
+    if spawned {
+        sentences.after_install(&state, req.corpus_id.clone());
+    } else {
+        sentences.enqueue(&state, &req.corpus_id);
+    }
     Ok(Json(CorpusInstallResponse {
         corpus_id: req.corpus_id,
         spawned,
@@ -65,13 +138,143 @@ pub async fn corpus_install(
 /// `GET /oicp/v1/corpus/progress` (§5.2). Projects the internal
 /// `corpus_id -> IngestProgress` snapshot onto the coarse protocol
 /// `CorpusIngestProgress`, so no `corpus_engine` type reaches the wire.
+///
+/// v0.6 §2.9: every install is listed from its spawn. `active_ingests` is
+/// set before install's reply, while the first progress entry waits on the
+/// engine's first callback, so an install with none yet is `pending` here,
+/// the union `/internal/corpus/status` already reads. Once an install has
+/// returned, its entry lists each document it read, from the record kept
+/// with the corpus (`Corpus::install_documents`). A corpus held from before
+/// the daemon's last start has no entry in memory; its record lists it
+/// `complete` (platform row PH), so a client polling after a `spawned:
+/// false` learns its documents rather than nothing.
 pub async fn corpus_progress(State(state): State<AppState>) -> Json<CorpusProgressResponse> {
+    let active = state.inner.ingest.active_ingests.read().await.clone();
     let snapshot = state.inner.ingest.corpus_progress.read().await;
-    let progress = snapshot
+    let mut progress: BTreeMap<String, CorpusIngestProgress> = snapshot
         .iter()
         .map(|(id, p)| (id.clone(), map_progress(p)))
         .collect();
+    drop(snapshot);
+    let mut spawned_only = 0usize;
+    for id in active {
+        progress.entry(id).or_insert_with(|| {
+            spawned_only += 1;
+            CorpusIngestProgress {
+                phase: IngestPhase::Pending,
+                fraction: None,
+                detail: Some("spawned".into()),
+                documents: Vec::new(),
+                documents_unlisted: None,
+            }
+        });
+    }
+    let index_dir = state
+        .inner
+        .node
+        .corpus_engine
+        .as_ref()
+        .map(|e| e.index_dir().to_path_buf());
+    let held = index_dir
+        .as_deref()
+        .map(|dir| held_with_documents(dir, &progress))
+        .unwrap_or_default();
+    for id in &held {
+        progress.insert(
+            id.clone(),
+            CorpusIngestProgress {
+                phase: IngestPhase::Complete,
+                fraction: Some(1.0),
+                detail: Some("held".into()),
+                documents: Vec::new(),
+                documents_unlisted: None,
+            },
+        );
+    }
+    let mut listed = 0usize;
+    for (id, entry) in progress.iter_mut() {
+        let corpus = index_dir
+            .as_deref()
+            .and_then(|dir| corpus_index::corpus::Corpus::named(dir, id));
+        if let Some((c, d)) = corpus.and_then(|c| c.install_documents().map(|d| (c, d))) {
+            // v0.6 §2.16: each ready document's record, kept with the install.
+            use crate::records_by_identifier::{InstallRecords, RecordsRead};
+            let records = match InstallRecords::of(&c) {
+                RecordsRead::Kept(r) => r,
+                RecordsRead::NotWritten => InstallRecords::default(),
+                RecordsRead::Unreadable(why) => {
+                    // §2.16 gives a ready document no place to say its record
+                    // is unreadable; the entry's `detail` is the human-readable one.
+                    tracing::warn!(corpus = %id, %why, "oicp corpus progress: records unreadable, named in detail");
+                    let note = format!("records unreadable: {why}");
+                    entry.detail = Some(match entry.detail.take() {
+                        Some(d) => format!("{d}; {note}"),
+                        None => note,
+                    });
+                    InstallRecords::default()
+                }
+            };
+            entry.documents = d
+                .documents
+                .iter()
+                .map(|d| wire_document(d, &records))
+                .collect();
+            entry.documents_unlisted = (d.unlisted > 0).then_some(d.unlisted);
+            listed += entry.documents.len();
+        }
+    }
+    tracing::debug!(
+        corpora = progress.len(),
+        spawned_only,
+        held = held.len(),
+        documents_listed = listed,
+        "oicp corpus progress: answered"
+    );
     Json(CorpusProgressResponse { progress })
+}
+
+/// The corpora under `index_dir` that keep an install-documents record and
+/// have no entry in `progress`: held from before the daemon's last start.
+fn held_with_documents(
+    index_dir: &std::path::Path,
+    progress: &BTreeMap<String, CorpusIngestProgress>,
+) -> Vec<String> {
+    let entries = match std::fs::read_dir(index_dir) {
+        Ok(entries) => entries,
+        Err(e) => {
+            tracing::warn!(dir = %index_dir.display(), error = %e, "oicp corpus progress: the index directory does not read, no held corpus listed");
+            return Vec::new();
+        }
+    };
+    entries
+        .filter_map(|e| e.ok()?.file_name().into_string().ok())
+        .filter(|id| !progress.contains_key(id))
+        .filter(|id| {
+            corpus_index::corpus::Corpus::named(index_dir, id)
+                .is_some_and(|c| c.install_documents_path().is_file())
+        })
+        .collect()
+}
+
+/// An ingest's document outcome on the wire (v0.6 §2.9), a ready one with
+/// its record (§2.16) when `records` keeps one for its text.
+fn wire_document(
+    d: &corpus_index::ingest_port::daemon::DocumentOutcome,
+    records: &crate::records_by_identifier::InstallRecords,
+) -> IngestDocument {
+    use corpus_index::ingest_port::daemon::DocumentState;
+    IngestDocument {
+        source: d.source.clone(),
+        state: match &d.state {
+            DocumentState::Ready { text_sha256 } => IngestDocumentState::Ready {
+                text_sha256: text_sha256.map(|h| h.to_hex()),
+                record: text_sha256.and_then(|h| records.record(&h.to_hex())),
+            },
+            DocumentState::Failed { reason } => IngestDocumentState::Failed {
+                reason: reason.clone(),
+            },
+        },
+    }
 }
 
 /// `POST /oicp/v1/recipe/test` (§5.4). Dry-runs a recipe's acquire →
@@ -179,6 +382,8 @@ fn map_progress(p: &sovereign_contracts::daemon_wire::IngestProgress) -> CorpusI
         phase,
         fraction: progress_fraction(p),
         detail,
+        documents: Vec::new(),
+        documents_unlisted: None,
     }
 }
 
@@ -221,5 +426,6 @@ mod tests {
     fn advertised_ingest_features_are_registered() {
         assert!(features::is_valid(features::INGEST_V1));
         assert!(features::is_valid(features::INGEST_RECIPE_TEST));
+        assert!(features::is_valid(features::INGEST_LOOKUPS));
     }
 }

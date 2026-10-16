@@ -15,9 +15,12 @@
 //! label is there at all, the answer is empty: the caller reads that as no
 //! answer, never as a zero.
 //!
-//! A host is asked natively first. The logprobs route is taken when the
-//! native answer is not a map, and it is remembered once it has produced one,
-//! the same way `chat_wire` remembers a host that refuses `json_schema`.
+//! A host on the estate is asked natively first. The logprobs route is taken
+//! when the native answer is not a map, and it is remembered once it has
+//! produced one, the same way `chat_wire` remembers a host that refuses
+//! `json_schema`. A third party (a hosted vendor) takes the logprobs route from
+//! its first call: no vendor answers with the map, and DeepSeek refuses the
+//! schema in both spellings (2026-10-13).
 
 use std::collections::BTreeMap;
 use std::sync::atomic::Ordering;
@@ -85,8 +88,6 @@ impl RemoteApiProvider {
                 "response_format",
                 "tools",
                 "tool_choice",
-                "think_budget",
-                "thinking",
                 "reasoning_budget_tokens",
             ] {
                 obj.remove(key);
@@ -96,7 +97,9 @@ impl RemoteApiProvider {
         body["temperature"] = json!(0);
         body["logprobs"] = json!(true);
         body["top_logprobs"] = json!(TOP_LOGPROBS);
-        body["chat_template_kwargs"] = json!({"enable_thinking": false});
+        // Off in every spelling: DeepSeek reasons unless told `thinking:
+        // disabled`, spending the one token on it and answering no logprobs.
+        crate::chat_wire::write_thinking(&mut body, Some(0), Some(false));
         crate::chat_wire::observe_wire_request(&body);
         let response = self
             .send_honouring_shed(

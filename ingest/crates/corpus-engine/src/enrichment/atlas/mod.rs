@@ -98,7 +98,8 @@ pub use resolution::{
     TrajectoryTransition,
 };
 pub use resolution_documents::{
-    read_stamp, stamp_claim_documents, DocumentStampReport, SectionDocuments, SourceDocument,
+    read_stamp, stamp_claim_documents, DocumentStampReport, DocumentTexts, SectionDocuments,
+    SourceDocument,
 };
 pub use resolution_ontology::ResolutionPolicy;
 pub use resolution_sources::{

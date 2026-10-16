@@ -18,9 +18,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::{
     AttrFamily, DocumentFieldsDecl, DocumentStamp, Force, OntologyLanguageRegistry,
     OntologyPolicies, SourceDecl, SupersessionClock, TypeIndex, TypeKind, DOCUMENT_COUNT_ATTR,
-    DOCUMENT_DATE_ATTR,
+    DOCUMENT_DATE_ATTR, THREAD_DOCUMENTS_ATTR,
 };
 use crate::enrichment::atlas::analysis::{TensionStrategy, SAME_FIELD_CLOCK, SAME_FIELD_SUBJECT};
+use crate::enrichment::atlas::resolution_records::decides;
 use crate::enrichment::pipeline::atlas::EntityType;
 use crate::recipe::OntologyBlock;
 
@@ -122,7 +123,7 @@ pub fn validate_block(block: &OntologyBlock) -> OntologyValidation {
 }
 
 /// `change.document`: at least one field, no blank name, and no declared
-/// attribute under a key a stamp would overwrite.
+/// attribute under a key a stamp, or a thread's placing, would overwrite.
 fn check_document_fields(p: &OntologyPolicies, d: &DocumentFieldsDecl, errors: &mut Vec<String>) {
     let keys = DocumentStamp::ALL.map(DocumentStamp::key).join(", ");
     if d.declared().next().is_none() && d.author.is_none() {
@@ -158,6 +159,19 @@ fn check_document_fields(p: &OntologyPolicies, d: &DocumentFieldsDecl, errors: &
                     t.name,
                     a.name,
                     stamp.key()
+                ));
+            }
+        }
+    }
+    if d.thread.is_some() && d.id.is_some() {
+        let index = TypeIndex::from_policies(p);
+        for t in p.shape.types.iter().filter(|t| decides(&index, &t.name)) {
+            if t.attributes.iter().any(|a| a.name == THREAD_DOCUMENTS_ATTR) {
+                errors.push(format!(
+                    "ontology type `{}` declares attribute `{THREAD_DOCUMENTS_ATTR}`, which holds \
+                     the documents change.document.thread places on its records. Rename the \
+                     attribute.",
+                    t.name
                 ));
             }
         }
@@ -308,7 +322,7 @@ fn document_fields_note(d: &DocumentFieldsDecl) -> String {
     )
 }
 
-fn kind_key(kind: TypeKind) -> &'static str {
+pub(super) fn kind_key(kind: TypeKind) -> &'static str {
     match kind {
         TypeKind::Entity => "entity",
         TypeKind::Relation => "relation",
@@ -705,6 +719,7 @@ fn derived_facets(p: &OntologyPolicies, notes: &mut Vec<String>) {
         if let Some(from) = inherited {
             line.push_str(&format!(" — inherited from `{from}`"));
         }
+        line.extend(super::validate_layer::mentions_note(p, &t.name));
         notes.push(line);
     }
     let by_kind = |k: TypeKind| {

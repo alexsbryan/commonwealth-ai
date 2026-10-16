@@ -10,7 +10,8 @@
 //!   whose words are a listed record's identity value or one of its read
 //!   values: that mention names the record and is not offered twice;
 //! - less any record in a declared exclusion set, a set over the type that a
-//!   declared path or fold drops by (`[!set]`).
+//!   declared path or fold drops by (`[!set]`), and any mention whose words
+//!   are such a record's identity value or read value.
 //!
 //! A chosen record answers with its identity value, cited by the field it was
 //! read from; a chosen mention with its words, cited where the line holds
@@ -28,9 +29,10 @@ use super::passes::{argmax, render};
 use super::DocumentReadField;
 use crate::enrichment::atlas::precision::{Precision, SourcePrecision};
 use crate::enrichment::atlas::resolution_derived::conditions_hold;
-use crate::enrichment::atlas::resolution_sources::field_records;
-use crate::enrichment::atlas::resolve_records::{decision_call, marked_context, LABELS, NONE};
+use crate::enrichment::atlas::resolution_sources::{field_records, FieldRecord};
+use crate::enrichment::atlas::resolve_records::{decision_call, LABELS, NONE};
 use crate::enrichment::atlas::SourceDocument;
+use crate::enrichment::ontology::derived::SUBJECT;
 use crate::enrichment::ontology::{
     AttrDecl, OntologyPolicies, OntologyTypeDecl, SourceDecl, TypeIndex,
 };
@@ -58,7 +60,7 @@ pub(super) enum Candidate {
 }
 
 impl Candidate {
-    fn shown(&self, of: &str) -> String {
+    pub(super) fn shown(&self, of: &str) -> String {
         match self {
             Candidate::Record {
                 identity,
@@ -78,7 +80,7 @@ impl Candidate {
     }
 
     /// The value a chosen candidate gives the field, and what cites it.
-    fn answer(&self) -> (String, String) {
+    pub(super) fn answer(&self) -> (String, String) {
         match self {
             Candidate::Record {
                 identity, scalar, ..
@@ -96,27 +98,65 @@ pub(super) struct Candidates {
     pub(super) dropped: usize,
 }
 
-/// What `document` offers a reference to `target`: the records its source
-/// reads here, less the exclusion sets, then the mentions that name no listed
-/// record.
+/// What `document` offers a reference to `target`, at most one forced
+/// choice's worth ([`listed`]).
 pub(super) fn candidates(
     document: &SourceDocument,
     policies: &OntologyPolicies,
     target: &OntologyTypeDecl,
     mentions: &[Mention],
 ) -> Candidates {
-    let derived = &policies.derivation.derived;
-    let excluded: Vec<_> = derived
-        .exclusion_sets()
+    let mut all = listed(document, policies, target, mentions);
+    let dropped = all.len().saturating_sub(LABELS.len());
+    all.truncate(LABELS.len());
+    Candidates {
+        shown: all,
+        dropped,
+    }
+}
+
+/// The mentions of `target` that name no record `document`'s fields list or
+/// exclude, as `(line, words)`: those a reference reads by their words alone,
+/// whatever a forced choice's cap shows.
+pub(super) fn unlisted_mentions(
+    document: &SourceDocument,
+    policies: &OntologyPolicies,
+    target: &OntologyTypeDecl,
+    mentions: &[Mention],
+) -> Vec<(usize, String)> {
+    listed(document, policies, target, mentions)
         .into_iter()
-        .filter_map(|id| derived.sets.iter().find(|s| s.id == id))
-        .filter(|s| s.of == target.name)
-        .collect();
+        .filter_map(|c| match c {
+            Candidate::Mention { line, text } => Some((line, text)),
+            Candidate::Record { .. } => None,
+        })
+        .collect()
+}
+
+/// Everything `document` offers a reference to `target`: the records its
+/// source reads here, less the exclusion sets, then the mentions that name no
+/// listed or excluded record.
+fn listed(
+    document: &SourceDocument,
+    policies: &OntologyPolicies,
+    target: &OntologyTypeDecl,
+    mentions: &[Mention],
+) -> Vec<Candidate> {
+    let excluded = policies.derivation.derived.exclusions_of(&target.name);
     let mut all: Vec<Candidate> = Vec::new();
     let mut keys: Vec<String> = Vec::new();
     // Folded identity values and read values: what a mention naming a listed
-    // record would be.
+    // record would be, and one naming an excluded record.
     let mut named: Vec<String> = Vec::new();
+    let mut named_excluded: Vec<String> = Vec::new();
+    let values = |record: &FieldRecord| {
+        record
+            .attributes
+            .values()
+            .filter_map(|v| fold_identity_value(v))
+            .chain(record.key.split('\u{1f}').map(str::to_string))
+            .collect::<Vec<_>>()
+    };
     if let Some(SourceDecl::Metadata(src)) = &target.source {
         let index = TypeIndex::from_policies(policies);
         let identity = index.effective_identity(&target.name);
@@ -138,16 +178,11 @@ pub(super) fn candidates(
                     .find(|s| conditions_hold(s, &attributes) == Some(true))
                 {
                     debug!(document = %document.key(), of = %target.name, key = %record.key, set = %set.id, "document_read/pick: candidate in an exclusion set");
+                    named_excluded.extend(values(&record));
                     continue;
                 }
                 keys.push(record.key.clone());
-                named.extend(
-                    record
-                        .attributes
-                        .values()
-                        .filter_map(|v| fold_identity_value(v)),
-                );
-                named.extend(record.key.split('\u{1f}').map(str::to_string));
+                named.extend(values(&record));
                 let names = record
                     .attributes
                     .iter()
@@ -169,6 +204,10 @@ pub(super) fn candidates(
             debug!(document = %document.key(), of = %target.name, words = %m.text, "document_read/pick: the mention names a listed record");
             continue;
         }
+        if folded.as_ref().is_some_and(|f| named_excluded.contains(f)) {
+            debug!(document = %document.key(), of = %target.name, words = %m.text, "document_read/pick: the mention names a record in an exclusion set");
+            continue;
+        }
         if let Some(f) = folded {
             named.push(f);
         }
@@ -177,22 +216,17 @@ pub(super) fn candidates(
             text: m.text.clone(),
         });
     }
-    let dropped = all.len().saturating_sub(LABELS.len());
-    all.truncate(LABELS.len());
-    Candidates {
-        shown: all,
-        dropped,
-    }
+    all
 }
 
 /// The Pick question: the field, the statement marked in its passage, and
 /// the candidates.
 fn pick_question(
-    facts: &str,
+    prefix: &str,
     owner: &OntologyTypeDecl,
     attr: &AttrDecl,
     of: &str,
-    passage: &str,
+    statement: &str,
     shown: &[Candidate],
     labels: &[&str],
 ) -> ChatPrompt {
@@ -204,7 +238,7 @@ fn pick_question(
         }
     };
     let mut u = format!(
-        "{facts}Type: {}\nAttribute: {}, one {of}\n\nStatement, its words in [[ ]]: \"…{passage}…\"\n\n\
+        "{prefix}Type: {}\nAttribute: {}, one {of}\n\n{statement}\n\n\
          Which {of} does the statement's {} refer to?\n",
         described(&owner.name, &owner.description),
         described(&attr.name, &attr.description),
@@ -230,56 +264,130 @@ pub(super) async fn pick(
     of: &str,
     calls: &mut u32,
 ) -> DocumentReadField {
-    let empty = Candidates::default();
-    let offered = ask.candidates.get(of).unwrap_or(&empty);
+    match chosen(ask, owner, attr, of, calls).await {
+        Ok(candidate) => {
+            let (value, evidence) = candidate.answer();
+            supported(value, evidence)
+        }
+        Err(unknown) => unknown,
+    }
+}
+
+/// Pick the subject of the statement `ask` holds, a statement of `kind` about
+/// a `of` whose metadata source names its records: the Pick question of a
+/// reference named `subject` on `kind`, its answer written as the readings of
+/// the subject's identity fields `keys`. A record gives its identity values; a
+/// mention, its words when one field identifies; none, every field unknown.
+pub(super) async fn pick_subject(
+    ask: &Ask<'_>,
+    kind: &OntologyTypeDecl,
+    of: &str,
+    keys: &[&AttrDecl],
+    calls: &mut u32,
+) -> Vec<(String, DocumentReadField)> {
+    let attr = AttrDecl {
+        name: SUBJECT.into(),
+        family: crate::enrichment::ontology::AttrFamily::Ref { of: of.into() },
+        description: String::new(),
+        derived: None,
+        by: None,
+    };
+    let each = |read: &dyn Fn(usize) -> DocumentReadField| {
+        keys.iter()
+            .enumerate()
+            .map(|(i, k)| (k.name.clone(), read(i)))
+            .collect()
+    };
+    match chosen(ask, kind, &attr, of, calls).await {
+        Ok(Candidate::Record {
+            identity, scalar, ..
+        }) if identity.len() == keys.len() => {
+            each(&|i| supported(identity[i].clone(), scalar.clone()))
+        }
+        Ok(Candidate::Mention { text, .. }) if keys.len() == 1 => {
+            each(&|_| supported(text.clone(), text.clone()))
+        }
+        Ok(other) => {
+            debug!(document = ask.document, statement = ask.statement, of, picked = %other.shown(of), "document_read/pick: the picked subject fills no identity field");
+            each(&|_| DocumentReadField::Unknown {
+                reason: format!(
+                    "the picked subject ({}) fills no identity field",
+                    other.shown(of)
+                ),
+            })
+        }
+        Err(unknown) => each(&|_| unknown.clone()),
+    }
+}
+
+fn supported(value: String, evidence: String) -> DocumentReadField {
+    DocumentReadField::Supported {
+        value: Value::String(value),
+        evidence,
+        by: Some(SourcePrecision::new("reader_pick", Precision::Unmeasured)),
+    }
+}
+
+/// Ask the Pick question of `attr` and return the candidate chosen, or the
+/// reading that says why there is none.
+async fn chosen<'c>(
+    ask: &'c Ask<'_>,
+    owner: &OntologyTypeDecl,
+    attr: &AttrDecl,
+    of: &str,
+    calls: &mut u32,
+) -> Result<&'c Candidate, DocumentReadField> {
+    let empty = &EMPTY;
+    let offered = ask.candidates.get(of).unwrap_or(empty);
     if offered.shown.is_empty() {
         debug!(document = ask.document, statement = ask.statement, field = %attr.name, of, "document_read/pick: no candidate");
-        return DocumentReadField::Unknown {
+        return Err(DocumentReadField::Unknown {
             reason: format!("not asked: the document offers no `{of}` candidate"),
-        };
+        });
     }
     let labels: Vec<&str> = LABELS[..offered.shown.len()]
         .iter()
         .copied()
         .chain([NONE])
         .collect();
-    let passage = marked_context(ask.body, ask.at.start, ask.at.end);
     let prompt = pick_question(
-        ask.facts,
+        &ask.prefix(),
         owner,
         attr,
         of,
-        &passage,
+        &ask.in_words(),
         &offered.shown,
         &labels,
     );
     *calls += 1;
     match decision_call(ask.infer, &prompt, &labels, ask.document, ask.statement).await {
-        Err(refusal) => DocumentReadField::Unknown {
+        Err(refusal) => Err(DocumentReadField::Unknown {
             reason: format!("refused: {refusal:?}"),
-        },
+        }),
         Ok(dist) => match argmax(&labels, &dist) {
             (best, p) if best < offered.shown.len() => {
-                let (value, evidence) = offered.shown[best].answer();
+                let value = offered.shown[best].answer().0;
                 debug!(document = ask.document, statement = ask.statement, field = %attr.name, %value, p, dist = %render(&dist), dropped = offered.dropped, "document_read/pick: picked");
-                DocumentReadField::Supported {
-                    value: Value::String(value),
-                    evidence,
-                    by: Some(SourcePrecision::new("reader_pick", Precision::Unmeasured)),
-                }
+                Ok(&offered.shown[best])
             }
             (_, p) => {
                 debug!(document = ask.document, statement = ask.statement, field = %attr.name, p, dist = %render(&dist), "document_read/pick: none of the candidates");
-                DocumentReadField::Unknown {
+                Err(DocumentReadField::Unknown {
                     reason: format!(
                         "the reader picked none of the candidates: {}",
                         render(&dist)
                     ),
-                }
+                })
             }
         },
     }
 }
+
+/// No candidates: what a document offers a type it names nothing of.
+static EMPTY: Candidates = Candidates {
+    shown: Vec::new(),
+    dropped: 0,
+};
 
 /// The Pick question on a fixed sample, for the read contract's fingerprint.
 pub(super) fn contract_sample() -> Value {
@@ -307,11 +415,14 @@ pub(super) fn contract_sample() -> Value {
         },
     ];
     let q = pick_question(
-        "",
+        &super::ask::opening(
+            "",
+            &super::passes::numbered("words", &super::passes::lines("words")),
+        ),
         &probe,
         &attr,
         "other",
-        "[[words]]",
+        &super::ask::statement_words("words", (1, 1)),
         &shown,
         &["A", "B", NONE],
     );

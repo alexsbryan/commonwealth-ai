@@ -268,9 +268,10 @@ pub struct RankInputs<'a> {
     pub oicp_request_id: &'a str,
     pub req: &'a InferenceRequirements,
     /// SLOT_POLICY §6 — the request elicits a calibrated one-pass
-    /// distribution, so only peers advertising `x:forced_choice` may
-    /// serve it.
-    pub needs_forced_choice: bool,
+    /// distribution (one question, or a wave of them), so only peers
+    /// advertising this feature may serve it
+    /// (`CompletionRequest::forced_choice_feature`).
+    pub forced_choice_feature: Option<&'static str>,
     /// Which objective ranks the feasible set. Production passes
     /// [`RankObjective::Product`]; the Tier-1 sim passes whatever its
     /// arm calls for.
@@ -341,7 +342,7 @@ pub fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResult {
         now_unix,
         oicp_request_id,
         req,
-        needs_forced_choice,
+        forced_choice_feature,
         objective,
         tier_floor,
         local,
@@ -490,17 +491,15 @@ pub fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResult {
             age_secs: manifest_age_secs,
             from_cache: manifest_from_cache,
         } = manifest_view;
-        if needs_forced_choice
-            && !manifest
-                .features
-                .iter()
-                .any(|f| f.as_str() == oicp_types::features::X_FORCED_CHOICE)
+        if let Some(feature) = forced_choice_feature
+            .filter(|feature| !manifest.features.iter().any(|f| f.as_str() == *feature))
         {
             tracing::debug!(
                 oicp_request_id = %oicp_request_id,
                 peer = %peer.name,
-                "mesh-inference: excluding peer — forced_choice sentinel \
-                 but manifest does not advertise x:forced_choice"
+                feature,
+                "mesh-inference: excluding peer — forced choice, and the \
+                 manifest does not advertise the feature it needs"
             );
             rec.exclude(
                 &peer.name,
@@ -906,7 +905,7 @@ mod tests {
                 now_unix: 1000,
                 oicp_request_id: "req-1",
                 req: &req,
-                needs_forced_choice: false,
+                forced_choice_feature: None,
                 objective: RankObjective::Product,
                 tier_floor: TierFloor::None,
                 local: LocalCandidateView {
@@ -1113,7 +1112,7 @@ mod tests {
                 now_unix: 1000,
                 oicp_request_id: "req-1",
                 req: &req,
-                needs_forced_choice: false,
+                forced_choice_feature: None,
                 objective: RankObjective::Product,
                 tier_floor: TierFloor::None,
                 local: LocalCandidateView {
@@ -1139,7 +1138,7 @@ mod tests {
                 now_unix: 1000,
                 oicp_request_id: "req-1",
                 req: &req,
-                needs_forced_choice: true,
+                forced_choice_feature: Some(oicp_types::features::X_FORCED_CHOICE),
                 objective: RankObjective::Product,
                 tier_floor: TierFloor::None,
                 local: LocalCandidateView {
@@ -1153,6 +1152,50 @@ mod tests {
         assert!(out.ranked.is_empty());
         assert!(matches!(
             out.decision.excluded[0].reason,
+            ExclusionReason::NoForcedChoice
+        ));
+    }
+
+    #[test]
+    fn a_wave_excludes_a_peer_that_answers_only_single_forced_choices() {
+        let (m, obs) = weak_local();
+        let req = requirements();
+        let mut single_only = peer("hub", 0.95, Some(0));
+        if let Some(view) = single_only.manifest.as_mut() {
+            view.manifest
+                .features
+                .push(oicp_types::features::X_FORCED_CHOICE.into());
+        }
+        let peers = vec![single_only];
+        let run = |feature| {
+            rank(
+                builder(),
+                RankInputs {
+                    now_unix: 1000,
+                    oicp_request_id: "req-1",
+                    req: &req,
+                    forced_choice_feature: feature,
+                    objective: RankObjective::Product,
+                    tier_floor: TierFloor::None,
+                    local: LocalCandidateView {
+                        manifest: &m,
+                        observations: &obs,
+                        benchmark: None,
+                    },
+                    peers: &peers,
+                },
+            )
+        };
+        assert!(
+            !run(Some(oicp_types::features::X_FORCED_CHOICE))
+                .ranked
+                .is_empty(),
+            "the peer serves a single forced choice"
+        );
+        let wave = run(Some(oicp_types::features::X_FORCED_CHOICE_WAVE));
+        assert!(wave.ranked.is_empty());
+        assert!(matches!(
+            wave.decision.excluded[0].reason,
             ExclusionReason::NoForcedChoice
         ));
     }
@@ -1207,7 +1250,7 @@ mod tests {
                     now_unix: 1000,
                     oicp_request_id: "req-1",
                     req: &req,
-                    needs_forced_choice: false,
+                    forced_choice_feature: None,
                     objective,
                     tier_floor: TierFloor::None,
                     local: LocalCandidateView {
@@ -1268,7 +1311,7 @@ mod tests {
                 now_unix: 1000,
                 oicp_request_id: "req-1",
                 req: &req,
-                needs_forced_choice: false,
+                forced_choice_feature: None,
                 objective: RankObjective::PredictedTime,
                 tier_floor: TierFloor::None,
                 local: LocalCandidateView {
@@ -1302,7 +1345,7 @@ mod tests {
                 now_unix: 1000,
                 oicp_request_id: "req-1",
                 req: &req,
-                needs_forced_choice: false,
+                forced_choice_feature: None,
                 objective: RankObjective::PredictedTime,
                 tier_floor: TierFloor::None,
                 local: LocalCandidateView {

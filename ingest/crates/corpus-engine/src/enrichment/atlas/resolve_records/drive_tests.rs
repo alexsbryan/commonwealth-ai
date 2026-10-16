@@ -82,6 +82,7 @@ async fn resolve(order: &[usize], answerer: Answerer<'_>) -> (String, BTreeMap<S
             let start = f.body.find(f.surface).unwrap();
             vec![Statement {
                 read: Default::default(),
+                described: Default::default(),
                 id: format!("{}/s0", f.id),
                 start,
                 end: start + f.surface.len(),
@@ -174,18 +175,21 @@ fn the_clock_puts_dated_documents_first_and_breaks_ties_by_id() {
 
 #[tokio::test]
 async fn any_document_order_gives_the_same_records_and_decisions() {
-    // Every call answers "none" over any labels, the same in every order.
-    let none: InferenceFn = Arc::new(|_, _| {
+    // Every call answers its first candidate over any labels, the same in
+    // every order: the model's choice decides, so a model that always said
+    // none would link nothing and make the equality vacuous.
+    let first: InferenceFn = Arc::new(|_, _| {
         Box::pin(async {
             let mut d = serde_json::Map::new();
             for l in super::super::LABELS {
                 d.insert(l.into(), serde_json::json!(0.01));
             }
-            d.insert(super::super::NONE.into(), serde_json::json!(0.75));
+            d.insert(super::super::LABELS[0].into(), serde_json::json!(0.75));
+            d.insert(super::super::NONE.into(), serde_json::json!(0.01));
             Ok(serde_json::Value::Object(d).to_string())
         })
     });
-    for answerer in [Answerer::Select(&none), Answerer::Proposed] {
+    for answerer in [Answerer::Select(&first), Answerer::Proposed] {
         let orders = permutations(DOCS.len());
         assert_eq!(orders.len(), 120);
         let first = resolve(&orders[0], answerer).await;

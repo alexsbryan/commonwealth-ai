@@ -193,3 +193,28 @@ fn records_without_the_named_content_field_are_named_as_the_cause() {
         r.errors
     );
 }
+
+#[test]
+fn a_thread_that_links_no_two_documents_is_a_warning() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = corpus(dir.path());
+    let each_its_own = check(&engine(dir.path()), &recipe(&path, "created", "id"), &path);
+    assert!(
+        each_its_own
+            .warnings
+            .iter()
+            .any(|w| w.contains("`id` (change.document.thread) links no two of the 3 documents")),
+        "{:?}",
+        each_its_own.warnings
+    );
+    let shared = check(
+        &engine(dir.path()),
+        &recipe(&path, "created", "thread"),
+        &path,
+    );
+    assert!(
+        !shared.warnings.iter().any(|w| w.contains("links no two")),
+        "{:?}",
+        shared.warnings
+    );
+}

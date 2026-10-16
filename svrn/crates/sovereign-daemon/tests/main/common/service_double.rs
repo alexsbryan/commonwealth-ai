@@ -103,6 +103,14 @@ impl InferenceProvider for ProviderService {
         self.0.embed_batch(texts).await
     }
 
+    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+        self.0.rerank_batch(query, docs).await
+    }
+
+    fn resident_slots(&self) -> Vec<sovereign_contracts::traits::ResidentSlot> {
+        self.0.resident_slots()
+    }
+
     fn model_id_for(&self, speed: Speed) -> String {
         self.0.model_id_for(speed)
     }

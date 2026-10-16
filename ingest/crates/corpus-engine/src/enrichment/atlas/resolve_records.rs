@@ -26,6 +26,14 @@ use crate::InferenceFn;
 /// question. A cost knob: it bounds the prompt, it decides nothing.
 const CONTEXT_BYTES: usize = 200;
 
+/// A window read's chapter-wide subject, `<chapter>/<reference>`
+/// (`SubjectScope::Chapter`): a sufficient key, so a chapter's statements of
+/// one particular link with no question, and a supplied value no other
+/// reference of the same chapter may join (`select::necessary_compatible`),
+/// so RESOLVE decides identity only across windows. Reserved: no recipe
+/// declares it.
+pub const CHAPTER_SUBJECT_KEY: &str = "__chapter_subject";
+
 /// The most values a necessary attribute may declare: READ labels each with
 /// one single-token letter (`select::LABELS`).
 const MAX_READ_VALUES: usize = 25;
@@ -147,6 +155,10 @@ pub struct Statement {
     /// source, never forbidding a candidate as a supplied `keys` value does.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub read: BTreeMap<String, String>,
+    /// What its reader read its particular to be: shown to the model beside the
+    /// statement and, folded, on the record it joins (`Described`).
+    #[serde(default, skip_serializing_if = "Described::is_empty")]
+    pub described: Described,
 }
 
 /// An open record and what has been folded into it.
@@ -168,6 +180,16 @@ pub struct Record {
     pub supplied: BTreeMap<String, BTreeSet<String>>,
     /// One entry per folded statement; later calls are shown these.
     pub evidence: Vec<Evidence>,
+    /// What a record seeded before any statement reached it is, as written:
+    /// its source's name and identity values and the records whose refs
+    /// point at it (`resolution_records::mentions::seed`). Shown to the
+    /// model; never compared (`keys` are).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub shown: Vec<String>,
+    /// What the readers of its statements read it to be, folded: shown to
+    /// the model on its card; never compared.
+    #[serde(skip_serializing_if = "Described::is_empty")]
+    pub described: Described,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -199,6 +221,15 @@ pub enum Decision {
     /// choice), and the record's posterior reached the type's bar ahead of
     /// every other. `sources` are those that agreed with it.
     Weighed {
+        record: String,
+        posterior: f64,
+        sources: Vec<Vote>,
+    },
+    /// The model, shown the record among the statement's candidates, chose it
+    /// over every other and over none, and its choice decides
+    /// (`select.rs`); `posterior` is what the weighed sources gave the record,
+    /// kept beside it, and `sources` those that agreed with it.
+    Chosen {
         record: String,
         posterior: f64,
         sources: Vec<Vote>,
@@ -266,6 +297,7 @@ impl Outcome {
             Outcome::Decided(Decision::Key { .. }) => "key",
             Outcome::Decided(Decision::Cited { .. }) => "cited",
             Outcome::Decided(Decision::Weighed { .. }) => "weighed",
+            Outcome::Decided(Decision::Chosen { .. }) => "chosen",
             Outcome::Decided(Decision::Opened { .. }) => "opened",
             Outcome::Held(_) => "held",
             Outcome::Refused(r) => match r {
@@ -287,6 +319,7 @@ impl Outcome {
                 Decision::Key { record, .. }
                 | Decision::Cited { record, .. }
                 | Decision::Weighed { record, .. }
+                | Decision::Chosen { record, .. }
                 | Decision::Opened { record, .. },
             ) => Some(record),
             Outcome::Refused(_) | Outcome::Held(_) => None,
@@ -328,6 +361,13 @@ pub enum Reason {
     /// TF-IDF cosine between this document and the record's document the
     /// proposer matched it through.
     SimilarDocument { similarity: f32 },
+    /// A field of this document names the record: one a metadata source read
+    /// from it (`resolution_sources`), offered to the document's mentions.
+    NamedInField { field: String },
+    /// Cosine, by the run's embedder, between a statement of this document
+    /// (its words and the lines they lie on) and what the record is shown as
+    /// (`propose::Nearest`).
+    Nearest { similarity: f32 },
 }
 
 /// A record a proposer offered, with every reason it was offered for.
@@ -344,13 +384,36 @@ impl Proposal {
             .iter()
             .filter_map(|r| match r {
                 Reason::SimilarDocument { similarity } => Some(*similarity),
-                Reason::SameThread => None,
+                Reason::SameThread | Reason::NamedInField { .. } | Reason::Nearest { .. } => None,
+            })
+            .fold(0.0, f32::max)
+    }
+
+    /// The statement-to-record cosine it was offered at; 0 when `Nearest`
+    /// did not offer it.
+    pub fn nearness(&self) -> f32 {
+        self.reasons
+            .iter()
+            .filter_map(|r| match r {
+                Reason::Nearest { similarity } => Some(*similarity),
+                _ => None,
             })
             .fold(0.0, f32::max)
     }
 
     pub fn same_thread(&self) -> bool {
         self.reasons.contains(&Reason::SameThread)
+    }
+
+    /// The fields of this document that name the record, if any.
+    pub fn named_in(&self) -> Vec<&str> {
+        self.reasons
+            .iter()
+            .filter_map(|r| match r {
+                Reason::NamedInField { field } => Some(field.as_str()),
+                _ => None,
+            })
+            .collect()
     }
 }
 
@@ -421,6 +484,11 @@ enum Plan {
         posterior: f64,
         votes: Vec<Vote>,
     },
+    Chosen {
+        record: usize,
+        posterior: f64,
+        votes: Vec<Vote>,
+    },
     Held(Held),
     Open {
         group: usize,
@@ -487,7 +555,10 @@ impl Resolver {
         let mut necessary: BTreeMap<&'static str, u32> = BTreeMap::new();
         let mut read_of = supplied.clone();
         for ((known, by_reader), given) in read_of.iter_mut().zip(chosen).zip(&supplied) {
-            *necessary.entry("supplied").or_default() += given.len() as u32;
+            // A chapter subject vetoes; it is no field a record shows.
+            known.remove(CHAPTER_SUBJECT_KEY);
+            *necessary.entry("supplied").or_default() +=
+                given.keys().filter(|k| *k != CHAPTER_SUBJECT_KEY).count() as u32;
             for (attr, values) in by_reader {
                 if known.contains_key(&attr) {
                     continue;
@@ -783,6 +854,27 @@ impl Resolver {
                         sources: votes,
                     })
                 }
+                Plan::Chosen {
+                    record,
+                    posterior,
+                    votes,
+                } => {
+                    self.fold(
+                        record,
+                        doc,
+                        &statements[i],
+                        surface[i],
+                        &folded_keys[i],
+                        &read_of[i],
+                        &supplied[i],
+                        None,
+                    );
+                    Outcome::Decided(Decision::Chosen {
+                        record: self.records[record].id.clone(),
+                        posterior,
+                        sources: votes,
+                    })
+                }
                 // Held: no record opens and nothing folds, so no later
                 // statement can join it at first sight.
                 Plan::Held(held) => Outcome::Held(held),
@@ -875,6 +967,8 @@ impl Resolver {
             fields: BTreeMap::new(),
             supplied: BTreeMap::new(),
             evidence: Vec::new(),
+            shown: Vec::new(),
+            described: Described::default(),
         });
         self.records.len() - 1
     }
@@ -905,6 +999,7 @@ impl Resolver {
                 .or_default()
                 .extend(values.iter().cloned());
         }
+        record.described.extend(&statement.described);
         record.statements.push(statement.id.clone());
         for (k, v) in keys {
             record.keys.entry(k.clone()).or_default().insert(v.clone());
@@ -933,6 +1028,8 @@ impl Resolver {
 
 mod answer;
 mod by;
+mod described;
+pub use described::Described;
 use estimate::{Comparison, Pairs};
 pub use estimate::{Estimate, SourceWeight};
 pub use weigh::Carried;
@@ -944,13 +1041,17 @@ mod estimate;
 mod fields;
 pub mod propose;
 mod read;
+mod seed;
 mod select;
 mod settle;
+mod wave;
 mod weigh;
 use fields::{declared_keys, key_edges};
 
 pub(crate) use read::choice_question;
 pub(crate) use select::{decision_call, LABELS, NONE};
+pub(crate) use wave::{compose as compose_wave, decision_wave, wave_text};
+pub use wave::{one_by_one, singles as wave_singles};
 
 pub use answer::{cite_found, ProposalRule, QUOTE_LABEL};
 use answer::{judge, prompt, Proposed};

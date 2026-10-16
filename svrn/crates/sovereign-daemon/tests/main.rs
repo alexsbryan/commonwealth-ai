@@ -121,6 +121,18 @@ mod oicp_align_e2e;
 mod oicp_evidence_e2e;
 #[path = "main/oicp_install_recipe_e2e.rs"]
 mod oicp_install_recipe_e2e;
+#[path = "main/oicp_locator_e2e.rs"]
+mod oicp_locator_e2e;
+#[path = "main/oicp_records_e2e.rs"]
+mod oicp_records_e2e;
+#[path = "main/oicp_search_e2e.rs"]
+mod oicp_search_e2e;
+#[path = "main/oicp_sentences_e2e.rs"]
+mod oicp_sentences_e2e;
+#[path = "main/oicp_verify_e2e.rs"]
+mod oicp_verify_e2e;
+#[path = "main/oicp_verify_sentences_e2e.rs"]
+mod oicp_verify_sentences_e2e;
 #[path = "main/onprem_keys_e2e.rs"]
 mod onprem_keys_e2e;
 #[path = "main/openai_wire_fidelity.rs"]

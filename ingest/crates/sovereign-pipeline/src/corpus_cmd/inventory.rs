@@ -53,6 +53,7 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
         std::collections::BTreeMap::new();
     let mut params_file: Option<PathBuf> = None;
     let mut wait_secs: Option<u64> = None;
+    let mut inline = false;
 
     let mut iter = args.iter();
     while let Some(a) = iter.next() {
@@ -77,6 +78,7 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
             "--wait" => {
                 wait_secs = Some(DEFAULT_WAIT_SECS);
             }
+            "--inline" => inline = true,
             _ if a.starts_with("--wait=") => {
                 let raw = &a["--wait=".len()..];
                 match raw.parse::<u64>() {
@@ -90,7 +92,7 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
             "--help" | "-h" => {
                 println!(
                     "Usage: svrn corpus install <id|recipe.toml> [--wait[=SECS]] \
-                     [--params k=v[,k=v...]] [--params-file <path>]\n\n\
+                     [--params k=v[,k=v...]] [--params-file <path>] [--inline]\n\n\
                      Given a path to a recipe file, registers it under \
                      ~/.svrnmesh/recipes/<id>/ (printing what it registered) and \
                      installs the id the recipe declares. Given an id, installs \
@@ -106,7 +108,13 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
                      With --wait it polls until the index is actually usable and \
                      exits non-zero if it never becomes so, so exit 0 means \
                      \"installed\". Default budget {DEFAULT_WAIT_SECS}s; \
-                     --wait=SECS to change it. Use this in scripts and gates."
+                     --wait=SECS to change it. Use this in scripts and gates.\n\n\
+                     --inline (a recipe path only) registers nothing here: the \
+                     recipe, its inline documents included, is sent in the \
+                     daemon's published OICP install, as from a client that \
+                     shares no disk with it. It is refused before sending when \
+                     larger than the daemon's stated max_install_bytes, and \
+                     --wait then polls the daemon's published progress."
                 );
                 return 0;
             }
@@ -122,6 +130,9 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
         eprintln!("Missing corpus ID. Usage: svrn corpus install <id|recipe.toml> [--params …]");
         return 1;
     };
+    if inline {
+        return install_inline_from(arg, params, params_file, wait_secs).await;
+    }
 
     // `svrn recipe validate my-coins.toml` takes a path, so `svrn corpus
     // install my-coins.toml` has to as well — the two are consecutive lines
@@ -199,6 +210,44 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
 // wait cannot disagree about which directory they are talking about (§10.6).
 // The CLI leaf's, shared with svrn's `corpus share` (pb-cli-llm-ingest-move).
 use sovereign_cli_base::dirs::configured_indexes_dir as indexes_dir;
+
+/// `--inline`: the recipe at `arg` over the daemon's published install
+/// (`inline_install`), its `--params-file` merged as the local path merges it.
+async fn install_inline_from(
+    arg: &str,
+    mut params: std::collections::BTreeMap<String, serde_json::Value>,
+    params_file: Option<PathBuf>,
+    wait_secs: Option<u64>,
+) -> i32 {
+    if !super::recipe_source::looks_like_recipe_path(arg) {
+        tracing::info!(arg, "corpus install --inline: not a recipe path");
+        eprintln!("error: --inline takes a recipe file, not an id: `{arg}`");
+        return 1;
+    }
+    if let Some(path) = params_file {
+        let parsed = std::fs::read_to_string(&path)
+            .map_err(|e| e.to_string())
+            .and_then(|raw| {
+                serde_json::from_str::<std::collections::BTreeMap<String, serde_json::Value>>(&raw)
+                    .map_err(|e| e.to_string())
+            });
+        match parsed {
+            Ok(from_file) => {
+                for (k, v) in from_file {
+                    params.entry(k).or_insert(v);
+                }
+            }
+            Err(e) => {
+                eprintln!("--params-file {}: {e}", path.display());
+                return 1;
+            }
+        }
+    }
+    let Some(base) = sovereign_cli_base::urls::daemon_base_or_refuse(None) else {
+        return 1;
+    };
+    super::inline_install::install_inline(&base, std::path::Path::new(arg), params, wait_secs).await
+}
 
 /// Default `--wait` budget. Generous enough for any LOCAL recipe (the
 /// journey fixture commits in ~20s on this host) and far too short for a
@@ -548,14 +597,19 @@ pub(super) async fn cmd_corpus_remove(args: &[String]) -> i32 {
         use std::io::BufRead;
         let stdin = std::io::stdin();
         let mut line = String::new();
-        if stdin.lock().read_line(&mut line).is_err() {
-            eprintln!("aborted (could not read stdin)");
-            return 1;
-        }
-        let answer = line.trim().to_lowercase();
-        if answer != "y" && answer != "yes" {
-            println!("aborted.");
-            return 0;
+        let read = stdin.lock().read_line(&mut line);
+        match removal_answer(read, &line) {
+            Answer::Yes => {}
+            Answer::No => {
+                println!("aborted.");
+                return 0;
+            }
+            Answer::Unanswered(why) => {
+                eprintln!(
+                    "aborted: {why}; nothing was removed (pass --yes to remove without asking)"
+                );
+                return 1;
+            }
         }
     }
 
@@ -601,4 +655,44 @@ pub(super) async fn cmd_corpus_remove(args: &[String]) -> i32 {
          hosted_corpora gossip will drop '{corpus_id}' shortly."
     );
     0
+}
+
+/// What the removal prompt was told. A closed or failed stdin is no answer,
+/// never a "no": a script that forgot `--yes` must not read as a clean exit.
+#[derive(Debug, PartialEq)]
+enum Answer {
+    Yes,
+    No,
+    Unanswered(&'static str),
+}
+
+fn removal_answer(read: std::io::Result<usize>, line: &str) -> Answer {
+    match read {
+        Err(_) => Answer::Unanswered("could not read stdin"),
+        Ok(0) => Answer::Unanswered("stdin closed before an answer"),
+        Ok(_) => match line.trim().to_lowercase().as_str() {
+            "y" | "yes" => Answer::Yes,
+            _ => Answer::No,
+        },
+    }
+}
+
+#[cfg(test)]
+mod removal_answer_tests {
+    use super::*;
+
+    #[test]
+    fn a_closed_stdin_is_no_answer_and_a_typed_no_is_a_no() {
+        assert_eq!(
+            removal_answer(Ok(0), ""),
+            Answer::Unanswered("stdin closed before an answer")
+        );
+        assert_eq!(
+            removal_answer(Err(std::io::Error::other("x")), ""),
+            Answer::Unanswered("could not read stdin")
+        );
+        assert_eq!(removal_answer(Ok(2), "n\n"), Answer::No);
+        assert_eq!(removal_answer(Ok(1), "\n"), Answer::No);
+        assert_eq!(removal_answer(Ok(4), "Yes\n"), Answer::Yes);
+    }
 }

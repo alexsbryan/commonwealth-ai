@@ -48,6 +48,7 @@ pub mod provider;
 pub mod question_kind;
 pub mod raptor_read;
 pub mod raw;
+pub mod records;
 pub mod resolve;
 pub mod schema_report;
 pub mod sec_facts;

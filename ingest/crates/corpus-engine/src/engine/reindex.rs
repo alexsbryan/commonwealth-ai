@@ -369,14 +369,22 @@ impl CorpusEngine {
             .reindex_text_writer(&index, corpus_id, extractor_config)
             .await?;
         for (ordinal, doc) in docs.iter().enumerate() {
-            let text = super::normalize_content(&doc.content);
-            let name = store.store_document(declared.input(
-                &text,
+            let read = declared.read(
+                &super::normalize_content(&doc.content),
                 source_doc_id,
-                ordinal as u32,
                 &doc.source,
-                doc.metadata.as_ref(),
-            ))?;
+            )?;
+            let text = read.text;
+            let name = store.store_document_located(
+                declared.input(
+                    &text,
+                    source_doc_id,
+                    ordinal as u32,
+                    &doc.source,
+                    doc.metadata.as_ref(),
+                ),
+                read.locators.as_deref(),
+            )?;
             for piece in chunker.chunk(&text) {
                 let metadata_json = if is_portal_bullet {
                     // Replace section-scoped outgoing_links with the

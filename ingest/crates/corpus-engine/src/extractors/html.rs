@@ -68,7 +68,7 @@ impl Iterator for HtmlIterator {
             match process_html_file(&self.label, &path) {
                 Ok(Some(doc)) => return Some(Ok(doc)),
                 Ok(None) => continue,
-                Err(e) => return Some(Err(e)),
+                Err(e) => return Some(Err(e.of_source(path.display()))),
             }
         }
     }

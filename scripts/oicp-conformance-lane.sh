@@ -35,7 +35,7 @@
 #
 # ── exit codes ───────────────────────────────────────────────────────────
 #   0  conformant, no regression vs the baseline
-#   1  a `must` check failed, or a check regressed vs the baseline
+#   1  a `must` or advertised-feature check failed, or a check regressed vs the baseline
 #   2  could not judge — daemon unreachable, model-less, or the build broke
 set -uo pipefail
 

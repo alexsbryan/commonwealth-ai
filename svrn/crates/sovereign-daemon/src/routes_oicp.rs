@@ -174,10 +174,24 @@ async fn apply_v04_enrichment(
         feats.push(features::INGEST_RECIPE_TEST.to_string());
         // v0.5 §4: install accepts `recipe_toml` (`routes_oicp_ingest`).
         feats.push(features::INGEST_RECIPE.to_string());
+        // v0.6 §2.9: progress lists installs from their spawn and each
+        // install's documents (`routes_oicp_ingest::corpus_progress`).
+        feats.push(features::INGEST_DOCUMENTS.to_string());
+        // v0.6 §2.14: a declared transcript is read by turn at ingest
+        // (`recipe_documents::DeclaredMetadata::read`); its turns' locators
+        // are served with `knowledge:locator`, advertised below on the same
+        // condition.
+        feats.push(features::INGEST_TRANSCRIPTS.to_string());
+        // v0.6 §2.16: an install that allows lookups gets its documents'
+        // records by identifier (`records_by_identifier`), listed on progress
+        // and on hits.
+        feats.push(features::INGEST_LOOKUPS.to_string());
         IngestEndpoints {
             install_endpoint: "/oicp/v1/corpus/install".into(),
             progress_endpoint: "/oicp/v1/corpus/progress".into(),
             test_endpoint: Some("/oicp/v1/recipe/test".into()),
+            // v0.6 §2.12: the bound the install route reads to (`server.rs`).
+            max_install_bytes: Some(crate::routes_oicp_ingest::MAX_INSTALL_BYTES as u64),
         }
     });
     // v0.5 §2.2-2.3 stored texts, read by name and aligned against, on the
@@ -187,12 +201,42 @@ async fn apply_v04_enrichment(
     let evidence = state.inner.node.corpus_engine.is_some().then(|| {
         feats.push(features::EVIDENCE_TEXT.to_string());
         feats.push(features::EVIDENCE_ALIGN.to_string());
+        // v0.6 §2.6: verify, mounted beside align on the same condition.
+        feats.push(features::EVIDENCE_VERIFY.to_string());
+        // v0.6 §2.10: verify's decisions are journaled and correctable
+        // (`routes_oicp_verify_journal`).
+        feats.push(features::EVIDENCE_VERIFY_CORRECTIONS.to_string());
         // §3: every local hit carries its text's record
         // (`oicp_evidence::knowledge_results`).
         feats.push(features::KNOWLEDGE_DOCUMENT.to_string());
+        // v0.6 §2.8: search scoped by text name, inside the index
+        // (`oicp_evidence::search_corpus`), and every hit's range of its
+        // text located at serve time (`oicp_evidence::span_of`).
+        feats.push(features::KNOWLEDGE_SCOPED.to_string());
+        feats.push(features::KNOWLEDGE_RANGE.to_string());
+        // v0.6 §2.13: every span carries the locator its text's writer kept
+        // beside it (`oicp_evidence::locator_at`): a transcript's turns today.
+        feats.push(features::KNOWLEDGE_LOCATOR.to_string());
+        // v0.6 §2.11: sentences from the sentence index
+        // (`routes_knowledge_sentences`), scored by the data file's scorer,
+        // advertised beside it below; not offered when the file does not read.
+        if state.inner.node.sentences.config().is_ok() {
+            feats.push(features::KNOWLEDGE_SENTENCES.to_string());
+            // v0.6 §2.11: a passages reply places each waiting corpus in the
+            // worker's queue (`sentence_index::queue::places`).
+            feats.push(features::KNOWLEDGE_SENTENCE_QUEUE.to_string());
+            // v0.6 §2.15: verify reads its candidates through that sentence
+            // search, under the same data file's floor (`routes_oicp_verify`).
+            feats.push(features::EVIDENCE_VERIFY_SENTENCES.to_string());
+        }
         EvidenceEndpoints {
             text_endpoint: crate::routes_oicp_text::TEXT_ENDPOINT.into(),
             align_endpoint: Some("/oicp/v1/align".into()),
+            verify_endpoint: Some(crate::routes_oicp_verify::VERIFY_ENDPOINT.into()),
+            verify_tiers: crate::routes_oicp_verify::TIERS.to_vec(),
+            verify_correction_endpoint: Some(
+                crate::routes_oicp_verify_journal::VERIFY_CORRECTION_ENDPOINT.into(),
+            ),
         }
     });
     manifest.features = feats;
@@ -214,6 +258,20 @@ async fn apply_v04_enrichment(
     // daemon at bootstrap; a client reconstructs bit-compatible query
     // embeddings from it for federated search.
     let embed_model = state.local_embed_model().await?;
+    // v0.6 §2.11: the scorer the data file names, iff the feature is offered.
+    let sentence_scorer = state
+        .inner
+        .node
+        .sentences
+        .config()
+        .ok()
+        .filter(|_| {
+            manifest
+                .features
+                .iter()
+                .any(|f| f == features::KNOWLEDGE_SENTENCES)
+        })
+        .map(|c| c.scorer);
     if embed_model.is_some() || ingest.is_some() || evidence.is_some() {
         match &mut manifest.knowledge {
             Some(k) => {
@@ -226,6 +284,7 @@ async fn apply_v04_enrichment(
                 if evidence.is_some() {
                     k.evidence = evidence;
                 }
+                k.sentence_scorer = sentence_scorer;
             }
             None => {
                 manifest.knowledge = Some(KnowledgeManifest {
@@ -234,6 +293,7 @@ async fn apply_v04_enrichment(
                     embed_model,
                     ingest,
                     evidence,
+                    sentence_scorer,
                 });
             }
         }
@@ -378,6 +438,7 @@ pub async fn capabilities(
             embed_model: None,
             ingest: None,
             evidence: None,
+            sentence_scorer: None,
         }),
         federation,
         features: Vec::new(),

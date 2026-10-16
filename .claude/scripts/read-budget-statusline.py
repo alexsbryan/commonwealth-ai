@@ -128,14 +128,17 @@ def last_context_size(transcript_path: Path) -> int:
 
 
 def frame_status(session_id: str) -> str:
-    """Session-frame freshness for THIS session: `✓Nm` when the
-    PreCompact/SessionEnd hooks (or a manual distill) have written
-    ~/.svrnmesh/sessions/<sid>/frame.md, `—` when no frame exists yet.
+    """Session-frame freshness for THIS session: `✓Nm` when the agent has
+    written its frame with commons_frame (euphemia's frame store since
+    2026-10-15, euphemia 0.3.5), `—` when no frame exists yet.
     The signal a handoff needs: red context + fresh frame = split is
     safe right now."""
     if not session_id:
         return "—"
-    frame = Path.home() / ".sovereign" / "sessions" / session_id / "frame.md"
+    import os
+    data = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+    name = "".join(c if c.isascii() and (c.isalnum() or c == "-") else "_" for c in session_id)[:128]
+    frame = Path(data) / "euphemia" / "frames" / f"{name}.json"
     try:
         age_s = max(0, int(__import__("time").time() - frame.stat().st_mtime))
     except OSError:

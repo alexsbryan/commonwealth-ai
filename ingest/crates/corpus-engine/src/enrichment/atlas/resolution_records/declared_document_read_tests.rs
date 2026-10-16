@@ -3,7 +3,8 @@ use crate::enrichment::atlas::ann_store::AtlasSeeding;
 use crate::enrichment::atlas::AtomEnvelope;
 use crate::enrichment::ontology::{AttrDecl, AttrFamily, DocumentFieldsDecl, Force};
 use crate::enrichment::pipeline::document_read::{
-    LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE,
+    CHAPTER_SUBJECT_ATTRIBUTE, LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE,
+    SUBJECT_FIELDS_ATTRIBUTE,
 };
 use serde_json::json;
 
@@ -172,8 +173,10 @@ async fn state_free_membership_resolves_and_survives_the_production_atlas_writer
         resolve_declared_types(
             &mut atoms,
             &documents,
+            &Default::default(),
             &policies,
             "cases",
+            None,
             Answerer::Proposed,
             &mut on_document,
         )
@@ -208,9 +211,18 @@ async fn state_free_membership_resolves_and_survives_the_production_atlas_writer
     assert!(memberships[1].subject.is_none());
     for claim in &memberships {
         assert_eq!(
-            claim.attributes.keys().collect::<Vec<_>>(),
+            claim
+                .attributes
+                .keys()
+                .filter(|k| k.as_str() != super::RESOLVE_LINK_ATTRIBUTE)
+                .collect::<Vec<_>>(),
             [SUBJECT_FIELDS_ATTRIBUTE],
             "membership is state-free; it keeps only its subject's readings"
+        );
+        assert_eq!(
+            claim.attributes.contains_key(super::RESOLVE_LINK_ATTRIBUTE),
+            claim.subject.is_some(),
+            "a placed statement says how its subject was decided, and only a placed one"
         );
         assert_eq!(
             claim.evidence[0].source_doc_id.as_deref(),
@@ -254,10 +266,15 @@ async fn state_free_membership_resolves_and_survives_the_production_atlas_writer
         })
         .collect();
     assert_eq!(written_claims.len(), 3);
-    // The writer keeps each one's subject readings, cited.
+    // The writer keeps each one's subject readings, cited, and how a placed
+    // one's subject was decided.
     for claim in &written_claims {
         assert_eq!(
-            claim.attributes.keys().collect::<Vec<_>>(),
+            claim
+                .attributes
+                .keys()
+                .filter(|k| k.as_str() != super::RESOLVE_LINK_ATTRIBUTE)
+                .collect::<Vec<_>>(),
             [SUBJECT_FIELDS_ATTRIBUTE]
         );
         let number = &claim.attributes[SUBJECT_FIELDS_ATTRIBUTE]["number"];
@@ -391,8 +408,10 @@ async fn run_open_writer_case(
         resolve_declared_types(
             &mut atoms,
             &documents,
+            &Default::default(),
             &policies,
             "same-anchor",
+            None,
             Answerer::Model(&infer),
             &mut on_document,
         )
@@ -602,7 +621,16 @@ async fn resolve_local_subjects(
     claims: &mut Vec<Claim>,
     entities: &mut Vec<Entity>,
 ) -> (Vec<RecordsReport>, Vec<PhaseFailure>) {
-    let (rows, policies) = local_subject_fixture();
+    let (_, policies) = local_subject_fixture();
+    resolve_fixture(claims, entities, &policies).await
+}
+
+async fn resolve_fixture(
+    claims: &mut Vec<Claim>,
+    entities: &mut Vec<Entity>,
+    policies: &OntologyPolicies,
+) -> (Vec<RecordsReport>, Vec<PhaseFailure>) {
+    let (rows, _) = local_subject_fixture();
     let documents = SectionDocuments::from_chunk_rows([("sec_1", &[51u64, 52][..])], &rows);
     let (mut events, mut states, mut relations) = (Vec::new(), Vec::new(), Vec::new());
     let (mut argument_reconstructions, mut positions, mut oppositions) =
@@ -624,8 +652,10 @@ async fn resolve_local_subjects(
     resolve_declared_types(
         &mut atoms,
         &documents,
-        &policies,
+        &Default::default(),
+        policies,
         "local-subjects",
+        None,
         Answerer::Proposed,
         &mut on_document,
     )
@@ -719,5 +749,68 @@ async fn one_local_subject_whose_spans_disagree_on_an_identity_value_is_not_join
             .iter()
             .any(|f| f.reason.contains("kept as separate statements")),
         "the disagreement is reported: {failures:?}"
+    );
+}
+
+/// The issue and the label event, read as one window, each saying something of
+/// one case with no declared key: the case is one record only when the
+/// window's chapter subject reaches RESOLVE.
+async fn resolve_window(chapter: bool) -> (Vec<Claim>, Vec<RecordsReport>) {
+    let (_, mut policies) = local_subject_fixture();
+    policies.shape.types[0].identity.clear();
+    let tag = |mut claim: Claim| {
+        if chapter {
+            claim
+                .attributes
+                .insert(CHAPTER_SUBJECT_ATTRIBUTE.into(), json!("sec_1/p1"));
+        }
+        claim
+    };
+    let mut claims = vec![
+        tag(local_subject_claim(
+            "membership",
+            "case_membership",
+            "issue",
+            ISSUE,
+            "1373",
+        )),
+        tag(local_subject_claim(
+            "label",
+            "case_membership",
+            "label-event",
+            "Label compatibility added to #1373.",
+            "1373",
+        )),
+    ];
+    let mut entities = Vec::new();
+    let (reports, _) = resolve_fixture(&mut claims, &mut entities, &policies).await;
+    (claims, reports)
+}
+
+/// Failing input, named: without the chapter subject the label event's
+/// statement is RESOLVE's to decide, and with no key and no model it does not
+/// land on the issue's record; with it, the two link by key, no call made.
+#[tokio::test]
+async fn a_window_reads_one_subject_across_two_documents_and_resolve_links_them_by_key() {
+    let (claims, reports) = resolve_window(false).await;
+    assert!(
+        claims[1].subject.is_none() || claims[0].subject != claims[1].subject,
+        "control: no key, no model, no link"
+    );
+    assert_eq!(reports[0].statements, 2);
+
+    let (claims, reports) = resolve_window(true).await;
+    assert!(claims[0].subject.is_some());
+    assert_eq!(
+        claims[0].subject, claims[1].subject,
+        "one case across the window"
+    );
+    assert_eq!(reports[0].records, 1);
+    assert_eq!(reports[0].calls, 0, "a key links; no question is asked");
+    assert!(
+        claims
+            .iter()
+            .all(|c| !c.attributes.contains_key(CHAPTER_SUBJECT_ATTRIBUTE)),
+        "the handoff attribute does not outlive RESOLVE"
     );
 }

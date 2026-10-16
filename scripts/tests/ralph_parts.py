@@ -258,6 +258,39 @@ class QueueTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md")
 
+    def test_a_human_row_names_the_check_that_closes_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/STATE.md",
+                  "- [ ] HUMAN-ratify — depends [] — the operator approves — "
+                  "closes-when=laws — check: `cargo xtask laws` exits 0\n"
+                  "- [ ] HUMAN-plain — depends []\n")
+            q = ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md", checks={"laws": ("true",)})
+            self.assertEqual(q.by_id()["HUMAN-ratify"].closes_when, "laws")
+            self.assertEqual(q.by_id()["HUMAN-plain"].closes_when, "")
+
+    def test_a_closes_when_naming_no_declared_check_is_refused_at_load(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "ralph/STATE.md", "- [ ] HUMAN-r — depends [] — closes-when=lawz\n")
+            path = pathlib.Path(tmp) / "ralph/STATE.md"
+            for checks, declared in (({"laws": ("true",)}, "declared: laws"), ({}, "declared: none")):
+                with self.assertRaises(ValueError) as cm:
+                    ralph.Queue(path, checks=checks)
+                self.assertIn("HUMAN-r closes-when `lawz` names no check", str(cm.exception))
+                self.assertIn(declared, str(cm.exception))
+            # A reader that does not decide (status, plan) parses it without the manifest.
+            self.assertEqual(ralph.Queue(path).by_id()["HUMAN-r"].closes_when, "lawz")
+
+    def test_closes_when_is_a_human_rows_and_written_one_way(self):
+        for row, why in (("- [ ] dm-a — depends [] — closes-when=laws\n", "HUMAN- rows"),
+                         ("- [ ] HUMAN-r — depends [] — closes-when: laws\n", "malformed"),
+                         ("- [ ] HUMAN-r — depends [] — closes-when=a — closes-when=b\n",
+                          "malformed")):
+            with tempfile.TemporaryDirectory() as tmp:
+                write(tmp, "ralph/STATE.md", row)
+                with self.assertRaisesRegex(ValueError, why):
+                    ralph.Queue(pathlib.Path(tmp) / "ralph/STATE.md",
+                                checks={"laws": ("true",), "a": ("true",), "b": ("true",)})
+
     def test_a_cycle_among_open_rows_is_refused_by_name(self):
         # Rows nothing can ever make ready: the loop would hold nothing and run nothing.
         for rows, cycle in (

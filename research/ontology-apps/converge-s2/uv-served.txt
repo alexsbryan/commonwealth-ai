@@ -1,0 +1,6 @@
+/Users/alexsbryan/dev/commonwealth-ai/runs/converge-s2/ours/uv-third: 44 gold cases with a state on the run's documents: {'served right': 14, 'wrong state served': 11, 'no record matched': 16, 'no state served': 3}
+  case records 58, serving a state 54
+  gold -> served, where they differ: {'declined -> reported': 3, 'reported -> declined': 2, 'resolved -> None': 2, 'resolved -> declined': 1, 'reported -> in_progress': 1, 'reported -> None': 1, 'declined -> resolved': 1, 'confirmed -> in_progress': 1, 'resolved -> in_progress': 1, 'reported -> resolved': 1}
+/Users/alexsbryan/dev/commonwealth-ai/runs/converge-s2/blind/uv-third: 54 gold cases with a state on the run's documents: {'no state served': 25, 'no record matched': 29}
+  case records 98, serving a state 0
+  gold -> served, where they differ: {'resolved -> None': 13, 'reported -> None': 6, 'declined -> None': 5, 'in_progress -> None': 1}

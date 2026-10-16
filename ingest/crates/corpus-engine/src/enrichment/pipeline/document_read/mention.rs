@@ -6,16 +6,27 @@
 //! line is one forced choice over those types and "none"; a line that names
 //! one is then pointed at (`point::point_span`), so a mention's words are the
 //! line's own by construction. A mention is a proposal for Pick and never a
-//! record by itself: nothing here reaches RESOLVE or the atoms.
+//! record by itself. Of a type RESOLVE decides the mentions of
+//! (`resolution_records::decides_mentions`), a mention naming no record the
+//! document's fields list is also a particular (`particulars`): it reaches
+//! RESOLVE as a statement, which links it to a record or opens one.
+
+use std::collections::BTreeMap;
 
 use oicp_types::forced_choice;
 use serde_json::{json, Value};
 use tracing::debug;
 
+use super::about::local_ref;
 use super::passes::{argmax, excerpt, numbered, render, Line};
+use super::pick::unlisted_mentions;
 use super::point::{point_span, Pointing};
-use crate::enrichment::atlas::resolve_records::{decision_call, LABELS, NONE};
-use crate::enrichment::ontology::OntologyTypeDecl;
+use super::schema::subject_read_attributes;
+use super::{DocumentReadField, DocumentReadParticular};
+use crate::enrichment::atlas::resolution_records::decides_mentions;
+use crate::enrichment::atlas::resolve_records::{decision_wave, LABELS, NONE};
+use crate::enrichment::atlas::SourceDocument;
+use crate::enrichment::ontology::{OntologyPolicies, OntologyTypeDecl, TypeIndex};
 use crate::enrichment::pipeline::types::ChatPrompt;
 use crate::InferenceFn;
 
@@ -83,11 +94,34 @@ pub(super) async fn mentions(
         .chain([NONE])
         .collect();
     let mut refused = 0usize;
-    for (line, _) in lines.iter().zip(asked).filter(|(_, a)| **a) {
-        let item = format!("line {}", line.n);
-        let prompt = mention_question(facts, body, lines, line, targets, &labels);
-        *calls += 1;
-        let dist = match decision_call(infer, &prompt, &labels, document, &item).await {
+    // Which type each line names needs no other line's answer: one wave. The
+    // pointing that follows a named line depends on that answer, so it is
+    // asked after, line by line.
+    let asking: Vec<&Line> = lines
+        .iter()
+        .zip(asked)
+        .filter(|(_, a)| **a)
+        .map(|(l, _)| l)
+        .collect();
+    let prompts: Vec<_> = asking
+        .iter()
+        .map(|line| mention_question(facts, body, lines, line, targets, &labels))
+        .collect();
+    let items: Vec<String> = asking
+        .iter()
+        .map(|line| format!("line {}", line.n))
+        .collect();
+    *calls += prompts.len() as u32;
+    let answers = decision_wave(
+        infer,
+        &prompts,
+        &vec![labels.clone(); prompts.len()],
+        document,
+        &items,
+    )
+    .await;
+    for ((line, item), answer) in asking.into_iter().zip(&items).zip(answers) {
+        let dist = match answer {
             Ok(d) => d,
             Err(refusal) => {
                 debug!(
@@ -122,7 +156,7 @@ pub(super) async fn mentions(
             what: format!("the name of the {}", target.name),
             phase: MENTION_PHASE,
             document,
-            item: &item,
+            item,
         };
         match point_span(&pointing, text, calls).await {
             Ok(Some(span)) => {
@@ -152,6 +186,48 @@ pub(super) async fn mentions(
         refused,
         "document_read/mention: document"
     );
+    out
+}
+
+/// The particulars `mentions` give each of `targets` whose mentions RESOLVE
+/// decides: one per mention a reference would read by its words alone, naming
+/// no record the document's fields list or exclude (`pick::unlisted_mentions`,
+/// Pick's own rule). Its evidence is the whole line, its statement the words
+/// on it, and it reads no field: each the type's particulars name is unknown,
+/// so identity its text does not state stays absent.
+pub(super) fn particulars(
+    document: &SourceDocument,
+    policies: &OntologyPolicies,
+    body: &str,
+    lines: &[Line],
+    targets: &[&OntologyTypeDecl],
+    mentions: &[Mention],
+) -> Vec<DocumentReadParticular> {
+    let index = TypeIndex::from_policies(policies);
+    let mut out = Vec::new();
+    for t in targets.iter().filter(|t| decides_mentions(&index, &t.name)) {
+        for (n, words) in unlisted_mentions(document, policies, t, mentions) {
+            let line = &lines[n - 1];
+            let reference = local_ref(n, &words);
+            debug!(document = %document.key(), of = %t.name, particular = %reference, "document_read/mention: a mention reaches RESOLVE as a particular");
+            let subject_fields: BTreeMap<String, DocumentReadField> =
+                subject_read_attributes(policies, &index, &t.name)
+                    .into_iter()
+                    .map(|a| {
+                        let reason = "a mention is its words; no field of it is read".into();
+                        (a.name.clone(), DocumentReadField::Unknown { reason })
+                    })
+                    .collect();
+            out.push(DocumentReadParticular {
+                subject_type: t.name.clone(),
+                subject_name: format!("{} {reference}", t.name),
+                subject_local_ref: reference,
+                evidence: body[line.start..line.end].to_string(),
+                subject_fields,
+                words: Some(words),
+            });
+        }
+    }
     out
 }
 

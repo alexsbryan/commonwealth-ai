@@ -1,166 +1,100 @@
-# Ontology layer: status brief for outside review (2026-10-10)
+# Ontology layer: the lean plan (2026-10-13)
 
-Written for reviewers who have not followed the work. Numbers come from runs on this repo; every figure has a
-commit or run directory behind it, and the campaign log (`.sovereign/features/ontology-layer/campaign.md`,
-local) holds the dated decisions. The previous brief, written 2026-10-07 for the crm-proof phase, is kept
-as `REVIEW_BRIEF_2026-10-07.md`.
+The longer version, with instruments, validity checks and bars, is in git at 1977b2eac. It is deferred until
+something works.
 
-## 1. What we are trying to build
+## Goal
 
-A general layer that turns a pile of documents into typed, cited records:
-- the deals in a sales mailbox;
-- the cases in an issue tracker;
-- the events in a news archive.
+One recipe and the default commands turn a corpus into typed, cited records. It must work on mail and on a novel,
+and scale past 1M tokens. The yardstick is a model that reads the whole corpus at once (the "one-shot"). The test
+is five generated mail worlds with an answer key (93 deals; `research/ontology-apps/world/`), scored by
+`score_ward.py`.
 
-The user does not train a model or write extraction rules. They write one declarative **recipe**:
-- the kinds of things their documents are about (entity and event types);
-- what makes two mentions the same thing (an identity criterion, in words, plus declared keys);
-- how a thing's state changes over time (a protocol);
-- which statements to look for (claim kinds, with closed or open values).
+## How we develop (operator, 2026-10-13)
 
-Then they run the CLI's default commands. The records come out with every value and link citing the passage
-and source behind it.
+- **The system and the model are separate tracks.** Build the system on the fastest model that is reasonably
+  capable; today that is DeepSeek Flash. Once the system works, engineer it down to leaner models.
+- **No one-way doors against small models.**
+  - Every call's prompt, reasoning and answer fit in 128k tokens: a 64GB machine runs a capable local model (Qwen 35B-A3B MoE or Qwen3.8 27B) at that context (operator, 2026-10-14; it was 32k). The bound is tunable: be expansive within it until the quality objective is met, then engineer down.
+  - No call's input grows with the size of the corpus.
+  - Nothing depends on a feature only a hosted model has.
 
-The objective has four parts:
-1. **General:** the same code serves unlike domains. No domain word in code; domain knowledge lives only in the recipe.
-2. **Author-independent:** two people who understand the domain and the syntax, writing separate recipes, get very similar records.
-3. **No tuning in recipes:** a recipe carries no numbers measured on data and no mechanism switches.
-4. **Local and auditable:** runs on a local model, every model answer is recorded, and a run replays byte for byte without the model.
+  A design that only works by eating context is out, however well it scores.
+- **The writer is not the reader.** MiMo writes the worlds, so it never reads them.
 
-## 2. The design (the method)
+## The race, 2026-10-13 (DeepSeek Flash, one run each, `runs/race/`)
 
-- **Declared structure first.** Code settles everything the recipe's structure can settle: fields, keys, threads, declared references, derived roles, order, state folds.
-- **The model answers only small closed questions,** about one document at a time. Each answer is a distribution over single-token labels in one forward pass, or a pointer to words that code then verifies are in the text. The reader's plan of questions is a pure function of the recipe:
-  - **Locate** which lines state each claim kind;
-  - **Choose** each closed value;
-  - **Point** at each open value;
-  - **Mention** entity types that references target;
-  - **Pick** each reference among candidates code proposes.
-- **Identity is decided in one place (RESOLVE).**
-  - Each statement is resolved to an existing record or a new one.
-  - Candidates are proposed from declared structure and generic similarity.
-  - Evidence from each source (declared fields, the model's choice, a similarity-based proposal) is weighed by a log-likelihood ratio. The weights are estimated on the corpus being read, without labels, so they are never numbers the author supplies.
-  - A posterior above a bar links. Otherwise the statement opens a new record, or is held and settled after all documents are read.
-  - The model never decides identity on its own: its verdict is one weighed source.
-- **Six contracts, enforced as tests.**
-  1. A question asks only what declared structure leaves open.
-  2. A reading turn holds one document's text. A resolution turn may show a candidate's own cited lines, marked as quotes.
-  3. Every value and link carries its source and that source's precision: declared, estimated, or unmeasured.
-  4. Records do not depend on document order.
-  5. A run replays without the model.
-  6. Renaming every type and attribute changes only the names.
+Four architectures were read with the same model and scored by the same scorer. On world-s4 and s1:
 
-## 3. How we measure
+| Design | Deals served |
+|---|---|
+| Windows | 28/33 |
+| Cast-first with the key's cast | 22/33 |
+| One-shot | 22/33 |
+| Cast-first with a built cast, notes, and rolling | Behind, or cut short when the DeepSeek balance ran out; not pursued |
 
-Three gold-labelled corpora, used as instruments, not as training targets:
+"Windows" reads each folder whole, up to about 24k tokens, then one call merges the records across windows.
 
-| System | Corpus | What gold marks |
+Windows against the one-shot on all five worlds, and on Ward (real mail):
+
+| | Windows | One-shot |
 |---|---|---|
-| Ward | ~1,000 Enron emails from one gas trader's mailbox | 47 deals in the tune split, each with counterparty, stage over time and the messages about it |
-| uv | GitHub issues, comments and timeline events from the `uv` project | Support cases and their state over time; we score a fixed third: 61 sections, 132 states |
-| GVC | The Gun Violence Corpus | Cross-document event coreference, 977 event mentions in its 78 dev documents; gold splits one incident into sub-events (shooting, injury, death) |
+| Deals served, 5 worlds | 76/93 (82%) | 66/93 (71%) |
+| Stage updates attached, 5 worlds | 294/328 (90%) | 247/328 (75%) |
+| Ward deals served | 7/14 | 8/14 |
+| Ward updates attached | 18/35 | 13/35 |
 
-For each system, a stage ladder shows where each gold item is lost:
-- **read:** the right statement was found;
-- **place:** it landed on the record of its gold particular;
-- **fold:** the record's state is right.
+Updates attached is better with windows on all six corpora. Served is better on three worlds and one deal worse
+on two.
 
-GVC is also scored as **RESOLVE alone**: gold mentions are given as statements, which isolates identity from reading.
+On world-s4 with the local model, Qwen 35B-A3B with thinking off:
 
-Author independence is tested with **blind authors**. A fresh LLM session gets only the domain description, the authoring guide and the validator, then writes a recipe that we run through the same default commands. We compare its records with ours.
-
-## 4. Where we are
-
-**Built and tested (unit tests plus the six contracts, all committed):**
-- the default command path end to end;
-- the answer recorder and byte-identical replay;
-- the full reader plan above (Point, Mention and Pick landed last, on 2026-10-10);
-- RESOLVE with corpus-estimated weights, candidates' own lines as quotes, and held statements settled after the last document;
-- protocol folds;
-- a validator that names, for every declared attribute, what fills it, and warns when nothing does.
-
-One specified piece is unfinished: 13 older identity routines in the general extractor still decide types that have no identity criterion.
-
-**Results on the instruments.** The newest run, with Point, Mention and Pick, is still in progress.
-
-| Measure | Baseline (2026-10-09) | Best so far | Notes |
+| Run | Deals served | Updates attached | Time |
 |---|---|---|---|
-| Ward: deals whose current stage is served right | 2 of 47 | 3 of 47 | The motivating CRM case; essentially not working |
-| Ward: deals matched to gold | 9 of 39 | 8 of 39 (ours), 10 of 39 (blind, round 3) | |
-| uv: gold states hit (fixed third) | 30 of 132 | 67 of 132 | The latest build regressed to 54 through a defect (section 5) |
-| GVC RESOLVE alone, CoNLL F1 | .599 | .607 | Floor with no model calls: .572 |
-| GVC end to end, B3 | — | about .45 to .47 | 179 of 324 statements span more than one gold event |
+| Windows, DeepSeek Flash | 14/15 | 48/55 | 4 min |
+| Windows, local, thinking on | 9/15 | 31/55 | 83 min |
+| Windows, local, thinking off | 5/15 | 27/55 | 6 min |
+| Today's pipeline, local | 1/15 | 27/55 | 43 min |
 
-**Blind authors, round 3.**
+With thinking off the local model folds a company's deals into one record (four false merges); with thinking on it
+makes none, but it cites fewer statements (43 quotes against DeepSeek's 101), so updates stay unattached. Each call
+thinks for 7-9.5k tokens. With thinking on, the daemon's JSON format empties the answer (note 068f6b1f), so those
+runs ask for JSON in the prompt only.
 
-Agreement with our records, as B3 between the two partitions over items both placed. Our own recipe agrees with itself across two builds at GVC .720 and uv .975, which gives the scale.
+**Windows cut by date** (one date-ordered stream, folder names hidden, 15 calls against 67) tie windows cut by
+folder: 78/93 served against 76, 284/328 attached against 294. The folders were not doing the work. Ward fits in one
+date window, so it cannot answer this; its rerun (5/14 against the one-shot's 8/14) puts single-run noise on Ward at
+about three deals.
 
-| System | Agreement with ours |
-|---|---|
-| GVC end to end | .900 |
-| uv | .976 |
-| Ward | 1.0, over only 5 items |
-| GVC RESOLVE alone | .445 |
+## What we could be wrong about
 
-Scored against gold at the concept each author declared:
+The percentages are my estimates, not measurements.
 
-| Measure | Blind author | Our recipe |
-|---|---|---|
-| GVC RESOLVE alone, against gold incidents (B3) | .814 | .328 |
-| Ward deals matched (of 39) | 10 | 8 |
-| uv states hit (of 132) | 56 | 67 |
+| Belief | How sure | Cost if wrong | Cheapest check |
+|---|---|---|---|
+| Windows wins because of the design, not because Ward foldered his mail by counterparty | Checked: date cut ties folder cut on the worlds | – | – |
+| The merge holds once it works in capped blocks (its input grows with the corpus today, which breaks the rule above) | ~50% | Windows doesn't scale | Cap is structural; quality at 1M waits for a big real inbox |
+| What wins on mail wins on a novel | ~50% | Two designs, or a redesign | Saltgrass (key: `bench/lanes/chaos_monkey/corpora/SALTGRASS_FACT_LEDGER.md`) |
+| The ontology syntax can say what a novel needs | ~60% | A gap in the core | Write saltgrass's recipe and run `recipe validate` (an hour) |
+| Generated mail ranks designs as real mail does | ~65% (Ward roughly agrees) | We tune to MiMo's prose | Ward alongside every run |
+| The scorer measures what a user needs | ~70% | We chase quote-matching artifacts | Hand-read 20 disagreements per design |
+| Cast-first is the right architecture | ~25% (lost the race) | – | – |
 
-The validator's warnings worked as feedback: the authors fixed declarations nothing would fill, and their recipes contain no tuned numbers.
+## Steps
 
-## 5. What has gone wrong
+1. ~~Thinking on locally~~ (done: 9/15). ~~Windows cut by date~~ (done: ties the folder cut).
+2. **Product.** Build windows into the default commands, reusing what exists, with the merge in capped blocks so no
+   call grows with the corpus. Measure with `run_world.sh` on the five worlds and Ward. No new test world (operator,
+   2026-10-13: the instruments in hand are enough).
+3. **Saltgrass** through the same commands: write the recipe, `recipe validate`, score against its fact ledger.
+4. **The model track.** Engineer the system down to the local model.
 
-**Process.**
-- We spent much of two days measuring rather than building. Components the method specified (Point, Mention, Pick) were held back behind exploratory probes with pass bars we invented. The probes said "not worth building", but the method already called for these components. They were built only on the last day, so most results predate them.
-- We chased each system's largest residual, which produced one-system levers and drift away from the general objective.
-- We froze our own recipes to avoid fitting to gold. That kept a known modelling error in every "ours" row (below).
-- Some green numbers were artifacts. Ward's deal-identity score of .875 is what you get when every message is its own deal: it scored well with zero correct links.
+## Rules
 
-**Technical.**
-- **Ward's identifying information is in free text.** A deal is a counterparty, product, delivery point and term. In this mailbox they sit in message bodies spread across threads, and much of the mail is internal discussion of an outside deal.
-  - Our recipe derives the counterparty from email headers. For none of the 25 deals lost at placing is the counterparty in the latest message's headers, and 19 of those companies never appear in any header.
-  - With no declared evidence to link two messages, and the model not allowed to decide identity alone, RESOLVE opens a new record for almost every statement: 84 of 92.
-- **GVC's statement unit does not match gold's.** We make statements from whole lines, while gold marks individual mentions and splits incidents into sub-events. 179 of 324 statements already span several gold events before resolution.
-- **Reader capability.** The local model is a 35B-parameter mixture-of-experts (about 3B active), quantised to 4 bits, answering one closed question at a time. Offline probes on our recorded data:
-  - picking a deal's counterparty from text is right .44 of the time (.52 with a looser name match);
-  - pointing at event mentions has .59 precision;
-  - its "these are the same" verdict on candidate pairs has precision of about .45 to .54.
-- **Label-free reliability estimation does not identify the text-reading sources.** The model's choice and the similarity proposal make false links that look like true ones on every feature we have (date, event kind, shared named entities). Every label-free estimator we tried leaves a gap of .4 to .7 between estimated and true precision on some run.
-- **The newest build's line filter regressed uv.** It drops any line whose text appears in an earlier document. That removes the only line of formulaic tracker events ("closed", "labeled bug"), so 12 states went unread again. The fix is clear and structural; it is not applied yet.
-- **Operations.** A shared host repeatedly ran low on disk, from other projects' builds and swap growth. That stopped one full test run and constrained builds. The full test suite at the latest commit has 4 failures and 5 timeouts, all outside this layer's code.
+- Develop on world-s4. Call a change better only when the other four worlds agree.
+- Numbers go in commit messages.
 
-## 6. Open questions for reviewers
+## Deferred until something works
 
-1. **Architecture vs ceiling.**
-   - Does "declared structure decides, the model answers only closed questions, and never decides identity alone" cap quality on free-text-heavy domains such as deals in email?
-   - Would letting the model reason over several documents, or generate and then verify, be worth the loss of auditability?
-2. **Is the reader model the bottleneck?** The pipeline can run unchanged with a stronger model behind the same questions. Is that the right next experiment, and what would its result mean either way?
-3. **Measuring "similar records whoever wrote the recipe."** Two reasonable authors chose different granularity (whole incident vs. sub-event) and so got different records. Should author independence be scored as:
-   - each author's records against gold at the concept that author declared;
-   - agreement only where the authors declared the same concept;
-   - or something else?
-4. **Label-free reliability of dependent, pre-selected evidence.** Candidate pairs are proposed by similarity, and two sources read the same text. Are there known estimators (beyond Fellegi–Sunter EM with independence) that work here, or should unmeasurable sources be refused rather than weighed?
-5. **The statement unit.** A line, a sentence or a mention: how should a general system choose the unit of a statement in event-dense text without a domain rule?
-6. **Gold as target.** These benchmarks encode particular concepts (GVC's sub-events, Ward's deal boundaries). How much should a general system be judged on matching them, rather than on being right at the author's own concept?
-7. **Legacy identity routines.** Should the general extractor's older identity routines, used for types with no declared criterion, be folded into the single decider (which then needs a default criterion), or retired?
-
-## 7. Formal objectives (the campaign's bars)
-
-The campaign is met when each bar reads met on its newest measured row:
-
-| Bar | What it measures |
-|---|---|
-| layer-identity-ward | A blind author's Ward deal identity, at or above the 2026-10-09 baseline |
-| layer-identity-uv | A blind author's uv case identity, at or above the 2026-10-09 baseline |
-| layer-identity-gvc | A blind author's GVC identity, at or above the 2026-10-09 baseline |
-| layer-no-tuning | No measured numbers or switches in recipes: now 0, met |
-| layer-default-path | All three systems run through the default commands: met |
-| layer-invariants | The six contracts pass: met |
-| layer-author-gap | Blind-vs-ours agreement at least our own cross-build agreement: now .595 against 1.0, bound by GVC RESOLVE alone |
-| layer-estimator | Estimated vs true source precision within .1: not yet measurable on all systems |
-
-The working judgement in this brief is that the bars and ladders are proxies. The objective is section 1.
+Labelling the hay, blind recipes, a second writer model, a real literary anchor, bars, statistics beyond five
+worlds, and a review process.

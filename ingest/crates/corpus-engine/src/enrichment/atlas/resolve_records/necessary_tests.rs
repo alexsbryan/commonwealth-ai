@@ -506,7 +506,8 @@ attributes = [{ name = "kind", type = "text", description = "firing: shots fired
 }
 
 /// A necessary value the document reader chose (`Statement::read`) is a read:
-/// it is weighed, and never forbids a candidate as a supplied one does.
+/// it never forbids a candidate as a supplied one does. The candidate is
+/// offered and the model, shown both kinds, decides.
 #[tokio::test]
 async fn necessary_identity_a_readers_value_is_weighed_never_a_veto() {
     let criterion = necessary(&[]);
@@ -542,5 +543,10 @@ async fn necessary_identity_a_readers_value_is_weighed_never_a_veto() {
         (0, 1, 1)
     );
     assert!(resolver.records()[0].supplied.is_empty());
-    assert_eq!(resolver.records()[0].fields["kind"], values(&["death"]));
+    assert_eq!(result.outcomes[0].outcome.label(), "chosen");
+    assert_eq!(
+        resolver.records()[0].fields["kind"],
+        values(&["death", "firing"]),
+        "the model put the firing on the death's record, and its choice decides"
+    );
 }

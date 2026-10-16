@@ -79,8 +79,13 @@ const SENTINEL: &str = "x_forced_choice";
 /// The one constructor every caller builds its body with.
 const CONSTRUCTOR: &str = "forced_choice::schema(";
 
+/// The other body constructor: a wave of forced choices
+/// (`oicp_types::forced_choice::wave`), each branch built by [`CONSTRUCTOR`].
+/// Its callers are censused the same way.
+const WAVE_CONSTRUCTOR: &str = "forced_choice::wave(";
+
 /// The census funnels a caller's file must issue its calls through.
-const FUNNELS: &[&str] = &["gate_call(", "decision_call("];
+const FUNNELS: &[&str] = &["gate_call(", "decision_call(", "decision_wave("];
 
 #[derive(Debug, PartialEq, Eq)]
 struct Site {
@@ -305,10 +310,10 @@ fn scan(rel: &str, text: &str, out: &mut Vec<Site>, callers: &mut Vec<Site>) {
             });
         }
         // A call, not the definition and not a string naming it (this gate's own).
-        if line.contains(CONSTRUCTOR)
-            && !line.contains("fn schema(")
-            && !line.contains(&format!("\"{CONSTRUCTOR}"))
-        {
+        let calls = |c: &str, def: &str| {
+            line.contains(c) && !line.contains(def) && !line.contains(&format!("\"{c}"))
+        };
+        if calls(CONSTRUCTOR, "fn schema(") || calls(WAVE_CONSTRUCTOR, "fn wave(") {
             callers.push(Site {
                 file: rel.to_string(),
                 line: i + 1,
