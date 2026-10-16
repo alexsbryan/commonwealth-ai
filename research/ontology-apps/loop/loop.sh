@@ -17,6 +17,8 @@
 # Env: NOTE="what this arm changes" (required). ASKER=replay|recorded|daemon for extract (default recorded: a
 # question asked before reuses its answer, a new one goes to the daemon); resolve always runs --asker recorded.
 # INIT=1 re-cuts the windows (enrich init). RESTORE=<arm> puts that arm's cut back first, for an exact replay.
+# SOVEREIGN_READER is passed through as given: unset runs the product default (the window reader since 5f2711847),
+# so an arm exercises the path a user gets; run.json records it ("default" when unset).
 cd "$(dirname "$0")/../../.." || exit 1
 L=research/ontology-apps/loop
 arm=$1; shift
@@ -25,7 +27,7 @@ case "$1" in ""|all) set -- $(python3 $L/corpora.py --set all) ;; inner) set -- 
 root=runs/loop/$arm
 [ -e $root ] && [ -z "$FORCE" ] && { echo "$root exists; name a new arm (FORCE=1 overwrites)" >&2; exit 2; }
 mkdir -p $root
-export SOVEREIGN_READER=${SOVEREIGN_READER:-window} SOVEREIGN_WAVES_ONE_BY_ONE=1 SOVEREIGN_NO_STALE_WARN=1 NO_COLOR=1
+export SOVEREIGN_WAVES_ONE_BY_ONE=1 SOVEREIGN_NO_STALE_WARN=1 NO_COLOR=1
 export RUST_LOG=info,corpus_engine::enrichment::pipeline::document_read::window=trace,corpus_engine::enrichment::atlas::resolve_records=debug
 asker=${ASKER:-recorded}
 head=$(git rev-parse --short HEAD)
@@ -57,6 +59,7 @@ one() {
   fi
   python3 -c "import json,sys; json.dump(dict(zip(sys.argv[2::2], sys.argv[3::2])), open(sys.argv[1], 'w'), indent=1)" $out/run.json \
     arm "$arm" corpus "$id" note "$NOTE" head "$head" dirty "$dirty" svrn_ingest_mtime "$bin" engine "$engine" asker "$asker" \
+    reader "${SOVEREIGN_READER:-default}" \
     init "${INIT:-}" restore "${RESTORE:-}" extract_exit "$rx" resolve_exit "${rr:-not run}" seconds "$(( $(date +%s) - s ))" \
     finished "$(date -u +%FT%TZ)"
   if [ "$kind" = bank ]; then
