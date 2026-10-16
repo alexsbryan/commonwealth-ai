@@ -23,7 +23,9 @@ use oicp_types::forced_choice;
 use tracing::{debug, warn};
 
 use super::answer::{describe, describe_opened, reasons, Proposed, ProposedVerdict};
-use super::apart::{chapters_compatible, necessary_compatible, offerable, read_beside};
+use super::apart::{
+    beside_in_document, chapters_compatible, necessary_compatible, offerable, read_beside,
+};
 use super::estimate::{Comparison, Estimate};
 use super::fields::{self, compare_necessary};
 use super::weigh::{tally, weigh, Carried, Zone};
@@ -565,6 +567,16 @@ pub(super) fn question(
     u.push_str(&format!("\nStatement, its words in [[ ]]: \"…{shown}…\"\n"));
     if !read_as.is_empty() {
         u.push_str(&format!("Its reader read what it is about as: {read_as}\n"));
+    }
+    // Its window's other particulars in this document, as read (absence shown
+    // as absence): the first of two siblings asked can leave a record that
+    // fits the other, which `read_beside` then keeps from it.
+    for (reference, described) in beside_in_document(s, statements) {
+        let read = described.render();
+        if !read.is_empty() {
+            debug!(document = doc.id, statement = %s.id, beside = reference, read = %read, "atlas/resolve: the question shows a particular read beside the statement");
+            u.push_str(&format!("Read in this document, as another particular: {read}. The two are different particulars; a record is at most one of them.\n"));
+        }
     }
     u.push('\n');
     match ask {

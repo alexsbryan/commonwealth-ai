@@ -323,3 +323,77 @@ fn a_necessary_conflict_is_named() {
     assert!(why.contains("sec_2/p1"), "{why}");
     assert_eq!(necessary_conflict(&c, &p2, &of(&["sec_1/p1"])), None);
 }
+
+/// Each question about a statement shows the other particulars its window's
+/// reader read beside it in the same document, as read, so the first of two
+/// siblings asked can leave a record that fits the other. Failing input,
+/// named: a message passing on one deal and going ahead with its sibling read
+/// two particulars in one sentence; the first asked chose the record of the
+/// second's deal, which then could not join it (world-s4 sagewood-d2, arms
+/// c12-verify and c123-verify, 2026-10-15). The model here takes the offered
+/// record unless the question shows a sibling the record's name is.
+#[tokio::test]
+async fn a_question_shows_the_particular_read_beside_its_statement() {
+    let seen = Arc::new(Mutex::new(Vec::<ChatPrompt>::new()));
+    let kept = seen.clone();
+    let infer: InferenceFn = Arc::new(move |p: &ChatPrompt, _| {
+        kept.lock().unwrap().push(p.clone());
+        let leaves = p.user.contains("about as: named: Acme Q1")
+            && p.user
+                .contains("in this document, as another particular: named: Acme Apr-Oct");
+        let answer = if leaves {
+            json!({"A": 0.1, "0": 0.9})
+        } else {
+            json!({"A": 0.9, "0": 0.1})
+        };
+        Box::pin(async move { Ok(answer.to_string()) })
+    });
+    let named = |s: Statement, name: &str| Statement {
+        described: Described {
+            names: [name.to_string()].into(),
+            ..Default::default()
+        },
+        ..s
+    };
+    let mut res = weights(&[("proposed_answer", 0.5, 0.4)]);
+    let c = criterion(&[CHAPTER_SUBJECT_KEY]);
+    let key = |chapter| [(CHAPTER_SUBJECT_KEY, chapter)];
+    let a = "Acme takes the Apr-Oct piece.";
+    res.resolve_document(
+        &c,
+        doc("a", a),
+        &[named(
+            stmt("a", a, "the Apr-Oct piece", 0, &key("sec_1/p1")),
+            "Acme Apr-Oct",
+        )],
+        &[],
+        Answerer::Select(&infer),
+    )
+    .await;
+    let b = "We pass on Q1 this time and go ahead with Apr-Oct.";
+    let r = res
+        .resolve_document(
+            &c,
+            doc("b", b),
+            &[
+                named(stmt("q1", b, "pass on Q1", 0, &key("sec_2/p1")), "Acme Q1"),
+                named(
+                    stmt("aprs", b, "go ahead with Apr-Oct", 0, &key("sec_2/p2")),
+                    "Acme Apr-Oct",
+                ),
+            ],
+            &[similar("a", 0.5)],
+            Answerer::Select(&infer),
+        )
+        .await;
+    assert_eq!(res.records()[0].statements, ["a", "aprs"], "{r:?}");
+    assert_eq!(r.outcomes[0].outcome.record(), Some("q1"), "{r:?}");
+    let asked = seen.lock().unwrap();
+    assert!(
+        asked
+            .iter()
+            .any(|p| p.user.contains("about as: named: Acme Apr-Oct")
+                && p.user.contains("as another particular: named: Acme Q1")),
+        "the second sibling's question shows the first"
+    );
+}
