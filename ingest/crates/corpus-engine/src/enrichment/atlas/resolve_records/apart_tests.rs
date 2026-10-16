@@ -250,6 +250,72 @@ fn a_reference_read_beside_is_one_of_the_documents_own() {
     assert_eq!(read_beside(None, &set(&["sec_2/p1"]), &doc), None);
 }
 
+/// A record this document opened is weighed by every particular that has
+/// joined it, as a record opened before it is: a particular of the
+/// statement's window that joined it keeps the statement out, and the
+/// statement opens its own. Failing input, named: offered by its opener's
+/// reference alone, the window-mate of a particular that had joined the
+/// record was asked, chose it, and was refused at the fold's recheck
+/// (`gate_plans`, which sees every joiner), so it reached no record (one
+/// long document read in windows, as a novel is; audit 2026-10-16).
+#[tokio::test]
+async fn a_record_opened_in_the_pass_holds_the_particulars_that_joined_it() {
+    let (infer, seen) = scripted(vec![
+        json!({"A": 0.9, "0": 0.1}),
+        json!({"A": 0.9, "0": 0.1}),
+    ]);
+    let mut res = weights(&[("proposed_answer", 0.5, 0.4)]);
+    let c = criterion(&[CHAPTER_SUBJECT_KEY]);
+    let key = |chapter| [(CHAPTER_SUBJECT_KEY, chapter)];
+    let body = "The brass lamp went missing. The tin case of the brass lamp lay in a crate. \
+                The brass lamp turned up under the sand.";
+    let r = res.resolve_document(
+        &c,
+        doc("story", body),
+        &[
+            stmt(
+                "opened",
+                body,
+                "The brass lamp went missing",
+                0,
+                &key("sec_1/p1"),
+            ),
+            stmt(
+                "case",
+                body,
+                "The tin case of the brass lamp lay in a crate",
+                0,
+                &key("sec_2/p1"),
+            ),
+            stmt(
+                "found",
+                body,
+                "The brass lamp turned up under the sand",
+                0,
+                &key("sec_2/p2"),
+            ),
+        ],
+        &[],
+        Answerer::Select(&infer),
+    )
+    .await;
+    let held: Vec<Vec<String>> = res.records().iter().map(|r| r.statements.clone()).collect();
+    assert_eq!(
+        held,
+        [vec!["opened", "case"], vec!["found"]],
+        "another window's particular may join; the joiner's window-mate may not: {r:?}"
+    );
+    assert!(
+        matches!(r.outcomes[2].outcome, Outcome::Decided(Decision::Opened { .. })),
+        "the window-mate opens its own record, never refused: {r:?}"
+    );
+    assert_eq!(
+        seen.lock().unwrap().len(),
+        1,
+        "the window-mate is offered nothing"
+    );
+}
+
 /// A statement follows its own particular. Once a question joined a window's
 /// particular to a record that also holds another particular of that window
 /// (offered, marked, and chosen: they were read in different documents), the

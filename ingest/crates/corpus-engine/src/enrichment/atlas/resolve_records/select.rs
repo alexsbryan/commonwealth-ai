@@ -24,7 +24,8 @@ use tracing::{debug, warn};
 
 use super::answer::{describe, describe_opened, reasons, Proposed, ProposedVerdict};
 use super::apart::{
-    beside_in_document, chapters_compatible, necessary_compatible, offerable, read_beside,
+    beside_in_document, chapters_compatible, necessary_compatible, necessary_conflict, offerable,
+    read_beside,
 };
 use super::estimate::{Comparison, Estimate};
 use super::fields::{self, compare_necessary};
@@ -126,7 +127,7 @@ pub(crate) async fn decision_call(
 
 /// An alternative a statement is weighed over: an offered record, or a record
 /// an earlier statement of this document opened (its position in `asked`).
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 enum Alt {
     Record(usize),
     Opened(usize),
@@ -141,15 +142,12 @@ impl Candidate<'_> {
     }
 }
 
-/// Keep the record a plan joins, by the statement's window reference, for the
-/// statements of its document after it (`read_beside`).
-fn note_join(
-    joined: &mut HashMap<usize, BTreeSet<String>>,
-    plan: &Plan,
-    mine: Option<&BTreeSet<String>>,
-) {
-    if let (Some(Alt::Record(r)), Some(mine)) = (alt_of(plan), mine) {
-        joined.entry(r).or_default().extend(mine.iter().cloned());
+/// Keep what a plan joins, a record or one this document opened (its
+/// opener included), by the statement's window reference, for the statements
+/// of its document after it: both are weighed by everything they hold.
+fn note_join(joined: &mut HashMap<Alt, BTreeSet<String>>, plan: &Plan, mine: Option<&BTreeSet<String>>) {
+    if let (Some(a), Some(mine)) = (alt_of(plan), mine) {
+        joined.entry(a).or_default().extend(mine.iter().cloned());
     }
 }
 
@@ -244,7 +242,7 @@ pub(super) async fn choose(
         .iter()
         .filter_map(|s| s.keys.get(super::CHAPTER_SUBJECT_KEY).cloned())
         .collect();
-    let mut joined: HashMap<usize, BTreeSet<String>> = HashMap::new();
+    let mut joined: HashMap<Alt, BTreeSet<String>> = HashMap::new();
     for (j, &i) in asked.iter().enumerate() {
         let mine = w.supplied[j].get(super::CHAPTER_SUBJECT_KEY);
         // A declared key shared with an earlier statement of this document
@@ -261,18 +259,37 @@ pub(super) async fn choose(
                 .get(super::CHAPTER_SUBJECT_KEY)
                 .cloned()
                 .unwrap_or_default();
-            held.extend(joined.get(&r).into_iter().flatten().cloned());
+            held.extend(joined.get(&Alt::Record(r)).into_iter().flatten().cloned());
             read_beside(mine, &held, &in_document).cloned()
+        };
+        // A record this document opened holds its opener's values and the
+        // window references of every statement that has joined it since, as
+        // the fold will (`gate_plans`): weighed by its opener's alone, a
+        // particular's window-mate was offered it, chose it and was refused.
+        let opened_holds = |g: usize| {
+            let mut holds = w.supplied[g].clone();
+            if let Some(joiners) = joined.get(&Alt::Opened(g)) {
+                holds
+                    .entry(super::CHAPTER_SUBJECT_KEY.to_string())
+                    .or_default()
+                    .extend(joiners.iter().cloned());
+            }
+            holds
         };
         let compatible = |a: Alt| match a {
             Alt::Record(r) => {
                 offerable(criterion, &w.supplied[j], &records[r].supplied) && beside(r).is_none()
             }
-            Alt::Opened(g) => necessary_compatible(criterion, &w.supplied[j], &w.supplied[g]),
+            Alt::Opened(g) => necessary_compatible(criterion, &w.supplied[j], &opened_holds(g)),
         };
         let mut candidates: Vec<Candidate> = opened.iter().map(|&g| Candidate::Opened(g)).collect();
         candidates.extend(w.shown.iter().map(|&(r, p)| Candidate::Record(r, p)));
         let offered = candidates.len();
+        for &g in &opened {
+            if let Some(conflict) = necessary_conflict(criterion, &w.supplied[j], &opened_holds(g)) {
+                debug!(document = doc.id, statement = %statements[i].id, candidate = %statements[asked[g]].id, %conflict, "atlas/resolve: a record this document opened holds what keeps this statement out; not offered");
+            }
+        }
         for &(r, _) in w.shown {
             if let Some(other) = beside(r) {
                 debug!(document = doc.id, statement = %statements[i].id, candidate = %records[r].id, beside = %other, "atlas/resolve: the record holds a particular the reader read beside this one in its document; not offered");

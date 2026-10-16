@@ -248,7 +248,8 @@ the claim's own document, and a claim whose words are not in its document refuse
 value in the answer costs the particular or claim that holds it, counted, never the window. A window's
 particular reaches RESOLVE as a sufficient key over its chapter (`CHAPTER_SUBJECT_KEY`), so RESOLVE decides
 identity only across windows, statement by statement against bounded candidates. Two particulars the reader read
-in one document stay two: a record holding one is never offered the other (`apart.rs::read_beside`), and each
+in one document stay two: a record holding one is never offered the other (`apart.rs::read_beside`), whether
+it was opened before the document or earlier in it (weighed by every particular that has joined it), and each
 one's question shows the other as read, so the first asked can leave the record that fits the other; whether
 particulars of different documents are one is RESOLVE's to decide, and once it lets two share a record, each
 particular's later statements follow it there by key. If it wins through the
