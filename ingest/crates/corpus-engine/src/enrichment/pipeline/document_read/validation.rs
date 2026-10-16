@@ -257,7 +257,6 @@ fn verify_particular(
     refuse_voice(
         policies,
         &particular.subject_name,
-        particular.words.as_deref(),
         &particular.subject_local_ref,
     )?;
     if !claim_evidence_exists(document, &particular.evidence) {
@@ -265,13 +264,6 @@ fn verify_particular(
             "the line naming it is not an exact passage in document `{}`",
             document.key()
         ));
-    }
-    if let Some(words) = &particular.words {
-        if words.trim().is_empty() || !particular.evidence.contains(words.as_str()) {
-            return Err(format!(
-                "the mention's words {words:?} are not on the line it cites"
-            ));
-        }
     }
     validate_fields(
         &particular.subject_fields,
@@ -282,17 +274,16 @@ fn verify_particular(
     fields_cited(&particular.subject_fields, document)
 }
 
-/// Why a subject cannot be a record: its name, its mention's words or the
-/// words of its `l{n}:` local reference are a declared voice — the reader's
+/// Why a subject cannot be a record: its name or the words of its `l{n}:`
+/// local reference are a declared voice — the reader's
 /// side of what the general extractor's parser enforces (`VoicesDecl::is_voice`).
 fn refuse_voice(
     policies: &OntologyPolicies,
     name: &str,
-    words: Option<&str>,
     local_ref: &str,
 ) -> std::result::Result<(), String> {
     let voices = &policies.assertion.voices;
-    match [Some(name), words, local_ref_words(local_ref)]
+    match [Some(name), local_ref_words(local_ref)]
         .into_iter()
         .flatten()
         .find(|n| voices.is_voice(n))
@@ -352,12 +343,7 @@ fn verify_claim(
             claim.kind
         ));
     }
-    refuse_voice(
-        policies,
-        &claim.subject_name,
-        None,
-        &claim.subject_local_ref,
-    )?;
+    refuse_voice(policies, &claim.subject_name, &claim.subject_local_ref)?;
     if !claim_evidence_exists(document, &claim.evidence) {
         return Err(format!(
             "evidence is not an exact passage in document `{}` nor one of its declared identity fields",

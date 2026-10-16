@@ -87,7 +87,6 @@ pub(super) fn unstated(
             subject_name: if name.is_empty() { local } else { name },
             evidence,
             subject_fields,
-            words: None,
             other_names,
         });
     }

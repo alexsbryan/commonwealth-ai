@@ -5,8 +5,9 @@ use super::*;
 use crate::enrichment::atlas::resolution_records::resolve_declared_types;
 use crate::enrichment::atlas::resolve_records::{Answerer, DocumentResolution};
 use crate::enrichment::pipeline::document_read::{
-    ABOUT_ATTRIBUTE, CLAIM_FIELDS_ATTRIBUTE, LOCAL_REF_ATTRIBUTE, OTHER_NAMES_ATTRIBUTE,
-    SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE, SUBJECT_NAME_ATTRIBUTE, WORDS_ATTRIBUTE,
+    ABOUT_ATTRIBUTE, CHAPTER_SUBJECT_ATTRIBUTE, CLAIM_FIELDS_ATTRIBUTE, LOCAL_REF_ATTRIBUTE,
+    OTHER_NAMES_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE,
+    SUBJECT_NAME_ATTRIBUTE,
 };
 use crate::index::EnrichmentChunkRow;
 use crate::recipe_ontology::OntologyBlock;
@@ -27,13 +28,21 @@ to = "character"
 "#;
 
 const LINE: &str = "Ivo trusted Nell with the ledger.";
+/// The line the particular Nell is read on, apart from Ivo's statements.
+const KEPT: &str = "Nell kept the ledger safe.";
+
+/// `claim` read on `line` rather than [`LINE`].
+fn on_line(line: &str, claim: Claim) -> Claim {
+    let text = serde_json::to_string(&claim).unwrap().replace(LINE, line);
+    serde_json::from_str(&text).unwrap()
+}
 
 fn read(value: &str) -> Value {
     json!({"status": "supported", "value": value, "evidence": value})
 }
 
 /// A statement as the document reader's projection hands it to RESOLVE:
-/// `kind` (none for a mention particular), its holder read as `name`, its own
+/// `kind` (none for a particular), its holder read as `name`, its own
 /// fields `own` and the extra handoff attributes `more`.
 fn handed(id: &str, kind: Option<&str>, local: &str, name: &str, own: Value, more: Value) -> Claim {
     let mut attributes: Map<String, Value> = more.as_object().cloned().unwrap();
@@ -59,8 +68,8 @@ fn handed(id: &str, kind: Option<&str>, local: &str, name: &str, own: Value, mor
 
 /// A relation's other endpoint is a record: the statement `Ivo trusted Nell`
 /// is about Ivo's record, and its `to`, read as the words "Nell", holds the
-/// record RESOLVE put the same document's mention of Nell on, never the
-/// words. Words that name no record there are not held, and say why.
+/// record RESOLVE put the same document's particular read as Nell on (on a
+/// line of its own), never the words. Words that name no record there are not held, and say why.
 #[tokio::test]
 async fn a_relation_statement_holds_its_other_endpoint_as_a_record() {
     let p = OntologyBlock {
@@ -71,13 +80,16 @@ async fn a_relation_statement_holds_its_other_endpoint_as_a_record() {
     .unwrap();
     let rows = [EnrichmentChunkRow {
         id: 1,
-        content: LINE.into(),
+        content: format!("{LINE}\n{KEPT}"),
         title: None,
         url: None,
         metadata_raw: Some(json!({ "id": "ch1" }).to_string()),
         source_doc_id: Some("ch1".into()),
     }];
     let docs = SectionDocuments::from_chunk_rows([("s1", &[1u64][..])], &rows);
+    // As a window read hands them: one line holds Ivo's statements and the
+    // particular Nell, told apart by their chapter-wide subjects.
+    let ivo = json!({ CHAPTER_SUBJECT_ATTRIBUTE: "ivo", SUBJECT_NAME_ATTRIBUTE: "Ivo" });
     let mut claims = vec![
         handed(
             "trust",
@@ -85,7 +97,7 @@ async fn a_relation_statement_holds_its_other_endpoint_as_a_record() {
             "ivo",
             "Ivo",
             json!({ "to": read("Nell") }),
-            json!({}),
+            ivo.clone(),
         ),
         handed(
             "doubt",
@@ -93,15 +105,19 @@ async fn a_relation_statement_holds_its_other_endpoint_as_a_record() {
             "ivo",
             "Ivo",
             json!({ "to": read("Grist") }),
-            json!({}),
+            ivo,
         ),
-        handed(
-            "nell",
-            None,
-            "nell",
-            "Nell",
-            json!({}),
-            json!({ ABOUT_ATTRIBUTE: "character", WORDS_ATTRIBUTE: "Nell" }),
+        on_line(
+            KEPT,
+            handed(
+                "nell",
+                None,
+                "nell",
+                "Nell",
+                json!({}),
+                json!({ ABOUT_ATTRIBUTE: "character", CHAPTER_SUBJECT_ATTRIBUTE: "nell",
+                    SUBJECT_NAME_ATTRIBUTE: "Nell" }),
+            ),
         ),
     ];
     let mut entities = Vec::new();

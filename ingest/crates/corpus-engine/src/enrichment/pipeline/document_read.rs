@@ -55,11 +55,6 @@ pub const CLAIM_FIELDS_ATTRIBUTE: &str = "__document_read_fields";
 /// from a [`DocumentReadParticular`]: such a claim declares no claim kind, so
 /// this is where its subject's type is read ([`about_type`]).
 pub const ABOUT_ATTRIBUTE: &str = "__document_read_about";
-/// A mention's words, on the claim projected from a mention particular: its
-/// statement is these words on its line (RESOLVE), and a reference reading
-/// that names them lands on its record (`resolution_derived/read_fields.rs`).
-/// Stays on the claim after RESOLVE, cited by its evidence.
-pub const WORDS_ATTRIBUTE: &str = "__document_read_words";
 /// The name a window read ([`SubjectScope::Chapter`]) gave a statement's
 /// subject: a reference reading of that name in the same document lands on
 /// the record RESOLVE put the statement on (`resolution_derived/read_fields.rs`).
@@ -70,11 +65,6 @@ pub const SUBJECT_NAME_ATTRIBUTE: &str = "__document_read_subject_name";
 /// The type a claim projected from a [`DocumentReadParticular`] is about.
 pub fn about_type(attributes: &Map<String, Value>) -> Option<&str> {
     attributes.get(ABOUT_ATTRIBUTE).and_then(Value::as_str)
-}
-
-/// The words a mention particular's claim names its particular by.
-pub fn mention_words(attributes: &Map<String, Value>) -> Option<&str> {
-    attributes.get(WORDS_ATTRIBUTE).and_then(Value::as_str)
 }
 
 /// The name a window read gave a statement's subject.
@@ -190,17 +180,12 @@ pub struct DocumentReadOutcome {
 }
 
 /// A particular a document is about that no claim of the document is about
-/// (`document_read/about.rs`): an issue that opens its thread is about a case
+/// (`window_particulars.rs`): an issue that opens its thread is about a case
 /// before any line says where the case stands. Its type is one RESOLVE
-/// decides; `evidence` is the line that first names it, its words are in its
-/// reference, and its identifying fields are read at them. It reaches RESOLVE as a statement of its own, so
-/// the document belongs to the particular's record whether or not a line
-/// states a claim kind.
-///
-/// Or a mention (`document_read/mention.rs`) of a type whose source names
-/// only who took part (`resolution_records::decides_mentions`): its `words`
-/// are the line's own, its statement is those words on that line, and it
-/// reads no field.
+/// decides; `evidence` is the line that names it, and its identifying fields
+/// are read there. It reaches RESOLVE as a statement of its own, so the
+/// document belongs to the particular's record whether or not a line states a
+/// claim kind.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct DocumentReadParticular {
@@ -209,8 +194,6 @@ pub struct DocumentReadParticular {
     pub subject_name: String,
     pub evidence: String,
     pub subject_fields: BTreeMap<String, DocumentReadField>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub words: Option<String>,
     /// The other names a window read gave what it names
     /// ([`OTHER_NAMES_ATTRIBUTE`]).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]

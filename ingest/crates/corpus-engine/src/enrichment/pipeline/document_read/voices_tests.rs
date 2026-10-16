@@ -4,7 +4,7 @@
 
 use super::*;
 
-fn particular(local_ref: &str, name: &str, words: Option<&str>) -> DocumentReadParticular {
+fn particular(local_ref: &str, name: &str) -> DocumentReadParticular {
     DocumentReadParticular {
         subject_type: "case".into(),
         subject_local_ref: local_ref.into(),
@@ -16,7 +16,6 @@ fn particular(local_ref: &str, name: &str, words: Option<&str>) -> DocumentReadP
                 (f.to_string(), DocumentReadField::Unknown { reason })
             })
             .into(),
-        words: words.map(str::to_string),
         other_names: Default::default(),
     }
 }
@@ -51,13 +50,13 @@ async fn a_declared_voice_is_never_a_particular_or_a_subject() {
         .section_extraction
         .unwrap();
     // Particulars in each form validation reads a voice in: an `l{n}:`
-    // reference, a mention (its words), and one that is no voice.
+    // reference and a name, and one that is no voice.
     extraction.document_read.as_mut().unwrap().documents[0]
         .particulars
         .extend([
-            particular("l1:The narrator", "the one telling it", None),
-            particular("m1", "the one telling it", Some("The narrator")),
-            particular("l1:Issue 42", "issue 42", None),
+            particular("l1:The narrator", "the one telling it"),
+            particular("m1", "the narrator"),
+            particular("l1:Issue 42", "issue 42"),
         ]);
     // A read cached before voices were enforced holds all of it.
     let cached = extraction.clone();

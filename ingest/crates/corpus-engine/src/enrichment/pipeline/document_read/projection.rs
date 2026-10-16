@@ -17,7 +17,7 @@ use super::{
     supported_values, DocumentRead, DocumentReadOutcome, DocumentReadParticular, SubjectScope,
     ABOUT_ATTRIBUTE, CHAPTER_SUBJECT_ATTRIBUTE, CLAIM_FIELDS_ATTRIBUTE, LOCAL_REF_ATTRIBUTE,
     OTHER_NAMES_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE,
-    SUBJECT_NAME_ATTRIBUTE, WORDS_ATTRIBUTE,
+    SUBJECT_NAME_ATTRIBUTE,
 };
 
 #[derive(Debug, Deserialize)]
@@ -208,9 +208,8 @@ fn other_names_value(
 /// A particular no claim is about, as the claim RESOLVE reads: the document
 /// asserts it is about the particular, at the words that first name it. It
 /// declares no claim kind; its type rides on [`ABOUT_ATTRIBUTE`], and its
-/// reference, document and identifying readings as a claim's do. A mention's
-/// words ride on [`WORDS_ATTRIBUTE`]; a window read's name for it on
-/// [`SUBJECT_NAME_ATTRIBUTE`].
+/// reference, document and identifying readings as a claim's do. A window
+/// read's name for it rides on [`SUBJECT_NAME_ATTRIBUTE`].
 fn particular_sketch(
     particular: &DocumentReadParticular,
     document_id: &str,
@@ -229,9 +228,6 @@ fn particular_sketch(
         SOURCE_DOCUMENT_ATTRIBUTE.into(),
         Value::String(document_id.to_string()),
     );
-    if let Some(words) = &particular.words {
-        attributes.insert(WORDS_ATTRIBUTE.into(), Value::String(words.clone()));
-    }
     if subjects == SubjectScope::Chapter {
         attributes.insert(
             SUBJECT_NAME_ATTRIBUTE.into(),

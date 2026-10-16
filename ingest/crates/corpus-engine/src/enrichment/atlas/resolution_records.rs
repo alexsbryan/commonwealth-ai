@@ -42,9 +42,8 @@ use crate::enrichment::ontology::{
 };
 use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType, EventType};
 use crate::enrichment::pipeline::document_read::{
-    about_type, field_readings, mention_words, supported_values, ABOUT_ATTRIBUTE,
-    CHAPTER_SUBJECT_ATTRIBUTE, LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE,
-    SUBJECT_FIELDS_ATTRIBUTE,
+    about_type, field_readings, supported_values, ABOUT_ATTRIBUTE, CHAPTER_SUBJECT_ATTRIBUTE,
+    LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE,
 };
 use crate::enrichment::pipeline::types::{PhaseFailure, PhaseFailureKind};
 use crate::EmbedFn;
@@ -481,23 +480,12 @@ async fn resolve_type(
             });
             placed.len() - 1
         });
-        let Some(mut start) = placed[k].body.find(&anchor) else {
+        let Some(start) = placed[k].body.find(&anchor) else {
             let why = format!("anchor {anchor:?} is not in document `{}`", doc.key);
             unplaced(&mut report, failures, claim, kind, &t.name, why);
             continue;
         };
-        let mut end = start + anchor.len();
-        // A mention's statement is its words on its line, so two named on one
-        // line are two statements the question tells apart.
-        if let Some(words) = mention_words(&claim.attributes).map(fold_ws) {
-            let Some(at) = placed[k].body[start..end].find(&words) else {
-                let why = format!("mention {words:?} is not on its line {anchor:?}");
-                unplaced(&mut report, failures, claim, kind, &t.name, why);
-                continue;
-            };
-            start += at;
-            end = start + words.len();
-        }
+        let end = start + anchor.len();
         let mut keys = BTreeMap::new();
         if let Some(fields) = read_subject_fields_of.get(&i) {
             for key in criterion.keys.iter().chain(t.identity_necessary.iter()) {
