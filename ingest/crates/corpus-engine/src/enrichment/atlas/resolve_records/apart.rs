@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use tracing::debug;
 
-use super::{Criterion, Described, Plan, Record, Refusal, Statement};
+use super::{Criterion, Plan, Record, Refusal, Statement};
 
 /// Two value sets are compatible when every necessary attribute evidenced on
 /// both sides has exactly one shared value. Missing evidence is permissive;
@@ -115,29 +115,6 @@ pub(super) fn read_beside<'a>(
             && in_document.contains(*h)
             && mine.iter().any(|m| chapter_of(m) == chapter_of(h))
     })
-}
-
-/// The other particulars of the statement's window that statements of its
-/// document are about, `read_beside`'s rule, each with what its reader read
-/// it to be: shown on the statement's question, so the first of two siblings
-/// asked can leave a record that fits the other. Empty for a statement no
-/// window read.
-pub(super) fn beside_in_document<'a>(
-    s: &Statement,
-    statements: &'a [Statement],
-) -> BTreeMap<&'a str, Described> {
-    let mut out: BTreeMap<&str, Described> = BTreeMap::new();
-    let Some(mine) = s.keys.get(super::CHAPTER_SUBJECT_KEY) else {
-        return out;
-    };
-    for o in statements {
-        if let Some(r) = o.keys.get(super::CHAPTER_SUBJECT_KEY) {
-            if r != mine && chapter_of(r) == chapter_of(mine) {
-                out.entry(r.as_str()).or_default().extend(&o.described);
-            }
-        }
-    }
-    out
 }
 
 /// The window a reference was read in: `sec_00002` of `sec_00002/p5`.

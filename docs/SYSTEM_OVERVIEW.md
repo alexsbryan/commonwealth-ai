@@ -661,9 +661,8 @@ question the pipeline asks about a type is a method on the resolved
   read in one document stay two: a record holding one is never offered the other, folded or joined earlier in the
   same document (`resolve_records/apart.rs::read_beside`, tracked in `select::choose`); a record the same document
   opened is weighed by every window reference that has joined it, not its opener's alone, as the fold's recheck
-  (`gate_plans`) weighs it, so a window-mate opens its own record instead of being refused; and each sibling's question
-  shows the other as read (`apart.rs::beside_in_document`), so the first asked can leave a record that fits the
-  other; and a statement follows its
+  (`gate_plans`) weighs it, so a window-mate opens its own record instead of being refused (code enforces this; no
+  question line restates it); and a statement follows its
   own particular, joining by key the record that already holds its reference whatever sibling a question let it
   share (`apart.rs::chapter_conflict`). Every veto event names its conflict. Every question about a
   document opens with its declared facts (`prefill.rs`: the metadata fields the

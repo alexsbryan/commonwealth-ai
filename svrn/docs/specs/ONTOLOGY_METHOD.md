@@ -249,8 +249,8 @@ value in the answer costs the particular or claim that holds it, counted, never 
 particular reaches RESOLVE as a sufficient key over its chapter (`CHAPTER_SUBJECT_KEY`), so RESOLVE decides
 identity only across windows, statement by statement against bounded candidates. Two particulars the reader read
 in one document stay two: a record holding one is never offered the other (`apart.rs::read_beside`), whether
-it was opened before the document or earlier in it (weighed by every particular that has joined it), and each
-one's question shows the other as read, so the first asked can leave the record that fits the other; whether
+it was opened before the document or earlier in it (weighed by every particular that has joined it), a guarantee
+code makes with no question line restating it (2026-10-16); whether
 particulars of different documents are one is RESOLVE's to decide, and once it lets two share a record, each
 particular's later statements follow it there by key. If it wins through the
 default commands it becomes the one reader and the passes and waves readers are deleted (operator,

@@ -394,29 +394,19 @@ fn a_necessary_conflict_is_named() {
     assert_eq!(necessary_conflict(&c, &p2, &of(&["sec_1/p1"])), None);
 }
 
-/// Each question about a statement shows the other particulars its window's
-/// reader read beside it in the same document, as read, so the first of two
-/// siblings asked can leave a record that fits the other. Failing input,
-/// named: a message passing on one deal and going ahead with its sibling read
-/// two particulars in one sentence; the first asked chose the record of the
-/// second's deal, which then could not join it (world-s4 sagewood-d2, arms
-/// c12-verify and c123-verify, 2026-10-15). The model here takes the offered
-/// record unless the question shows a sibling the record's name is.
+/// Two particulars a window read in one document are never one record, and
+/// no question line asks the model to keep them apart: `read_beside` bars the
+/// later sibling from a record the first took (C1). A sibling line on the
+/// question (086bac7e3) restated that rule and changed no pick (sagewood-d2,
+/// arm bundle1-fresh, 2026-10-16); it is gone, the bar holds. The model here
+/// takes every offered record.
 #[tokio::test]
-async fn a_question_shows_the_particular_read_beside_its_statement() {
+async fn siblings_stay_apart_by_the_bar_with_no_question_line() {
     let seen = Arc::new(Mutex::new(Vec::<ChatPrompt>::new()));
     let kept = seen.clone();
     let infer: InferenceFn = Arc::new(move |p: &ChatPrompt, _| {
         kept.lock().unwrap().push(p.clone());
-        let leaves = p.user.contains("about as: named: Acme Q1")
-            && p.user
-                .contains("in this document, as another particular: named: Acme Apr-Oct");
-        let answer = if leaves {
-            json!({"A": 0.1, "0": 0.9})
-        } else {
-            json!({"A": 0.9, "0": 0.1})
-        };
-        Box::pin(async move { Ok(answer.to_string()) })
+        Box::pin(async move { Ok(json!({"A": 0.9, "0": 0.1}).to_string()) })
     });
     let named = |s: Statement, name: &str| Statement {
         described: Described {
@@ -456,14 +446,17 @@ async fn a_question_shows_the_particular_read_beside_its_statement() {
             Answerer::Select(&infer),
         )
         .await;
-    assert_eq!(res.records()[0].statements, ["a", "aprs"], "{r:?}");
-    assert_eq!(r.outcomes[0].outcome.record(), Some("q1"), "{r:?}");
-    let asked = seen.lock().unwrap();
+    assert_eq!(res.records()[0].statements, ["a", "q1"], "{r:?}");
+    assert_ne!(
+        r.outcomes[1].outcome.record(),
+        Some("a"),
+        "the later sibling is barred from the record the first took: {r:?}"
+    );
     assert!(
-        asked
+        seen.lock()
+            .unwrap()
             .iter()
-            .any(|p| p.user.contains("about as: named: Acme Apr-Oct")
-                && p.user.contains("as another particular: named: Acme Q1")),
-        "the second sibling's question shows the first"
+            .all(|p| !p.user.contains("as another particular")),
+        "no question line restates the bar"
     );
 }
