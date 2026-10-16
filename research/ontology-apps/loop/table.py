@@ -128,7 +128,11 @@ def diff(a, b):
                  "(a replay: ASKER=replay RESTORE=<arm> loop.sh), and read what the rescore gains as well as what it loses.")
     for c in sorted(ta.keys() & tb.keys()):
         if c in corpora.HELD_OUT or c in corpora.BANKS:
-            print(f"{c:<16} {ta[c][1]} -> {tb[c][1]}" + ("  (held out)" if c in corpora.HELD_OUT else ""))
+            agree = ""
+            if c in corpora.BANKS:  # question by question: read noise shows here, not in the totals (generality.py --noise)
+                va, vb = ({q["id"]: q["verdict"] for q in json.load(open(f"{x}/{c}/bank.json"))["questions"]} for x in (a, b))
+                agree = f"  agree {sum(va[i] == vb.get(i) for i in va)}/{len(va)}"
+            print(f"{c:<16} {ta[c][1]} -> {tb[c][1]}{agree}" + ("  (held out)" if c in corpora.HELD_OUT else ""))
     A, B = verdicts(a), verdicts(b)
     both = [k for k in A if k in B]
     for title, keys, src in (("gained", [k for k in both if B[k][0] and not A[k][0]], A), ("lost", [k for k in both if A[k][0] and not B[k][0]], B)):

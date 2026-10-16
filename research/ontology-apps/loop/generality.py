@@ -2,7 +2,7 @@
 
 Reads only verdict counts and per-question agreement counts; prints no question of a held-out corpus.
 """
-import itertools, json, statistics, sys
+import glob, itertools, json, statistics, sys
 
 L = "/Users/alexsbryan/dev/commonwealth-ai/runs/loop"
 READS = {
@@ -22,6 +22,21 @@ def verdicts(p):
 right = lambda v: sum(x == "right" for x in v.values())
 agree = lambda a, b: sum(a[i] == b[i] for i in a)
 
+# Read noise (generality.py --noise): one recipe, one reader code, fresh reads; and the bank alone, on fixed records.
+SAME_CODE = [(f"asked {a} {b}", f"{L}/{a}/saltgrass-asked/bank.json", f"{L}/{b}/saltgrass-asked/bank.json")
+             for a, b in (("fit-sg1", "fit-sg2"), ("voice-sg1", "voice-sg2"), ("voice2-sg1", "voice2-sg2"))] \
+    + [(f"{r} gen reads", *ps) for r, ps in READS.items() if len(ps) == 2]
+SHUFFLES = sorted(glob.glob(f"{L}/answerer-noise/shuffles/*.json"))
+if sys.argv[1:] == ["--noise"]:
+    S = [{q["id"]: q["verdict"] for q in load(p)["questions"]} for p in SHUFFLES]  # single presentations, unstamped
+    maj = lambda sub: {i: max(("right", "wrong"), key=lambda x: sum(s[i] == x for s in sub)) for i in sub[0]}
+    halves = [(a, [i for i in range(len(S)) if i not in a]) for a in itertools.combinations(range(len(S)), len(S) // 2) if 0 in a]
+    floor = [agree(maj([S[i] for i in a]), maj([S[i] for i in b])) for a, b in halves]
+    print(f"bank alone, fixed records: majority-of-{len(S) // 2} halves agree {statistics.mean(floor):.1f} ({min(floor)}-{max(floor)})")
+    for label, a, b in SAME_CODE:
+        x, y = verdicts(a), verdicts(b)
+        print(f"same recipe, same code: {right(x):>2} {right(y):>2}  agree {agree(x, y)}  {label}")
+    print(f"judges: {sorted(judges)}"); sys.exit()
 V = {r: [verdicts(p) for p in ps] for r, ps in READS.items()}
 O = [verdicts(p) for p in ONESHOT]
 for r, vs in V.items(): print(f"{r:<10} reads {[right(v) for v in vs]}  mean {statistics.mean(right(v) for v in vs):.1f}")
