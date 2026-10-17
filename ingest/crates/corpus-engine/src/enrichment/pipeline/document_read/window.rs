@@ -722,6 +722,10 @@ fn envelope(
 mod tests;
 
 #[cfg(test)]
+#[path = "window_widen_tests.rs"]
+mod widen_tests;
+
+#[cfg(test)]
 #[path = "window_names_tests.rs"]
 mod names_tests;
 
