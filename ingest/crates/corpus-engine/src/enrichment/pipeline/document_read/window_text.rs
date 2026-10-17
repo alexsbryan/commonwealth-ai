@@ -16,27 +16,32 @@ const NO_OWN_LINE: &str =
 /// embeds (`line_classes.rs`). A reply's quoted history is the earlier
 /// message's, which the window holds under its own date or another window
 /// does; read here, it states the earlier stage under the later date. What a
-/// claim cites and its sentence is widened in (`sentence_of`).
+/// claim cites and its sentence is widened in (`sentence_of`). Where lines
+/// were removed a blank line stands between the own lines around them, so a
+/// sentence widens only within one run of the body's own lines and what code
+/// cites is a passage of the body validation checks (`claim_evidence_exists`).
 pub(super) fn own_text(doc: &SourceDocument, classes: &LineClasses) -> String {
     let raw = doc.raw_body();
     let lines = super::super::line_classes::lines(&raw);
-    let mut held = 0usize;
-    let own: Vec<&str> = lines
-        .iter()
-        .zip(classes.classes(doc.key(), &raw, &lines))
-        .filter_map(|(line, carried)| match carried {
-            Some(_) => {
-                held += 1;
-                None
-            }
-            None => Some(&raw[line.start..line.end]),
-        })
-        .collect();
-    debug!(document = %doc.key(), lines = lines.len(), held, "document_read/window: carried, header and embedded lines not shown");
+    let (mut own, mut held, mut breaks, mut gap) = (String::new(), 0usize, 0usize, false);
+    for (line, carried) in lines.iter().zip(classes.classes(doc.key(), &raw, &lines)) {
+        if carried.is_some() {
+            held += 1;
+            gap = true;
+            continue;
+        }
+        if !own.is_empty() {
+            breaks += usize::from(gap);
+            own.push_str(if gap { "\n\n" } else { "\n" });
+        }
+        own.push_str(&raw[line.start..line.end]);
+        gap = false;
+    }
+    debug!(document = %doc.key(), lines = lines.len(), held, breaks, "document_read/window: carried, header and embedded lines not shown");
     if own.is_empty() {
         NO_OWN_LINE.to_string()
     } else {
-        own.join("\n")
+        own
     }
 }
 

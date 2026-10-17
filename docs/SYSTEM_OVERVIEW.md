@@ -682,7 +682,10 @@ question the pipeline asks about a type is a method on the resolved
   `document_read/window_text.rs::shown_text`, `LineClasses::sources`), so a reply's referent is read where it
   was written while the quoted text stays unshown and uncitable: a claim whose quote is in the lines its
   document quotes or embeds and not in its own is refused by name (`window.rs::envelope`, `quoted_text`;
-  counted as `carried` on the chapter-read event), a guarantee code makes, not the prompt. Both are offsets into the canonical text
+  counted as `carried` on the chapter-read event), a guarantee code makes, not the prompt. A claim's quote
+  is widened to its sentence only within the run of own lines it stands in (`window_text.rs::own_text`
+  leaves a blank line where lines were removed, `window.rs::sentence_of` stops there), so the evidence code
+  composes is a passage of the body validation checks. Both are offsets into the canonical text
   the reader reads: `SourceDocument::raw_body` prefers the text store's text
   (`corpus_io::document_texts`, attached by `SectionDocuments::with_texts`),
   so no chunk title or overlap is read; a document the store cannot give is
