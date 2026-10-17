@@ -136,6 +136,10 @@ In a POOL LANE (the note that opens this prompt says so):
   commit body, trimmed, never only under `{{log_dir}}`.
 - Readings that touch the plan (P) are pasted in your commit body; the seat
   copies them into P. Never edit files outside this repo.
+- The result verb is written in this file as the template variable `result`
+  in double braces, which ralph's prompt renderer fills as `ralph-result` and
+  eutropia's as `eutropia result`, so the addendum never names either verb as
+  an instruction.
 
 Outside a lane (a REVIEW row in the main tree), mint the same way and run
 `scripts/ralph-decisions.py --write` in the same commit.
