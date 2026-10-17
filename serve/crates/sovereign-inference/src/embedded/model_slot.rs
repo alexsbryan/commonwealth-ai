@@ -4821,15 +4821,8 @@ impl ModelSlot {
             n_batch,
             model_id,
         )?;
-        let mut batch = LlamaBatch::new(n_batch, 1);
         let tail = &tokens[tail_start..];
         let last_idx = tail.len() - 1;
-        for (j, &token) in tail.iter().enumerate() {
-            let absolute_pos = (tail_start + j) as i32;
-            batch
-                .add(token, absolute_pos, &[0], j == last_idx)
-                .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
-        }
         // **TEMPORARY instrumentation (Phase 3c, 2026-05-19).**
         // Promoted to info so we can correlate prefix-cache state
         // with the n_tokens==0 decode failures observed in the gym.
@@ -4840,27 +4833,44 @@ impl ModelSlot {
             new_prefill_tokens = tokens.len() - lcp,
             new_prompt_len = tokens.len(),
             cached_len_at_entry,
-            batch_n_tokens = batch.n_tokens(),
+            batch_n_tokens = tail.len(),
             "prefix_cache: prefill scope"
         );
 
-        // The abort backstop. Over-capacity here is `abort()`, not an Err —
-        // it kills the daemon rather than the request (see
-        // `ensure_batch_decodable`).
-        ensure_batch_decodable(batch.n_tokens() as usize, n_batch, "prefix-reuse prefill")?;
-        if let Err(e) = ctx.decode(&mut batch) {
-            tracing::warn!(
-                error = %e,
-                cache_hit_tokens = lcp,
-                raw_lcp,
-                new_prefill_tokens = tail.len(),
-                new_prompt_len = tokens.len(),
-                cached_len_at_entry,
-                batch_n_tokens = batch.n_tokens(),
-                "prefix_cache: decode failed — state at failure"
-            );
-            return Err(Error::Inference(format!("Prompt decode failed: {e}")));
-        }
+        // A background request's tail is read in parts, pausing between them
+        // while a writer's step is in flight (OICP v0.6 §2.17, PV3b); any
+        // other request's in one. Logits on the prompt's last token only.
+        let mut batch = LlamaBatch::new(n_batch, 1);
+        crate::priority_gate::PriorityGate::process().in_parts(
+            "prefill",
+            tail.len(),
+            crate::priority_gate::BACKGROUND_PART_TOKENS,
+            |part| {
+                batch.clear();
+                for j in part {
+                    batch
+                        .add(tail[j], (tail_start + j) as i32, &[0], j == last_idx)
+                        .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
+                }
+                // The abort backstop. Over-capacity here is `abort()`, not an
+                // Err — it kills the daemon rather than the request (see
+                // `ensure_batch_decodable`).
+                ensure_batch_decodable(batch.n_tokens() as usize, n_batch, "prefix-reuse prefill")?;
+                ctx.decode(&mut batch).map_err(|e| {
+                    tracing::warn!(
+                        error = %e,
+                        cache_hit_tokens = lcp,
+                        raw_lcp,
+                        new_prefill_tokens = tail.len(),
+                        new_prompt_len = tokens.len(),
+                        cached_len_at_entry,
+                        batch_n_tokens = batch.n_tokens(),
+                        "prefix_cache: decode failed — state at failure"
+                    );
+                    Error::Inference(format!("Prompt decode failed: {e}"))
+                })
+            },
+        )?;
         // Decode succeeded — record the new cached sequence so the
         // next call can compute its LCP against this one. The decode
         // loop below mutates `ctx` (KV grows by `n_generated` after

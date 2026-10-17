@@ -81,6 +81,18 @@ pub async fn asked<F: Future>(priority: Option<RequestPriority>, f: F) -> F::Out
     }
 }
 
+/// Wrap a closure that will run on another thread so it serves the request
+/// the call creating it serves: the engine's model work runs on blocking
+/// threads, where a background step pauses between its parts.
+pub fn carry<R>(f: impl FnOnce() -> R) -> impl FnOnce() -> R {
+    let asked = current();
+    move || {
+        let previous = ASKED.with(|a| a.replace(asked));
+        let _restore = Restore(previous);
+        f()
+    }
+}
+
 /// Polls `inner` with `asked` installed, restoring what was there after.
 struct Scoped<F: Future> {
     asked: Asked,
@@ -151,6 +163,19 @@ mod tests {
                 Some(RequestPriority::Background)
             )
         );
+    }
+
+    #[test]
+    fn a_carried_closure_serves_its_request_on_another_thread() {
+        let carried = block_on(asked(Some(RequestPriority::Background), async {
+            carry(|| current().map(|a| a.priority()))
+        }));
+        let seen = std::thread::spawn(move || (carried(), current().is_none()))
+            .join()
+            .unwrap();
+        assert_eq!(seen, (Some(RequestPriority::Background), true));
+        let unasked = carry(|| current().is_none());
+        assert!(std::thread::spawn(unasked).join().unwrap());
     }
 
     #[test]

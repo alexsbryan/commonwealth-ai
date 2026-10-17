@@ -712,12 +712,16 @@ RequestPriority = "interactive" | "background"
   checker's completions. While an `interactive` request's model work is in
   flight, a `background` request starts none: each of its steps waits until
   no interactive model work is in flight, then starts. Work already started
-  finishes; nothing is preempted.
+  is not preempted, but a host may read a background step in parts and
+  start no part while interactive work is in flight; a part already
+  started finishes.
 - **Bounded.** A background step waits at most the host's hold ceiling,
   then starts, so interactive requests in a row cannot starve it. The
   reference host's ceiling is 2 s.
 - **When, never what.** The same request with either priority, or none, is
-  answered the same; only when its model work starts differs.
+  answered the same; only when its model work starts differs. A step read
+  in parts reads the same tokens in the same order, its parts fixed by its
+  length alone, never by timing.
 - **Refused, never defaulted.** A value outside the set is refused (`400`
   or `422`), never read as absent.
 - **Seen.** The host says at debug, for each background step that waited,
@@ -728,7 +732,12 @@ The reference host holds steps at its embedding slot and at the admission
 of its generation slots, the two places its search and verify start model
 work. It runs a request's background steps one at a time, so at most one
 stands between an interactive step and the stage it queues at: background
-steps already queued at a stage would otherwise be served first.
+steps already queued at a stage would otherwise be served first. It reads
+a background completion's prompt in parts of 64 tokens and pauses between
+them while an interactive step is in flight, each pause within the ceiling:
+a checker's prompt read whole held the accelerator for most of a second,
+and an interactive embedding running beside it took up to nine times as
+long as alone.
 
 ## 6. Conformance (additions)
 

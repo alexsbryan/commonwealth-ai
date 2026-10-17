@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use std::sync::Mutex;
 
-use sovereign_contracts::request_priority::asked;
+use sovereign_contracts::request_priority::{asked, carry};
 
 use super::*;
 
@@ -105,4 +105,68 @@ async fn an_unasked_step_passes_while_interactive_work_is_in_flight() {
     let started = Instant::now();
     let _step = gate.step("unasked").await;
     assert!(started.elapsed() < Duration::from_secs(1));
+}
+
+/// How long the writer waited for a fake accelerator while a long step read
+/// eight parts of 50 ms through it, asked as `background` (or unasked, the
+/// control), and the ranges that step read.
+async fn writers_wait_beside_a_long_read(
+    background: Option<RequestPriority>,
+) -> (Duration, Vec<std::ops::Range<usize>>) {
+    let gate = PriorityGate::new(Duration::from_secs(10));
+    let accelerator = Arc::new(Mutex::new(()));
+    let part_time = Duration::from_millis(50);
+    let read = {
+        let (gate, accelerator) = (Arc::clone(&gate), Arc::clone(&accelerator));
+        asked(background, async move {
+            tokio::task::spawn_blocking(carry(move || {
+                let mut ranges = Vec::new();
+                gate.in_parts("fake_prefill", 8, 1, |r| {
+                    let _held = accelerator.lock().unwrap();
+                    std::thread::sleep(part_time * r.len() as u32);
+                    ranges.push(r);
+                    Ok::<_, ()>(())
+                })
+                .unwrap();
+                ranges
+            }))
+            .await
+            .unwrap()
+        })
+    };
+    let read = tokio::spawn(read);
+    // The writer types while the second part is being read.
+    tokio::time::sleep(Duration::from_millis(75)).await;
+    let waited = asked(Some(RequestPriority::Interactive), async {
+        let _step = gate.step("fake_embed").await;
+        let arrived = Instant::now();
+        tokio::task::spawn_blocking(move || {
+            let _held = accelerator.lock().unwrap();
+            arrived.elapsed()
+        })
+        .await
+        .unwrap()
+    })
+    .await;
+    (waited, read.await.unwrap())
+}
+
+/// PV3b's failing input: a writer's step arriving while one long background
+/// step reads through the stage waits behind at most one part of it; unasked,
+/// it waits the whole remaining read. Either way the step reads every part,
+/// in order.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_writer_waits_behind_one_part_of_a_long_background_read() {
+    let (waited, ranges) = writers_wait_beside_a_long_read(Some(RequestPriority::Background)).await;
+    assert!(
+        waited < Duration::from_millis(160),
+        "the writer waited {waited:?}"
+    );
+    assert_eq!(ranges, (0..8).map(|i| i..i + 1).collect::<Vec<_>>());
+    let (unasked, ranges) = writers_wait_beside_a_long_read(None).await;
+    assert!(
+        unasked > Duration::from_millis(250),
+        "the control: unasked, the writer waits out the read ({unasked:?})"
+    );
+    assert_eq!(ranges, vec![0..8]);
 }

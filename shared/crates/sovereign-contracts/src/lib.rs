@@ -21,6 +21,7 @@ pub use oicp_types as oicp;
 pub mod admission_wire;
 pub mod ask_discipline;
 pub mod baselines;
+pub mod call_scope;
 /// `.sovereign/sovereign.toml` — the per-project watcher configuration. Moved
 /// down from `corpus-engine` so a caller that only reads the operator's
 /// watcher posture does not link the knowledge engine; corpus-engine
