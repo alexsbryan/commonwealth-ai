@@ -43,3 +43,22 @@ fresh reads (fold b). saltgrass-teacher: voice2-teacher and one new fresh read (
 1. Fold a and fold b agree on at least 36 of 42.
 2. Each asked fold scores at least 31 (single reads at this code: 29, 30), and fold t at least 32 (single: 32).
 3. Folds a and b each agree with fold t on at least 33 (single reads at this code: 31 and 30).
+
+## Step 3: smaller windows (pre-registered 2026-10-17, after step 2's reads, before any step-3 read)
+
+**Step 2's result.** Asked folds 31 and 34 agreeing on 35, teacher fold 34, cross 31 and 32: bar 2 passed, 1 and 3
+failed. The folds disagree on facts only one of them holds, so a read's chance of writing a fact is the noise.
+
+**Change (DIAGNOSTIC, uncommitted).** `window_manifest::WINDOW_CHARS` 20,000 (40,000), re-cut by `INIT=1`; the reader
+is HEAD's (thinking on). Nothing else.
+
+**Reads.** saltgrass-asked twice, saltgrass-teacher once, fresh (`ASKER=daemon`). Judge 77495a0bde1d.
+
+**Passes when all three hold.**
+1. The two asked reads agree on at least 36 of 42 (single 40k reads at this code: 33-34 over six pairs).
+2. Each asked read scores at least 31 and teacher at least 32 (40k singles: asked 29, 30, 26, 32; teacher 32, 27).
+3. The mean agreement of the two asked reads with teacher is at least 33.25 (40k singles: mean 33.25 over eight
+   pairs).
+
+Reported beside the bars, no bar: windows, claims per window and in all, answer tokens per window. Mail is not read
+here; a pass is a candidate default only after the inner ring is read at 20k.
