@@ -28,3 +28,18 @@ answer tokens per window.
 **If 1 passes and 2 fails,** the next step is reading each window twice with thinking on and folding the reads
 (the plan of 2026-10-16, step 2). **If 1 fails,** temperature 0 without thinking does not make DeepSeek's reads
 repeatable, and step 2 is next either way.
+
+## Step 2: read twice, fold (pre-registered 2026-10-17, after step 1's reads, before any step-2 read)
+
+**Change (prototype, no product code).** `loop/fold_reads.py` folds two recorded thinking reads of each window into
+one answer: B's particulars map onto A's by a shared name or, failing that, by evidence (B's claims about it cite
+what A's claims about one A particular of its type cite); B's claims are added unless A holds the same kind about
+the same particular with an overlapping quote. The fold is replayed through the public commands (`ASKER=replay`).
+
+**Reads.** HEAD's reader (thinking on, ebdf1eab5). saltgrass-asked: voice2-sg1 and voice2-sg2 (fold a) and two new
+fresh reads (fold b). saltgrass-teacher: voice2-teacher and one new fresh read (fold t). Judge 77495a0bde1d.
+
+**Passes when all three hold.**
+1. Fold a and fold b agree on at least 36 of 42.
+2. Each asked fold scores at least 31 (single reads at this code: 29, 30), and fold t at least 32 (single: 32).
+3. Folds a and b each agree with fold t on at least 33 (single reads at this code: 31 and 30).
