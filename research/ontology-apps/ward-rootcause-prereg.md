@@ -54,3 +54,13 @@ second on the first's cut), HEAD's reader. The worlds are not re-ingested in thi
 Reported beside the bars, no bar: pasadena-d1 (its gold names one deal where the recipe's identity rule names two,
 and the one-shot serves it 0 of 2), every Ward deal's served count beside the 11 earlier reads, windows and answer
 tokens, and claims that cite an embedded message, with their date basis.
+
+**Result (nest-w1, nest-w2 at f48e3ef10; 199k answer tokens).** Bars 1 and 2 pass, bar 3 fails: Ward serves 7 and 6,
+mean 6.5 against 7. tep-d4 and tep-d6 are served in both reads, each through a claim citing an embedded message (12 of
+27 and 17 of 37 claims cite one; by date basis 5 and 6 header, 7 and 11 before the carrier). The cut is now 5 windows,
+the fifth pasadena/37 alone. Lost against the step-1 replays: pasadena-d8 0 of 2 (alone in its window, the reader reads
+its own lines under "[quoted from a document ... outside this window]" as quoted: "an email with no new text"); tep-d2
+0 of 2 (tep-d5's now-visible evidence is merged into its record; in nest-w2 RESOLVE picks it over none); pasadena-d4 0
+of 2 (split, then merged with pasadena-d2 by RESOLVE). pasadena-d1 0 of 2. Per deal, 11 earlier reads -> nest-w1,
+nest-w2: p-d1 0,0,0  p-d2 3,0,0  p-d3 10,1,1  p-d4 4,0,0  p-d5 5,1,0  p-d6 0,0,0  p-d7 11,1,1  p-d8 4,0,0  t-d1 8,1,1
+t-d2 7,0,0  t-d3 10,1,1  t-d4 0,1,1  t-d5 6,0,0  t-d6 0,1,1 (the 11 earlier reads average 6.2).
