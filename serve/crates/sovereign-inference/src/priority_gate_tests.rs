@@ -170,3 +170,73 @@ async fn a_writer_waits_behind_one_part_of_a_long_background_read() {
     );
     assert_eq!(ranges, vec![0..8]);
 }
+
+/// How long the writer waited for a fake embed context while a long batch
+/// embedded eight sub-batches of 50 ms under it, asked as `background` (or
+/// unasked, the control), and how many times the batch took the context.
+async fn writers_wait_beside_a_long_batch(
+    background: Option<RequestPriority>,
+) -> (Duration, usize) {
+    let gate = PriorityGate::new(Duration::from_secs(10));
+    let context = Arc::new(Mutex::new(()));
+    let sub_batch = Duration::from_millis(50);
+    let batch = {
+        let (gate, context) = (Arc::clone(&gate), Arc::clone(&context));
+        asked(background, async move {
+            tokio::task::spawn_blocking(carry(move || {
+                let (mut taken, mut left) = (0, 8);
+                gate.parts_under(
+                    "fake_embed_batch",
+                    || {
+                        taken += 1;
+                        context.lock().unwrap()
+                    },
+                    |_held| {
+                        std::thread::sleep(sub_batch);
+                        left -= 1;
+                        Ok::<_, ()>(left > 0)
+                    },
+                )
+                .unwrap();
+                taken
+            }))
+            .await
+            .unwrap()
+        })
+    };
+    let batch = tokio::spawn(batch);
+    // The writer's embed arrives during the second sub-batch.
+    tokio::time::sleep(Duration::from_millis(75)).await;
+    let waited = asked(Some(RequestPriority::Interactive), async {
+        let _step = gate.step("fake_embed").await;
+        let arrived = Instant::now();
+        tokio::task::spawn_blocking(move || {
+            let _held = context.lock().unwrap();
+            arrived.elapsed()
+        })
+        .await
+        .unwrap()
+    })
+    .await;
+    (waited, batch.await.unwrap())
+}
+
+/// PV3c's failing input: a writer's embed arriving while a long background
+/// embed batch holds the embed context waits behind at most one sub-batch,
+/// the batch taking the context once a sub-batch; unasked, the batch holds
+/// it throughout and the writer waits out the rest.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_writers_embed_waits_behind_one_sub_batch_of_a_background_batch() {
+    let (waited, taken) = writers_wait_beside_a_long_batch(Some(RequestPriority::Background)).await;
+    assert!(
+        waited < Duration::from_millis(160),
+        "the writer waited {waited:?}"
+    );
+    assert_eq!(taken, 8);
+    let (unasked, taken) = writers_wait_beside_a_long_batch(None).await;
+    assert!(
+        unasked > Duration::from_millis(250),
+        "the control: unasked, the writer waits out the batch ({unasked:?})"
+    );
+    assert_eq!(taken, 1);
+}

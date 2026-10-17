@@ -14,7 +14,8 @@
 //! A step already running is not preempted, but a background one long enough
 //! to matter is read in parts ([`PriorityGate::in_parts`]): a completion's
 //! prompt, which holds the accelerator longest, pauses between its parts
-//! while an interactive step is in flight.
+//! while an interactive step is in flight, and a background embed batch lets
+//! the embed context go between its sub-batches ([`PriorityGate::parts_under`]).
 //!
 //! Why here: on 2026-10-16 a warm summon's query embed took p50 249 ms under a
 //! draft's checks against 77 ms idle, and the checks' verify ran 126 primary
@@ -167,10 +168,8 @@ impl PriorityGate {
         part: usize,
         mut read: impl FnMut(std::ops::Range<usize>) -> Result<(), E>,
     ) -> Result<(), E> {
-        let background = request_priority::current()
-            .is_some_and(|a| a.priority() == RequestPriority::Background);
         let part = part.max(1);
-        if !background || len <= part {
+        if !Self::in_background() || len <= part {
             return read(0..len);
         }
         tracing::trace!(target: TARGET, phase, len, part, "priority: background read in parts");
@@ -184,6 +183,38 @@ impl PriorityGate {
             from = to;
         }
         Ok(())
+    }
+
+    /// Runs `part` under the hold `acquire` returns until `part` answers that
+    /// none is left. A background request lets the hold go between parts and
+    /// takes it again after pausing while an interactive step is in flight
+    /// (each pause bounded by the ceiling), so a writer's step queued at the
+    /// same lock goes between them (PV3c); any other request runs every part
+    /// under one hold, as before. Blocking, for the thread doing the model
+    /// work. Where parts fall is `part`'s to say, never timing's.
+    pub fn parts_under<G, E>(
+        &self,
+        phase: &'static str,
+        mut acquire: impl FnMut() -> G,
+        mut part: impl FnMut(&mut G) -> Result<bool, E>,
+    ) -> Result<(), E> {
+        let background = Self::in_background();
+        let mut held = acquire();
+        let mut at = 0;
+        while part(&mut held)? {
+            at += 1;
+            if background {
+                drop(held);
+                self.pause_between_parts(phase, at);
+                held = acquire();
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether the request the running thread serves asked as background.
+    fn in_background() -> bool {
+        request_priority::current().is_some_and(|a| a.priority() == RequestPriority::Background)
     }
 
     /// Blocks while an interactive step is in flight, at most the ceiling.

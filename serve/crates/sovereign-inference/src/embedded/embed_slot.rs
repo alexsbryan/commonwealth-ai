@@ -450,7 +450,6 @@ impl EmbedSlot {
         }
 
         let batch_start = std::time::Instant::now();
-        let mut ctx_lock = slot.contexts[0].blocking_lock();
         let mut results: Vec<Vec<f32>> = Vec::with_capacity(inputs.len());
 
         let mut sub_batches = 0usize;
@@ -466,87 +465,95 @@ impl EmbedSlot {
         // `NoKvCacheSlot` at decode time on real-world corpora.
         let pack_budget = slot.ctx_tokens.saturating_sub(slot.ctx_tokens / 10);
 
-        while cursor < prepared.len() {
-            // Greedily accumulate sequences into `batch` until the
-            // next one would overflow either bound. `take >= 1`
-            // always — a single input exceeding ctx_tokens already
-            // had its tokens truncated to max_input_tokens, and
-            // max_input_tokens ≤ ctx_tokens / n_seq_max by
-            // construction at `EmbedSlot::load`.
-            batch.clear();
-            let mut tokens_in_batch = 0usize;
-            let mut seqs_in_batch = 0usize;
-            let sub_start = cursor;
+        // A background request's sub-batches each take the context and let it
+        // go after, so a writer's embed queued at it goes between them (PV3c);
+        // the KV cache is cleared before every decode, so nothing carries over.
+        let gate = crate::priority_gate::PriorityGate::process();
+        gate.parts_under(
+            "embed_batch",
+            || slot.contexts[0].blocking_lock(),
+            |ctx_lock| {
+                // Greedily accumulate sequences into `batch` until the
+                // next one would overflow either bound. `take >= 1`
+                // always — a single input exceeding ctx_tokens already
+                // had its tokens truncated to max_input_tokens, and
+                // max_input_tokens ≤ ctx_tokens / n_seq_max by
+                // construction at `EmbedSlot::load`.
+                batch.clear();
+                let mut tokens_in_batch = 0usize;
+                let mut seqs_in_batch = 0usize;
+                let sub_start = cursor;
 
-            while cursor < prepared.len() {
-                let next_len = prepared[cursor].len().max(1);
-                if seqs_in_batch > 0
-                    && (tokens_in_batch + next_len > pack_budget
-                        || seqs_in_batch + 1 > slot.n_seq_max)
-                {
-                    break;
-                }
-                let seq_id = seqs_in_batch as i32;
-                let toks = &prepared[cursor];
-                if toks.is_empty() {
-                    // Zero-token input: record a sentinel so we
-                    // can inject a zero vector without running it
-                    // through llama.cpp (adding zero tokens to a
-                    // batch is a no-op that then has no seq to
-                    // read from).
-                    // We handle this by NOT advancing seqs_in_batch
-                    // for this input; instead we account for it
-                    // after the decode. Track its global index.
-                    // Simpler: fabricate a synthetic token? Cheaper
-                    // to skip. We'll handle below by post-filling.
-                } else {
-                    for (pos, &tok) in toks.iter().enumerate() {
-                        batch.add(tok, pos as i32, &[seq_id], true).map_err(|e| {
-                            Error::Inference(format!("Embed batch add failed: {e}"))
-                        })?;
+                while cursor < prepared.len() {
+                    let next_len = prepared[cursor].len().max(1);
+                    if seqs_in_batch > 0
+                        && (tokens_in_batch + next_len > pack_budget
+                            || seqs_in_batch + 1 > slot.n_seq_max)
+                    {
+                        break;
                     }
-                    tokens_in_batch += next_len;
-                    seqs_in_batch += 1;
+                    let seq_id = seqs_in_batch as i32;
+                    let toks = &prepared[cursor];
+                    if toks.is_empty() {
+                        // Zero-token input: record a sentinel so we
+                        // can inject a zero vector without running it
+                        // through llama.cpp (adding zero tokens to a
+                        // batch is a no-op that then has no seq to
+                        // read from).
+                        // We handle this by NOT advancing seqs_in_batch
+                        // for this input; instead we account for it
+                        // after the decode. Track its global index.
+                        // Simpler: fabricate a synthetic token? Cheaper
+                        // to skip. We'll handle below by post-filling.
+                    } else {
+                        for (pos, &tok) in toks.iter().enumerate() {
+                            batch.add(tok, pos as i32, &[seq_id], true).map_err(|e| {
+                                Error::Inference(format!("Embed batch add failed: {e}"))
+                            })?;
+                        }
+                        tokens_in_batch += next_len;
+                        seqs_in_batch += 1;
+                    }
+                    cursor += 1;
                 }
-                cursor += 1;
-            }
 
-            // Decode whatever sequences were packed. If every
-            // input in the range was empty, `seqs_in_batch == 0`
-            // and we skip the decode entirely.
-            if seqs_in_batch > 0 {
-                ctx_lock.ctx.clear_kv_cache();
-                // See run_embed_sync for why this per-decode toggle
-                // is load-bearing on llama-cpp-4 0.2.x.
-                super::ffi_trace::record(super::ffi_trace::FfiCall::SetEmbeddings);
-                ctx_lock.ctx.set_embeddings(true);
-                ctx_lock
-                    .ctx
-                    .decode(&mut batch)
-                    .map_err(|e| Error::Inference(format!("Embed decode failed: {e}")))?;
-                super::ffi_trace::record(super::ffi_trace::FfiCall::EmbedDecode);
-            }
-
-            // Walk the inputs that belonged to this sub-batch and
-            // emit one embedding per input, mapping local seq_id
-            // back to the original input slot. Empty inputs get
-            // zero vectors of the right length. Non-empty inputs
-            // read the libllama-pooled vector via `embeddings_seq_ith`.
-            let mut local_seq: i32 = 0;
-            for prepared_item in &prepared[sub_start..cursor] {
-                if prepared_item.is_empty() {
-                    results.push(vec![0.0; slot.n_embd]);
-                } else {
-                    let raw = ctx_lock
+                // Decode whatever sequences were packed. If every
+                // input in the range was empty, `seqs_in_batch == 0`
+                // and we skip the decode entirely.
+                if seqs_in_batch > 0 {
+                    ctx_lock.ctx.clear_kv_cache();
+                    // See run_embed_sync for why this per-decode toggle
+                    // is load-bearing on llama-cpp-4 0.2.x.
+                    super::ffi_trace::record(super::ffi_trace::FfiCall::SetEmbeddings);
+                    ctx_lock.ctx.set_embeddings(true);
+                    ctx_lock
                         .ctx
-                        .embeddings_seq_ith(local_seq)
-                        .map_err(|e| Error::Inference(format!("Failed to read embedding: {e}")))?;
-                    results.push(l2_normalize(raw.to_vec()));
-                    local_seq += 1;
+                        .decode(&mut batch)
+                        .map_err(|e| Error::Inference(format!("Embed decode failed: {e}")))?;
+                    super::ffi_trace::record(super::ffi_trace::FfiCall::EmbedDecode);
                 }
-            }
-            sub_batches += 1;
-        }
+
+                // Walk the inputs that belonged to this sub-batch and
+                // emit one embedding per input, mapping local seq_id
+                // back to the original input slot. Empty inputs get
+                // zero vectors of the right length. Non-empty inputs
+                // read the libllama-pooled vector via `embeddings_seq_ith`.
+                let mut local_seq: i32 = 0;
+                for prepared_item in &prepared[sub_start..cursor] {
+                    if prepared_item.is_empty() {
+                        results.push(vec![0.0; slot.n_embd]);
+                    } else {
+                        let raw = ctx_lock.ctx.embeddings_seq_ith(local_seq).map_err(|e| {
+                            Error::Inference(format!("Failed to read embedding: {e}"))
+                        })?;
+                        results.push(l2_normalize(raw.to_vec()));
+                        local_seq += 1;
+                    }
+                }
+                sub_batches += 1;
+                Ok::<_, Error>(cursor < prepared.len())
+            },
+        )?;
 
         let total_ms = batch_start.elapsed().as_millis();
         let seqs_per_sec = if total_ms > 0 {

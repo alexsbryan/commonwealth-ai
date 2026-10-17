@@ -737,7 +737,10 @@ a background completion's prompt in parts of 64 tokens and pauses between
 them while an interactive step is in flight, each pause within the ceiling:
 a checker's prompt read whole held the accelerator for most of a second,
 and an interactive embedding running beside it took up to nine times as
-long as alone.
+long as alone. A background embedding batch likewise lets the embedding
+context go between its sub-batches and pauses while an interactive step is
+in flight: held across a whole batch, it kept a writer's query embedding
+waiting 300 to 540 ms.
 
 ## 6. Conformance (additions)
 
