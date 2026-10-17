@@ -133,7 +133,9 @@ reader before that, on 2026-10-09.
 `enrich init` cuts the corpus into windows: every document in declared-clock order, cut by size where a document
 ends; a document longer than a window (a novel, a long report) is cut where the recipe's chunker cut it, its parts
 read in their own windows and its statements anchored in the whole, so prompt and reasoned answer fit 128k
-(`sovereign-enrichment-build/src/window_manifest.rs`). One call reads a window, reasoning before it answers,
+(`sovereign-enrichment-build/src/window_manifest.rs`). A call writes about as many statements whatever it is shown, so
+the window's size decides how much of a document becomes statements, and with it how often two reads, and two
+recipes' reads, agree: at 20,000 characters as often as the one-shot agrees with itself (`determinism-prereg.md`). One call reads a window, reasoning before it answers,
 prompted from the contract alone, a pure function of it, unchanged by renaming: the ontology rendered (each
 statement kind with its subject type and fields, each field's family and closed values), then each document under
 its label with its declared facts above its text: the fields the declaration stamps or its metadata sources read,

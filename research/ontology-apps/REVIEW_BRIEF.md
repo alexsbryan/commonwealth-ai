@@ -16,6 +16,12 @@ The window reader is the product's one reader (5f2711847; the passes reader dele
 served against the one-shot's 68/93 (arms structural-fresh and structural-fresh-s1, the diagnosed set). Ward: 8/14,
 tied with the one-shot. Saltgrass, held out (`generality-prereg.md`): Bar G passes (the ledger recipe's 28.5 against
 the one-shot's 25.5), Bar R fails on 7 of 10 recipe pairs, on agreement (778461d0e).
+Windows are 20,000 characters since 2026-10-17 (determinism-prereg.md): a call writes about as many statements
+whatever it is shown, so smaller windows write more of each document. Same-recipe reads of saltgrass-asked went from
+26-32 agreeing on 33-34 of 42 to 37 and 37 agreeing on 36 (the one-shot: 37); the held-out recipes agree on 32.6
+(29.2), Bar G 30.5; mail kept its deals for about 1.7x the answer tokens. Thinking off and folding two reads were
+measured first and failed. One window in about a thousand writes its field values beside `fields`, losing them
+(world-s1 window 7 at 20k); queued.
 Who says it (b34ee699b, ebdf1eab5, voice-prereg.md) is kept on the cut line (operator, 2026-10-16): it passed
 its three target bars and missed the mail guard by one deal (31 against 32, note dcdfeb8f); the first change found
 later that jumps the objective and conflicts with it takes precedence, and this is the first thing to cut.
@@ -58,7 +64,7 @@ The percentages are my estimates, not measurements.
 2. ~~Product~~ (done: the window reader is the default commands' reader, 5f2711847).
 3. ~~Saltgrass~~ (done: blind recipes through the same commands, scored by its question banks; above).
 4. **The model track.** Engineer the system down to the local model. Filed 2026-10-15 (Qwen 35B-A3B, thinking
-   on, product window reader, world-s4; `runs/loop/local35b-s4-think{,-w20k,-w10k}`): 3/15 at the default 40k-char
+   on, product window reader, world-s4; `runs/loop/local35b-s4-think{,-w20k,-w10k}`): 3/15 at the then-default 40k-char
    window, 5/15 at 20k, against DeepSeek's 9-10/15. The losses are per call, not the design: the model plans a
    window's claims in its reasoning and drops some writing one long answer (9 of 38 on the densest window), and
    gold-document recall rises as windows shrink (67%, 75%, 86% at 40k, 20k, 10k). Window size is the first knob.

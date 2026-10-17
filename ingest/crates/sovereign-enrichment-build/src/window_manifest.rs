@@ -19,15 +19,18 @@ use corpus_index::index::EnrichmentChunkRow;
 use serde_json::{Map, Value};
 use tracing::{debug, info, warn};
 
-/// The most characters of stored text one window holds, about 10k tokens at
-/// the 4.2 characters a token measured on mail (49k prompt tokens for world-s4's
-/// 190k characters). The answer grows with the window: at about 120k characters
-/// world-s4's answer passed 8k tokens and was cut off, and Ward's whole 37
-/// messages drew a 30k-token prompt and a 6.8k-token answer (2026-10-13). Here
-/// prompt and the reasoned answer (`window.rs`, 64k) fit the 128k context the system is held
-/// to (REVIEW_BRIEF, "no one-way doors"). A cost bound: it sets how many
-/// calls a corpus takes, never what a record says.
-pub const WINDOW_CHARS: usize = 40_000;
+/// The most characters of stored text one window holds, about 5k tokens at the
+/// 4.2 characters a token measured on mail. A reader writes about as many
+/// statements per call whatever it is shown (21-38 per saltgrass window at 20k
+/// and at 40k), so the size sets how much of a document becomes statements, not
+/// only how many calls a corpus takes: at 20k saltgrass-asked read 37 and 37 of
+/// 42 agreeing on 36, at 40k 26-32 agreeing on 33-34, and the held-out recipes
+/// agree with each other on 32.6 against 29.2 (`determinism-prereg.md`,
+/// 2026-10-17). Mail kept its deals (world-s3 + ward-story 33 of 41, 31 at 40k)
+/// for about 1.7x the answer tokens. Prompt and the reasoned answer
+/// (`window.rs`, 64k) fit the 128k context the system is held to
+/// (REVIEW_BRIEF, "no one-way doors").
+pub const WINDOW_CHARS: usize = 20_000;
 
 /// What a window holds of one document: all of it, or a run of its chunks.
 struct Piece<'a> {

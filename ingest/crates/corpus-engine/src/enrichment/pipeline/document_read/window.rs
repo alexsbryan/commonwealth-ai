@@ -40,7 +40,7 @@ pub(super) const WINDOW_PHASE: &str = "document_window";
 const PROMPT: &str = include_str!("window_prompt.md");
 const SYSTEM: &str = "You read documents and write what an ontology describes, as JSON.";
 /// The answer a window's call is given, its reasoning included: the engine
-/// counts both against it. A window holds about 10k tokens
+/// counts both against it. A window holds about 5k tokens
 /// (`window_manifest::WINDOW_CHARS`), so prompt and answer fit 128k, the
 /// context the system is held to (a 64GB machine on a capable local model,
 /// operator 2026-10-14). The longest reasoning and answer on the worlds'
