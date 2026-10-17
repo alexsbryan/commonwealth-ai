@@ -261,9 +261,16 @@ async fn the_floor_is_the_data_files_and_a_verdict_moves_with_it() {
     let (c, r) = verify_one(&state, &fx, RESTATED, "fast").await;
     assert_eq!(c.verdict, VerifyVerdict::Abstained, "{r:?}");
     assert!(!c.evidence.is_empty(), "{c:?}");
-    assert!(r.verifier.contains(" floor=0.5 "), "{}", r.verifier);
+    let floor = SentenceSearchConfig::parse(DATA_FILE)
+        .expect("the shipped data file parses")
+        .verify_floor;
+    assert!(
+        r.verifier.contains(&format!(" floor={floor} ")),
+        "{}",
+        r.verifier
+    );
 
-    let raised = DATA_FILE.replace("verify_floor = 0.5", "verify_floor = 0.999");
+    let raised = DATA_FILE.replace(&format!("verify_floor = {floor}"), "verify_floor = 0.999");
     assert_ne!(raised, DATA_FILE, "the data file names its floor");
     state
         .inner
