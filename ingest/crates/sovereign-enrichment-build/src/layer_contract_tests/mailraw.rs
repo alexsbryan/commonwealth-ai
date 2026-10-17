@@ -44,11 +44,14 @@ async fn no_window_shows_a_header_line_as_its_own() {
     assert!(headers.is_empty(), "header lines were shown: {headers:?}");
 }
 
-/// A forwarded message that is not in the corpus is no statement of the
-/// message carrying it: none of its lines is shown as the forward's own, so
-/// nothing it says is dated or authored by the forward, and no claim cites it.
+/// A forwarded message that is not in the corpus is a message of its own,
+/// never a statement of the message carrying it: none of its lines is shown
+/// as the forward's own, and every claim citing it is the embedded
+/// message's, dated and authored by its own header (Sam Reed, 3 March), not
+/// by the forward (Mia Holt, 4 March). Until 2026-10-17 such a message was
+/// read nowhere (ward-story tep/10., note f9142d79).
 #[tokio::test]
-async fn no_line_of_an_embedded_message_is_shown_or_cited() {
+async fn an_embedded_message_is_read_as_its_own_and_never_as_the_forwards() {
     let run = run(&Fixture::ingest(SHAPE).await).await;
     let shown = own_lines(&run, Some("message_id: <n2@alderpine.example>"));
     assert!(
@@ -59,19 +62,32 @@ async fn no_line_of_an_embedded_message_is_shown_or_cited() {
     );
     assert!(
         !shown.iter().any(|l| l.contains(FORWARDED)),
-        "a line of the embedded message was shown: {shown:?}"
+        "a line of the embedded message was shown as the forward's: {shown:?}"
     );
-    let citing: Vec<String> = run
-        .atoms()
+    assert!(
+        own_lines(&run, None).iter().any(|l| l.contains(FORWARDED)),
+        "the embedded message is shown as a message of its own"
+    );
+    let atoms = run.atoms();
+    let citing: Vec<&serde_json::Value> = atoms
         .iter()
         .filter(|a| a["atom_type"] == "Claim")
         .filter(|a| a.to_string().contains(FORWARDED))
-        .map(|a| a["data"]["id"].to_string())
+        .map(|a| &a["data"]["attributes"])
         .collect();
-    assert!(
-        citing.is_empty(),
-        "claims cite the embedded message: {citing:?}"
-    );
+    assert!(!citing.is_empty(), "no claim cites the embedded message");
+    for attributes in citing {
+        let id = attributes["document_id"].as_str().unwrap_or_default();
+        let date = attributes["document_date"].as_str().unwrap_or_default();
+        assert!(
+            id.starts_with("embedded-"),
+            "cited as the forward's: {attributes}"
+        );
+        assert!(
+            date.starts_with("2026-03-04T00:20"),
+            "not its own header's date: {attributes}"
+        );
+    }
 }
 
 /// What RESOLVE shows of a record is what a reader would recognise it by: an

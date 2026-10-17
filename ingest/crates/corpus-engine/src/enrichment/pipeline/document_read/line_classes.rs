@@ -71,8 +71,18 @@ impl LineClass {
 #[derive(Debug, Default)]
 struct Layout {
     body_start: usize,
-    /// Each embedded message: (start, where its own header block ends, end).
-    segments: Vec<(usize, usize, usize)>,
+    segments: Vec<Segment>,
+}
+
+/// One embedded message's span, and the document that is that message when
+/// the extractor wrote it as one of its own.
+#[derive(Debug)]
+struct Segment {
+    start: usize,
+    /// Where its own header block ends.
+    header_end: usize,
+    end: usize,
+    message: Option<String>,
 }
 
 impl Layout {
@@ -126,7 +136,15 @@ impl Layout {
             {
                 return Err("a segment outside its text");
             }
-            segments.push((start, header_end, end));
+            segments.push(Segment {
+                start,
+                header_end,
+                end,
+                message: s
+                    .get("message")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string),
+            });
         }
         Ok(Some(Self {
             body_start,
@@ -138,15 +156,20 @@ impl Layout {
     /// embedded message's is a header line; the rest of an embedded message
     /// is embedded.
     fn class(&self, line_start: usize) -> Option<LineClass> {
-        let in_header = |&(s, h, _): &(usize, usize, usize)| (s..h).contains(&line_start);
-        let in_segment = |&(s, _, e): &(usize, usize, usize)| (s..e).contains(&line_start);
-        if line_start < self.body_start || self.segments.iter().any(in_header) {
+        let in_header = |s: &&Segment| (s.start..s.header_end).contains(&line_start);
+        if line_start < self.body_start || self.segments.iter().any(|s| in_header(&s)) {
             Some(LineClass::Field)
-        } else if self.segments.iter().any(in_segment) {
+        } else if self.segment(line_start).is_some() {
             Some(LineClass::Embedded)
         } else {
             None
         }
+    }
+
+    fn segment(&self, line_start: usize) -> Option<&Segment> {
+        self.segments
+            .iter()
+            .find(|s| (s.start..s.end).contains(&line_start))
     }
 }
 
@@ -180,11 +203,19 @@ pub struct LineClasses {
     /// Two texts' ids, the second the next line after the first → the
     /// documents holding them so.
     passages: HashMap<(u32, u32), Holders>,
+    /// `lines` and `passages` as each document holds them in its own text,
+    /// outside its header and the messages it embeds: what an embedded
+    /// message's lines are owned against, since its carrier's copy is it.
+    own_lines: HashMap<u32, BTreeMap<String, Holders>>,
+    own_passages: HashMap<(u32, u32), Holders>,
     /// Document key → its layout, for documents whose extractor stated one
     /// that agrees with their canonical text.
     layouts: HashMap<String, Layout>,
     /// Each document's date as the declared clock reads it, by index.
     dates: Vec<Option<String>>,
+    /// Whether each document, by index, is a message another one embeds that
+    /// the extractor wrote as a document of its own (`embedded_in`).
+    derived: Vec<bool>,
 }
 
 /// A line's text as compared: from its first to its last letter or digit,
@@ -211,6 +242,28 @@ pub(super) fn mark(text: &str) -> String {
         .take_while(|c| !c.is_alphanumeric())
         .filter(|c| !c.is_whitespace())
         .collect()
+}
+
+/// Index one line of a document: its text under its mark, and the passage it
+/// makes with the line before it.
+fn hold(
+    lines: &mut HashMap<u32, BTreeMap<String, Holders>>,
+    passages: &mut HashMap<(u32, u32), Holders>,
+    previous: &mut Option<u32>,
+    id: u32,
+    mark: String,
+    holder: (u32, u32),
+) {
+    lines
+        .entry(id)
+        .or_default()
+        .entry(mark)
+        .or_default()
+        .insert(holder);
+    if let Some(previous) = *previous {
+        passages.entry((previous, id)).or_default().insert(holder);
+    }
+    *previous = Some(id);
 }
 
 impl LineClasses {
@@ -250,6 +303,7 @@ impl LineClasses {
             out.docs.insert(d.key().to_string(), (index as u32, None));
             out.keys.push(d.key().to_string());
             out.dates.push(date.clone());
+            out.derived.push(d.metadata().contains_key("embedded_in"));
             match Layout::of(d) {
                 Ok(Some(layout)) => {
                     laid += 1;
@@ -282,30 +336,46 @@ impl LineClasses {
                 entry.1 = Some(rank);
             }
             let holder = (rank, index as u32);
-            let mut previous = None;
-            for line in d.raw_body().lines() {
-                let Some(key) = line_key(line) else {
+            let raw = d.raw_body();
+            let ls = lines(&raw);
+            let layout = out.layouts.get(d.key());
+            let owned: Vec<bool> = ls
+                .iter()
+                .map(|l| layout.is_none_or(|layout| layout.class(l.start).is_none()))
+                .collect();
+            let (mut previous, mut previous_own) = (None, None);
+            for (line, own) in ls.iter().zip(owned) {
+                let text = &raw[line.start..line.end];
+                let Some(key) = line_key(text) else {
                     continue;
                 };
                 let next = out.texts.len() as u32;
                 let id = *out.texts.entry(key).or_insert(next);
-                out.lines
-                    .entry(id)
-                    .or_default()
-                    .entry(mark(line))
-                    .or_default()
-                    .insert(holder);
-                if let Some(previous) = previous {
-                    out.passages
-                        .entry((previous, id))
-                        .or_default()
-                        .insert(holder);
+                hold(
+                    &mut out.lines,
+                    &mut out.passages,
+                    &mut previous,
+                    id,
+                    mark(text),
+                    holder,
+                );
+                if own {
+                    hold(
+                        &mut out.own_lines,
+                        &mut out.own_passages,
+                        &mut previous_own,
+                        id,
+                        mark(text),
+                        holder,
+                    );
+                } else {
+                    previous_own = None;
                 }
-                previous = Some(id);
             }
         }
         tracing::debug!(
             documents = out.docs.len(),
+            derived = out.derived.iter().filter(|d| **d).count(),
             dated = out.docs.values().filter(|(_, rank)| rank.is_some()).count(),
             texts = out.texts.len(),
             passages = out.passages.len(),
@@ -343,21 +413,44 @@ impl LineClasses {
     /// Each of `lines`, the texts of `document`'s lines in order, that is
     /// carried from an earlier document.
     fn carried(&self, document: &str, lines: &[&str]) -> Vec<Option<Carried<'_>>> {
+        match self.docs.get(document) {
+            Some(&(me, Some(rank))) => self.carried_by(me, rank, lines),
+            _ => vec![None; lines.len()],
+        }
+    }
+
+    /// `carried` for the document at index `me`, dated at `rank`.
+    fn carried_by(&self, me: u32, rank: u32, lines: &[&str]) -> Vec<Option<Carried<'_>>> {
         let mut out = vec![None; lines.len()];
-        let Some(&(me, Some(rank))) = self.docs.get(document) else {
-            return out;
-        };
-        // Held earlier: the earliest document other than this one holding
-        // it, when that one is dated before it.
+        // Who a line held by several documents belongs to, so each line has
+        // one owner: a stored message holds its own lines against any other
+        // dated after it, and never yields one to a message only embedded
+        // (`derived`); an embedded message yields to any stored one holding
+        // the line, else to an embedded one dated before it (ties by key).
+        let derived = |d: u32| self.derived[d as usize];
         let earlier = |holders: &Holders| {
+            let mut others = holders.iter().filter(|(_, d)| *d != me);
+            if !derived(me) {
+                return others
+                    .find(|(_, d)| !derived(*d))
+                    .filter(|(r, _)| *r < rank)
+                    .map(|(_, d)| *d);
+            }
             holders
                 .iter()
-                .find(|(_, d)| *d != me)
-                .filter(|(r, _)| *r < rank)
+                .find(|(_, d)| *d != me && !derived(*d))
+                .or_else(|| others.find(|&&(r, d)| (r, d) < (rank, me)))
                 .map(|(_, d)| *d)
         };
+        // An embedded message's lines are owned against what each document
+        // holds as its own: its carrier's copy of them is the message itself.
+        let (held_lines, held_passages) = if derived(me) {
+            (&self.own_lines, &self.own_passages)
+        } else {
+            (&self.lines, &self.passages)
+        };
         let next_to = |a: Option<u32>, b: Option<u32>| match (a, b) {
-            (Some(a), Some(b)) => self.passages.get(&(a, b)).and_then(earlier),
+            (Some(a), Some(b)) => held_passages.get(&(a, b)).and_then(earlier),
             _ => None,
         };
         let carried = |class, from: u32| Carried {
@@ -375,7 +468,7 @@ impl LineClasses {
             let after = keyed.get(j + 1).and_then(|n| n.1);
             let passage = next_to(before, *id).or_else(|| next_to(*id, after));
             let marked = || {
-                id.and_then(|id| self.lines.get(&id))?
+                id.and_then(|id| held_lines.get(&id))?
                     .iter()
                     .filter(|(theirs, _)| m.len() > theirs.len() && m.ends_with(theirs.as_str()))
                     .find_map(|(_, holders)| earlier(holders))
@@ -390,14 +483,41 @@ impl LineClasses {
     /// Where each of `lines`, `document`'s lines in order, was written
     /// before: the earlier document holding it as a passage or under a mark
     /// (`carried`), whatever its layout says of it, so an embedded reply's
-    /// lines name the message they quote. `None` where no earlier document
-    /// holds the line.
+    /// lines name the message they quote; else, inside a segment, the
+    /// document that is the message it embeds. `None` where neither holds
+    /// the line.
     pub(super) fn sources(&self, document: &str, raw: &str, lines: &[Line]) -> Vec<Option<&str>> {
         let texts: Vec<&str> = lines.iter().map(|l| &raw[l.start..l.end]).collect();
-        self.carried(document, &texts)
+        let mut out: Vec<Option<&str>> = self
+            .carried(document, &texts)
             .into_iter()
             .map(|c| c.map(|c| c.from))
-            .collect()
+            .collect();
+        // A segment the extractor wrote as a document of its own: each of its
+        // lines is where that message's copy of it is owned, the message
+        // itself or the stored one it yields the line to, not whichever
+        // earlier document carries the same copy.
+        for segment in self.layouts.get(document).map_or(&[][..], |l| &l.segments) {
+            let Some((key, &(message, rank))) = segment
+                .message
+                .as_deref()
+                .and_then(|m| self.docs.get_key_value(m))
+            else {
+                continue;
+            };
+            let inside: Vec<usize> = (0..lines.len())
+                .filter(|&i| (segment.start..segment.end).contains(&lines[i].start))
+                .collect();
+            let held: Vec<&str> = inside.iter().map(|&i| texts[i]).collect();
+            let owners = match rank {
+                Some(rank) => self.carried_by(message, rank, &held),
+                None => vec![None; held.len()],
+            };
+            for (&i, owner) in inside.iter().zip(owners) {
+                out[i] = Some(owner.map_or(key.as_str(), |c| c.from));
+            }
+        }
+        out
     }
 
     /// A document's date as the declared clock reads it.

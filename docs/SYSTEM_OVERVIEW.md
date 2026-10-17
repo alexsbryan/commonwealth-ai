@@ -676,7 +676,15 @@ question the pipeline asks about a type is a method on the resolved
   key). Two more classes come from what the extractor wrote, never from the
   words: a header line before the document's `body_start` and a line inside
   one of its `segments`, an embedded reply or forward
-  (`extractors/email_segments.rs`). The window reader shows, in place of each run of lines a document quotes
+  (`extractors/email_segments.rs`, one segment per message of a history). Each embedded message is a
+  document of its own since 2026-10-17 (`extractors/email_embedded.rs`): its own lines, dated and authored
+  by its own header (`date_basis`: `header`, or "before its carrier" with why, never the carrier's date as
+  if read), keyed by who said what so one carried by several replies is one document, and marked
+  `embedded_in`; its carrier's segment names it (`message`). `LineClasses` gives every line one owner: a
+  stored document never yields a line to an embedded one, an embedded one yields to any stored document
+  holding the line as its own text and else to an embedded one dated before it (ties by key), and a
+  segment's lines point to that owner. Before this, an embedded message no stored document held was read
+  nowhere (ward-story tep/10., note f9142d79). The window reader shows, in place of each run of lines a document quotes
   from an earlier one, a pointer to that document (`[quoted from d3]` in the window, its date outside it;
   self-describing, so no prompt line explains it or assumes the document is a reply;
   `document_read/window_text.rs::shown_text`, `LineClasses::sources`), so a reply's referent is read where it

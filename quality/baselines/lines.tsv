@@ -77,11 +77,11 @@
 302	distributions/crates/sovereign-onprem::tests
 142	distributions/crates/sovereign-stock
 5721	distributions/crates/sovereign-stock::tests
-87948	ingest/crates/corpus-engine
-52135	ingest/crates/corpus-engine::tests
+88818	ingest/crates/corpus-engine
+52141	ingest/crates/corpus-engine::tests
 723	ingest/crates/sovereign-authoring-harness
 115	ingest/crates/sovereign-authoring-harness::tests
-9937	ingest/crates/sovereign-enrichment-build
+9950	ingest/crates/sovereign-enrichment-build
 1872	ingest/crates/sovereign-enrichment-build::tests
 305	ingest/crates/sovereign-enrichment-catalog
 370	ingest/crates/sovereign-enrichment-catalog::tests

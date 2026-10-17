@@ -149,7 +149,9 @@ not written under there (compared from first to last letter or digit). Repetitio
 2026-10-10 on the outside review, note 2347f4c6): a tracker's act and an author's greeting repeat and each is read,
 and who wrote a line suppresses nothing. Nor is a line before the extractor's `body_start` (a header block, whose
 facts are declared) or inside a segment the extractor marks as an embedded message: the format knowledge stays in
-the extractor (amended 2026-10-12). In place of each run of quoted lines the window shows a pointer to the earlier
+the extractor (amended 2026-10-12). An embedded message is a document of its own, dated and authored by its own
+header, so every line has one owner and is read once, under the message that wrote it (amended 2026-10-17: until
+then an embedded message no stored document held was read nowhere). In place of each run of quoted lines the window shows a pointer to the earlier
 document (`[quoted from d3]`, or its date outside the window), so a reply's referent is read where it was written
 and the quoted text stays unshown and uncitable (2026-10-15); code refuses a claim whose quote is in its document's
 quoted or embedded lines and not its own (2026-10-16), so no prompt line carries that guarantee. Every document of a
