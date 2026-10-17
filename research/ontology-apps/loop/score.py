@@ -143,6 +143,11 @@ else:
                 sys.exit(f"stage_update partition {fs} is still capped: {ans['notes']}")
             claims.update({r["atom_id"]: r for r in ans["rows"]})
         total = q({"target_type": "stage_update"})["matched"]
+        # A statement with no stage is in no stage partition (the query sets an absence aside, negated too);
+        # reach it by its name's words. A capped letter is fine here: the count below is the guarantee.
+        for ch in ("abcdefghijklmnopqrstuvwxyz0123456789" if len(claims) < total else ""):
+            claims.update({r["atom_id"]: r for r in q({"target_type": "stage_update", "filters": [
+                {"attribute": "name", "op": "contains", "value": ch}]})["rows"]})
         if len(claims) != total:
             sys.exit(f"read {len(claims)} stage_update statements of {total}")
 
