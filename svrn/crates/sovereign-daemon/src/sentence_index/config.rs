@@ -76,7 +76,12 @@ mod tests {
         let typo = format!("{DATA_FILE}\nscan_cieling = 3\n");
         assert!(SentenceSearchConfig::parse(&typo).is_err());
         assert!((0.0..1.0).contains(&c.verify_floor));
-        let unbounded = DATA_FILE.replace("verify_floor = 0.5", "verify_floor = nan");
+        let set = format!("verify_floor = {}", c.verify_floor);
+        assert!(
+            DATA_FILE.contains(&set),
+            "the data file spells the floor as {set}"
+        );
+        let unbounded = DATA_FILE.replace(&set, "verify_floor = nan");
         assert!(SentenceSearchConfig::parse(&unbounded).is_err());
     }
 }
