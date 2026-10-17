@@ -338,6 +338,15 @@ QueuedCorpus    { corpus: String, pending: Option<u64> }
   (`"` `“` `(` `[`) or the end; never at a `.` after a lone capital (an
   initial). Each range is trimmed of whitespace; a text with no stop is one
   sentence, and whitespace alone is none.
+- **What is not the work's.** A host yields no sentence from text a
+  distributor wrapped around the work, so neither a search nor verify's
+  candidates (§2.15) quote it as the work's word; the stored text, its name
+  and every span into it are unchanged. The reference host leaves out a
+  Project Gutenberg wrapper (`sentence_index/wrapper.rs`): the header
+  through its `*** START OF … GUTENBERG …` line and the licence from its
+  `*** END OF` line, a sentence reaching across a marker keeping its part
+  in the work. Quoted as a source's word, that header was most of the
+  `contradicted` flags in zoracite's K2 run.
 - **Scope.** `corpora` and `documents` apply as in §2.8, before the top
   `limit` is cut: under a non-empty `documents` every sentence is from a
   named text, and a malformed name is `400`.
