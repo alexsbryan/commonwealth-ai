@@ -62,3 +62,22 @@ is HEAD's (thinking on). Nothing else.
 
 Reported beside the bars, no bar: windows, claims per window and in all, answer tokens per window. Mail is not read
 here; a pass is a candidate default only after the inner ring is read at 20k.
+
+## Step 4: 20k windows on mail and on the held-out recipes (pre-registered 2026-10-17, before any read)
+
+**Step 3's result.** All three bars passed: asked 37 and 37 agreeing on 36, teacher 36, cross 36.0.
+
+**Change.** As step 3 (DIAGNOSTIC `WINDOW_CHARS` 20,000, `INIT=1` re-cut, HEAD's reader). Approved by the operator.
+
+**Reads.** One fresh read of the inner ring (world-s1, world-s3, ward-story). saltgrass-ledger twice; detective, editor,
+engineer once each. Judge 77495a0bde1d for the banks.
+
+**The change is a candidate default when all three hold.**
+1. Mail guard: world-s3 + ward-story serve at least 29 of 41 (HEAD's reader, fresh at 40k: 24 + 7). world-s1 is
+   reported, no bar (it flips 7 of 18 between reads of one code).
+2. Bar G (generality-prereg.md): saltgrass-ledger's mean is at least the one-shot's 25.5 minus 2.
+3. The mean cross-recipe agreement over the ten pairs of asked, ledger, detective, editor and engineer is at least 32
+   of 42 (40k: 29.2).
+
+Reported beside them, no bar: Bar R as generality-prereg.md scores it, its yardstick pooled from the 20k asked and
+ledger pairs (40k: 3 of 10 pairs pass); the largest call's prompt and answer tokens.

@@ -12,6 +12,11 @@ READS = {
     "editor": [f"{L}/gen-fresh/saltgrass-editor/bank.json"],
     "engineer": [f"{L}/gen-fresh/saltgrass-engineer/bank.json"],
 }
+# Read at 20k-character windows (determinism-prereg.md step 4): generality.py --w20
+W20 = {"asked": ["w20-sg1", "w20-sg2"], "ledger": ["w20-ledger1", "w20-ledger2"], "detective": ["w20-held"],
+       "editor": ["w20-held"], "engineer": ["w20-held"]}
+if "--w20" in sys.argv:
+    READS = {r: [f"{L}/{a}/saltgrass-{r}/bank.json" for a in arms] for r, arms in W20.items()}
 ONESHOT = [f"{L}/gen-rescore/oneshot1.bank.json", f"{L}/gen-rescore/oneshot2.bank.json"]
 
 load = lambda p: json.load(open(p))
@@ -54,4 +59,6 @@ for a, b in itertools.combinations(V, 2):
     cross = statistics.mean(agree(x, y) for x in V[a] for y in V[b])
     ok = gap <= gap_y and cross >= agree_y - 3
     print(f"  {a:<10} vs {b:<10} gap {gap:4.1f} (<= {gap_y:.1f})  agreement {cross:4.1f} (>= {agree_y - 3:.1f})  {'PASS' if ok else 'FAIL'}")
+pairs = [statistics.mean(agree(x, y) for x in V[a] for y in V[b]) for a, b in itertools.combinations(V, 2)]
+print(f"\nmean cross-recipe agreement over {len(pairs)} pairs: {statistics.mean(pairs):.1f}/42")
 print(f"\njudges: {sorted(judges)}" + ("" if len(judges) == 1 else "  MIXED JUDGES: not comparable"))
