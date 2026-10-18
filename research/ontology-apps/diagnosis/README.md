@@ -62,34 +62,30 @@ one-shot misses both), own text after a quote marker read as quoted (pasadena-d8
 fixed by eb07f225a, verent-d4 a scorer artefact, four renamed counterparties (pinyonton-d2, -d3, pellica-d1,
 alderdale-d1), faircroft-d1 (siblings, "We can price that at .10").
 
-## On the latest reads: misses are on deals whose history changes (2026-10-17, later; corrected the same day)
+## On today's reader: what 20k windows cost the worlds (2026-10-18)
 
-**Corrected:** the first table here pooled two readers (the 40k reader of 2026-10-16 for s2, s4, s5) and counted
-world-s1 three times. By reader, deals by the gold tags on their updates:
+Corrects the section that stood here (cfb432266 and its same-day correction): it pooled two readers. Today's reader,
+one fresh read per world (leand-0 for s1 and s3, w20-s245 for s2, s4, s5); the 40k reader of 10-16, two fresh reads
+(bundle1-fresh, structural-fresh); deals by the gold tags on their updates (`by_reader.py`):
 
-| reads | no cancel, revive, superseded or rename | cancel, revive or superseded | renamed |
-|---|---|---|---|
-| today's reader (20k), world-s1 + s3: leand-0; two fresh RESOLVE passes | 20/21; 21, 21 | 13/18; 14, 14 | 6/6 |
-| 40k reader of 10-16, world-s1 + s3 (structural-fresh) | 20/21 | 18/18 | 6/6 |
-| 40k reader of 10-16, world-s2, s4, s5 | 18/18 | 17/20 | 7/10 |
-| one-shot's two reads, world-s1 + s3 | 36/42 | 22/36 | 11/12 |
+| reads | plain | cancel, revive or superseded | renamed | served |
+|---|---|---|---|---|
+| today's reader, 20k | 37/39 | 30/38 | 11/16 | 78/93 |
+| 40k reader of 10-16 (structural-fresh) | 38/39 | 35/38 | 13/16 | 86/93 (bundle1-fresh 85) |
+| one-shot, two reads | 67/78 | 42/76 | 29/32 | 69/93 mean |
 
-world-s2, s4 and s5 have no read by today's reader. On world-s1 the 40k reader served all 18 deals in both its fresh
-reads (bundle1-fresh, structural-fresh-s1; no flip); the first read with the voice change and 20k windows together
-served 9 (w20-inner), 12 with 3175c3f6c, 14 with fresh RESOLVE. world-s1 was out of both changes' bars on "flips 7 of
-18 between reads of one code", which is reader-fresh0 against reader-think-uncapped, the 10-14 reader. What it loses:
-- Acts under a won deal (nominations). The recipe has no stage for one, so the reader picks one. At 40k, five to
-  seven nominations to a window, it reasoned them won together (4 of 5 and 4 of 4 claims); at 20k, one or two to a
-  window, lead or proposal (2 of 2). blueville-d1 and kestrel_ridge-d2 lose on them in leand-0 and not in the fresh
-  RESOLVE passes, which kept the nomination apart; cedarwood-d1 loses the won nomination that put it right at 40k
-  (its revival is read lead in both; the one-shot misses it in both reads).
-- The replaced deal's end. halwick-d1's "being rolled into a new arrangement" was written lost at 40k, in the window
-  holding its redline; at 20k it opens a window of its own and is not written.
-- The rollover's two deals. coyoteville-d2's Q2 loss written on the deal it replaced, the one reader-made identity
-  error on today's inner ring.
+Nine deals both 40k reads served are lost today (world-s1 6, s4 2, s2 1), one gained; the two 40k reads differ by 5
+deals, net 1. Today's reader at 40k (w40-head, DIAGNOSTIC `WINDOW_CHARS` 40,000, uncommitted): world-s1 16/18,
+world-s4 11/15, and 6 of the 8 losses tested come back (blueville-d1, coyoteville-d1, -d2, halwick-d1,
+kestrel_ridge-d2, pinyonton-d1). So the window size is the converging cause, not the voice change; cedarwood-d1,
+tamarack_falls-d1 and faircroft-d2 are lost at 40k too, within the 40k reader's own read-to-read change.
 
-The class holds on today's reader, at 18 deals on two worlds, and the 40k reader's 18 of 18 rested on a guess that
-a window of nominations made consistent.
+What 20k does to them: it writes more of each document (`determinism-prereg.md`, why it was adopted), and on world-s1
+what it newly writes includes acts under a won deal, which the recipe has no stage for. Nominations written as stage
+claims: 40k reads 4 of 5 and 4 of 4 won, today's reader at 40k none written, at 20k 2 of 2 lead or proposal, which
+moves the won deal back. A rollover's end (halwick-d1's "being rolled into a new arrangement", lost under the
+unchanged recipe, 2026-10-13) is written when the deal's history shares its window and not when it opens one. Of
+today's lifecycle misses, 6 of 8 are these; sagewood-d2 and -d3 are lost by every read, the one-shot's included.
 
 ## What exists (inventory, 2026-10-17)
 

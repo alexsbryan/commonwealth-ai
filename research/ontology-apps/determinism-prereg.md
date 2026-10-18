@@ -84,3 +84,8 @@ engineer once each. Judge 77495a0bde1d for the banks.
 
 Reported beside them, no bar: Bar R as generality-prereg.md scores it, its yardstick pooled from the 20k asked and
 ledger pairs (40k: 3 of 10 pairs pass); the largest call's prompt and answer tokens.
+
+**Measured after adoption (2026-10-18, `diagnosis/README.md`).** On all five worlds, today's reader at 20k serves 78
+of 93; the 40k reader of 10-16 served 86 and 85, and today's reader at 40k returns 6 of the 8 losses it was tested on
+(world-s1 12 -> 16, world-s4 9 -> 11). The mail guard above did not see this: world-s1 was out of it on the 10-14
+reader's noise.
