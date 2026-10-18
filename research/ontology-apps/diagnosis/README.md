@@ -57,6 +57,10 @@ route-level fixes move a deal to another route. `decisive.py`, `single_point.py`
 `ward_labels.jsonl`, hand-labelled): deal-ness is a judgment (pasadena-d1 a floated hedge, d6 a quote request; the
 one-shot misses both), own text after a quote marker read as quoted (pasadena-d8), RESOLVE without domain knowledge
 (tep-d5 gas Master Firm merged into tep-d2 EEI power).
+Corrected 2026-10-18 (note 80893bfb): pasadena-d8's message quotes nothing; the markers stand for its own lines
+repeated from earlier monthly nominations (line_classes' passage rule), and the lone marker above them reads as a
+heading. tep-d5's merge is knowledge, not coarse reading: asked the product alone, the model calls "Master Firm
+Purchase/Sale" and "EEI Master Power Purchase and Sale Agreement" compatible in both option orders.
 
 **The stable gap against the one-shot** (served in both its reads, missed in at least half of ours): 7 deals; tep-d4
 fixed by eb07f225a, verent-d4 a scorer artefact, four renamed counterparties (pinyonton-d2, -d3, pellica-d1,
