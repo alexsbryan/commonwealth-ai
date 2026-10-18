@@ -44,3 +44,23 @@ right and wrong by `decisions.py`, and every deal that changed, with its chain.
 **After the bars.** Passed: the five worlds and saltgrass-asked are replayed the same way (development set), and only
 then the held-out saltgrass recipes. Failed: the result and its diagnosis by class are reported, and the next ring
 (the two-pass re-read, `diagnosis/README.md` family 2) is priced against it.
+
+**Result (446136f33 replayed on the inner ring; ~201k answer tokens over 658 RESOLVE questions, counted as
+characters / 4, thinking not metered). Fails: bar 2 fails, bar 1 could not be judged, bars 3 and 4 pass.**
+Validity 1 passed with one named substitution: `leand-0` reproduces beside-s1 (world-s1), nest-w2 and nest-w1
+(`leand-0-w1`, nest-w1's read made latest by `loop/latest.py`) in windows, atlas, misses and score, and their
+decisions as today's `decisions.py` judges them. world-s3 reproduces itself (`leand-0r`, no question asked) but not
+w20-inner, which was read before 3175c3f6c and scored by an older `score.py` (87 against 86 of 88 updates matched,
+identity errors 0 and 0), so world-s3's control is `leand-0`. Validity 2, deals served under the control and two fresh
+RESOLVE passes (`leand-nz1`, `leand-nz2`): world-s1 12/14/14, world-s3 27/27/27, Ward nest-w2 6/6/8, nest-w1 7/7/7.
+The change (`leand-1`, `leand-1-w1`): 13, 26, 9, 7, pooled 55 of 73 against 52, 54 and 56 without it.
+Bar 1: the inner ring's reads hold one identity error the reader bound (coyoteville-d2, a rollover), before and after,
+in every pass. The diagnosis's 78 are 53 from reads of 2026-10-14, 13 from the local 35B reads and 12 from the 17
+world reads since 2026-10-16 (`ARMS=<arm>/<corpus> identity_where.py`). Bar 2: world-s3 falls from 27 to 26 against a
+band of 0 (velica-d1). Bar 3: 24 fully described updates, 0% wrong and 0% unplaced in every arm. Bar 4: C1-C6 8 of 8;
+all 12 replays' windows are identical to their reference's. Beyond RESOLVE's own variation lean D moves two deals.
+pasadena-d5 is joined: a window split (p9 and p6 of one window, in two documents), the first's record offered, marked,
+and chosen. velica-d1 is split: the rollover "The Sumas piece with Vleica is being replaced by a new Cal 01 deal", with
+the old deal's record offered first, which the model read as the new deal. kestrel_ridge-d2, pasadena-d2 and
+pasadena-d4 change with fresh answers alone. 145 decisions are added, judged wrong 4 to 5. The noise passes' answers
+are now the latest in the three stores, so a recorded replay picks its read with `latest.py`.

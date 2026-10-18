@@ -42,7 +42,9 @@ route-level fixes move a deal to another route. `decisive.py`, `single_point.py`
   reader notices ("pfenwell@torera.com" other_names "pfenwell@apc.org") but writes it on a person or a deal.
 - 20k windows leave more partial statements without their deal's history (world-s1 33% -> 52%, world-s3 24% -> 39%).
 - 78 of the 106 rename-free identity errors are the reader's binding inside one window; RESOLVE makes 28
-  (`identity_where.py`).
+  (`identity_where.py`). Most are in superseded reads: 53 in reads of 2026-10-14, 13 in the local 35B reads, 12 in
+  the 17 world reads since 2026-10-16, and the inner ring's current reads hold 1 (`ARMS=<arm>/<corpus>`,
+  `lean-d-prereg.md` Result).
 
 **Problem B (Ward, real mail): fully described statements still fail** (right 57% at the current ingest;
 `ward_labels.jsonl`, hand-labelled): deal-ness is a judgment (pasadena-d1 a floated hedge, d6 a quote request; the

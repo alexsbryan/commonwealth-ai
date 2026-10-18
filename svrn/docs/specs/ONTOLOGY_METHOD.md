@@ -135,7 +135,9 @@ record replaces it, resumes it), applied by the fold, so the supersession line o
 deferred to a decision on the margin, an unsettled statement stays held and surfaced instead of forced at settling.
 Windows stay independent, every answer is recorded, and the change is judged by replaying saved reads with only
 RESOLVE re-asked (`research/ontology-apps/lean-d-prereg.md`). The two-pass re-read with records in view is the next
-ring out if this does not move the cells.
+ring out if this does not move the cells. Step 1 landed in 446136f33; its replay fails bar 2 by one deal, a rollover
+the model read as the new deal once asked, and the inner ring's current reads hold one error of the kind it targets
+(the prereg's Result).
 
 ## Reading (agreed 2026-10-08; the window reader since 2026-10-15)
 
