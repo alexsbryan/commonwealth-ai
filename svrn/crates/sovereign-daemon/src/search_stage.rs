@@ -103,7 +103,11 @@ impl SearchStage {
 /// event (PV3d): on 2026-10-17 9 of 60 summons' admission ran 313 to 787 ms
 /// against a p50 of 34, and the stage alone could not say which part waited
 /// (zoracite a181013).
-pub(crate) fn admission_parts(local_embed_model: Duration, resident_slots: Duration, admit: Duration) {
+pub(crate) fn admission_parts(
+    local_embed_model: Duration,
+    resident_slots: Duration,
+    admit: Duration,
+) {
     tracing::debug!(
         target: TARGET,
         local_embed_model_us = local_embed_model.as_micros() as u64,

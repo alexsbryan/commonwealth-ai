@@ -54,7 +54,10 @@ async fn a_writers_embed_is_not_held_by_the_gpu_context() {
     let path = PathBuf::from(std::env::var("EMBED_GGUF").expect("EMBED_GGUF"));
     let backend = Arc::new(LlamaBackend::init().unwrap());
     let slot = Arc::new(EmbedSlot::load(&backend, &path, 999, None, Writer::OnCpu).unwrap());
-    assert!(slot.writer.is_some(), "a slot on the GPU keeps a writer's context");
+    assert!(
+        slot.writer.is_some(),
+        "a slot on the GPU keeps a writer's context"
+    );
 
     let held = Duration::from_millis(1500);
     let (asked_took, on_cpu) =
@@ -62,7 +65,10 @@ async fn a_writers_embed_is_not_held_by_the_gpu_context() {
     let (unasked_took, on_gpu) = embed_beside_a_held_gpu_context(&slot, None, held).await;
     eprintln!("interactive {asked_took:?}, unasked {unasked_took:?}");
     assert!(asked_took < Duration::from_millis(500), "{asked_took:?}");
-    assert!(unasked_took >= Duration::from_millis(1400), "{unasked_took:?}");
+    assert!(
+        unasked_took >= Duration::from_millis(1400),
+        "{unasked_took:?}"
+    );
     for (a, b) in on_cpu.iter().zip(&on_gpu) {
         let cos: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
         eprintln!("cos {cos}");

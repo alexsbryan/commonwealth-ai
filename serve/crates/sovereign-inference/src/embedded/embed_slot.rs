@@ -27,10 +27,10 @@ use crate::llama::{LlamaContextExt, LlamaModelExt};
 
 use oicp_types::RequestPriority;
 use sovereign_contracts::error::Error;
-use sovereign_contracts::request_priority;
 use sovereign_contracts::model_family::{
     EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
 };
+use sovereign_contracts::request_priority;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::*;
 use sovereign_contracts::Result;
@@ -398,11 +398,7 @@ impl EmbedSlot {
         match &self.writer {
             Some(w) if on_writers_context(asked) => {
                 tracing::debug!(target: "priority", "priority: an interactive embed on the writer's CPU context");
-                (
-                    &w.ctx,
-                    WRITER_CTX_TOKENS as usize,
-                    WRITER_SEQ_MAX as usize,
-                )
+                (&w.ctx, WRITER_CTX_TOKENS as usize, WRITER_SEQ_MAX as usize)
             }
             _ => (&self.contexts[0], self.ctx_tokens, self.n_seq_max),
         }
