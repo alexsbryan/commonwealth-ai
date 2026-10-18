@@ -95,8 +95,9 @@ today's lifecycle misses, 6 of 8 are these; sagewood-d2 and -d3 are lost by ever
 - `window::read` takes no prior state: every window starts empty. RESOLVE is the only cross-window step, and
   statements sharing a window's particular link without a question.
 - A company is one header domain with no path to an alias; `other_names` is shown and never compared.
-- The ontology syntax supports relation types (`from`/`to`); no recipe here declares one, and the supersession line in
-  `window_prompt.md` is prompt text with no code behind it.
+- The ontology syntax supports relation types (`from`/`to`); no recipe here declares one. The supersession line in
+  `window_prompt.md` was prompt text with no code behind it, and is replaced by the method's lifecycle kinds
+  (`lifecycle-prereg.md`).
 - RESOLVE's "Unsettled" hold is re-asked and forced at the end of a run: no could-not-judge outcome survives.
 
 ## The solution space

@@ -636,6 +636,32 @@ fn resolve_identity<'a>(
 }
 
 fn derived_facets(p: &OntologyPolicies, notes: &mut Vec<String>) {
+    for fold in &p.derivation.derived.folds {
+        let (Some(protocol), Some([replaced, act])) = (
+            &fold.protocol,
+            crate::recipe_ontology::lifecycle::names(p, fold),
+        ) else {
+            continue;
+        };
+        if protocol.lifecycle == Some(false) {
+            notes.push(format!(
+                "lifecycle: none on fold `{}` (`lifecycle = false`)",
+                fold.id
+            ));
+            continue;
+        }
+        let moves = |state: &Option<String>, default: &str| match state {
+            Some(state) => format!("moves it to {state}"),
+            None => default.to_string(),
+        };
+        notes.push(format!(
+            "lifecycle: `{replaced}` {}, `{act}` {} — the method's kinds; `replaced`, `acts_under` \
+             or `lifecycle = false` on fold `{}` change them",
+            moves(&protocol.replaced, "takes the state your rules give it"),
+            moves(&protocol.acts_under, "moves nothing"),
+            fold.id
+        ));
+    }
     notes.push(match p.change.clock {
         SupersessionClock::DocumentDate => "clock: document_date — supersession folds on document \
              dates (the default; set `change.clock = \"narrative\"` for order within a work)"

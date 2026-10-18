@@ -272,7 +272,10 @@
         "identity",
         "effective_time",
         "rules",
-        "initial"
+        "initial",
+        "replaced",
+        "acts_under",
+        "lifecycle"
       ],
       "protocol_rule": [
         "id",
@@ -354,6 +357,7 @@
       "must_not",
       "types",
       "max_entities_per_section",
+      "window_chars",
       "voices",
       "change",
       "tension",

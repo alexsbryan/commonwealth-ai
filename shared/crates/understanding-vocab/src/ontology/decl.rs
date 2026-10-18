@@ -208,15 +208,9 @@ pub enum Comparison {
 
 // ── Version-1 TOML types (rendered into SCHEMA.md) ──────────────────────────
 
-/// The narrowest [`OntologyV1::max_entities_per_section`] a recipe may
-/// declare. Below this a section cannot carry even a short list, so a number
-/// under it is an authoring mistake rather than a choice.
-pub const MIN_ENTITIES_PER_SECTION: usize = 5;
-/// The widest [`OntologyV1::max_entities_per_section`] a recipe may declare.
-/// The Phase-1 array caps are runaway prevention, not data-quality caps
-/// (`PHASE1_SECTION_EXTRACTION_SCHEMA`'s own note); past this the cap stops
-/// preventing runaway and one section can swallow the token budget.
-pub const MAX_ENTITIES_PER_SECTION: usize = 60;
+pub use super::limits::{
+    MAX_ENTITIES_PER_SECTION, MAX_WINDOW_CHARS, MIN_ENTITIES_PER_SECTION, MIN_WINDOW_CHARS,
+};
 
 /// `[enrichment.ontology]` under `version = 1`: the declaration language for
 /// "your own types". Every key is optional; each defaults to today's
@@ -251,6 +245,11 @@ pub struct OntologyV1 {
     /// recipe refuses at load rather than clamping.
     #[serde(default)]
     pub max_entities_per_section: Option<usize>,
+    /// The most characters one window holds (`window_manifest`). Absent takes
+    /// the shipped size; outside `MIN_WINDOW_CHARS`..=`MAX_WINDOW_CHARS` the
+    /// recipe refuses at load.
+    #[serde(default)]
+    pub window_chars: Option<usize>,
     /// Who speaks in the corpus, and which speakers are not subject matter.
     #[serde(default)]
     pub voices: VoicesDecl,
@@ -318,6 +317,7 @@ impl OntologyV1 {
             shape: ShapePolicy {
                 types: self.types,
                 max_entities_per_section: self.max_entities_per_section,
+                window_chars: self.window_chars,
             },
             assertion: AssertionPolicy {
                 voices: self.voices,

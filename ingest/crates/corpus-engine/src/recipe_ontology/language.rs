@@ -29,7 +29,8 @@ use super::OntologyConfig;
 use crate::error::{Error, Result};
 use crate::recipe_parsing::translate_parse_error;
 use understanding_vocab::ontology::decl::{
-    Force, OntologyV1, TypeKind, MAX_ENTITIES_PER_SECTION, MIN_ENTITIES_PER_SECTION,
+    Force, OntologyV1, TypeKind, MAX_ENTITIES_PER_SECTION, MAX_WINDOW_CHARS,
+    MIN_ENTITIES_PER_SECTION, MIN_WINDOW_CHARS,
 };
 use understanding_vocab::ontology::OntologyPolicies;
 
@@ -167,6 +168,7 @@ const V1_KEYS: &[&str] = &[
     "must_not",
     "types",
     "max_entities_per_section",
+    "window_chars",
     "voices",
     "change",
     "tension",
@@ -311,7 +313,18 @@ impl OntologyLanguage for V1 {
                 )));
             }
         }
-        Ok(v1.into_policies())
+        if let Some(n) = v1.window_chars {
+            if !(MIN_WINDOW_CHARS..=MAX_WINDOW_CHARS).contains(&n) {
+                return Err(Error::Recipe(format!(
+                    "[enrichment.ontology] window_chars = {n} is outside \
+                     {MIN_WINDOW_CHARS}..={MAX_WINDOW_CHARS}. Omit the key to take the \
+                     shipped window size."
+                )));
+            }
+        }
+        let mut policies = v1.into_policies();
+        super::lifecycle::supply(&mut policies)?;
+        Ok(policies)
     }
 
     fn schema_doc(&self) -> &'static str {

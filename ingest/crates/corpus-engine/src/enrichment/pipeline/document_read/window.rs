@@ -729,6 +729,10 @@ mod widen_tests;
 #[path = "window_names_tests.rs"]
 mod names_tests;
 
+#[cfg(test)]
+#[path = "window_lifecycle_tests.rs"]
+mod lifecycle_tests;
+
 #[path = "window_particulars.rs"]
 mod particulars;
 

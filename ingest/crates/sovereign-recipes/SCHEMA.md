@@ -795,6 +795,7 @@ Allowed values:
 | `must_not` | `Vec<String>` | no | type default | Things the corpus must never be used for ("give dosing advice"). Read by the extraction prompt and the answer gate. Block-level. |
 | `types` | `Vec<OntologyTypeDecl>` | no | type default | The declared types (`[[enrichment.ontology.types]]`), each specializing one atom kind. |
 | `max_entities_per_section` | `Option<usize>` | no | type default | How many entities one section may introduce in Phase 1. Absent takes the shipped schema's cap of 15 — raise it for a corpus whose sections enumerate (a data table, a list of recipients). Outside `MIN_ENTITIES_PER_SECTION`..=`MAX_ENTITIES_PER_SECTION` (5..=60) the recipe refuses at load rather than clamping. |
+| `window_chars` | `Option<usize>` | no | type default | The most characters one window holds (`window_manifest`). Absent takes the shipped size; outside `MIN_WINDOW_CHARS`..=`MAX_WINDOW_CHARS` the recipe refuses at load. |
 | `voices` | `VoicesDecl` | no | type default | Who speaks in the corpus, and which speakers are not subject matter. |
 | `change` | `ChangeDecl` | no | type default | What holds when: the clock and which claim types supersede. |
 | `tension` | `TensionDecl` | no | type default | Which claim types can be in tension, and what makes two comparable. |
@@ -1047,6 +1048,9 @@ Data for a qualified scalar fold over already-assigned, cited claims.
 | `effective_time` | `Option<String>` | no | type default | A source-supported transition effective time; never used as report order. |
 | `rules` | `Vec<ProtocolRuleDecl>` | no | type default | Explicit claim qualifications map to application state values. |
 | `initial` | `Option<String>` | no | type default | The state a record holds before any move, for the rules' `from` alone: a record no cited move reaches still holds nothing. |
+| `replaced` | `Option<String>` | no | type default | Where a statement that the record is replaced, rolled into or superseded by another moves it. Absent: the replaced statement is a kind of the rules' claim kind and the rules give it its state, read from their values (ONTOLOGY_METHOD §Lifecycle). |
+| `acts_under` | `Option<String>` | no | type default | Where something done under the record as it stands moves it. Absent: nowhere, it is not a move. |
+| `lifecycle` | `Option<bool>` | no | type default | `false`: the method supplies neither lifecycle kind. Absent: it does. |
 
 ## `ProtocolRuleDecl`
 
@@ -1319,7 +1323,7 @@ is refused at load, naming the line to add — never dropped.
 
 ## `version = 1`
 
-Keys: `guidance`, `vocabulary`, `must_not`, `types`, `max_entities_per_section`, `voices`, `change`, `tension`, `derive`, `patterns`, `navigation`, `paths`, `sets`, `folds`
+Keys: `guidance`, `vocabulary`, `must_not`, `types`, `max_entities_per_section`, `window_chars`, `voices`, `change`, `tension`, `derive`, `patterns`, `navigation`, `paths`, `sets`, `folds`
 
 Version 1 declares your own types. `version = 1` under `[enrichment.ontology]`
 selects it; the tables above (`OntologyV1`, `OntologyTypeDecl`, `AttrDecl`,
@@ -1512,6 +1516,19 @@ The derived `coin.status` attribute must be a closed text enum containing
 `effective_at`. `recipe validate` rejects unknown fields, claim types, state
 values, invalid paths, or a target not decided by RESOLVE.
 
+When a protocol fold's rules name one claim kind, the method gives its record
+two statement kinds of its own, shown to the reader beside yours:
+`<type>_replaced` (the record is replaced by, rolled into or superseded by
+another) and `<type>_act_under` (something done under it as it stands: carrying
+it out, scheduling or reporting on it). By default the replaced kind is a kind
+of your claim kind, so your rules give it its state from your values, and an act
+under the record moves nothing. Three keys on `[enrichment.ontology.folds.protocol]`
+change that: `replaced = "<state>"` moves every replaced record to that state
+without asking the reader, `acts_under = "<state>"` makes an act a move into it,
+and `lifecycle = false` supplies neither kind. A state either names must be one
+of the derived attribute's values; a type you declare under either name is
+yours and is left alone.
+
 An entity type's `source` can name the documents' own metadata fields instead
 of a table (`MetadataSourceDecl`): one atom per distinct value of the type's
 `identity` attribute seen in those fields, no model call. Each source
@@ -1561,6 +1578,12 @@ one section (5–60; omit it to take the shipped cap of 15). Raise it for a
 corpus whose sections enumerate — a data table, a list of recipients — where
 the shipped cap stops the extraction mid-table; a number outside the range
 refuses at load rather than clamping.
+
+`window_chars` sets how many characters of documents the window reader reads
+in one call (2,000–40,000; omit it to take the shipped 20,000). A call writes
+about as many statements whatever it is shown, so smaller windows write more of
+each document and larger ones keep more of a thread in view; a number outside
+the range refuses at load rather than clamping.
 
 `[enrichment.ontology.navigation]` is the map's third role: how a reader walks
 the atlas for each question kind — `thematic`, `trajectory`, `tension`,

@@ -131,7 +131,8 @@ is sufficient within one document and evidence across documents, so a statement 
 its window-mate's record offered first and marked as the reader's reading; a record of the window's other particulars
 is offered, marked, not hidden. Next, in its own step: after the pick, one forced choice over the protocol fold's own
 moves, shown the chosen record's state so far (moves it, acts under it without moving it, ends it because another
-record replaces it, resumes it), applied by the fold, so the supersession line of `window_prompt.md` can go; then,
+record replaces it, resumes it), applied by the fold, so the supersession line of `window_prompt.md` can go (taken
+instead as statement kinds the reader writes, §Lifecycle, 2026-10-18); then,
 deferred to a decision on the margin, an unsettled statement stays held and surfaced instead of forced at settling.
 Windows stay independent, every answer is recorded, and the change is judged by replaying saved reads with only
 RESOLVE re-asked (`research/ontology-apps/lean-d-prereg.md`). The two-pass re-read with records in view is the next
@@ -153,7 +154,7 @@ ends; a document longer than a window (a novel, a long report) is cut where the 
 read in their own windows and its statements anchored in the whole, so prompt and reasoned answer fit 128k
 (`sovereign-enrichment-build/src/window_manifest.rs`). A call writes about as many statements whatever it is shown, so
 the window's size decides how much of a document becomes statements, and with it how often two reads, and two
-recipes' reads, agree: at 20,000 characters as often as the one-shot agrees with itself (`determinism-prereg.md`). One call reads a window, reasoning before it answers,
+recipes' reads, agree: at 20,000 characters as often as the one-shot agrees with itself (`determinism-prereg.md`); a recipe may set its own (`window_chars`, 2,000-40,000). One call reads a window, reasoning before it answers,
 prompted from the contract alone, a pure function of it, unchanged by renaming: the ontology rendered (each
 statement kind with its subject type and fields, each field's family and closed values), then each document under
 its label with its declared facts above its text: the fields the declaration stamps or its metadata sources read,
@@ -228,6 +229,21 @@ Why windows: the race of 2026-10-13 (REVIEW_BRIEF.md) read five generated mail w
 model; windows of whole documents served 76/93 deals against the one-shot's 66/93, and on the local model windows
 served 5/15 of world-s4's deals where the passes reader served 1/15. Through the default commands the window reader
 then served 81/93 on the worlds and 9/14 on Ward, and graduated (2026-10-15).
+
+## Lifecycle (agreed 2026-10-18)
+
+A record whose state a protocol fold derives can end because another replaces it, and can be acted under without
+changing state; neither is a stage the recipe lists, so a reader asked for one guesses. At 20k windows world-s1's
+reader wrote nominations under won deals as leads and proposals and left a rollover's end unwritten when the deal's
+history sat in another window; at 40k the same reader served them (`research/ontology-apps/diagnosis/README.md`).
+The method supplies two statement kinds for such a record, `<type>_replaced` and `<type>_act_under`
+(`corpus-engine/src/recipe_ontology/lifecycle.rs`); the reader reports which it read and the fold applies what it
+means, so no prompt rule stands in for either (the window prompt's supersession line went with this). The defaults
+are the sources': a replaced record ends, in the state the recipe's own rules give it (the replaced kind is a kind of
+the fold's claim kind), as a rollover is a new contract with lineage and the old one ends (CDM, Conga renewals); an
+act under a record, a nomination or a draw under a trade, changes nothing (CDM's reset). Where a recipe's world reads
+otherwise its owner says so: `replaced` and `acts_under` pin the state each moves to, `lifecycle = false` drops both.
+Pre-registered in `research/ontology-apps/lifecycle-prereg.md`.
 
 ## The generality test
 

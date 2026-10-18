@@ -586,11 +586,6 @@ async fn cmd_init_from_corpus(
         .map(|spec| spec.policies())
         .filter(|p| p.reads_documents());
     let manifest = if let Some(policies) = window_policies {
-        let date = policies
-            .change
-            .document
-            .as_ref()
-            .and_then(|d| d.field(corpus_engine::enrichment::ontology::DocumentStamp::Date));
         if parsed.limit_articles.is_some()
             || parsed.include_articles.is_some()
             || parsed.max_chapter_words.is_some()
@@ -601,7 +596,7 @@ async fn cmd_init_from_corpus(
             &parsed.corpus_id,
             &index,
             rows,
-            date,
+            &policies,
         )
         .await
     } else {

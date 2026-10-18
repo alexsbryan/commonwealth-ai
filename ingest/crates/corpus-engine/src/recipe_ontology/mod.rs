@@ -17,6 +17,7 @@
 //! needs neither this crate nor the languages.
 
 pub mod language;
+pub(crate) mod lifecycle;
 
 use serde::{Deserialize, Serialize};
 

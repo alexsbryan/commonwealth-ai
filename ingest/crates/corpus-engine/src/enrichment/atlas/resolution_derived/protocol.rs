@@ -265,7 +265,12 @@ pub(super) fn derive(
 
         let rule = matching[0];
         rule_ids.extend(matching.iter().map(|r| r.id.clone()));
+        // A kind that declares no field (a pinned lifecycle lever's,
+        // `recipe_ontology/lifecycle.rs`) is identified by the state it enters.
+        let by_state =
+            claim_kind.is_some_and(|kind| graph.index.extracted_attributes(kind).is_empty());
         let identity = match source_field_value(claim, source_document, &protocol.identity) {
+            _ if by_state => rule.state.clone(),
             Ok(value) if !value.is_empty() => value,
             Ok(_) => {
                 let reason = format!("identity field `{}` is empty", protocol.identity);

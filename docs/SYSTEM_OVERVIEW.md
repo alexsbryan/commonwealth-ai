@@ -640,7 +640,7 @@ question the pipeline asks about a type is a method on the resolved
   2026-10-16, `SOVEREIGN_READER` retired with them). It reads each
   chapter in one call (`document_read/window.rs`, prompt `window_prompt.md`), and `enrich init` then cuts the
   corpus into windows: every document in declared-clock order, cut by size only where a document ends
-  (`sovereign-enrichment-build/src/window_manifest.rs`, `WINDOW_CHARS`, 20,000 characters since 2026-10-17: a call
+  (`sovereign-enrichment-build/src/window_manifest.rs`, `WINDOW_CHARS`, 20,000 characters since 2026-10-17, or the recipe's `window_chars`: a call
   writes about as many statements whatever it is shown, so the size sets coverage and read-to-read agreement, not
   only cost). The window reader names each
   particular once across its chapter; its envelope says so (`DocumentRead.subjects = Chapter`), the projection

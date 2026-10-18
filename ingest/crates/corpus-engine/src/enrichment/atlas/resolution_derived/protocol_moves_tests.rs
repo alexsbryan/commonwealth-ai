@@ -189,34 +189,74 @@ const POSTS: [(&str, Option<&str>, &str, &str, &str); 5] = [
     ("ann", None, "closed", "resolved", "closed"),
 ];
 
+/// One document and its one statement: who posted it, their association,
+/// its text, the statement's kind, the state it reads (none: it carries no
+/// field) and the words that cite it.
+struct Post<'a> {
+    author: &'a str,
+    association: Option<&'a str>,
+    body: &'a str,
+    kind: &'a str,
+    state: Option<&'a str>,
+    cite: &'a str,
+}
+
 /// The state the tracker's case folds to under `declaration`, and each
 /// statement's disposition in the fold's history.
 fn fold(declaration: &str) -> (DerivedValue, BTreeMap<String, String>) {
+    let posts: Vec<Post> = POSTS
+        .iter()
+        .map(|&(author, association, body, state, cite)| Post {
+            author,
+            association,
+            body,
+            kind: "case_state",
+            state: Some(state),
+            cite,
+        })
+        .collect();
+    fold_posts(declaration, &posts)
+}
+
+/// [`fold`] over any posts.
+fn fold_posts(declaration: &str, posts: &[Post]) -> (DerivedValue, BTreeMap<String, String>) {
     let p = OntologyBlock {
         version: 1,
         body: toml::from_str(declaration).unwrap(),
     }
     .policies()
     .unwrap();
-    let rows: Vec<EnrichmentChunkRow> = POSTS
+    let rows: Vec<EnrichmentChunkRow> = posts
         .iter()
         .enumerate()
-        .map(|(i, (author, association, body, _, _))| {
-            let mut m = json!({"date": format!("2001-01-0{}T10:00:00Z", i + 1), "author": author});
-            if let Some(a) = association {
-                m["association"] = json!(a);
-            }
-            EnrichmentChunkRow {
-                id: i as u64 + 1,
-                content: body.to_string(),
-                title: None,
-                url: None,
-                metadata_raw: Some(m.to_string()),
-                source_doc_id: Some(format!("d{}", i + 1)),
-            }
-        })
+        .map(
+            |(
+                i,
+                Post {
+                    author,
+                    association,
+                    body,
+                    ..
+                },
+            )| {
+                let mut m =
+                    json!({"date": format!("2001-01-0{}T10:00:00Z", i + 1), "author": author});
+                if let Some(a) = association {
+                    m["association"] = json!(a);
+                }
+                EnrichmentChunkRow {
+                    id: i as u64 + 1,
+                    content: body.to_string(),
+                    title: None,
+                    url: None,
+                    metadata_raw: Some(m.to_string()),
+                    source_doc_id: Some(format!("d{}", i + 1)),
+                }
+            },
+        )
         .collect();
-    let docs = SectionDocuments::from_chunk_rows([("s1", &[1u64, 2, 3, 4, 5][..])], &rows);
+    let ids: Vec<u64> = (1..=posts.len() as u64).collect();
+    let docs = SectionDocuments::from_chunk_rows([("s1", &ids[..])], &rows);
     let projection = crate::enrichment::atlas::project_source_atoms(&docs, &p, "c").unwrap();
     let mut entities = projection.atoms.clone();
     entities.push(
@@ -225,17 +265,20 @@ fn fold(declaration: &str) -> (DerivedValue, BTreeMap<String, String>) {
             "salience": 0.0, "enrichment_depth": "extracted"}))
         .unwrap(),
     );
-    let mut claims: Vec<Claim> = POSTS
+    let mut claims: Vec<Claim> = posts
         .iter()
         .enumerate()
-        .map(|(i, (_, _, _, state, cite))| {
+        .map(|(i, Post { kind, state, cite, .. })| {
+            let fields = match state {
+                Some(state) => json!({"state": {"status": "supported", "value": state, "evidence": cite}}),
+                None => json!({}),
+            };
             serde_json::from_value(json!({
                 "id": format!("c{}", i + 1), "content": cite, "discourse_act": "assert",
                 "epistemic_status": "attributed", "scope": "universal", "subject": "entity-case",
                 "evidence": [{"chunk_id": "s1", "passage_preview": cite, "source_doc_id": format!("d{}", i + 1)}],
-                "claim_kind": "case_state", "enrichment_depth": "extracted",
-                "attributes": {"__document_read_fields": {"state":
-                    {"status": "supported", "value": state, "evidence": cite}}},
+                "claim_kind": kind, "enrichment_depth": "extracted",
+                "attributes": {"__document_read_fields": fields},
             }))
             .unwrap()
         })
@@ -337,4 +380,103 @@ fn with_no_maintainer_post_no_move_needs_one_is_made() {
     for claim in ["c2", "c3", "c5"] {
         assert_eq!(d[claim], "unauthorized", "{claim}: {d:?}");
     }
+}
+
+/// The tracker with no mover or prior state: the latest report wins.
+fn plain_tracker() -> String {
+    let mut plain = TRACKER.to_string();
+    for cut in [
+        "initial = \"reported\"\n",
+        "from = [\"reported\", \"confirmed\"]\n",
+        "[[folds.protocol.rules]]\nid = \"reopen\"\nclaim_kind = \"case_state\"\nstate = \"reported\"\nwhen = { state = \"reported\" }\nfrom = [\"resolved\", \"declined\"]\nby = \"maintainer\"\n",
+    ] {
+        assert!(plain.contains(cut), "{cut}");
+        plain = plain.replace(cut, "");
+    }
+    plain.replace("by = \"maintainer\"\n", "")
+}
+
+fn post<'a>(kind: &'a str, state: Option<&'a str>, cite: &'a str) -> Post<'a> {
+    Post {
+        author: "ann",
+        association: Some("NONE"),
+        body: cite,
+        kind,
+        state,
+        cite,
+    }
+}
+
+fn decided(line: &DerivedValue) -> Option<&str> {
+    match &line.outcome {
+        DerivedOutcome::Decided { values, .. } => values.first().map(String::as_str),
+        _ => None,
+    }
+}
+
+/// Failing input, named: world-s1's 20k read wrote "please nominate 4k/d at
+/// PG&E Citygate for January under the existing Index deal" as a lead and
+/// moved the won blueville-d1 back (2026-10-18). Written as an act under the
+/// case, a later statement moves nothing; with the `acts_under` lever it is a
+/// move into the state the recipe names.
+#[test]
+fn an_act_under_a_record_moves_nothing_unless_the_recipe_says_where() {
+    let posts = [
+        post(
+            "case_state",
+            Some("confirmed"),
+            "I can reproduce the crash.",
+        ),
+        post(
+            "case_act_under",
+            None,
+            "Scheduled the fix for the next release.",
+        ),
+    ];
+    let (line, d) = fold_posts(&plain_tracker(), &posts);
+    assert_eq!(decided(&line), Some("confirmed"), "{line:?}");
+    assert_eq!(d["c2"], "unmatched_kind", "{d:?}");
+    let lever = plain_tracker().replace(
+        "identity = \"state\"\n",
+        "identity = \"state\"\nacts_under = \"resolved\"\n",
+    );
+    let (line, d) = fold_posts(&lever, &posts);
+    assert_eq!(decided(&line), Some("resolved"), "{line:?} {d:?}");
+}
+
+/// Failing input, named: halwick-d1's "The Nov-Mar deal is being rolled into a
+/// new arrangement" is lost under the unchanged recipe (2026-10-13) and went
+/// unwritten at 20k. A replaced statement is a kind of the fold's claim kind,
+/// so its state is read from the recipe's values; with the `replaced` lever it
+/// carries none and the fold moves the record to the state named.
+#[test]
+fn a_replaced_record_takes_the_state_its_rules_or_its_lever_give() {
+    let posts = [
+        post(
+            "case_state",
+            Some("confirmed"),
+            "I can reproduce the crash.",
+        ),
+        post(
+            "case_replaced",
+            Some("declined"),
+            "Folded into the new import issue.",
+        ),
+    ];
+    let (line, d) = fold_posts(&plain_tracker(), &posts);
+    assert_eq!(decided(&line), Some("declined"), "{line:?} {d:?}");
+    let lever = plain_tracker().replace(
+        "identity = \"state\"\n",
+        "identity = \"state\"\nreplaced = \"declined\"\n",
+    );
+    let posts = [
+        post(
+            "case_state",
+            Some("confirmed"),
+            "I can reproduce the crash.",
+        ),
+        post("case_replaced", None, "Folded into the new import issue."),
+    ];
+    let (line, d) = fold_posts(&lever, &posts);
+    assert_eq!(decided(&line), Some("declined"), "{line:?} {d:?}");
 }

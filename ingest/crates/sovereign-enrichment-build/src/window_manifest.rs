@@ -13,7 +13,7 @@
 use std::collections::BTreeMap;
 
 use corpus_engine::enrichment::atlas::{read_stamp, DocumentTexts};
-use corpus_engine::enrichment::ontology::DocumentStamp;
+use corpus_engine::enrichment::ontology::{DocumentStamp, OntologyPolicies};
 use corpus_engine::enrichment::pipeline::{ChapterEntry, ChapterManifest};
 use corpus_index::index::EnrichmentChunkRow;
 use serde_json::{Map, Value};
@@ -58,14 +58,26 @@ impl Doc {
     }
 }
 
-/// [`build_window_manifest`] sized by `index`'s stored texts, as the reader
+/// The window size `policies` read at: the recipe's `window_chars`, or the
+/// shipped [`WINDOW_CHARS`].
+pub fn window_chars(policies: &OntologyPolicies) -> usize {
+    policies.shape.window_chars.unwrap_or(WINDOW_CHARS)
+}
+
+/// [`build_window_manifest`] for `policies`: clocked by its declared date, cut
+/// at its [`window_chars`], and sized by `index`'s stored texts, as the reader
 /// will read them; when the store gives none, by the chunks, and it says so.
 pub async fn build_window_manifest_for(
     corpus_id: &str,
     index: &corpus_index::index::CorpusIndex,
     rows: Vec<EnrichmentChunkRow>,
-    date_field: Option<&str>,
+    policies: &OntologyPolicies,
 ) -> ChapterManifest {
+    let date_field = policies
+        .change
+        .document
+        .as_ref()
+        .and_then(|d| d.field(DocumentStamp::Date));
     let texts = match crate::corpus_io::document_texts(index).await {
         Ok(texts) => texts,
         Err(e) => {
@@ -73,7 +85,9 @@ pub async fn build_window_manifest_for(
             DocumentTexts::new()
         }
     };
-    build_window_manifest(corpus_id, rows, &texts, date_field, WINDOW_CHARS)
+    let max_chars = window_chars(policies);
+    info!(corpus_id, max_chars, "window manifest: window size");
+    build_window_manifest(corpus_id, rows, &texts, date_field, max_chars)
 }
 
 /// The window manifest of `rows`: documents in clock order by `date_field`
