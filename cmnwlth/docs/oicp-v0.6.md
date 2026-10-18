@@ -684,6 +684,13 @@ RecordLookup { identifier: String,            // the CSL variable: "DOI", "ISBN"
   origin `declared`. A looked-up field enters only where the metadata
   declares none, its origin the resolver's name. `origins` names exactly
   the fields of `csl`.
+- **CSL's own.** `csl` is CSL-JSON as CSL 1.0.2 defines it, so any CSL
+  processor reads it. A looked-up field enters in CSL's shape or not at
+  all: a resolver's item type is read as CSL's (Crossref's `journal-article`
+  is `article-journal`) and one CSL lacks is left out; a name keeps CSL's
+  name fields, a date CSL's date fields; a variable CSL holds as one string
+  or number, given as a list, is read at its first item. The mapping is the
+  host's data, beside each resolver.
 - **Named, never invented.** `unresolved` (the resolver does not know the
   identifier) and `unreachable` (it could not be asked, or did not answer)
   add no field. A client may install again later; the host may ask again
@@ -696,8 +703,8 @@ RecordLookup { identifier: String,            // the CSL variable: "DOI", "ISBN"
   corpus's `texts_digest`; a lookup never changes a stored text.
 
 The reference host does not advertise `ingest:lookups` yet. When it does,
-its data file maps `DOI` to Crossref and `ISBN` to Open Library, and its
-records keep CSL-JSON field names as the resolvers return them.
+its data file maps `DOI` to Crossref and `ISBN` to Open Library, each
+with its types read as CSL's.
 
 ### 2.17 The writer's request first
 

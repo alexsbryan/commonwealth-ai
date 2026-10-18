@@ -39,6 +39,8 @@ use oicp_types::{KnowledgeResult, LookupOutcome, MergedRecord, RecordLookup};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+#[path = "records_by_identifier/csl.rs"]
+pub mod csl;
 #[cfg(any(test, feature = "test-doubles"))]
 #[path = "records_by_identifier/recorded.rs"]
 mod recorded;
@@ -64,6 +66,8 @@ pub struct ResolverTable {
     pub keep: BTreeSet<String>,
     /// Distinct identifiers asked at once.
     pub concurrency: usize,
+    /// CSL 1.0.2's shapes, which a reply's fields are made on the way in.
+    pub csl: csl::CslSchema,
     /// One row per CSL variable this host resolves.
     #[serde(rename = "resolver")]
     pub resolvers: Vec<ResolverRow>,
@@ -83,6 +87,10 @@ pub struct ResolverRow {
     pub url: String,
     /// The shape the resolver answers in.
     pub reply: ReplyShape,
+    /// The resolver's item types read as CSL's (`journal-article` is
+    /// `article-journal`); a type it does not name is kept only when it is
+    /// CSL's.
+    pub types: BTreeMap<String, String>,
 }
 
 /// How a declared identifier is normalised before it is asked for. A closed
@@ -129,6 +137,21 @@ impl ResolverTable {
             if !variables.insert(r.variable.as_str()) {
                 return Err(format!("`{}` has two resolvers", r.variable));
             }
+            if let Some((from, to)) = r.types.iter().find(|(_, to)| !t.csl.types.contains(*to)) {
+                return Err(format!(
+                    "resolver `{}` reads `{from}` as `{to}`, not a CSL type",
+                    r.name
+                ));
+            }
+        }
+        if let Some(v) = t
+            .csl
+            .names
+            .iter()
+            .chain(&t.csl.dates)
+            .find(|v| !t.keep.contains(*v))
+        {
+            return Err(format!("csl names `{v}`, which `keep` does not"));
         }
         Ok(t)
     }
@@ -313,11 +336,46 @@ pub async fn resolve<'m>(
     Some(answers)
 }
 
+impl ResolverTable {
+    /// What a `Found` answer from `resolver` adds to a record: each field in
+    /// `keep` that `csl` does not hold, made CSL's by `csl` or left out. The
+    /// one place a reply's fields enter a record, for an install's lookups
+    /// and for one asked again.
+    pub(crate) fn take_found(
+        &self,
+        resolver: &str,
+        fields: &Map<String, Value>,
+        csl: &mut Map<String, Value>,
+        origins: &mut BTreeMap<String, String>,
+    ) {
+        let none = BTreeMap::new();
+        let types = self
+            .resolvers
+            .iter()
+            .find(|r| r.name == resolver)
+            .map_or(&none, |r| &r.types);
+        for (k, v) in fields {
+            if !self.keep.contains(k) || csl.contains_key(k) {
+                continue;
+            }
+            match self.csl.shape(types, k, v) {
+                Ok(v) => {
+                    csl.insert(k.clone(), v);
+                    origins.insert(k.clone(), resolver.to_string());
+                }
+                Err(why) => {
+                    tracing::debug!(%resolver, field = %k, why, "records: a reply's field is not CSL's, left out")
+                }
+            }
+        }
+    }
+}
+
 /// `declared`'s record: `None` when it carries no identifier a row resolves.
 /// `answers` is [`resolve`]'s: `None` names every lookup `not_allowed`; an
 /// identifier it lacks was not answered, so `unreachable`. Only a `Found`
 /// answer adds fields, those in `keep` that no declaration (and no earlier
-/// resolver) holds.
+/// resolver) holds, each made CSL's by the table's `csl` (or left out).
 pub fn merge(
     table: &ResolverTable,
     declared: &Map<String, Value>,
@@ -338,12 +396,7 @@ pub fn merge(
         let outcome = match answers.map(|a| a.get(&(row.name.clone(), value.to_string()))) {
             None => LookupOutcome::NotAllowed,
             Some(Some(ResolverAnswer::Found(fields))) => {
-                for (k, v) in fields {
-                    if table.keep.contains(k) && !csl.contains_key(k) {
-                        csl.insert(k.clone(), v.clone());
-                        origins.insert(k.clone(), row.name.clone());
-                    }
-                }
+                table.take_found(&row.name, fields, &mut csl, &mut origins);
                 LookupOutcome::Resolved
             }
             Some(Some(ResolverAnswer::Unresolved)) => LookupOutcome::Unresolved,
