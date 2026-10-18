@@ -22,6 +22,8 @@ whatever it is shown, so smaller windows write more of each document. Same-recip
 (29.2), Bar G 30.5; mail kept its deals for about 1.7x the answer tokens. Thinking off and folding two reads were
 measured first and failed. A window that writes its claims' field values beside `fields` (8 of 343 saved
 windows) now has them read in it: world-s1's 20k read replays 9 -> 12 of 18.
+Why deals are still lost, and the solution space, is in `diagnosis/README.md` (2026-10-17): a statement is placed
+only by a handle unique to its deal; the state-across-windows decision is taken first.
 Who says it (b34ee699b, ebdf1eab5, voice-prereg.md) is kept on the cut line (operator, 2026-10-16): it passed
 its three target bars and missed the mail guard by one deal (31 against 32, note dcdfeb8f); the first change found
 later that jumps the objective and conflicts with it takes precedence, and this is the first thing to cut.
