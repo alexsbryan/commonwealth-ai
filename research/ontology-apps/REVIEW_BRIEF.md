@@ -15,7 +15,11 @@ is five generated mail worlds with an answer key (93 deals; `research/ontology-a
 The window reader is the product's one reader (5f2711847; the passes reader deleted 2026-10-16). Worlds: 86/93
 served against the one-shot's 68/93 (arms structural-fresh and structural-fresh-s1, the diagnosed set). Ward: 8/14,
 tied with the one-shot. Saltgrass, held out (`generality-prereg.md`): Bar G passes (the ledger recipe's 28.5 against
-the one-shot's 25.5), Bar R fails on 7 of 10 recipe pairs, on agreement (778461d0e).
+the one-shot's 25.5). Bar R, judged 2026-10-18 on two 20k reads of each of five recipes (generality-prereg.md, last
+revision): the author effect is real (recipe means 37, 37, 31.5, 30.5, 28; 2.5% of random deals spread as wide; the
+40k control fails at 1.8%), and every recipe clears the floor (lowest 28 against 23.5). Recipes differ in how many
+questions they answer, not which: cross-recipe reads swap 2.2 questions, same-recipe 2.0. The 2026-10-16 form's
+"fails on agreement" (778461d0e) was its yardstick re-counting the score gap at one read per persona.
 Windows are 20,000 characters since 2026-10-17 (determinism-prereg.md): a call writes about as many statements
 whatever it is shown, so smaller windows write more of each document. Same-recipe reads of saltgrass-asked went from
 26-32 agreeing on 33-34 of 42 to 37 and 37 agreeing on 36 (the one-shot: 37); the held-out recipes agree on 32.6
