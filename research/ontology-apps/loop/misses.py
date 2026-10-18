@@ -49,7 +49,7 @@ one-shot serves the deal):
 Each update carries its evidence: `thought`, the reader's reasoning lines that name the update's document label;
 `oneshot`, what the one-shot wrote for the same update; `judged`, decisions.py's verdict on its RESOLVE question.
 """
-import json, os, re, sys
+import glob, json, os, re, sys
 from collections import Counter
 from email.utils import parsedate_to_datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -172,6 +172,20 @@ def resolve_lines(run):
         m = re.search(r'document="([^"]+)" statement=\S+?#"([^"]+)"', line)
         if m: out.setdefault((m.group(1), m.group(2)), []).append(re.sub(r"^\S+\s+DEBUG\s+", "", line.strip())[:400])
     return out
+
+
+def fresh_reads(cid):
+    """The score paths of `cid` a diagnosis pools, in glob order: with ARMS=a,b exactly those arms (a replay among
+    them), else every fresh read (extract asker daemon or recorded; not det-* or the early whole-text arms)."""
+    arms = [a for a in os.environ.get("ARMS", "").split(",") if a]
+    for p in glob.glob(f"runs/loop/*/{cid}/score.json"):
+        arm = p.split("/")[2]
+        if arms:
+            if arm in arms: yield p
+            continue
+        rr = json.load(open(os.path.join(os.path.dirname(p), "run.json")))
+        if rr.get("asker") in ("daemon", "recorded") and not arm.startswith(("det-", "carried", "marked", "budget", "header")):
+            yield p
 
 
 def load(run, cid):

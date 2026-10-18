@@ -4,9 +4,8 @@ sys.path.insert(0, 'research/ontology-apps/loop')
 import misses as M
 tab = collections.defaultdict(collections.Counter); deal_tab = collections.defaultdict(lambda: [0, 0])
 for cid in ['world-s1', 'world-s2', 'world-s3', 'world-s4', 'world-s5']:
-    for p in glob.glob(f'runs/loop/*/{cid}/score.json'):
+    for p in M.fresh_reads(cid):
         d = os.path.dirname(p); rr = json.load(open(f'{d}/run.json'))
-        if rr.get('asker') not in ('daemon', 'recorded') or d.split('/')[2].startswith(('det-', 'carried', 'marked', 'budget', 'header')): continue
         if not os.path.exists(f'{d}/extract.err'): continue
         try: D = M.load(d, cid)
         except Exception: continue

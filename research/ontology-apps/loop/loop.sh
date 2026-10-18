@@ -17,7 +17,8 @@
 # then table.py prints the arm's totals and categories and appends a row to runs/loop/journal.tsv.
 #
 # Env: NOTE="what this arm changes" (required). ASKER=replay|recorded|daemon for extract (default recorded: a
-# question asked before reuses its answer, a new one goes to the daemon); resolve always runs --asker recorded.
+# question asked before reuses its answer, a new one goes to the daemon). RESOLVE_ASKER=daemon re-asks every RESOLVE
+# question fresh, for a noise band (default recorded).
 # INIT=1 re-cuts the windows (enrich init). RESTORE=<arm> puts that arm's cut back first, for an exact replay.
 # NOSCORE=1 scores and diagnoses nothing and writes no journal row: a deletion's replay, judged by
 # `table.py --same <reference arm> <arm>` on its records, asks no bank question (a bank score is 210 model calls).
@@ -31,7 +32,7 @@ root=runs/loop/$arm
 mkdir -p $root
 export SOVEREIGN_NO_STALE_WARN=1 NO_COLOR=1
 export RUST_LOG=info,corpus_engine::enrichment::pipeline::document_read::window=trace,corpus_engine::enrichment::atlas::resolve_records=debug
-asker=${ASKER:-recorded}
+asker=${ASKER:-recorded}; rasker=${RESOLVE_ASKER:-recorded}
 head=$(git rev-parse --short HEAD)
 dirty=$(git diff HEAD -- . ':!runs' | shasum | cut -c1-12); [ -z "$(git diff HEAD --stat -- . ':!runs')" ] && dirty=clean
 bin=$(stat -f '%Sm' -t '%Y-%m-%dT%H:%M:%S' target/debug/svrn-ingest)
@@ -52,7 +53,7 @@ one() {
   cp $cut $out/chapters.json; cp $cfg $out/config.json
   store=~/.svrnmesh/enrichment/$id/answers.jsonl; before=$(wc -l < $store 2>/dev/null | tr -d ' ')
   sovereign enrich extract $id --full --asker $asker > $out/extract.out 2> $out/extract.err; rx=$?
-  [ $rx = 0 ] && { sovereign enrich resolve $id --asker recorded > $out/resolve.out 2> $out/resolve.err; rr=$?; }
+  [ $rx = 0 ] && { sovereign enrich resolve $id --asker $rasker > $out/resolve.out 2> $out/resolve.err; rr=$?; }
   after=$(wc -l < $store 2>/dev/null | tr -d ' ')
   [ "$rr" = 0 ] && mkdir -p $out/atlas && cp ~/.svrnmesh/indexes/$id/atlas/atoms.json ~/.svrnmesh/indexes/$id/atlas/edges.json $out/atlas/
   kind=$(python3 $L/corpora.py $id kind); [ -n "$NOSCORE" ] && kind=none
@@ -64,7 +65,7 @@ one() {
     [ $rx = 0 ] && [ "$rr" = 0 ] && python3 $L/score.py $(python3 $L/corpora.py $id msgids) $out/score.json $(python3 $L/corpora.py $id score-args) > $out/score.out 2>&1
   fi
   python3 -c "import json,sys; json.dump(dict(zip(sys.argv[2::2], sys.argv[3::2])), open(sys.argv[1], 'w'), indent=1)" $out/run.json \
-    arm "$arm" corpus "$id" note "$NOTE" head "$head" dirty "$dirty" svrn_ingest_mtime "$bin" engine "$engine" asker "$asker" \
+    arm "$arm" corpus "$id" note "$NOTE" head "$head" dirty "$dirty" svrn_ingest_mtime "$bin" engine "$engine" asker "$asker" resolve_asker "$rasker" \
     init "${INIT:-}" restore "${RESTORE:-}" extract_exit "$rx" resolve_exit "${rr:-not run}" seconds "$(( $(date +%s) - s ))" \
     answers_before "$before" answers_after "$after" noscore "${NOSCORE:-}" finished "$(date -u +%FT%TZ)"
   [ "$kind" = none ] && { echo "$id: extract exit $rx, resolve exit ${rr:-not run}; answers $before -> $after (not scored)"; return; }

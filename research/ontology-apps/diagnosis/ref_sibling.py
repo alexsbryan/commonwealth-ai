@@ -17,9 +17,8 @@ for cid in ['world-s1', 'world-s2', 'world-s3', 'world-s4', 'world-s5']:
         d = deals[g]; p = d['p']
         if not p: return False
         return any(o['folder'] == d['folder'] and o['id'] != g and o['p'] and o['p']['product'] == p['product'] and (o['p']['term'] == p['term'] or o['p']['point'] == p['point']) for o in deals.values())
-    for p in glob.glob(f'runs/loop/*/{cid}/score.json'):
+    for p in M.fresh_reads(cid):
         d = os.path.dirname(p); r = json.load(open(f'{d}/run.json'))
-        if r.get('asker') not in ('daemon', 'recorded') or d.split('/')[2].startswith(('det-', 'carried', 'marked', 'budget', 'header')): continue
         if not os.path.exists(f'{d}/extract.err'): continue
         try: D = M.load(d, cid)
         except Exception: continue
