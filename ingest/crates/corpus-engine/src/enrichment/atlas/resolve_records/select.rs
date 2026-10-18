@@ -25,6 +25,7 @@ use tracing::{debug, warn};
 use super::answer::{describe, describe_opened, reasons, Proposed, ProposedVerdict};
 use super::apart::{
     chapters_compatible, necessary_compatible, necessary_conflict, offerable, read_beside,
+    reader_bound,
 };
 use super::estimate::{Comparison, Estimate};
 use super::fields::{self, compare_necessary};
@@ -285,8 +286,36 @@ pub(super) async fn choose(
             }
             Alt::Opened(g) => necessary_compatible(criterion, &w.supplied[j], &opened_holds(g)),
         };
-        let mut candidates: Vec<Candidate> = opened.iter().map(|&g| Candidate::Opened(g)).collect();
-        candidates.extend(w.shown.iter().map(|&(r, p)| Candidate::Record(r, p)));
+        // The records the window's reader read as this statement's particular
+        // in earlier documents come first, proposed or not (`reader_bound`).
+        let bound: Vec<(usize, Proposal)> = reader_bound(mine, records)
+            .into_iter()
+            .map(|r| match w.shown.iter().find(|&&(s, _)| s == r) {
+                Some(&(_, p)) => (r, p.clone()),
+                None => (
+                    r,
+                    Proposal {
+                        record: records[r].id.clone(),
+                        reasons: Vec::new(),
+                    },
+                ),
+            })
+            .collect();
+        if !bound.is_empty() {
+            let ids: Vec<&str> = bound.iter().map(|(r, _)| records[*r].id.as_str()).collect();
+            debug!(document = doc.id, statement = %statements[i].id, bound = ?ids, "atlas/resolve: the window's reader read this statement's particular as these records' in earlier documents; offered first, marked");
+        }
+        let mut candidates: Vec<Candidate> = bound
+            .iter()
+            .map(|(r, p)| Candidate::Record(*r, p))
+            .collect();
+        candidates.extend(opened.iter().map(|&g| Candidate::Opened(g)));
+        candidates.extend(
+            w.shown
+                .iter()
+                .filter(|&&(r, _)| !bound.iter().any(|&(b, _)| b == r))
+                .map(|&(r, p)| Candidate::Record(r, p)),
+        );
         let offered = candidates.len();
         for &g in &opened {
             if let Some(conflict) = necessary_conflict(criterion, &w.supplied[j], &opened_holds(g))
@@ -559,10 +588,12 @@ pub(super) fn question(
         let line = match *c {
             Candidate::Record(r, p) => {
                 let mut why = reasons(p);
-                if !chapters_compatible(
-                    mine.as_ref(),
-                    records[r].supplied.get(super::CHAPTER_SUBJECT_KEY),
-                ) {
+                let held = records[r].supplied.get(super::CHAPTER_SUBJECT_KEY);
+                if mine.as_ref().zip(held).is_some_and(|(m, h)| m.is_subset(h)) {
+                    why.push_str(
+                        "; the window's reader read this record's particular as this statement's",
+                    );
+                } else if !chapters_compatible(mine.as_ref(), held) {
                     why.push_str(
                         "; the window's reader read this record's particular as another than this statement's",
                     );

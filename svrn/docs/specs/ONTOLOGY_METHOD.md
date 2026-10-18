@@ -200,8 +200,10 @@ decides is read as a statement about it (2026-10-15): a state carries its value,
 and a relation its other endpoint, `to` (`OntologyTypeDecl::implied_fields`); after RESOLVE each is also a State or
 Relation atom beside its claim (`resolution_records/statement_atoms.rs`).
 
-A window's particular reaches RESOLVE as a sufficient key over its chapter (`CHAPTER_SUBJECT_KEY`), so RESOLVE
-decides identity only across windows, statement by statement against bounded candidates. Two particulars the reader
+A window's particular reaches RESOLVE as its chapter's reference (`CHAPTER_SUBJECT_KEY`): a sufficient key within one
+document, and across documents evidence, so RESOLVE decides identity statement by statement against bounded
+candidates, the records holding the statement's own reference offered first, marked (`apart.rs::reader_bound`,
+lean D, 2026-10-17). Two particulars the reader
 read in one document stay two: a record holding one is never offered the other (`apart.rs::read_beside`), a
 guarantee code makes with no question line restating it (2026-10-16). A reading of a subject's field stays on its
 claim, cited, never on the record (`SUBJECT_FIELDS_ATTRIBUTE`). A read reference holds a record or nothing: the

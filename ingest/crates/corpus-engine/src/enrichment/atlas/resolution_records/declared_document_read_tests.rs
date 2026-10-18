@@ -630,6 +630,15 @@ async fn resolve_fixture(
     entities: &mut Vec<Entity>,
     policies: &OntologyPolicies,
 ) -> (Vec<RecordsReport>, Vec<PhaseFailure>) {
+    resolve_fixture_by(claims, entities, policies, Answerer::Proposed).await
+}
+
+async fn resolve_fixture_by(
+    claims: &mut Vec<Claim>,
+    entities: &mut Vec<Entity>,
+    policies: &OntologyPolicies,
+    answerer: Answerer<'_>,
+) -> (Vec<RecordsReport>, Vec<PhaseFailure>) {
     let (rows, _) = local_subject_fixture();
     let documents = SectionDocuments::from_chunk_rows([("sec_1", &[51u64, 52][..])], &rows);
     let (mut events, mut states, mut relations) = (Vec::new(), Vec::new(), Vec::new());
@@ -656,7 +665,7 @@ async fn resolve_fixture(
         policies,
         "local-subjects",
         None,
-        Answerer::Proposed,
+        answerer,
         &mut on_document,
     )
     .await
@@ -752,65 +761,5 @@ async fn one_local_subject_whose_spans_disagree_on_an_identity_value_is_not_join
     );
 }
 
-/// The issue and the label event, read as one window, each saying something of
-/// one case with no declared key: the case is one record only when the
-/// window's chapter subject reaches RESOLVE.
-async fn resolve_window(chapter: bool) -> (Vec<Claim>, Vec<RecordsReport>) {
-    let (_, mut policies) = local_subject_fixture();
-    policies.shape.types[0].identity.clear();
-    let tag = |mut claim: Claim| {
-        if chapter {
-            claim
-                .attributes
-                .insert(CHAPTER_SUBJECT_ATTRIBUTE.into(), json!("sec_1/p1"));
-        }
-        claim
-    };
-    let mut claims = vec![
-        tag(local_subject_claim(
-            "membership",
-            "case_membership",
-            "issue",
-            ISSUE,
-            "1373",
-        )),
-        tag(local_subject_claim(
-            "label",
-            "case_membership",
-            "label-event",
-            "Label compatibility added to #1373.",
-            "1373",
-        )),
-    ];
-    let mut entities = Vec::new();
-    let (reports, _) = resolve_fixture(&mut claims, &mut entities, &policies).await;
-    (claims, reports)
-}
-
-/// Failing input, named: without the chapter subject the label event's
-/// statement is RESOLVE's to decide, and with no key and no model it does not
-/// land on the issue's record; with it, the two link by key, no call made.
-#[tokio::test]
-async fn a_window_reads_one_subject_across_two_documents_and_resolve_links_them_by_key() {
-    let (claims, reports) = resolve_window(false).await;
-    assert!(
-        claims[1].subject.is_none() || claims[0].subject != claims[1].subject,
-        "control: no key, no model, no link"
-    );
-    assert_eq!(reports[0].statements, 2);
-
-    let (claims, reports) = resolve_window(true).await;
-    assert!(claims[0].subject.is_some());
-    assert_eq!(
-        claims[0].subject, claims[1].subject,
-        "one case across the window"
-    );
-    assert_eq!(reports[0].records, 1);
-    assert_eq!(reports[0].calls, 0, "a key links; no question is asked");
-    assert!(
-        claims
-            .iter()
-            .all(|c| !c.attributes.contains_key(CHAPTER_SUBJECT_ATTRIBUTE)),
-        "the handoff attribute does not outlive RESOLVE"
-    );
-}
+#[path = "window_subject_tests.rs"]
+mod window_subject;
