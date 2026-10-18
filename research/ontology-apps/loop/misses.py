@@ -175,13 +175,14 @@ def resolve_lines(run):
 
 
 def fresh_reads(cid):
-    """The score paths of `cid` a diagnosis pools, in glob order: with ARMS=a,b exactly those arms (a replay among
-    them), else every fresh read (extract asker daemon or recorded; not det-* or the early whole-text arms)."""
+    """The score paths of `cid` a diagnosis pools, in glob order: with ARMS=a,b/world-s3 exactly those arms, or one
+    corpus of an arm (a replay among them), else every fresh read (extract asker daemon or recorded; not det-* or the
+    early whole-text arms)."""
     arms = [a for a in os.environ.get("ARMS", "").split(",") if a]
     for p in glob.glob(f"runs/loop/*/{cid}/score.json"):
         arm = p.split("/")[2]
         if arms:
-            if arm in arms: yield p
+            if arm in arms or f"{arm}/{cid}" in arms: yield p
             continue
         rr = json.load(open(os.path.join(os.path.dirname(p), "run.json")))
         if rr.get("asker") in ("daemon", "recorded") and not arm.startswith(("det-", "carried", "marked", "budget", "header")):
