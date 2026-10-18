@@ -94,16 +94,18 @@ pub struct ProtocolFoldDecl {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub initial: Option<String>,
     /// Where a statement that the record is replaced, rolled into or
-    /// superseded by another moves it. Absent: the replaced statement is a
-    /// kind of the rules' claim kind and the rules give it its state, read
-    /// from their values (ONTOLOGY_METHOD §Lifecycle).
+    /// superseded by another moves it; setting it opts into the lifecycle
+    /// kinds. Absent, opted in: the replaced statement is a kind of the rules'
+    /// claim kind and the rules give it its state, read from their values
+    /// (ONTOLOGY_METHOD §Lifecycle).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replaced: Option<String>,
-    /// Where something done under the record as it stands moves it.
-    /// Absent: nowhere, it is not a move.
+    /// Where something done under the record as it stands moves it; setting
+    /// it opts in. Absent, opted in: nowhere, it is not a move.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub acts_under: Option<String>,
-    /// `false`: the method supplies neither lifecycle kind. Absent: it does.
+    /// `true`: the method supplies both lifecycle kinds; `false`: neither,
+    /// whatever else is set. Absent: only when `replaced` or `acts_under` is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lifecycle: Option<bool>,
 }

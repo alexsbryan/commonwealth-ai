@@ -59,3 +59,20 @@ and asks the stage it ends in (e271fac85): under the first wording halwick-d1's 
 stage negotiating, under the second, lost. Every nomination in the three windows was written as an act under
 (8 of 8). The bars are unchanged; halwick-d1's window informed the wording, so a bar 1 that passes on halwick-d1
 alone is reported as such.
+
+## Result (life-inner, fresh 20k at 2e3ea8585; 623k output tokens, thinking included, chars/4)
+
+**Fails: bar 3 fails on world-s3 and ward-story; bars 1, 2 and 4 pass.** Bar 1: 4 of world-s1's five losses served
+(blueville-d1, kestrel_ridge-d2, coyoteville-d1, -d2; controls 0, 2, 2); halwick-d1 is not, so the wording its smoke
+window informed did not carry it. Bar 2: world-s1's six statements quoting a nomination are all acts under (control:
+2 of 2 lead or proposal). Bar 3: world-s1's other 13, 12 served (controls 12); world-s3 25 of 27 (controls 27);
+ward-story 5 of 14 (controls 6-8). Bar 4: C1-C6 and the changed crates' 2752 tests pass. Inner ring pooled 46 of 59
+against 45-48. Diagnosis by class:
+- The replaced kind leaves the end state to the reader, and it read won in 2 of 4: halwick-d1's "being rolled into a
+  new arrangement" and velica-d1's "being replaced by a new Cal 01 deal" won, coyoteville-d1's and velica-d2's lost.
+- The act-under kind swallows stage moves on real mail: ward-story wrote 17, among them tep-d3's "working to close a
+  gas transaction" (gold negotiating) and pasadena-d8's "Sale to Enron at SoCalBorder ... at $2.68" (gold won); on
+  the worlds it took every nomination (9 of 9 on world-s1 and world-s3) and "book it", "roll it" (no gold update).
+Neither part passes alone, so the kinds' default is reverted to today's reader (no kinds supplied, the prompt's
+supersession line back) and they stay as levers a recipe opts into; `window_chars` stands (no change at its
+default).

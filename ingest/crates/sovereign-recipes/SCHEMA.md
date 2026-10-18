@@ -1048,9 +1048,9 @@ Data for a qualified scalar fold over already-assigned, cited claims.
 | `effective_time` | `Option<String>` | no | type default | A source-supported transition effective time; never used as report order. |
 | `rules` | `Vec<ProtocolRuleDecl>` | no | type default | Explicit claim qualifications map to application state values. |
 | `initial` | `Option<String>` | no | type default | The state a record holds before any move, for the rules' `from` alone: a record no cited move reaches still holds nothing. |
-| `replaced` | `Option<String>` | no | type default | Where a statement that the record is replaced, rolled into or superseded by another moves it. Absent: the replaced statement is a kind of the rules' claim kind and the rules give it its state, read from their values (ONTOLOGY_METHOD §Lifecycle). |
-| `acts_under` | `Option<String>` | no | type default | Where something done under the record as it stands moves it. Absent: nowhere, it is not a move. |
-| `lifecycle` | `Option<bool>` | no | type default | `false`: the method supplies neither lifecycle kind. Absent: it does. |
+| `replaced` | `Option<String>` | no | type default | Where a statement that the record is replaced, rolled into or superseded by another moves it; setting it opts into the lifecycle kinds. Absent, opted in: the replaced statement is a kind of the rules' claim kind and the rules give it its state, read from their values (ONTOLOGY_METHOD §Lifecycle). |
+| `acts_under` | `Option<String>` | no | type default | Where something done under the record as it stands moves it; setting it opts in. Absent, opted in: nowhere, it is not a move. |
+| `lifecycle` | `Option<bool>` | no | type default | `true`: the method supplies both lifecycle kinds; `false`: neither, whatever else is set. Absent: only when `replaced` or `acts_under` is. |
 
 ## `ProtocolRuleDecl`
 
@@ -1516,18 +1516,20 @@ The derived `coin.status` attribute must be a closed text enum containing
 `effective_at`. `recipe validate` rejects unknown fields, claim types, state
 values, invalid paths, or a target not decided by RESOLVE.
 
-When a protocol fold's rules name one claim kind, the method gives its record
-two statement kinds of its own, shown to the reader beside yours:
+A protocol fold whose rules name one claim kind can opt into two statement
+kinds the method writes for its record, shown to the reader beside yours:
 `<type>_replaced` (the record is replaced by, rolled into or superseded by
-another) and `<type>_act_under` (something done under it as it stands: carrying
-it out, scheduling or reporting on it). By default the replaced kind is a kind
-of your claim kind, so your rules give it its state from your values, and an act
-under the record moves nothing. Three keys on `[enrichment.ontology.folds.protocol]`
-change that: `replaced = "<state>"` moves every replaced record to that state
-without asking the reader, `acts_under = "<state>"` makes an act a move into it,
-and `lifecycle = false` supplies neither kind. A state either names must be one
-of the derived attribute's values; a type you declare under either name is
-yours and is left alone.
+another, so it has ended) and `<type>_act_under` (something done under it as it
+stands: carrying it out, scheduling or reporting on it). Set `lifecycle = true`
+on `[enrichment.ontology.folds.protocol]` to take them with their defaults: the
+replaced kind is a kind of your claim kind, so your rules give it its state
+from your values, and an act under the record moves nothing. `replaced =
+"<state>"` moves every replaced record to that state without asking the
+reader, `acts_under = "<state>"` makes an act a move into it; either one opts
+in, and `lifecycle = false` keeps both off whatever else is set. A state either
+names must be one of the derived attribute's values; a type you declare under
+either name is yours and is left alone. They are off by default: supplied to
+every recipe they cost as many deals as they won (`DEFAULTS_LEDGER.md`).
 
 An entity type's `source` can name the documents' own metadata fields instead
 of a table (`MetadataSourceDecl`): one atom per distinct value of the type's

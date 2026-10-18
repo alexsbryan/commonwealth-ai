@@ -448,7 +448,7 @@ fn an_act_under_a_record_moves_nothing_unless_the_recipe_says_where() {
 /// new arrangement" is lost under the unchanged recipe (2026-10-13) and went
 /// unwritten at 20k. A replaced statement is a kind of the fold's claim kind,
 /// so its state is read from the recipe's values; with the `replaced` lever it
-/// carries none and the fold moves the record to the state named.
+/// carries none and the fold moves the record to the state named. Both opt in.
 #[test]
 fn a_replaced_record_takes_the_state_its_rules_or_its_lever_give() {
     let posts = [
@@ -463,7 +463,11 @@ fn a_replaced_record_takes_the_state_its_rules_or_its_lever_give() {
             "Folded into the new import issue.",
         ),
     ];
-    let (line, d) = fold_posts(&plain_tracker(), &posts);
+    let opted = plain_tracker().replace(
+        "identity = \"state\"\n",
+        "identity = \"state\"\nlifecycle = true\n",
+    );
+    let (line, d) = fold_posts(&opted, &posts);
     assert_eq!(decided(&line), Some("declined"), "{line:?} {d:?}");
     let lever = plain_tracker().replace(
         "identity = \"state\"\n",

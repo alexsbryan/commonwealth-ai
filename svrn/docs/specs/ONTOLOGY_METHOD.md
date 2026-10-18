@@ -131,8 +131,8 @@ is sufficient within one document and evidence across documents, so a statement 
 its window-mate's record offered first and marked as the reader's reading; a record of the window's other particulars
 is offered, marked, not hidden. Next, in its own step: after the pick, one forced choice over the protocol fold's own
 moves, shown the chosen record's state so far (moves it, acts under it without moving it, ends it because another
-record replaces it, resumes it), applied by the fold, so the supersession line of `window_prompt.md` can go (taken
-instead as statement kinds the reader writes, §Lifecycle, 2026-10-18); then,
+record replaces it, resumes it), applied by the fold, so the supersession line of `window_prompt.md` can go (tried
+as statement kinds the reader writes, §Lifecycle, 2026-10-18: opt-in after its bars); then,
 deferred to a decision on the margin, an unsettled statement stays held and surfaced instead of forced at settling.
 Windows stay independent, every answer is recorded, and the change is judged by replaying saved reads with only
 RESOLVE re-asked (`research/ontology-apps/lean-d-prereg.md`). The two-pass re-read with records in view is the next
@@ -230,20 +230,22 @@ model; windows of whole documents served 76/93 deals against the one-shot's 66/9
 served 5/15 of world-s4's deals where the passes reader served 1/15. Through the default commands the window reader
 then served 81/93 on the worlds and 9/14 on Ward, and graduated (2026-10-15).
 
-## Lifecycle (agreed 2026-10-18)
+## Lifecycle (agreed 2026-10-18; opt-in after its bars)
 
 A record whose state a protocol fold derives can end because another replaces it, and can be acted under without
 changing state; neither is a stage the recipe lists, so a reader asked for one guesses. At 20k windows world-s1's
 reader wrote nominations under won deals as leads and proposals and left a rollover's end unwritten when the deal's
 history sat in another window; at 40k the same reader served them (`research/ontology-apps/diagnosis/README.md`).
-The method supplies two statement kinds for such a record, `<type>_replaced` and `<type>_act_under`
+The method offers two statement kinds for such a record, `<type>_replaced` and `<type>_act_under`
 (`corpus-engine/src/recipe_ontology/lifecycle.rs`); the reader reports which it read and the fold applies what it
-means, so no prompt rule stands in for either (the window prompt's supersession line went with this). The defaults
-are the sources': a replaced record ends, in the state the recipe's own rules give it (the replaced kind is a kind of
-the fold's claim kind), as a rollover is a new contract with lineage and the old one ends (CDM, Conga renewals); an
-act under a record, a nomination or a draw under a trade, changes nothing (CDM's reset). Where a recipe's world reads
-otherwise its owner says so: `replaced` and `acts_under` pin the state each moves to, `lifecycle = false` drops both.
-Pre-registered in `research/ontology-apps/lifecycle-prereg.md`.
+means. Their meanings are the sources': a replaced record ends, in the state the recipe's own rules give it (the
+replaced kind is a kind of the fold's claim kind), as a rollover is a new contract with lineage and the old one ends
+(CDM, Conga renewals); an act under a record, a nomination or a draw under a trade, changes nothing (CDM's reset).
+`replaced` and `acts_under` pin the state each moves to. Supplied to every recipe they failed their bars
+(`research/ontology-apps/lifecycle-prereg.md`): world-s1 regained 4 of 5 deals, world-s3 and ward-story lost 2 each,
+the reader reading a replaced deal's end as won 2 times in 4 and writing real stage moves as acts under on real mail.
+So they are a recipe's to opt into (`lifecycle = true` or a pinned lever), and the window prompt keeps its
+supersession line.
 
 ## The generality test
 

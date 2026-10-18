@@ -176,6 +176,23 @@ re-shaped campaign retired; their bars are tuning targets on the scaffold's runs
 **Closure.** Order 3 of campaign ontology-layer removes the two keys from
 `V1_RETIRED_KEYS` once no recipe carries them. **Review by 2026-10-31.**
 
+### Lifecycle kinds of a protocol-folded record — off unless a recipe opts in (2026-10-18)
+
+**What ships.** `lifecycle = true` (or a pinned `replaced = "<state>"` / `acts_under = "<state>"`) on
+`[enrichment.ontology.folds.protocol]` gives the record two statement kinds the method writes,
+`<type>_replaced` and `<type>_act_under` (`corpus-engine/src/recipe_ontology/lifecycle.rs`); the fold applies
+them. `recipe validate` names them, and the levers when they are off.
+
+**Why off.** Supplied by default they failed `research/ontology-apps/lifecycle-prereg.md` (life-inner, 623k
+tokens): world-s1 regained 4 of its 5 losses to 20k windows, and world-s3 and ward-story fell 2 each, because the
+reader read a replaced deal's end as won 2 times in 4 and on real mail wrote stage moves as acts under.
+
+**Flip condition.** A fresh read in which the kinds hold the inner ring's guards (world-s3 and ward-story at or
+above their controls) with world-s1's regain intact; the two failure classes are where to start: the replaced end
+left to the reader (a pinned `replaced` removes it), and the act-under description's reach on real mail.
+
+**Review by 2026-11-01.**
+
 ### Recipe-declared qualified scalar protocol fold — off unless a recipe opts in (2026-10-07)
 
 **What ships.** A version-1 ontology may declare one `by = "protocol"` fold for

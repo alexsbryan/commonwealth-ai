@@ -643,9 +643,10 @@ fn derived_facets(p: &OntologyPolicies, notes: &mut Vec<String>) {
         ) else {
             continue;
         };
-        if protocol.lifecycle == Some(false) {
+        if !crate::recipe_ontology::lifecycle::opted_in(protocol) {
             notes.push(format!(
-                "lifecycle: none on fold `{}` (`lifecycle = false`)",
+                "lifecycle: off on fold `{}`; `lifecycle = true`, `replaced` or `acts_under` \
+                 supply `{replaced}` and `{act}`",
                 fold.id
             ));
             continue;
@@ -655,8 +656,7 @@ fn derived_facets(p: &OntologyPolicies, notes: &mut Vec<String>) {
             None => default.to_string(),
         };
         notes.push(format!(
-            "lifecycle: `{replaced}` {}, `{act}` {} — the method's kinds; `replaced`, `acts_under` \
-             or `lifecycle = false` on fold `{}` change them",
+            "lifecycle: `{replaced}` {}, `{act}` {} — the method's kinds, opted into on fold `{}`",
             moves(&protocol.replaced, "takes the state your rules give it"),
             moves(&protocol.acts_under, "moves nothing"),
             fold.id

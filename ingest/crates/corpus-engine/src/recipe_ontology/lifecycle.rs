@@ -5,19 +5,22 @@
 //! under it as it stands. The reader reports which it read; the fold applies
 //! what it means, so no prompt rule stands in for either.
 //!
-//! What each means is the recipe's to say, and the defaults are the ones the
-//! sources give. A replaced record ends: by default the replaced kind is a
-//! kind of the fold's claim kind, so the recipe's own rules give its state
-//! from their values, and `replaced = "<state>"` pins it instead. An act under
-//! a record (a nomination or a draw under a trade, CDM's reset) changes
-//! nothing by default, and `acts_under = "<state>"` makes it a move.
-//! `lifecycle = false` supplies neither.
+//! A recipe opts in: `lifecycle = true`, or a pinned lever. Supplied by
+//! default they failed their bars (`research/ontology-apps/lifecycle-prereg.md`
+//! Result: the reader read a replaced deal's end as won 2 times in 4, and on
+//! real mail wrote stage moves as acts under), so the default is today's
+//! reader. Opted in, what each means is the recipe's to say, with the sources'
+//! meaning unless it pins another: a replaced record ends, its state given by
+//! the recipe's own rules from their values (the replaced kind is a kind of the
+//! fold's claim kind), or `replaced = "<state>"`; an act under a record (a
+//! nomination or a draw under a trade, CDM's reset) changes nothing, or
+//! `acts_under = "<state>"` makes it a move.
 
 use std::collections::BTreeSet;
 
 use tracing::{debug, info};
 use understanding_vocab::ontology::decl::{AttrFamily, Force, OntologyTypeDecl, TypeKind};
-use understanding_vocab::ontology::derived::{FoldDecl, ProtocolRuleDecl};
+use understanding_vocab::ontology::derived::{FoldDecl, ProtocolFoldDecl, ProtocolRuleDecl};
 use understanding_vocab::ontology::OntologyPolicies;
 
 use crate::error::{Error, Result};
@@ -33,8 +36,8 @@ pub(super) fn supply(policies: &mut OntologyPolicies) -> Result<()> {
         let Some(protocol) = &fold.protocol else {
             continue;
         };
-        if protocol.lifecycle == Some(false) {
-            debug!(fold = %fold.id, "ontology: lifecycle = false, no lifecycle kinds");
+        if !opted_in(protocol) {
+            debug!(fold = %fold.id, "ontology: the recipe does not opt into lifecycle kinds");
             continue;
         }
         let Some((record, values)) = record_of(policies, fold) else {
@@ -114,6 +117,15 @@ pub(super) fn supply(policies: &mut OntologyPolicies) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Whether `protocol`'s recipe asks for the lifecycle kinds: `lifecycle =
+/// true`, or a pinned `replaced` or `acts_under`; `lifecycle = false` never.
+pub(crate) fn opted_in(protocol: &ProtocolFoldDecl) -> bool {
+    protocol.lifecycle != Some(false)
+        && (protocol.lifecycle == Some(true)
+            || protocol.replaced.is_some()
+            || protocol.acts_under.is_some())
 }
 
 /// The lifecycle kinds' names for `fold`'s record, replaced then act-under:

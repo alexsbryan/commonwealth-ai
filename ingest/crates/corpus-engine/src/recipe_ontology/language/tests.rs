@@ -202,13 +202,16 @@ fn rules(p: &OntologyPolicies) -> Vec<(String, String, usize)> {
         .collect()
 }
 
-/// A protocol fold's record is given the method's two lifecycle kinds: one
-/// replaced, a kind of the fold's claim kind so its rules give it a state read
-/// from their values, and one done under it, which no rule moves. Without a
-/// fold neither is supplied.
+/// The method's two lifecycle kinds are a recipe's to opt into: with
+/// `lifecycle = true` a protocol fold's record gets one replaced, a kind of the
+/// fold's claim kind so its rules give it a state read from their values, and
+/// one done under it, which no rule moves. Absent, or without a fold, neither
+/// is supplied (lifecycle-prereg.md Result: supplied by default they failed).
 #[test]
-fn a_protocol_folded_type_is_given_a_replaced_and_an_act_under_kind() {
+fn a_protocol_folded_type_opts_into_a_replaced_and_an_act_under_kind() {
     let p = v1(DEALS).unwrap();
+    assert!(p.type_decl("deal_replaced").is_none() && p.type_decl("deal_act_under").is_none());
+    let p = v1(&opted(DEALS)).unwrap();
     let replaced = p
         .type_decl("deal_replaced")
         .expect("deal_replaced supplied");
@@ -221,14 +224,25 @@ fn a_protocol_folded_type_is_given_a_replaced_and_an_act_under_kind() {
     assert_eq!(act.subject.as_deref(), Some("deal"));
     assert_eq!(act.specializes, None);
     assert!(act.is_document_reading_eligible(&p.shape.types));
-    assert_eq!(rules(&p).len(), 2, "no rule is added by default");
-    let unfolded = DEALS
+    assert_eq!(
+        rules(&p).len(),
+        2,
+        "no rule is added unless a lever pins one"
+    );
+    let unfolded = opted(DEALS)
         .split("[[folds]]")
         .next()
         .unwrap()
         .replace(", derived = \"deal_stage\"", "");
     let p = v1(&unfolded).unwrap();
     assert!(p.type_decl("deal_replaced").is_none() && p.type_decl("deal_act_under").is_none());
+}
+
+fn opted(body: &str) -> String {
+    body.replace(
+        "identity = \"stage\"\n",
+        "identity = \"stage\"\nlifecycle = true\n",
+    )
 }
 
 /// The levers: `replaced` and `acts_under` name the state each moves its
@@ -262,7 +276,7 @@ fn the_lifecycle_levers_pin_a_state_and_turn_the_kinds_off() {
         err.contains("closed") && err.contains("deal_stage"),
         "{err}"
     );
-    let off = DEALS.replace(
+    let off = pinned.replace(
         "identity = \"stage\"\n",
         "identity = \"stage\"\nlifecycle = false\n",
     );
@@ -274,7 +288,8 @@ fn the_lifecycle_levers_pin_a_state_and_turn_the_kinds_off() {
 #[test]
 fn a_declared_type_of_a_supplied_name_is_the_recipes() {
     let own = format!(
-        "{DEALS}\n[[types]]\nname = \"deal_act_under\"\nkind = \"claim\"\nforce = \"commissive\"\nsubject = \"deal\"\n"
+        "{}\n[[types]]\nname = \"deal_act_under\"\nkind = \"claim\"\nforce = \"commissive\"\nsubject = \"deal\"\n",
+        opted(DEALS)
     );
     let p = v1(&own).unwrap();
     let decls: Vec<_> = p
@@ -324,11 +339,13 @@ fn the_lifecycle_kinds_and_levers_validate_clean() {
             .filter(|e| e.contains("deal_replaced") || e.contains("deal_act_under"))
             .collect();
         assert!(ours.is_empty(), "{ours:?}");
+        let want = match body.contains("replaced = ") {
+            true => "lifecycle: `deal_replaced` ",
+            false => "lifecycle: off on fold `deal_stage`",
+        };
         assert!(
-            v.notes
-                .iter()
-                .any(|n| n.starts_with("lifecycle: `deal_replaced` ")),
-            "{:?}",
+            v.notes.iter().any(|n| n.starts_with(want)),
+            "{want}: {:?}",
             v.notes
         );
     }

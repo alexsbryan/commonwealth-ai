@@ -1,6 +1,6 @@
 //! A record's lifecycle as the reader is shown it: the method's replaced and
-//! act-under kinds beside the recipe's (`recipe_ontology/lifecycle.rs`), and no
-//! prose rule standing in for them.
+//! act-under kinds beside the recipe's when it opts in
+//! (`recipe_ontology/lifecycle.rs`).
 
 use crate::enrichment::ontology::TypeIndex;
 use crate::recipe_ontology::OntologyBlock;
@@ -35,34 +35,43 @@ state = "won"
 when = { stage = "won" }
 "#;
 
-/// Failing input, named: the window prompt's supersession line ("Write the
-/// first's ending even when nothing else in the window speaks of it") was
-/// prose with no code behind it, and at 20k halwick-d1's rollover went
-/// unwritten (2026-10-18). The reader is shown the two kinds instead, the
-/// replaced one with the stage it reads; the line is gone.
+/// Failing input, named: at 20k halwick-d1's rollover went unwritten and
+/// world-s1's nominations were written as leads (2026-10-18). A recipe that
+/// opts in shows the reader both kinds, the replaced one with the stage it ends
+/// in; one that does not shows neither (lifecycle-prereg.md Result).
 #[test]
-fn the_reader_is_shown_the_lifecycle_kinds_and_no_supersession_rule() {
-    let p = OntologyBlock {
-        version: 1,
-        body: toml::from_str(DEALS).unwrap(),
-    }
-    .policies()
-    .unwrap();
-    let contract = super::Contract::of(&p);
-    let index = TypeIndex::from_policies(&p);
-    let shown = super::ontology_text(&contract, &p, &index);
+fn an_opted_in_recipe_shows_the_reader_the_lifecycle_kinds() {
+    let shown = |body: &str| {
+        let p = OntologyBlock {
+            version: 1,
+            body: toml::from_str(body).unwrap(),
+        }
+        .policies()
+        .unwrap();
+        let contract = super::Contract::of(&p);
+        let index = TypeIndex::from_policies(&p);
+        super::ontology_text(&contract, &p, &index)
+    };
+    let opted = shown(&DEALS.replace(
+        "identity = \"stage\"\n",
+        "identity = \"stage\"\nlifecycle = true\n",
+    ));
     assert!(
-        shown.contains("- deal_replaced (a statement about one deal): "),
-        "{shown}"
+        opted.contains("- deal_replaced (a statement about one deal): "),
+        "{opted}"
     );
     assert!(
-        shown.contains("- deal_act_under (a statement about one deal): "),
-        "{shown}"
+        opted.contains("- deal_act_under (a statement about one deal): "),
+        "{opted}"
     );
-    let replaced = shown.split("- deal_replaced").nth(1).unwrap();
+    let replaced = opted.split("- deal_replaced").nth(1).unwrap();
     assert!(
         replaced.lines().nth(1).unwrap().contains("* stage (text)"),
-        "{shown}"
+        "{opted}"
     );
-    assert!(!super::PROMPT.contains("rolled into"), "{}", super::PROMPT);
+    let plain = shown(DEALS);
+    assert!(
+        !plain.contains("deal_replaced") && !plain.contains("deal_act_under"),
+        "{plain}"
+    );
 }
