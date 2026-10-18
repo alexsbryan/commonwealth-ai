@@ -65,7 +65,7 @@ pub(super) fn supply(policies: &mut OntologyPolicies) -> Result<()> {
         let field = &protocol.identity;
         let [replaced, act] = kind_names(&record);
         let ending = format!(
-            "a statement that this {record} is replaced by, rolled into or superseded by another {record}, about the one replaced and written even when nothing else in the window speaks of it"
+            "a statement that this {record} is replaced by, rolled into or superseded by another {record}, so the one replaced has ended; written about the one replaced, even when nothing else in the window speaks of it"
         );
         let doing = format!(
             "something done under a {record} as it stands: carrying it out, scheduling it or reporting on it"
@@ -74,7 +74,7 @@ pub(super) fn supply(policies: &mut OntologyPolicies) -> Result<()> {
             &replaced,
             &record,
             match &protocol.replaced {
-                None => format!("{ending}; its {field} is the one the replacement leaves it in"),
+                None => format!("{ending}, with the {field} it ends in"),
                 Some(_) => ending,
             },
         );
