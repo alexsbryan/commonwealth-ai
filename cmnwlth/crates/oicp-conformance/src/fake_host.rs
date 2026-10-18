@@ -47,6 +47,10 @@ pub struct Breaks {
     pub scope_leaks: bool,
     /// ingest.recipe: an install is missing from the first poll after it.
     pub late_listing: bool,
+    /// ingest.recipe: the first poll after a re-install under another
+    /// recipe lists the last install's `complete` with no documents (the
+    /// reference host at d95ba219e, platform row PV3g).
+    pub stale_reinstall: bool,
     /// evidence.verify_correction: a correction's witness is never read
     /// back; every one is `verified`.
     pub witness_unread: bool,
@@ -172,6 +176,8 @@ struct Fake {
     resolved: BTreeMap<String, Value>,
     /// Polls of progress since each corpus's last install.
     polls: Mutex<BTreeMap<String, u32>>,
+    /// Corpora installed again under another recipe, until their next poll.
+    reinstalled: Mutex<BTreeSet<String>>,
     /// The corpora whose sentences the fake's one worker embeds, first in
     /// first out (v0.6 §2.11): the front is embedding now. An install of a
     /// corpus in `queueable` joins it; each sentence search over a queued
@@ -416,6 +422,7 @@ pub async fn spawn(breaks: Breaks) -> Running {
         allowed: Mutex::new(BTreeSet::new()),
         resolved: records::resolver_table(),
         polls: Mutex::new(BTreeMap::new()),
+        reinstalled: Mutex::new(BTreeSet::new()),
         queue: Mutex::new(Vec::new()),
         finished: Mutex::new(Vec::new()),
         queueable: sentences::queue_corpora(),

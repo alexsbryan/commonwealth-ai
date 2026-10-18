@@ -103,6 +103,9 @@ async fn install(State(f): State<Arc<Fake>>, req: Result<Json<Value>, JsonReject
     }
     if spawned {
         f.polls.lock().unwrap().remove(&corpus);
+        if previous.is_some() {
+            f.reinstalled.lock().unwrap().insert(corpus.clone());
+        }
     }
     Json(json!({"corpus_id": corpus, "spawned": spawned, "recipe_sha256": sha})).into_response()
 }
@@ -110,7 +113,8 @@ async fn install(State(f): State<Arc<Fake>>, req: Result<Json<Value>, JsonReject
 /// The lawful progress: every install listed from its first poll, complete,
 /// with each fixture text `ready` under its name (v0.6 §2.9).
 /// `late_listing` hides an install from the first poll after it;
-/// `omit_documents` lists none.
+/// `stale_reinstall` lists a re-install's first poll as the last install's
+/// `complete` with no documents; `omit_documents` lists none.
 pub(super) async fn progress(State(f): State<Arc<Fake>>) -> Json<Value> {
     let installed = f.installed.lock().unwrap();
     let mut polls = f.polls.lock().unwrap();
@@ -143,6 +147,10 @@ pub(super) async fn progress(State(f): State<Arc<Fake>>) -> Json<Value> {
         let n = polls.entry(c.clone()).or_insert(0);
         *n += 1;
         if f.breaks.late_listing && *n == 1 {
+            continue;
+        }
+        if f.reinstalled.lock().unwrap().remove(c.as_str()) && f.breaks.stale_reinstall {
+            progress.insert(c, json!({"phase": "complete", "documents": []}));
             continue;
         }
         progress.insert(c, json!({"phase": "complete", "documents": documents(c)}));

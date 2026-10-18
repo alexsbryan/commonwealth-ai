@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::state::AppState;
 
-use super::corpus_ingest::{clear_stale_failure, ingest_progress_callback, record_failure};
+use super::corpus_ingest::{clear_last_attempt, ingest_progress_callback, record_failure};
 
 #[path = "corpus_install/post_install.rs"]
 mod post_install;
@@ -136,7 +136,7 @@ pub async fn spawn_install(
         }
     }
 
-    clear_stale_failure(&state, &corpus_id).await;
+    clear_last_attempt(&state, &corpus_id).await;
 
     // Resolve the recipe + apply parameters BEFORE spawning the
     // background task so a parameter mismatch surfaces as a

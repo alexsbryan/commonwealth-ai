@@ -447,7 +447,7 @@ pub async fn corpus_expand(
 /// and losing that race would park the corpus on a non-terminal phase
 /// (say "embedding") with no task running to ever advance it, i.e. a
 /// permanent fake spinner in place of the error. Safe across retries
-/// because `clear_stale_failure` runs before a new attempt spawns.
+/// because `clear_last_attempt` runs before a new attempt spawns.
 pub(super) fn ingest_progress_callback(
     state: AppState,
     corpus_id: String,
@@ -470,19 +470,22 @@ pub(super) fn ingest_progress_callback(
     })
 }
 
-/// Retire a `Failed` record left by a previous attempt, so a retry
-/// starts clean.
+/// Retire the last attempt's terminal record, `Failed` or `Complete`, and
+/// its documents, so a new attempt starts clean.
 ///
 /// The failure record is deliberately sticky — it has to outlive its
 /// task to be reportable at all — which makes the retry responsible for
 /// clearing it. Without this, the stale message would sit in the
 /// snapshot beside live progress and a UI showing "Install failed" would
-/// keep showing it straight through a successful reinstall.
+/// keep showing it straight through a successful reinstall. A `Complete`
+/// goes too (platform row PV3g): kept, a re-install of a held corpus read
+/// `complete` with no documents from its spawn to the engine's first
+/// callback, where OICP v0.6 §2.9 lists it `pending` ("a new attempt starts
+/// it again"), and a client read the library installed and empty.
 ///
-/// Only `Failed` is swept: in-flight phases cannot be present (the
-/// `active_ingests` guard already returned), and a `Complete` entry is
-/// legitimate history until overwritten.
-pub(super) async fn clear_stale_failure(state: &AppState, corpus_id: &str) {
+/// In-flight phases cannot be present: the `active_ingests` guard already
+/// returned.
+pub(super) async fn clear_last_attempt(state: &AppState, corpus_id: &str) {
     // A new attempt's documents are its own: the last install's list goes
     // with it, so no poll mixes the two.
     if let Some(corpus) = state
@@ -493,15 +496,21 @@ pub(super) async fn clear_stale_failure(state: &AppState, corpus_id: &str) {
         .and_then(|e| corpus_index::corpus::Corpus::named(e.index_dir(), corpus_id))
     {
         if let Err(e) = corpus.clear_install_documents() {
-            tracing::warn!(corpus = %corpus_id, error = %e, "clear_stale_failure: the last install's documents record did not clear");
+            tracing::warn!(corpus = %corpus_id, error = %e, "clear_last_attempt: the last install's documents record did not clear");
         }
     }
-    let mut progress = state.inner.ingest.corpus_progress.write().await;
-    if let Some(sovereign_contracts::daemon_wire::IngestProgress::Failed { .. }) =
-        progress.get(corpus_id)
-    {
-        progress.remove(corpus_id);
-    }
+    let last = state
+        .inner
+        .ingest
+        .corpus_progress
+        .write()
+        .await
+        .remove(corpus_id);
+    tracing::debug!(
+        corpus = %corpus_id,
+        retired = ?last,
+        "clear_last_attempt: a new attempt starts its progress entry again"
+    );
 }
 
 /// Record a terminal failure so `/internal/corpus/status` can report it.
@@ -532,7 +541,7 @@ pub async fn spawn_corpus_expand(state: AppState, corpus_id: String) -> bool {
         active.insert(corpus_id.clone());
     }
 
-    clear_stale_failure(&state, &corpus_id).await;
+    clear_last_attempt(&state, &corpus_id).await;
 
     let state_for_task = state.clone();
     let corpus_id_for_task = corpus_id.clone();

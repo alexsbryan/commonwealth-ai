@@ -131,6 +131,20 @@ async fn ingest_documents_is_red_against_a_late_listing_and_an_entry_with_no_doc
     );
 }
 
+/// v0.6 §2.9 (platform row PV3g): the held fixture installed again under
+/// another recipe is listed as that install from its spawn, never as the last
+/// install's `complete` with no documents.
+#[tokio::test]
+async fn ingest_recipe_is_red_against_a_reinstall_listed_as_the_last_install() {
+    let b = bench(Breaks {
+        stale_reinstall: true,
+        ..Breaks::default()
+    })
+    .await;
+    let (c, _) = check_ingest_recipe(&b.host, &b.manifest, &b.args, &b.lib).await;
+    red(&c, "complete with no documents");
+}
+
 /// v0.6 §2.9 (platform row PH): a fixture the host holds is listed with its
 /// documents even when no install of it returned in this run, as after the
 /// host's restart. Red against a host that lists only this run's installs:
