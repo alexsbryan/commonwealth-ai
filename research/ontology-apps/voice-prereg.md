@@ -29,6 +29,9 @@ replay of the code before the change.
 4. world-s3 and ward-story together serve no more than 2 deals fewer than fit-ref (26/27 and 8/14). world-s1 is
    left out: it flips 7 of 18 deals between reads of the same code, so one read of it cannot carry a bar (it sank
    the fit gate's third bar).
+   *Corrected 2026-10-17:* the 7 of 18 is the 2026-10-14 reader's (reader-fresh0 against reader-think-uncapped);
+   the window reader's two fresh 40k reads served 18 and 18 with no flip, and world-s1 fell to 9 at this change and
+   the next taken together (`diagnosis/README.md`).
 
 Development corpora only. If it passes, the change stands for every corpus, held-out included; the held-out reads
 come after, once.

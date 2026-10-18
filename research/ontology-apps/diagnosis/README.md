@@ -1,8 +1,15 @@
 # Why deals are lost: the 2026-10-17 diagnosis and its solution space
 
-Every number below is re-derived by the script named beside it, run from the repo root over the saved reads in
-`runs/loop/` (fresh thinking-on reads: asker daemon or recorded, not `det-*` or the early whole-text arms). "Identity
+Every number below is re-derived by the script named beside it, run from the repo root with `ARMS=all`: every fresh
+thinking-on read in `runs/loop/` (asker daemon or recorded, not `det-*` or the early whole-text arms). "Identity
 wrong" means a gold update's statement is not on its deal's main record; "not placed" means no statement matched it.
+
+**Corrected 2026-10-17: that population is every reader since 2026-10-14, and the reader changed under it.**
+Identity errors per five-world read were 11-21 in the five reads of 10-14, 7 on 10-15 (bundle1-fresh), 4 on 10-16
+(structural-fresh), and 1 over today's reads of world-s1 and world-s3 (`identity_where.py` per arm). The cells
+below describe the readers of 10-14 and 10-15 more than today's. Lean D step 1 was sized on 78 reader-made errors
+from them and found 1 (`lean-d-prereg.md` Result). A count that sizes a change is taken on reads of the code it
+changes; the scripts now take no default population (`ARMS=` names the reads, `ARMS=all` is this one).
 
 ## What was ruled out first
 
@@ -55,23 +62,34 @@ one-shot misses both), own text after a quote marker read as quoted (pasadena-d8
 fixed by eb07f225a, verent-d4 a scorer artefact, four renamed counterparties (pinyonton-d2, -d3, pellica-d1,
 alderdale-d1), faircroft-d1 (siblings, "We can price that at .10").
 
-## On the latest reads: misses are on deals whose history changes (2026-10-17, later)
+## On the latest reads: misses are on deals whose history changes (2026-10-17, later; corrected the same day)
 
-Latest read per world (structural-fresh for s2, s4, s5; leand-0 and two fresh RESOLVE passes for s1; leand-0 for s3),
-deals by the gold tags on their updates; the one-shot's two reads beside:
+**Corrected:** the first table here pooled two readers (the 40k reader of 2026-10-16 for s2, s4, s5) and counted
+world-s1 three times. By reader, deals by the gold tags on their updates:
 
-| deal | ours served | one-shot |
-|---|---|---|
-| no cancel, revive, superseded or rename | 50/51 (98%) | 67/78 (86%) |
-| cancel, revive or superseded | 42/58 (72%) | 42/76 (55%) |
-| renamed | 17/20 (85%) | 29/32 (91%) |
+| reads | no cancel, revive, superseded or rename | cancel, revive or superseded | renamed |
+|---|---|---|---|
+| today's reader (20k), world-s1 + s3: leand-0; two fresh RESOLVE passes | 20/21; 21, 21 | 13/18; 14, 14 | 6/6 |
+| 40k reader of 10-16, world-s1 + s3 (structural-fresh) | 20/21 | 18/18 | 6/6 |
+| 40k reader of 10-16, world-s2, s4, s5 | 18/18 | 17/20 | 7/10 |
+| one-shot's two reads, world-s1 + s3 | 36/42 | 22/36 | 11/12 |
 
-Superseded deals are served 14 of 26, cancelled 13 of 21, revived 33 of 46. Their misses are the reader's
-particulars around the change (in-window merge and split: coyoteville's Q2 loss written on the replaced deal), the
-replaced deal's end not written (halwick-d1), and acts under a won deal folded as stage moves (two nominations moved
-blueville-d1 and kestrel_ridge-d2 back to lead). Of the 7 deals the one-shot serves in both reads and we miss, 6 are
-renames, nominations and rollovers (family 3 below); tep-d2 is RESOLVE without domain knowledge. Lean D step 1 acts
-only after the reader and leaves these where they are (`lean-d-prereg.md` Result).
+world-s2, s4 and s5 have no read by today's reader. On world-s1 the 40k reader served all 18 deals in both its fresh
+reads (bundle1-fresh, structural-fresh-s1; no flip); the first read with the voice change and 20k windows together
+served 9 (w20-inner), 12 with 3175c3f6c, 14 with fresh RESOLVE. world-s1 was out of both changes' bars on "flips 7 of
+18 between reads of one code", which is reader-fresh0 against reader-think-uncapped, the 10-14 reader. What it loses:
+- Acts under a won deal (nominations). The recipe has no stage for one, so the reader picks one. At 40k, five to
+  seven nominations to a window, it reasoned them won together (4 of 5 and 4 of 4 claims); at 20k, one or two to a
+  window, lead or proposal (2 of 2). blueville-d1 and kestrel_ridge-d2 lose on them in leand-0 and not in the fresh
+  RESOLVE passes, which kept the nomination apart; cedarwood-d1 loses the won nomination that put it right at 40k
+  (its revival is read lead in both; the one-shot misses it in both reads).
+- The replaced deal's end. halwick-d1's "being rolled into a new arrangement" was written lost at 40k, in the window
+  holding its redline; at 20k it opens a window of its own and is not written.
+- The rollover's two deals. coyoteville-d2's Q2 loss written on the deal it replaced, the one reader-made identity
+  error on today's inner ring.
+
+The class holds on today's reader, at 18 deals on two worlds, and the 40k reader's 18 of 18 rested on a guess that
+a window of nominations made consistent.
 
 ## What exists (inventory, 2026-10-17)
 

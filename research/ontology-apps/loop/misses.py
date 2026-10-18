@@ -175,13 +175,17 @@ def resolve_lines(run):
 
 
 def fresh_reads(cid):
-    """The score paths of `cid` a diagnosis pools, in glob order: with ARMS=a,b/world-s3 exactly those arms, or one
-    corpus of an arm (a replay among them), else every fresh read (extract asker daemon or recorded; not det-* or the
-    early whole-text arms)."""
-    arms = [a for a in os.environ.get("ARMS", "").split(",") if a]
-    for p in glob.glob(f"runs/loop/*/{cid}/score.json"):
+    """The score paths of `cid` a diagnosis counts: ARMS=a,b/world-s3 names arms, or one corpus of an arm (a replay
+    among them). There is no default. ARMS=all is every fresh read (extract asker daemon or recorded; not det-* or the
+    early whole-text arms), which spans every reader since 2026-10-14: identity errors per five-world read fell from
+    11-21 on 10-14 to 4 on 10-16, so a count pooled that way describes no one reader (lean D was sized on one)."""
+    names = os.environ.get("ARMS", "")
+    if not names:
+        sys.exit("ARMS=<arm>[/<corpus>],... names the reads to count; ARMS=all pools every fresh read, across readers")
+    arms = [a for a in names.split(",") if a]
+    for p in sorted(glob.glob(f"runs/loop/*/{cid}/score.json")):
         arm = p.split("/")[2]
-        if arms:
+        if names != "all":
             if arm in arms or f"{arm}/{cid}" in arms: yield p
             continue
         rr = json.load(open(os.path.join(os.path.dirname(p), "run.json")))

@@ -75,6 +75,9 @@ engineer once each. Judge 77495a0bde1d for the banks.
 **The change is a candidate default when all three hold.**
 1. Mail guard: world-s3 + ward-story serve at least 29 of 41 (HEAD's reader, fresh at 40k: 24 + 7). world-s1 is
    reported, no bar (it flips 7 of 18 between reads of one code).
+   *Corrected 2026-10-17:* the 7 of 18 is the 2026-10-14 reader's (reader-fresh0 against reader-think-uncapped);
+   the window reader's two fresh 40k reads served 18 and 18 with no flip, and world-s1 fell to 9 at this change and
+   the next taken together (`diagnosis/README.md`).
 2. Bar G (generality-prereg.md): saltgrass-ledger's mean is at least the one-shot's 25.5 minus 2.
 3. The mean cross-recipe agreement over the ten pairs of asked, ledger, detective, editor and engineer is at least 32
    of 42 (40k: 29.2).
