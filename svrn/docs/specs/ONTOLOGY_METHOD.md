@@ -122,6 +122,21 @@ follows whatever decision put its value in a record (uv thread .905 under gold, 
 estimated on the run itself, document by document in clock order, and checked against the labelled ratios
 (layer-estimator) rather than declared.
 
+**What the window reader bound is RESOLVE's to decide (agreed 2026-10-17, "lean D").** A statement is placed
+right when a handle unique to its particular comes with it, its own full description or a thread no sibling shares
+(~1% wrong), and wrong 6.5-7.5% without one; 78 of 106 rename-free identity errors were the window reader's binding
+across documents, which linked on the window's reference without a question, and a record wholly of the window's
+other particulars was never offered (`research/ontology-apps/diagnosis/README.md`). Amended: the window's reference
+is sufficient within one document and evidence across documents, so a statement bound across documents is asked,
+its window-mate's record offered first and marked as the reader's reading; a record of the window's other particulars
+is offered, marked, not hidden. Next, in its own step: after the pick, one forced choice over the protocol fold's own
+moves, shown the chosen record's state so far (moves it, acts under it without moving it, ends it because another
+record replaces it, resumes it), applied by the fold, so the supersession line of `window_prompt.md` can go; then,
+deferred to a decision on the margin, an unsettled statement stays held and surfaced instead of forced at settling.
+Windows stay independent, every answer is recorded, and the change is judged by replaying saved reads with only
+RESOLVE re-asked (`research/ontology-apps/lean-d-prereg.md`). The two-pass re-read with records in view is the next
+ring out if this does not move the cells.
+
 ## Reading (agreed 2026-10-08; the window reader since 2026-10-15)
 
 The reader asks; it never decides identity. There is one reader, chosen by the declaration (every claim kind
