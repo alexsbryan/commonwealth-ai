@@ -2,28 +2,33 @@
 //! The reference host's half of OICP v0.6 §2.17: a writer's request first.
 //!
 //! The engine asks [`PriorityGate::step`] where a step of model work starts
-//! (the embed slot, a generation slot's admission) and holds what it returns
-//! until the step ends. An interactive step is counted while it runs. A
-//! background step waits until none is, and the request's background steps
-//! go one at a time, so at most one stands between a writer's step and the
-//! stage it queues at: the embed context's lock is first in first out, and
-//! background steps already queued there would otherwise go first. Each wait
-//! is bounded by the ceiling, then the step goes ahead. A call whose request
-//! named no priority passes untouched.
+//! (the embed slot, a generation slot's admission), tells it
+//! [`Step::entered`] once it holds its stage, and holds it until the step
+//! ends. An interactive step is counted from its ask. A background step waits
+//! until none is, and the background steps waiting to enter one stage go one
+//! at a time, so at most one stands between a writer's step and the stage it
+//! queues at: a stage's queue is first in first out, and background steps
+//! already queued there would otherwise go first. A background step that has
+//! entered its stage holds no other back (PV3e). Each wait is bounded by the
+//! ceiling, then the step goes ahead. A call whose request named no priority
+//! passes untouched.
 //!
 //! A step already running is not preempted, but a background one long enough
 //! to matter is read in parts ([`PriorityGate::in_parts`]): a completion's
 //! prompt, which holds the accelerator longest, pauses between its parts
-//! while an interactive step is in flight, and a background embed batch lets
-//! the embed context go between its sub-batches ([`PriorityGate::parts_under`]).
+//! while an interactive step that has entered its stage runs, never for one
+//! waiting on the slot the prompt's step holds (PV3e). A background embed
+//! batch lets the embed context go between its sub-batches
+//! ([`PriorityGate::parts_under`]) and pauses for any interactive step.
 //!
 //! Why here: on 2026-10-16 a warm summon's query embed took p50 249 ms under a
 //! draft's checks against 77 ms idle, and the checks' verify ran 126 primary
 //! completions in the same window; the accelerator, not the lock's queue,
 //! held the time (zoracite v1-pull-latency).
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
 use oicp_types::RequestPriority;
@@ -51,17 +56,37 @@ const PAUSE_POLL: Duration = Duration::from_millis(2);
 /// Holds interactive steps first and background steps one at a time.
 #[derive(Debug)]
 pub struct PriorityGate {
+    /// Interactive steps asked and not ended.
     interactive: AtomicUsize,
+    /// Of those, the ones inside their stage.
+    running: AtomicUsize,
     ended: Notify,
-    background: Arc<Semaphore>,
+    /// Each stage's one place for a background step waiting to enter it.
+    waiting: Mutex<HashMap<String, Arc<Semaphore>>>,
     ceiling: Duration,
 }
 
 /// A step of model work, held until the work ends.
 #[derive(Debug, Default)]
 pub struct Step {
-    _interactive: Option<InteractiveMark>,
-    _background: Option<(OwnedSemaphorePermit, Holding)>,
+    interactive: Option<InteractiveMark>,
+    running: Option<RunningMark>,
+    waiting: Option<OwnedSemaphorePermit>,
+    _holding: Option<Holding>,
+}
+
+impl Step {
+    /// The step holds its stage: a background step gives its stage's place to
+    /// the next one waiting there, and an interactive one counts as running,
+    /// so a background prompt read pauses for it. A second call does nothing.
+    pub fn entered(&mut self) {
+        self.waiting = None;
+        if let (Some(mark), None) = (&self.interactive, &self.running) {
+            let running = mark.0.running.fetch_add(1, Ordering::SeqCst) + 1;
+            tracing::trace!(target: TARGET, running, "priority: interactive step entered its stage");
+            self.running = Some(RunningMark(Arc::clone(&mark.0)));
+        }
+    }
 }
 
 /// One interactive step in flight; dropping it wakes held background steps.
@@ -77,13 +102,24 @@ impl Drop for InteractiveMark {
     }
 }
 
+/// One interactive step inside its stage.
+#[derive(Debug)]
+struct RunningMark(Arc<PriorityGate>);
+
+impl Drop for RunningMark {
+    fn drop(&mut self) {
+        self.0.running.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
 impl PriorityGate {
     /// A gate whose background steps wait at most `ceiling`.
     pub fn new(ceiling: Duration) -> Arc<Self> {
         Arc::new(Self {
             interactive: AtomicUsize::new(0),
+            running: AtomicUsize::new(0),
             ended: Notify::new(),
-            background: Arc::new(Semaphore::new(1)),
+            waiting: Mutex::new(HashMap::new()),
             ceiling,
         })
     }
@@ -94,8 +130,9 @@ impl PriorityGate {
         GATE.get_or_init(|| Self::new(HOLD_CEILING))
     }
 
-    /// The step `phase` starts, for the request the running call serves.
-    pub async fn step(self: &Arc<Self>, phase: &'static str) -> Step {
+    /// The step `phase` starts at `stage` (the embed context, a generation
+    /// slot's queue), for the request the running call serves.
+    pub async fn step(self: &Arc<Self>, stage: &str, phase: &'static str) -> Step {
         let Some(asked) = request_priority::current() else {
             tracing::trace!(target: TARGET, phase, "priority: unasked step, served as before");
             return Step::default();
@@ -105,8 +142,8 @@ impl PriorityGate {
                 let in_flight = self.interactive.fetch_add(1, Ordering::SeqCst) + 1;
                 tracing::debug!(target: TARGET, phase, in_flight, "priority: interactive step");
                 Step {
-                    _interactive: Some(InteractiveMark(Arc::clone(self))),
-                    _background: None,
+                    interactive: Some(InteractiveMark(Arc::clone(self))),
+                    ..Step::default()
                 }
             }
             RequestPriority::Background if asked.holding() => {
@@ -117,23 +154,30 @@ impl PriorityGate {
                 );
                 Step::default()
             }
-            RequestPriority::Background => self.background_step(phase, &asked).await,
+            RequestPriority::Background => self.background_step(stage, phase, &asked).await,
         }
     }
 
-    async fn background_step(&self, phase: &'static str, asked: &Asked) -> Step {
+    async fn background_step(&self, stage: &str, phase: &'static str, asked: &Asked) -> Step {
         let asked_at = Instant::now();
-        let permit =
-            tokio::time::timeout(self.ceiling, Arc::clone(&self.background).acquire_owned())
-                .await
-                .ok()
-                .and_then(Result::ok);
+        let place = Arc::clone(
+            self.waiting
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .entry(stage.to_string())
+                .or_insert_with(|| Arc::new(Semaphore::new(1))),
+        );
+        let permit = tokio::time::timeout(self.ceiling, place.acquire_owned())
+            .await
+            .ok()
+            .and_then(Result::ok);
         let behind = self.until_no_interactive(asked_at).await;
         let waited_ms = asked_at.elapsed().as_millis() as u64;
         let at_ceiling = permit.is_none() || asked_at.elapsed() >= self.ceiling;
         if at_ceiling {
             tracing::debug!(
                 target: TARGET,
+                stage,
                 phase,
                 waited_ms,
                 behind,
@@ -143,6 +187,7 @@ impl PriorityGate {
         } else {
             tracing::debug!(
                 target: TARGET,
+                stage,
                 phase,
                 waited_ms,
                 behind,
@@ -150,8 +195,9 @@ impl PriorityGate {
             );
         }
         Step {
-            _interactive: None,
-            _background: permit.map(|p| (p, asked.hold())),
+            waiting: permit,
+            _holding: Some(asked.hold()),
+            ..Step::default()
         }
     }
 
@@ -176,7 +222,7 @@ impl PriorityGate {
         let mut from = 0;
         while from < len {
             if from > 0 {
-                self.pause_between_parts(phase, from);
+                self.pause_between_parts(phase, from, &self.running);
             }
             let to = (from + part).min(len);
             read(from..to)?;
@@ -205,7 +251,7 @@ impl PriorityGate {
             at += 1;
             if background {
                 drop(held);
-                self.pause_between_parts(phase, at);
+                self.pause_between_parts(phase, at, &self.interactive);
                 held = acquire();
             }
         }
@@ -217,11 +263,16 @@ impl PriorityGate {
         request_priority::current().is_some_and(|a| a.priority() == RequestPriority::Background)
     }
 
-    /// Blocks while an interactive step is in flight, at most the ceiling.
-    fn pause_between_parts(&self, phase: &'static str, at: usize) {
+    /// Blocks while `count` (the interactive steps running, or all asked) is
+    /// above zero, at most the ceiling. A prompt read holds its slot across
+    /// its parts, so it counts only running steps: one waiting on that slot
+    /// cannot run until the read ends, and pausing for it would hold both
+    /// (zoracite 1747f71: a writer's verify took 29 s behind checks paused
+    /// for it, against 8 s with neither asked).
+    fn pause_between_parts(&self, phase: &'static str, at: usize, count: &AtomicUsize) {
         let asked_at = Instant::now();
         let mut behind = 0;
-        while let n @ 1.. = self.interactive.load(Ordering::SeqCst) {
+        while let n @ 1.. = count.load(Ordering::SeqCst) {
             behind = behind.max(n);
             if asked_at.elapsed() >= self.ceiling {
                 tracing::debug!(

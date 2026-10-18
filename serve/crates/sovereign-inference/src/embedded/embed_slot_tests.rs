@@ -33,7 +33,7 @@ async fn embed_beside_a_held_gpu_context(
     let start = Instant::now();
     let vectors = asked(priority, async move {
         tokio::task::spawn_blocking(carry(move || {
-            EmbedSlot::run_embed_batch_sync(&embedder, &inputs)
+            EmbedSlot::run_embed_batch_sync(&embedder, &inputs, &mut Default::default())
         }))
         .await
         .unwrap()

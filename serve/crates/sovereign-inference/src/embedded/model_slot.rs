@@ -1278,10 +1278,11 @@ pub(super) async fn acquire_with_queue_gauge(
 ) -> Result<SlotPermit> {
     use std::sync::atomic::Ordering;
 
-    let step = crate::priority_gate::PriorityGate::process()
-        .step(phase)
+    let mut step = crate::priority_gate::PriorityGate::process()
+        .step(&queue.label, phase)
         .await;
     let grant = |permit| {
+        step.entered();
         // ONE place a turn's start is stamped, so the permit's own clock and
         // the queue's view of "how far along is the holder" cannot disagree.
         let started = std::time::Instant::now();

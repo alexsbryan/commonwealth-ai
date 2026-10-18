@@ -15,8 +15,9 @@ async fn at_the_stage(
     name: String,
     turn: Duration,
 ) {
-    let _step = gate.step("fake_embed").await;
+    let mut step = gate.step("fake_stage", "fake_embed").await;
     let _context = stage.lock().await;
+    step.entered();
     tokio::time::sleep(turn).await;
     served.lock().unwrap().push(name);
 }
@@ -54,12 +55,13 @@ async fn writers_place(background: Option<RequestPriority>) -> usize {
 
 /// The order's failing input (orders/v1-pull PV3): an interactive request
 /// queued behind background work at the stage PV1 named. Asked as
-/// background, at most the one check already at the stage goes before the
-/// writer; unasked, all five do.
+/// background, the check inside the stage and at most one waiting to enter
+/// it go before the writer (PV3e: the one inside holds no other back);
+/// unasked, all five do.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_writers_step_is_served_ahead_of_background_work_queued_at_the_stage() {
     let place = writers_place(Some(RequestPriority::Background)).await;
-    assert!(place <= 1, "the writer was served in place {place}");
+    assert!(place <= 2, "the writer was served in place {place}");
     let unasked = writers_place(None).await;
     assert_eq!(
         unasked, 5,
@@ -72,9 +74,17 @@ async fn the_writers_step_is_served_ahead_of_background_work_queued_at_the_stage
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_background_step_goes_ahead_at_the_hold_ceiling() {
     let gate = PriorityGate::new(Duration::from_millis(100));
-    let writer = asked(Some(RequestPriority::Interactive), gate.step("held_open")).await;
+    let writer = asked(
+        Some(RequestPriority::Interactive),
+        gate.step("slot", "held_open"),
+    )
+    .await;
     let started = Instant::now();
-    let _step = asked(Some(RequestPriority::Background), gate.step("check")).await;
+    let _step = asked(
+        Some(RequestPriority::Background),
+        gate.step("slot", "check"),
+    )
+    .await;
     let waited = started.elapsed();
     assert!(
         waited >= Duration::from_millis(90) && waited < Duration::from_secs(1),
@@ -90,8 +100,8 @@ async fn a_step_inside_its_requests_held_step_does_not_wait_on_it() {
     let gate = PriorityGate::new(Duration::from_secs(10));
     let started = Instant::now();
     asked(Some(RequestPriority::Background), async {
-        let _outer = gate.step("completion").await;
-        let _inner = gate.step("embed").await;
+        let _outer = gate.step("slot", "completion").await;
+        let _inner = gate.step("embed", "embed").await;
     })
     .await;
     assert!(started.elapsed() < Duration::from_secs(1));
@@ -101,9 +111,13 @@ async fn a_step_inside_its_requests_held_step_does_not_wait_on_it() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_unasked_step_passes_while_interactive_work_is_in_flight() {
     let gate = PriorityGate::new(Duration::from_secs(10));
-    let _writer = asked(Some(RequestPriority::Interactive), gate.step("held_open")).await;
+    let _writer = asked(
+        Some(RequestPriority::Interactive),
+        gate.step("slot", "held_open"),
+    )
+    .await;
     let started = Instant::now();
-    let _step = gate.step("unasked").await;
+    let _step = gate.step("slot", "unasked").await;
     assert!(started.elapsed() < Duration::from_secs(1));
 }
 
@@ -137,8 +151,10 @@ async fn writers_wait_beside_a_long_read(
     let read = tokio::spawn(read);
     // The writer types while the second part is being read.
     tokio::time::sleep(Duration::from_millis(75)).await;
+    // The writer is inside its own stage and computes on the accelerator.
     let waited = asked(Some(RequestPriority::Interactive), async {
-        let _step = gate.step("fake_embed").await;
+        let mut step = gate.step("fake_embed", "fake_embed").await;
+        step.entered();
         let arrived = Instant::now();
         tokio::task::spawn_blocking(move || {
             let _held = accelerator.lock().unwrap();
@@ -208,7 +224,9 @@ async fn writers_wait_beside_a_long_batch(
     // The writer's embed arrives during the second sub-batch.
     tokio::time::sleep(Duration::from_millis(75)).await;
     let waited = asked(Some(RequestPriority::Interactive), async {
-        let _step = gate.step("fake_embed").await;
+        // Waiting on the context itself, which the batch lets go between
+        // sub-batches: not yet inside it.
+        let _step = gate.step("fake_embed", "fake_embed").await;
         let arrived = Instant::now();
         tokio::task::spawn_blocking(move || {
             let _held = context.lock().unwrap();
@@ -239,4 +257,77 @@ async fn a_writers_embed_waits_behind_one_sub_batch_of_a_background_batch() {
         "the control: unasked, the writer waits out the batch ({unasked:?})"
     );
     assert_eq!(taken, 1);
+}
+
+/// PV3e's first failing input: a background step inside its stage holds no
+/// other back, at that stage or another (zoracite 1747f71: with nothing
+/// interactive in flight, 120 background steps waited the 2 s ceiling,
+/// every one `behind=0`). The control: while one waits to enter a stage, the
+/// next for that stage still waits.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_background_step_inside_its_stage_holds_no_other_back() {
+    let gate = PriorityGate::new(Duration::from_millis(500));
+    let background = Some(RequestPriority::Background);
+    let mut inside = asked(background, gate.step("primary", "complete")).await;
+    inside.entered();
+    let started = Instant::now();
+    let _next = asked(background, gate.step("primary", "complete")).await;
+    let _elsewhere = asked(background, gate.step("embed", "embed_batch")).await;
+    assert!(
+        started.elapsed() < Duration::from_millis(100),
+        "{:?}",
+        started.elapsed()
+    );
+    let started = Instant::now();
+    let _behind = asked(background, gate.step("primary", "complete")).await;
+    assert!(
+        started.elapsed() >= Duration::from_millis(450),
+        "the control: one waits to enter, so the next waits ({:?})",
+        started.elapsed()
+    );
+    drop(inside);
+}
+
+/// PV3e's second failing input: a writer waiting on the slot a background
+/// prompt read holds across its parts does not pause the read, so it gets
+/// the slot when the read ends (zoracite 1747f71: the checks' prompts paused
+/// for writers waiting on their slot, and a writer's verify took 29 s).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_writer_waiting_on_the_slot_a_background_read_holds_does_not_pause_it() {
+    let gate = PriorityGate::new(Duration::from_secs(1));
+    let slot = Arc::new(tokio::sync::Mutex::new(()));
+    let read = {
+        let (gate, slot) = (Arc::clone(&gate), Arc::clone(&slot));
+        asked(Some(RequestPriority::Background), async move {
+            let mut step = gate.step("slot", "lazy").await;
+            let held = slot.lock_owned().await;
+            step.entered();
+            tokio::task::spawn_blocking(carry(move || {
+                gate.in_parts("fake_prefill", 8, 1, |_| {
+                    std::thread::sleep(Duration::from_millis(50));
+                    Ok::<_, ()>(())
+                })
+                .unwrap();
+                drop(held);
+                drop(step);
+            }))
+            .await
+            .unwrap()
+        })
+    };
+    let read = tokio::spawn(read);
+    tokio::time::sleep(Duration::from_millis(75)).await;
+    let waited = asked(Some(RequestPriority::Interactive), async {
+        let mut step = gate.step("slot", "lazy").await;
+        let arrived = Instant::now();
+        let _slot = slot.lock().await;
+        step.entered();
+        arrived.elapsed()
+    })
+    .await;
+    read.await.unwrap();
+    assert!(
+        waited < Duration::from_millis(600),
+        "the writer waited {waited:?} for the slot"
+    );
 }

@@ -739,11 +739,13 @@ RequestPriority = "interactive" | "background"
 
 The reference host holds steps at its embedding slot and at the admission
 of its generation slots, the two places its search and verify start model
-work. It runs a request's background steps one at a time, so at most one
-stands between an interactive step and the stage it queues at: background
-steps already queued at a stage would otherwise be served first. It reads
-a background completion's prompt in parts of 64 tokens and pauses between
-them while an interactive step is in flight, each pause within the ceiling:
+work. Background steps waiting to enter one stage go one at a time, so at
+most one stands between an interactive step and the stage it queues at:
+background steps already queued at a stage would otherwise be served first.
+A background step inside its stage holds no other back. It reads a
+background completion's prompt in parts of 64 tokens and pauses between
+them while an interactive step is running inside its stage, never for one
+waiting on the slot the prompt holds, each pause within the ceiling:
 a checker's prompt read whole held the accelerator for most of a second,
 and an interactive embedding running beside it took up to nine times as
 long as alone. A background embedding batch likewise lets the embedding

@@ -537,6 +537,7 @@ impl EmbedSlot {
     pub(crate) fn run_embed_batch_sync(
         slot: &EmbedSlot,
         inputs: &[String],
+        step: &mut crate::priority_gate::Step,
     ) -> Result<Vec<Vec<f32>>> {
         if inputs.is_empty() {
             return Ok(vec![]);
@@ -586,7 +587,11 @@ impl EmbedSlot {
         let gate = crate::priority_gate::PriorityGate::process();
         gate.parts_under(
             "embed_batch",
-            || context.blocking_lock(),
+            || {
+                let held = context.blocking_lock();
+                step.entered();
+                held
+            },
             |ctx_lock| {
                 // Greedily accumulate sequences into `batch` until the
                 // next one would overflow either bound. `take >= 1`
