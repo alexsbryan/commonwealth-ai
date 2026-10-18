@@ -27,11 +27,11 @@ use crate::InferenceFn;
 const CONTEXT_BYTES: usize = 200;
 
 /// A window read's chapter-wide subject, `<chapter>/<reference>`
-/// (`SubjectScope::Chapter`): a sufficient key within one document, so its
-/// statements of one particular link with no question (`key_edges`), and
-/// evidence across documents, RESOLVE's to decide (`apart::reader_bound`);
-/// no other reference of the same chapter joins by key or field
-/// (`apart::necessary_compatible`). Reserved: no recipe declares it.
+/// (`SubjectScope::Chapter`): a sufficient key, so a chapter's statements of
+/// one particular link with no question, and a supplied value no other
+/// reference of the same chapter may join (`apart::necessary_compatible`),
+/// so RESOLVE decides identity only across windows. Reserved: no recipe
+/// declares it.
 pub const CHAPTER_SUBJECT_KEY: &str = "__chapter_subject";
 
 /// The most values a necessary attribute may declare: READ labels each with

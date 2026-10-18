@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! What keeps a statement from a record, and the code's own joins that obey
 //! it: a declared necessary value that differs, a particular the window's
-//! reader read as another (`chapters_compatible`), a sufficient key's join
-//! (`key_plan`), a field's (`settle_field`), and the recheck of every join
-//! before fold (`gate_plans`). The model is asked in `select.rs`; what it may
-//! be offered (`offerable`, `reader_bound`) and what code may join is decided
-//! here.
+//! reader read as another (`chapters_compatible`, `read_apart`), a sufficient
+//! key's join (`key_plan`), a field's (`settle_field`), and the recheck of every
+//! join before fold (`gate_plans`). The model is asked in `select.rs`; what it
+//! may be offered and what code may join is decided here.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -46,15 +45,13 @@ pub(super) fn necessary_conflict(
 }
 
 /// What forbids a record a question offers or a forced choice joins: a
-/// differing declared necessary value, nothing else. A record holding another
-/// reference of the asked statement's window is offered, marked (`question`),
-/// and the model decides, wholly of that window or not (lean D, 2026-10-17):
-/// across documents the window reader's distinction is evidence, and as a
-/// veto it made a reader's split of one deal permanent (world-s1
-/// coyoteville-d1, 2026-10-14; the window splits of
-/// `research/ontology-apps/diagnosis/README.md`). Within one document it
-/// still forbids (`read_beside`), and code's own joins, by key or field, keep
-/// `necessary_compatible`.
+/// differing declared necessary value, or the record being wholly another
+/// particular of the asked statement's own window (`read_apart`). A record
+/// that holds another reference of that window AND another window's is
+/// offered, marked (`question`), and the model decides: the window reader's
+/// distinction meets another window's reading there, and as a veto it made a
+/// reader's in-window split permanent (world-s1 coyoteville-d1, 2026-10-14).
+/// Code's own joins, by key or field, keep `necessary_compatible`.
 pub(super) fn offerable(
     criterion: &Criterion,
     left: &BTreeMap<String, BTreeSet<String>>,
@@ -69,30 +66,32 @@ pub(super) fn offer_conflict(
     left: &BTreeMap<String, BTreeSet<String>>,
     right: &BTreeMap<String, BTreeSet<String>>,
 ) -> Option<String> {
-    values_conflict(criterion, left, right)
+    values_conflict(criterion, left, right).or_else(|| {
+        read_apart(
+            left.get(super::CHAPTER_SUBJECT_KEY),
+            right.get(super::CHAPTER_SUBJECT_KEY),
+        )
+        .then(|| "the record is wholly other particulars of the statement's window".to_string())
+    })
 }
 
-/// The records holding the statement's own window reference (`mine`), in
-/// the order they were opened: where statements of earlier documents went
-/// that the window's reader read as its particular. Within one document that
-/// reading links with no question (`key_edges`); across documents it is
-/// evidence, so these are offered first, marked as the reader's reading
-/// (`select::question`), and RESOLVE decides (lean D, ONTOLOGY_METHOD
-/// §Identity).
-pub(super) fn reader_bound(mine: Option<&BTreeSet<String>>, records: &[Record]) -> Vec<usize> {
-    let Some(mine) = mine.filter(|m| !m.is_empty()) else {
-        return Vec::new();
+/// The record is wholly other particulars of the statement's own window, as
+/// that window's one reading gave them: a distinction made first-hand, with
+/// the whole window in view, which no later question overturns. Measured
+/// 2026-10-14 (arm chapter-shown): asked to override it, RESOLVE joined
+/// rightly 4 times and wrongly 5 (Ward's three TEP master agreements folded
+/// into one), against 31 to 4 where the record also held another window's.
+pub(super) fn read_apart(
+    left: Option<&BTreeSet<String>>,
+    right: Option<&BTreeSet<String>>,
+) -> bool {
+    let (Some(left), Some(right)) = (left, right) else {
+        return false;
     };
-    records
-        .iter()
-        .enumerate()
-        .filter(|(_, r)| {
-            r.supplied
-                .get(super::CHAPTER_SUBJECT_KEY)
-                .is_some_and(|held| mine.is_subset(held))
-        })
-        .map(|(r, _)| r)
-        .collect()
+    let chapter = |s: &str| s.split_once('/').map_or(s, |(c, _)| c).to_string();
+    let mine: BTreeSet<String> = left.iter().map(|a| chapter(a)).collect();
+    !chapters_compatible(Some(left), Some(right))
+        && right.iter().all(|b| mine.contains(&chapter(b)))
 }
 
 /// The window reference a record holds that this document's reader read
@@ -173,10 +172,7 @@ fn sibling_held<'a>(left: &BTreeSet<String>, right: &'a BTreeSet<String>) -> Opt
     })
 }
 
-/// Prior records matching a statement's declared sufficient keys. The
-/// window's reference is none of them here: every record it names is of an
-/// earlier document, and across documents it is evidence RESOLVE is asked
-/// about (`reader_bound`), never a link.
+/// Prior records matching a statement's declared sufficient keys.
 pub(super) fn key_hits(
     by_key: &HashMap<(String, String), usize>,
     keys: &[Vec<(String, String)>],
@@ -184,7 +180,6 @@ pub(super) fn key_hits(
     keys.iter()
         .map(|keys| {
             keys.iter()
-                .filter(|(key, _)| key != super::CHAPTER_SUBJECT_KEY)
                 .filter_map(|(key, value)| {
                     by_key
                         .get(&(key.clone(), value.clone()))

@@ -393,7 +393,7 @@ async fn resolve_type(
         }
     };
     if !chapter_subject_of.is_empty() {
-        debug!(r#type = %t.name, claims = chapter_subject_of.len(), "atlas/resolve: a window read's chapter subjects are a sufficient key within one document");
+        debug!(r#type = %t.name, claims = chapter_subject_of.len(), "atlas/resolve: a window read's chapter subjects are a sufficient key");
         criterion.keys.push(CHAPTER_SUBJECT_KEY.to_string());
     }
     let carried: BTreeSet<&str> = criterion

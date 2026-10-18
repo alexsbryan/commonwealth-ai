@@ -46,8 +46,7 @@ zero-spend replay of the eight loop corpora against a same-store baseline
 **What ships.** `document_read/window.rs` reads a chapter in one call;
 `enrich init` cuts the corpus into windows in clock order
 (`window_manifest.rs`); a window's particulars reach RESOLVE as a chapter-wide
-reference (`CHAPTER_SUBJECT_KEY`), a sufficient key within one document and
-across documents evidence RESOLVE is asked about (lean D, 2026-10-17).
+sufficient key (`CHAPTER_SUBJECT_KEY`).
 
 **Known gap.** The window reader never binds a company named only in prose
 (no header names it) to the record a header seeds: it sends no mention of a

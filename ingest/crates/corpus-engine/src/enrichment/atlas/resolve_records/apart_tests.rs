@@ -55,104 +55,35 @@ async fn a_record_holding_another_reference_of_the_window_is_offered_marked() {
     assert!(asked[1].user.contains(mark), "{}", asked[1].user);
 }
 
-/// What the window's reader bound across documents is RESOLVE's to decide
-/// (lean D, ONTOLOGY_METHOD §Identity): a statement whose window reference a
-/// record of an earlier document holds is asked, that record offered first and
-/// marked as the reader's reading though no proposer offered it, and kept
-/// apart when the model says none; within the document the reference still
-/// links with no question. Failing input, named: 78 of 106 rename-free
-/// identity errors were the reader's binding across documents, linked on the
-/// reference unasked (research/ontology-apps/diagnosis/README.md, 2026-10-17).
-#[tokio::test]
-async fn a_particular_bound_across_documents_is_asked_and_kept_apart() {
-    let (infer, seen) = scripted(vec![json!({"A": 0.1, "B": 0.1, "0": 0.8})]);
-    let mut res = weights(&[("proposed_answer", 0.5, 0.4)]);
-    let c = criterion(&[CHAPTER_SUBJECT_KEY]);
-    let key = |chapter| [(CHAPTER_SUBJECT_KEY, chapter)];
-    for (id, body, chapter) in [
-        ("a", "The storage deal is proposed.", "sec_1/p1"),
-        ("x", "The lamp deal is proposed.", "sec_2/p1"),
-    ] {
-        res.resolve_document(
-            &c,
-            doc(id, body),
-            &[stmt(id, body, "deal", 0, &key(chapter))],
-            &[],
-            Answerer::Select(&infer),
-        )
-        .await;
-    }
-    let b = "The lamp deal is signed. It ships Monday.";
-    let r = res
-        .resolve_document(
-            &c,
-            doc("b", b),
-            &[
-                stmt("b", b, "is signed", 0, &key("sec_1/p1")),
-                stmt("b2", b, "ships Monday", 0, &key("sec_1/p1")),
-            ],
-            &[similar("x", 0.9)],
-            Answerer::Select(&infer),
-        )
-        .await;
-    let held: Vec<Vec<String>> = res.records().iter().map(|r| r.statements.clone()).collect();
-    assert_eq!(held, [vec!["a"], vec!["x"], vec!["b", "b2"]], "{r:?}");
-    let asked = seen.lock().unwrap();
-    assert_eq!(asked.len(), 1, "b is asked, b2 follows it by its reference");
-    let line = |label: &str| {
-        asked[0]
-            .user
-            .lines()
-            .find(|l| l.starts_with(label))
-            .unwrap_or_else(|| panic!("no candidate {label}: {}", asked[0].user))
-            .to_string()
-    };
-    let mark = "read this record's particular as this statement's";
-    assert!(line("A ").contains(mark), "{}", asked[0].user);
-    assert!(!line("B ").contains(mark), "{}", asked[0].user);
-}
-
-/// A record wholly of the window's other particulars is offered, marked as
-/// the reader's other particular, and the model decides: the reader's split
-/// across two documents is evidence, not a veto (lean D). Failing input,
-/// named: a window split, one deal read as p1 in one document and p2 in the
-/// next, the second never offered the first's record (diagnosis/README.md,
-/// 2026-10-17). The veto it replaces was measured when the reader's own
-/// binding across documents linked unasked (Ward's TEP agreements, 2026-10-14).
-#[tokio::test]
-async fn a_window_split_across_documents_is_offered_and_joined() {
-    let (infer, seen) = scripted(vec![json!({"A": 0.9, "0": 0.1})]);
-    let mut res = weights(&[("proposed_answer", 0.5, 0.4)]);
-    let c = criterion(&[CHAPTER_SUBJECT_KEY]);
-    let key = |chapter| [(CHAPTER_SUBJECT_KEY, chapter)];
-    for (id, body, chapter) in [
-        ("a", "The storage deal is proposed.", "sec_1/p1"),
-        ("b", "The storage deal is signed.", "sec_1/p2"),
-    ] {
-        let proposals = if id == "a" {
-            vec![]
-        } else {
-            vec![similar("a", 0.5)]
-        };
-        res.resolve_document(
-            &c,
-            doc(id, body),
-            &[stmt(id, body, "storage deal", 0, &key(chapter))],
-            &proposals,
-            Answerer::Select(&infer),
-        )
-        .await;
-    }
-    assert_eq!(res.records()[0].statements, ["a", "b"]);
-    let asked = seen.lock().unwrap();
-    assert_eq!(asked.len(), 1, "b was offered a's record");
-    assert!(
-        asked[0]
-            .user
-            .contains("read this record's particular as another"),
-        "{}",
-        asked[0].user
-    );
+/// A record wholly of the statement's own window's other particulars stays
+/// apart (Ward's TEP agreements, read apart in one window, folded into one
+/// record when RESOLVE was asked, 2026-10-14); one that also holds another
+/// window's reading is RESOLVE's to decide (world-s1 coyoteville-d1).
+#[test]
+fn a_record_wholly_of_the_statements_window_stays_apart() {
+    use super::super::apart::read_apart;
+    let set = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<BTreeSet<_>>();
+    assert!(read_apart(
+        Some(&set(&["sec_1/p2"])),
+        Some(&set(&["sec_1/p1"]))
+    ));
+    assert!(read_apart(
+        Some(&set(&["sec_1/p2"])),
+        Some(&set(&["sec_1/p1", "sec_1/p4"]))
+    ));
+    assert!(!read_apart(
+        Some(&set(&["sec_2/p5"])),
+        Some(&set(&["sec_1/p7", "sec_2/p18"]))
+    ));
+    assert!(!read_apart(
+        Some(&set(&["sec_2/p1"])),
+        Some(&set(&["sec_1/p1"]))
+    ));
+    assert!(!read_apart(
+        Some(&set(&["sec_1/p1"])),
+        Some(&set(&["sec_1/p1"]))
+    ));
+    assert!(!read_apart(Some(&set(&["sec_1/p1"])), None));
 }
 
 /// Failing input, named: the Ward window read eight deals, p1 to p8, and
@@ -287,11 +218,7 @@ async fn a_record_holding_a_particular_read_beside_the_statement_is_not_offered(
     )
     .await;
     assert_eq!(res.records()[0].statements, ["a", "b", "old"]);
-    assert_eq!(
-        seen.lock().unwrap().len(),
-        2,
-        "b and old were asked; new is offered nothing"
-    );
+    assert_eq!(seen.lock().unwrap().len(), 1, "only b was asked");
 }
 
 #[test]
@@ -396,15 +323,14 @@ async fn a_record_opened_in_the_pass_holds_the_particulars_that_joined_it() {
 /// A statement follows its own particular. Once a question joined a window's
 /// particular to a record that also holds another particular of that window
 /// (offered, marked, and chosen: they were read in different documents), the
-/// particular's statements in later documents are offered that record first,
-/// marked as the reader's reading (lean D), and the window rule does not veto
-/// it. Failing input, named: a deal's updates in later documents, refused as
-/// contradictions because the record already held a sibling, so the deal's
-/// won and lost reached no record (arm particulars-all2, 2026-10-15).
+/// particular's later statements join that record by their window key; the
+/// window rule does not veto it. Failing input, named: a deal's updates in
+/// later documents, refused as contradictions because the record already
+/// held a sibling, so the deal's won and lost reached no record (arm
+/// particulars-all2, 2026-10-15).
 #[tokio::test]
 async fn a_statement_follows_its_own_particular() {
-    let (infer, seen) = scripted(vec![
-        json!({"A": 0.9, "0": 0.1}),
+    let (infer, _) = scripted(vec![
         json!({"A": 0.9, "0": 0.1}),
         json!({"A": 0.9, "0": 0.1}),
     ]);
@@ -442,15 +368,6 @@ async fn a_statement_follows_its_own_particular() {
     let d = last.expect("d was resolved");
     assert_eq!(d.outcomes[0].outcome.record(), Some("a"), "{d:?}");
     assert_eq!(res.records()[0].statements, ["a", "b", "c", "d"]);
-    let asked = seen.lock().unwrap();
-    assert_eq!(asked.len(), 3, "b, c and d were asked");
-    assert!(
-        asked[2]
-            .user
-            .contains("read this record's particular as this statement's"),
-        "{}",
-        asked[2].user
-    );
 }
 
 #[test]
