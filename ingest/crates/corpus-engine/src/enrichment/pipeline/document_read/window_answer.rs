@@ -8,11 +8,16 @@
 //!   not in doubt, and text inside a string is never touched;
 //! - if the answer still does not parse, each element of its `particulars` and
 //!   `claims` arrays is parsed on its own: one that does not parse is dropped
-//!   and counted, and so is every claim about a dropped particular.
+//!   and counted, and so is every claim about a dropped particular;
+//! - a key a claim writes outside its envelope (the keys `window_prompt.md`
+//!   gives a claim) is a field written beside `fields`, and is read in
+//!   `fields` when `fields` does not hold it: a claim has no other place a
+//!   field can mean anything, so its value is not in doubt.
 
 use std::collections::BTreeSet;
+use std::sync::LazyLock;
 
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use tracing::{debug, warn};
 
 /// A parsed window answer and what parsing it cost.
@@ -23,6 +28,8 @@ pub(super) struct Parsed {
     /// Elements not read: particulars and claims that did not parse, and the
     /// claims about a particular that did not.
     pub(super) dropped: usize,
+    /// Claim fields written beside `fields`, read in it.
+    pub(super) beside: usize,
 }
 
 /// `json`, the answer's JSON block (`prepare_phase_json`), parsed. An error
@@ -32,14 +39,103 @@ pub(super) fn parse(json: &str, chapter: &str) -> Result<Parsed, String> {
     if repaired > 0 {
         warn!(chapter, repaired, "document_read/window: numbers written without a leading zero read as the numbers they write");
     }
-    match serde_json::from_str(&json) {
-        Ok(value) => Ok(Parsed {
+    let mut parsed = match serde_json::from_str(&json) {
+        Ok(value) => Parsed {
             value,
             repaired,
             dropped: 0,
-        }),
-        Err(whole) => by_element(&json, chapter, repaired).ok_or_else(|| whole.to_string()),
+            beside: 0,
+        },
+        Err(whole) => by_element(&json, chapter, repaired).ok_or_else(|| whole.to_string())?,
+    };
+    parsed.beside = fields_beside(&mut parsed.value, chapter);
+    Ok(parsed)
+}
+
+/// The keys of a claim's envelope, read from the prompt's answer shape (its
+/// `"claims": [{...}]` element), so the prompt stays their one statement.
+pub(super) static CLAIM_KEYS: LazyLock<BTreeSet<String>> =
+    LazyLock::new(|| element_keys(super::PROMPT, "\"claims\": [{"));
+
+/// The quoted keys of the object that opens with the `{` ending `opens` in
+/// `shape`, at its own depth (a nested `{<field>: <value>}` names none).
+fn element_keys(shape: &str, opens: &str) -> BTreeSet<String> {
+    let Some(at) = shape.find(opens) else {
+        return BTreeSet::new();
+    };
+    let body = &shape[at + opens.len()..];
+    let (mut keys, mut depth, mut quote) = (BTreeSet::new(), 1usize, None::<usize>);
+    for (i, c) in body.char_indices() {
+        match (c, quote) {
+            ('"', None) => quote = Some(i + 1),
+            ('"', Some(start)) => {
+                let after = body[i + 1..].trim_start();
+                if depth == 1 && after.starts_with(':') {
+                    keys.insert(body[start..i].to_string());
+                }
+                quote = None;
+            }
+            (_, Some(_)) => {}
+            ('{', None) => depth += 1,
+            ('}', None) => {
+                depth -= 1;
+                if depth == 0 {
+                    break;
+                }
+            }
+            _ => {}
+        }
     }
+    keys
+}
+
+/// Every claim's keys outside its envelope moved into its `fields` when
+/// `fields` does not hold them; how many were moved. A key `fields` already
+/// holds is left where it was, unread, and traced.
+fn fields_beside(answer: &mut Value, chapter: &str) -> usize {
+    let mut moved = 0usize;
+    for claim in answer["claims"]
+        .as_array_mut()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_object_mut)
+    {
+        let beside: Vec<String> = claim
+            .keys()
+            .filter(|k| !CLAIM_KEYS.contains(*k))
+            .cloned()
+            .collect();
+        if beside.is_empty() {
+            continue;
+        }
+        if claim.get("fields").is_none_or(Value::is_null) {
+            claim.insert("fields".into(), Value::Object(Map::new()));
+        }
+        let Some(Value::Object(fields)) = claim.get("fields") else {
+            debug!(chapter, keys = ?beside, "document_read/window: claim keys beside a `fields` that is not an object; not read");
+            continue;
+        };
+        let (held, free): (Vec<String>, Vec<String>) =
+            beside.into_iter().partition(|k| fields.contains_key(k));
+        if !held.is_empty() {
+            debug!(chapter, keys = ?held, "document_read/window: claim keys beside `fields`, which already holds them; not read");
+        }
+        let lifted: Vec<(String, Value)> = free
+            .into_iter()
+            .filter_map(|k| claim.remove(&k).map(|v| (k, v)))
+            .collect();
+        moved += lifted.len();
+        if let Some(Value::Object(fields)) = claim.get_mut("fields") {
+            fields.extend(lifted);
+        }
+    }
+    if moved > 0 {
+        warn!(
+            chapter,
+            moved, "document_read/window: claim fields written beside `fields` read in it"
+        );
+    }
+    moved
 }
 
 /// `json` with a `0` written before every point that opens a number outside a
@@ -143,6 +239,7 @@ fn by_element(json: &str, chapter: &str, repaired: usize) -> Option<Parsed> {
         value: json!({ "particulars": particulars, "claims": claims }),
         repaired,
         dropped,
+        beside: 0,
     })
 }
 

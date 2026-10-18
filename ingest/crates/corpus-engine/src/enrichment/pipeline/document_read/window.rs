@@ -339,7 +339,7 @@ pub async fn read(
     let parsed = prepare_phase_json(&raw, "phase 1 (window read)")
         .map_err(|e| failed(e.to_string()))
         .and_then(|json| answer::parse(&json, &chapter.chapter_id).map_err(failed))?;
-    debug!(chapter = %chapter.chapter_id, repaired = parsed.repaired, dropped = parsed.dropped, "document_read/window: answer parsed");
+    debug!(chapter = %chapter.chapter_id, repaired = parsed.repaired, dropped = parsed.dropped, beside = parsed.beside, "document_read/window: answer parsed");
     let owns: Vec<String> = chapter
         .source_documents
         .iter()

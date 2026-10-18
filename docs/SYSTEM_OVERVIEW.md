@@ -648,7 +648,9 @@ question the pipeline asks about a type is a method on the resolved
   sufficient key (`resolution_records.rs::CHAPTER_SUBJECT_KEY`), deciding only across windows. A malformed value
   in the answer costs at most the element holding it (`window_answer.rs`): a bare fraction (`.02`) is read with
   its leading zero, and if the answer still does not parse each particular and claim is parsed alone, the ones
-  that fail (and the claims about a failed particular) dropped and counted as `lost`. A reference value resolves
+  that fail (and the claims about a failed particular) dropped and counted as `lost`; a claim key outside the
+  claim's envelope (the keys `window_prompt.md` gives a claim, read from it) is a field written beside `fields` and
+  is read in it. A reference value resolves
   in `window_refs.rs` (label name, candidate, words held), by any of a particular's names when the answer lists
   `other_names` for it (a name a document says it also has; typed, never a delimiter, so "Input / Output" is one
   name; `window_particulars.rs::names_for`, also used for a subject's sourced identity and for placing an

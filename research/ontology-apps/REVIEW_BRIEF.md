@@ -20,8 +20,8 @@ Windows are 20,000 characters since 2026-10-17 (determinism-prereg.md): a call w
 whatever it is shown, so smaller windows write more of each document. Same-recipe reads of saltgrass-asked went from
 26-32 agreeing on 33-34 of 42 to 37 and 37 agreeing on 36 (the one-shot: 37); the held-out recipes agree on 32.6
 (29.2), Bar G 30.5; mail kept its deals for about 1.7x the answer tokens. Thinking off and folding two reads were
-measured first and failed. One window in about a thousand writes its field values beside `fields`, losing them
-(world-s1 window 7 at 20k); queued.
+measured first and failed. A window that writes its claims' field values beside `fields` (8 of 343 saved
+windows) now has them read in it: world-s1's 20k read replays 9 -> 12 of 18.
 Who says it (b34ee699b, ebdf1eab5, voice-prereg.md) is kept on the cut line (operator, 2026-10-16): it passed
 its three target bars and missed the mail guard by one deal (31 against 32, note dcdfeb8f); the first change found
 later that jumps the objective and conflicts with it takes precedence, and this is the first thing to cut.
