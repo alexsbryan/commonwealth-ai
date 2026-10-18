@@ -32,7 +32,7 @@ use oicp_types::{
 use sovereign_contracts::principal::Principal;
 
 use crate::oicp_evidence::{readable_corpora, record_for, search_corpus, wire_document};
-use crate::search_stage::SearchStage;
+use crate::search_stage::{self, SearchStage};
 use crate::sentence_index::scan::{capped, dot, top_k, Scored};
 use crate::sentence_index::store::{same_embedder, unit, PROBE_TEXT};
 use crate::sentence_index::{read, Entry, SentenceSearchConfig, TARGET};
@@ -145,14 +145,17 @@ pub(crate) async fn sentences(
         return Err(refuse(scorer, "no local inference on this host"));
     };
     // `rerank` runs on the rerank slot, and names its model from it.
+    let slots_at = Instant::now();
     let rerank_model = local
         .resident_slots()
         .into_iter()
         .find(|s| s.role == "rerank")
         .map(|s| s.model_id);
+    let resident_slots = slots_at.elapsed();
     if scorer == SentenceScorer::Rerank && rerank_model.is_none() {
         return Err(refuse(scorer, "this host holds no rerank slot"));
     }
+    let model_at = Instant::now();
     // The query prefix and the embedder's name, as the passage route reads
     // them (the manifest's source); a host that names none is not guessed at.
     let (prefix, embed_model_id) = match state.local_embed_model().await {
@@ -160,6 +163,7 @@ pub(crate) async fn sentences(
         Ok(None) => (String::new(), local.embed_model_id()),
         Err(e) => return Err(refuse(scorer, &format!("the embed model is unread: {e}"))),
     };
+    let local_embed_model = model_at.elapsed();
     if embed_model_id.trim().is_empty() || embed_model_id == "unknown" {
         return Err(refuse(scorer, "this host's embedder names no model"));
     }
@@ -197,11 +201,13 @@ pub(crate) async fn sentences(
     let embedding = embed_at.elapsed();
     SearchStage::QueryEmbed.emit(embedding, None, usize::from(!caller_vector));
 
+    let admit_at = Instant::now();
     let (targets, unavailable, unhosted) =
         match admit(&state, principal, &request, scope.as_deref(), &cfg, &probe).await {
             Ok(t) => t,
             Err(refused) => return Err(refused),
         };
+    search_stage::admission_parts(local_embed_model, resident_slots, admit_at.elapsed());
     SearchStage::Admission.emit(
         admitted_at.elapsed().saturating_sub(embedding),
         None,

@@ -99,6 +99,20 @@ impl SearchStage {
     }
 }
 
+/// A sentence search's admission in its three parts, beside the stage's one
+/// event (PV3d): on 2026-10-17 9 of 60 summons' admission ran 313 to 787 ms
+/// against a p50 of 34, and the stage alone could not say which part waited
+/// (zoracite a181013).
+pub(crate) fn admission_parts(local_embed_model: Duration, resident_slots: Duration, admit: Duration) {
+    tracing::debug!(
+        target: TARGET,
+        local_embed_model_us = local_embed_model.as_micros() as u64,
+        resident_slots_us = resident_slots.as_micros() as u64,
+        admit_us = admit.as_micros() as u64,
+        "admission in parts"
+    );
+}
+
 /// The span one search's stage events sit under. `query` is the first 12
 /// hex of the query text's sha256, so a reader matches its own searches
 /// without the text being logged.

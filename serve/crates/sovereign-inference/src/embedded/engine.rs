@@ -1224,7 +1224,13 @@ impl EmbeddedLlamaCpp {
                 // Silicon Metal (33 vs 2.8 seq/sec, 12×). The Metal
                 // GGML_ASSERT(buf_src) crash referenced in the old
                 // comment was fixed in llama-cpp-2 0.1.141.
-                match EmbedSlot::load(&backend, path, n_gpu_layers, embed_quirks.clone()) {
+                match EmbedSlot::load(
+                    &backend,
+                    path,
+                    n_gpu_layers,
+                    embed_quirks.clone(),
+                    Writer::OnCpu,
+                ) {
                     Ok(slot) => {
                         // Priced from the gguf on disk: `EmbedSlot` has no
                         // `size()` accounting of its own, and an honest
@@ -2503,7 +2509,13 @@ impl EmbeddedLlamaCpp {
         let backend = Arc::clone(&self.backend);
         let recipe = recipe.clone();
         cell.acquire(why, move || {
-            let slot = EmbedSlot::load(&backend, &recipe.path, recipe.gpu_layers, recipe.quirks)?;
+            let slot = EmbedSlot::load(
+                &backend,
+                &recipe.path,
+                recipe.gpu_layers,
+                recipe.quirks,
+                Writer::OnCpu,
+            )?;
             let size_bytes = super::model_slot::total_model_bytes(&recipe.path);
             Ok((slot, size_bytes))
         })
@@ -3932,7 +3944,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             let _step = step;
             let _in_caller = span.enter();
             let start = Instant::now();
-            let mut ctx_lock = slot.contexts[0].blocking_lock();
+            let mut ctx_lock = slot.context_for_request().0.blocking_lock();
             let slot_wait = asked.elapsed();
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 EmbedSlot::embed_sync(
@@ -3981,7 +3993,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
         tokio::task::spawn_blocking(sovereign_contracts::call_scope::carry(move || {
             let _step = step;
-            let mut ctx_lock = slot.contexts[0].blocking_lock();
+            let mut ctx_lock = slot.context_for_request().0.blocking_lock();
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 EmbedSlot::embed_query_sync(
                     &slot.model,

@@ -749,7 +749,11 @@ and an interactive embedding running beside it took up to nine times as
 long as alone. A background embedding batch likewise lets the embedding
 context go between its sub-batches and pauses while an interactive step is
 in flight: held across a whole batch, it kept a writer's query embedding
-waiting 300 to 540 ms.
+waiting 300 to 540 ms. Where its embedding context computes on the
+accelerator its generation slots share, it keeps a second context on the
+CPU for an interactive request's embeddings: beside the primary's compute,
+a writer's query embedding took 353 ms on the shared accelerator and under
+50 ms on the CPU.
 
 ## 6. Conformance (additions)
 

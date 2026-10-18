@@ -318,6 +318,11 @@ async fn the_index_route_reads_stored_addresses_and_never_locates_a_passage() {
     }
     assert_eq!(events("span_of") + events("index_query"), 0, "{trace}");
     assert!(trace.contains("search{route=\"sentences\""), "{trace}");
+    let parts = trace.lines().filter(|l| l.contains("admission in parts")).collect::<Vec<_>>();
+    assert_eq!(parts.len(), 1, "admission's parts on one event (PV3d):\n{trace}");
+    for part in ["local_embed_model_us=", "resident_slots_us=", "admit_us="] {
+        assert!(parts[0].contains(part), "{part} in {}", parts[0]);
+    }
 }
 
 /// A scope whose sentences are still embedding is answered by the passages
