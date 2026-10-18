@@ -731,9 +731,12 @@ RequestPriority = "interactive" | "background"
   is not preempted, but a host may read a background step in parts and
   start no part while interactive work is in flight; a part already
   started finishes.
-- **Bounded.** A background step waits at most the host's hold ceiling,
-  then starts, so interactive requests in a row cannot starve it. The
-  reference host's ceiling is 2 s.
+- **Bounded.** A background step is held for interactive work at most the
+  host's hold ceiling, then starts, so interactive requests in a row cannot
+  starve it. The ceiling bounds that hold, not the step's turn behind other
+  background work: a step that goes on at the ceiling does not go ahead of
+  the background steps before it, nor before an interactive step already
+  waiting at its stage. The reference host's ceiling is 2 s.
 - **When, never what.** The same request with either priority, or none, is
   answered the same; only when its model work starts differs. A step read
   in parts reads the same tokens in the same order, its parts fixed by its
@@ -749,6 +752,10 @@ of its generation slots, the two places its search and verify start model
 work. Background steps waiting to enter one stage go one at a time, so at
 most one stands between an interactive step and the stage it queues at:
 background steps already queued at a stage would otherwise be served first.
+A background step keeps its place in that line however long the ones ahead
+of it take, its hold counted from its place: places given up at the
+ceiling sent several to a stage at once, and under a draft's checks 91 of
+222 writer's steps parked behind two to four of them.
 A background step inside its stage holds no other back. It reads a
 background completion's prompt in parts of 64 tokens and pauses between
 them while an interactive step is running inside its stage, never for one

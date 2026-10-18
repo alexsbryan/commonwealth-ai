@@ -9,9 +9,12 @@
 //! at a time, so at most one stands between a writer's step and the stage it
 //! queues at: a stage's queue is first in first out, and background steps
 //! already queued there would otherwise go first. A background step that has
-//! entered its stage holds no other back (PV3e). Each wait is bounded by the
-//! ceiling, then the step goes ahead. A call whose request named no priority
-//! passes untouched.
+//! entered its stage holds no other back (PV3e). Its place in that line is
+//! kept however long the steps ahead of it take: only its hold for
+//! interactive work is bounded by the ceiling, counted from the place, then
+//! it goes ahead (PV3h: places given up at the ceiling sent several to the
+//! stage at once, a writer's step parked behind two to four). A call whose
+//! request named no priority passes untouched.
 //!
 //! A step already running is not preempted, but a background one long enough
 //! to matter is read in parts ([`PriorityGate::in_parts`]): a completion's
@@ -167,21 +170,27 @@ impl PriorityGate {
                 .entry(stage.to_string())
                 .or_insert_with(|| Arc::new(Semaphore::new(1))),
         );
-        let permit = tokio::time::timeout(self.ceiling, place.acquire_owned())
-            .await
-            .ok()
-            .and_then(Result::ok);
-        let behind = self.until_no_interactive(asked_at).await;
+        // The place is never given up at the ceiling (PV3h); it is closed
+        // only if the gate is, and then the step goes on without one.
+        let permit = match place.acquire_owned().await {
+            Ok(permit) => Some(permit),
+            Err(_closed) => {
+                tracing::warn!(target: TARGET, stage, phase, "priority: the stage's place is closed; the background step goes on without one");
+                None
+            }
+        };
+        let placed_at = Instant::now();
+        let place_ms = placed_at.duration_since(asked_at).as_millis() as u64;
+        let behind = self.until_no_interactive(placed_at).await;
         let waited_ms = asked_at.elapsed().as_millis() as u64;
-        let at_ceiling = permit.is_none() || asked_at.elapsed() >= self.ceiling;
-        if at_ceiling {
+        if placed_at.elapsed() >= self.ceiling {
             tracing::debug!(
                 target: TARGET,
                 stage,
                 phase,
                 waited_ms,
+                place_ms,
                 behind,
-                one_at_a_time = permit.is_some(),
                 "priority: background step went ahead at the hold ceiling"
             );
         } else {
@@ -190,6 +199,7 @@ impl PriorityGate {
                 stage,
                 phase,
                 waited_ms,
+                place_ms,
                 behind,
                 "priority: background step admitted"
             );
@@ -300,7 +310,8 @@ impl PriorityGate {
     }
 
     /// Waits until no interactive step is in flight, or the ceiling counted
-    /// from `asked_at`; the most interactive steps it waited behind.
+    /// from `asked_at` (a background step's place); the most interactive
+    /// steps it waited behind.
     async fn until_no_interactive(&self, asked_at: Instant) -> usize {
         let mut behind = 0;
         loop {

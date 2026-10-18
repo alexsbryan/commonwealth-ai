@@ -263,27 +263,38 @@ async fn a_writers_embed_waits_behind_one_sub_batch_of_a_background_batch() {
 /// other back, at that stage or another (zoracite 1747f71: with nothing
 /// interactive in flight, 120 background steps waited the 2 s ceiling,
 /// every one `behind=0`). The control: while one waits to enter a stage, the
-/// next for that stage still waits.
+/// next for that stage still waits, past the ceiling (PV3h), until the one
+/// ahead enters.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_background_step_inside_its_stage_holds_no_other_back() {
-    let gate = PriorityGate::new(Duration::from_millis(500));
+    let gate = PriorityGate::new(Duration::from_millis(300));
     let background = Some(RequestPriority::Background);
     let mut inside = asked(background, gate.step("primary", "complete")).await;
     inside.entered();
     let started = Instant::now();
-    let _next = asked(background, gate.step("primary", "complete")).await;
+    let mut next = asked(background, gate.step("primary", "complete")).await;
     let _elsewhere = asked(background, gate.step("embed", "embed_batch")).await;
     assert!(
         started.elapsed() < Duration::from_millis(100),
         "{:?}",
         started.elapsed()
     );
-    let started = Instant::now();
-    let _behind = asked(background, gate.step("primary", "complete")).await;
+    let behind = tokio::spawn({
+        let gate = Arc::clone(&gate);
+        async move { asked(background, gate.step("primary", "complete")).await }
+    });
+    tokio::time::sleep(Duration::from_millis(450)).await;
     assert!(
-        started.elapsed() >= Duration::from_millis(450),
-        "the control: one waits to enter, so the next waits ({:?})",
-        started.elapsed()
+        !behind.is_finished(),
+        "the control: one waits to enter, so the next waits past the ceiling"
+    );
+    let entered = Instant::now();
+    next.entered();
+    behind.await.unwrap();
+    assert!(
+        entered.elapsed() < Duration::from_millis(100),
+        "the next goes once the one ahead enters ({:?})",
+        entered.elapsed()
     );
     drop(inside);
 }
@@ -329,5 +340,47 @@ async fn a_writer_waiting_on_the_slot_a_background_read_holds_does_not_pause_it(
     assert!(
         waited < Duration::from_millis(600),
         "the writer waited {waited:?} for the slot"
+    );
+}
+
+/// PV3h's failing input: background steps that went ahead at the ceiling do
+/// not stand before a writer's step at the stage. Five checks ask at once
+/// with a 30 ms ceiling and 40 ms turns, so the three behind the first two
+/// run out the ceiling before the writer asks at 60 ms; at most the check
+/// inside the stage and one waiting to enter it are served between the
+/// writer's ask and its turn. Red on d6bf9075c's gate: the three that went
+/// ahead at the ceiling queued at the stage together, four ahead of it
+/// (zoracite v1-claims-demo, 2026-10-18: 91 of 222 writer's steps parked
+/// with two to four ahead).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn background_steps_past_the_ceiling_do_not_stand_before_the_writer() {
+    let gate = PriorityGate::new(Duration::from_millis(30));
+    let stage = Arc::new(tokio::sync::Mutex::new(()));
+    let served = Arc::new(Mutex::new(Vec::new()));
+    let turn = Duration::from_millis(40);
+    let mut work = Vec::new();
+    for i in 0..5 {
+        let f = at_the_stage(
+            Arc::clone(&gate),
+            Arc::clone(&stage),
+            Arc::clone(&served),
+            format!("check {i}"),
+            turn,
+        );
+        work.push(tokio::spawn(asked(Some(RequestPriority::Background), f)));
+    }
+    tokio::time::sleep(Duration::from_millis(60)).await;
+    let before = served.lock().unwrap().len();
+    let f = at_the_stage(gate, stage, Arc::clone(&served), "writer".into(), turn);
+    work.push(tokio::spawn(asked(Some(RequestPriority::Interactive), f)));
+    for w in work {
+        w.await.unwrap();
+    }
+    let served = served.lock().unwrap();
+    assert_eq!(served.len(), 6, "{served:?}");
+    let ahead = served.iter().position(|n| n == "writer").unwrap() - before;
+    assert!(
+        ahead <= 2,
+        "{ahead} served between the writer's ask and its turn: {served:?}"
     );
 }
