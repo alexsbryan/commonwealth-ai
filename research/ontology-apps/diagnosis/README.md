@@ -55,6 +55,24 @@ one-shot misses both), own text after a quote marker read as quoted (pasadena-d8
 fixed by eb07f225a, verent-d4 a scorer artefact, four renamed counterparties (pinyonton-d2, -d3, pellica-d1,
 alderdale-d1), faircroft-d1 (siblings, "We can price that at .10").
 
+## On the latest reads: misses are on deals whose history changes (2026-10-17, later)
+
+Latest read per world (structural-fresh for s2, s4, s5; leand-0 and two fresh RESOLVE passes for s1; leand-0 for s3),
+deals by the gold tags on their updates; the one-shot's two reads beside:
+
+| deal | ours served | one-shot |
+|---|---|---|
+| no cancel, revive, superseded or rename | 50/51 (98%) | 67/78 (86%) |
+| cancel, revive or superseded | 42/58 (72%) | 42/76 (55%) |
+| renamed | 17/20 (85%) | 29/32 (91%) |
+
+Superseded deals are served 14 of 26, cancelled 13 of 21, revived 33 of 46. Their misses are the reader's
+particulars around the change (in-window merge and split: coyoteville's Q2 loss written on the replaced deal), the
+replaced deal's end not written (halwick-d1), and acts under a won deal folded as stage moves (two nominations moved
+blueville-d1 and kestrel_ridge-d2 back to lead). Of the 7 deals the one-shot serves in both reads and we miss, 6 are
+renames, nominations and rollovers (family 3 below); tep-d2 is RESOLVE without domain knowledge. Lean D step 1 acts
+only after the reader and leaves these where they are (`lean-d-prereg.md` Result).
+
 ## What exists (inventory, 2026-10-17)
 
 - The thread the reader and RESOLVE use is the one metadata field the recipe names (the worlds: `base_subject`,
