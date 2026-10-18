@@ -6,10 +6,18 @@
 # fails until both move together. The values below are first settings, to be
 # fitted by `svrn bench` (ADDRESSED_TEXT §5.3 step 4), not measurements.
 
-# Keep an alignment only when quote tokens matched (exactly, or the first word up to its
-# first letter's case) / quote tokens reaches
-# this. The verdict a client draws from the reported differences is its own.
+# Keep an alignment only when quote words matched (exactly, or the first word up to its
+# first letter's case) / quote words reaches this; a mark is not a word. The verdict a client draws from the reported differences is its own.
 coverage_floor = 0.7
+
+# Keep an alignment only when the words it matched also say it is this place:
+# their share of the quote's words, each weighted by its rarity in the texts
+# read (ln(1 + words / (1 + occurrences))), reaches `specific_floor`, or they
+# hold `specific_run` words in a row. Three common words of "there is no
+# alternative" are neither; Hamlet's first nine words with "problem" for
+# "question" are the run (PAL1, OICP v0.6 §2.18).
+specific_floor = 0.7
+specific_run = 5
 
 # How many chunks the host's lexical search over the quote contributes as
 # candidate texts. Read by the route, not by the aligner.

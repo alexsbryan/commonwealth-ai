@@ -14,6 +14,7 @@ mod readiness;
 mod rows;
 mod search;
 mod texts;
+mod texts_holding;
 mod write;
 
 pub use chunk_key::{ChunkKey, ChunkKeyColumns};

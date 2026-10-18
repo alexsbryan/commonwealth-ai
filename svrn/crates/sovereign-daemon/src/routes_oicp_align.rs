@@ -4,8 +4,12 @@
 //!
 //! Candidates come from the index that exists: each corpus's lexical search
 //! over the quote returns its top `candidate_k` chunks (`align.toml`), and
-//! the stored texts they were cut from are what `quote_align::align` reads.
-//! Recall is the search's; precision is the aligner's.
+//! the stored texts they were cut from are what `quote_align::align` reads,
+//! with every stored text that holds the quote's words word for word
+//! (`quote_align::holds_words`, read through `CorpusIndex::texts_holding`):
+//! a quotation standing verbatim in a text is aligned there however the
+//! lexical search ranked it (OICP v0.6 §2.18; "in their sleep" in Mill,
+//! behind eight chunks of Malthus, PAL1). Precision is the aligner's.
 //!
 //! Mounted in `general` under `client_auth`, like every OICP route. Which
 //! corpora a caller reaches is [`readable_corpora`], and every requested corpus
@@ -222,6 +226,26 @@ async fn read_corpus(
             None => order.push((name, vec![source])),
         }
     }
+    // Verbatim recall (§2.18): the texts holding the quote's words, in name
+    // order after the lexical ones, with no matched chunk to name a document.
+    let lexical = order.len();
+    match index
+        .texts_holding(|text| quote_align::holds_words(text, quote))
+        .await
+    {
+        Ok(Ok(holding)) => {
+            for name in holding {
+                if !order.iter().any(|(n, _)| *n == name) {
+                    order.push((name, Vec::new()));
+                }
+            }
+        }
+        Ok(Err(absence)) => {
+            tracing::debug!(corpus = %corpus_id, reason = absence_reason(absence), "oicp align: no stored texts to read for verbatim recall");
+        }
+        Err(e) => return Err(format!("text store unreadable: {e}")),
+    }
+    let verbatim_added = order.len() - lexical;
     let mut texts = Vec::new();
     for (name, sources) in order {
         let stored = match index.text(&name).await {
@@ -239,6 +263,8 @@ async fn read_corpus(
         corpus = %corpus_id,
         hits = hits.len(),
         hits_naming_no_text = unnamed,
+        lexical_texts = lexical,
+        verbatim_added,
         texts = texts.len(),
         "oicp align: candidates read"
     );

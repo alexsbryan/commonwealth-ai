@@ -764,6 +764,36 @@ CPU for an interactive request's embeddings: beside the primary's compute,
 a writer's query embedding took 353 ms on the shared accelerator and under
 50 ms on the CPU.
 
+### 2.18 Alignment where the words stand
+
+v0.5 §2.3 leaves a host to pick the texts it aligns against, and counts a
+mark as a token in `coverage`. On the reference host both let a quotation
+its writer got right be "fixed" to other words: "in their sleep." stands
+word for word in Mill, but the lexical search's top chunks were Malthus's,
+where "in their population." matched three of its four tokens, the stop
+among them. This section amends §2.3; its shapes are unchanged.
+
+- **Recall.** A quotation that stands word for word in a stored text of a
+  requested corpus, its punctuation aside, is aligned there: the host
+  aligns against every such text, however its own search ranked it. Which
+  other texts it reads is still its own.
+- **A mark is not a word.** `coverage` is the quotation's words matched
+  exactly over its words, in `[0, 1]`; the first word may differ in its
+  first letter's case. Marks are still aligned and every difference in them
+  is still reported. A mark for a mark costs less than a word for a word,
+  so a span that differs from the quotation in punctuation alone comes
+  before every span with a word changed.
+- **Specific.** A host returns an alignment only when the words it matched
+  say it is that place, not any place holding the quotation's common words.
+  The reference host keeps one whose matched words carry at least its
+  `specific_floor` (0.7) of the quotation's words, each weighted by its
+  rarity in the texts read (`ln(1 + words / (1 + occurrences))`), or hold a
+  run of `specific_run` (5) words: "there is no" matched of "there is no
+  alternative" is neither, and "To be, or not to be, that is the" matched of
+  a quotation ending "problem" is the run.
+- `aligner` moves with this: the reference host's is `align/4 norm/0`, so a
+  client's alignments cached under `align/3` are asked again.
+
 ## 6. Conformance (additions)
 
 | check | holds | red against |
@@ -826,6 +856,8 @@ without `ingest:documents` and `ingest:recipe`; `knowledge:priority` never witho
   verify request reads and writes back unchanged. A client sends it only
   to a host advertising `knowledge:priority`; a host without it may refuse
   the field or ignore it, serving the request as one without.
+- §2.18 changes no shape: a v0.5 client reads its alignments as before,
+  and one that keys cached alignments on `aligner` asks again.
 - A client sends `format = "transcript"` only to a host advertising
   `ingest:transcripts`; a host without it may refuse the recipe or read the
   document as plain text, its spans then carrying no turn.
