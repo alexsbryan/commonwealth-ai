@@ -50,3 +50,12 @@ lifecycle class (`diagnosis/by_reader.py`); attached updates; answer tokens per 
 reader's own read-to-read change, 2 deals), and saltgrass-asked once, because the prompt line goes for every recipe
 (Bar G, `generality-prereg.md`). Failed: the result and its diagnosis by class, and the change reverted unless one
 part passes on its own.
+
+## Revisions
+
+**2026-10-18, after a smoke read of three of world-s1's target windows (sec_00004, sec_00007, sec_00008; 114k
+output tokens), before any measured read.** The replaced kind's description now says the replaced record has ended
+and asks the stage it ends in (e271fac85): under the first wording halwick-d1's rollover was written replaced with
+stage negotiating, under the second, lost. Every nomination in the three windows was written as an act under
+(8 of 8). The bars are unchanged; halwick-d1's window informed the wording, so a bar 1 that passes on halwick-d1
+alone is reported as such.
