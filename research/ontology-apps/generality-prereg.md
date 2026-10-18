@@ -41,3 +41,17 @@ held-out corpus.
 - Each persona gets one read. Bar R's read-to-read gap is pooled: the mean of |A1 - A2| over the recipes with two
   reads (asked, ledger), and within-recipe agreement likewise pooled. A recipe pair passes when its score gap and
   its agreement are within the pooled yardstick as the bar states.
+
+**2026-10-18, before the persona recipes' second reads; operator: "Settle it".** The bar as revised 2026-10-16
+cannot tell an author's recipe from read noise (aea6993bd, `generality.py --w20 --null`): the same reads dealt to
+the recipes at random pass 3 or fewer pairs in 26% of deals, and cross-recipe read pairs swap 2.3 questions against
+2.5 for two reads of one recipe, so the agreement half re-counts the score gap. Bar R is judged instead on two 20k
+reads of each of the five recipes. Detective, editor and engineer get their second read at HEAD with the cut of
+w20-held restored; HEAD rebuilds every 20k read's records identically from its answers (arms hr-*).
+- Floor: each recipe's mean is at least the one-shot's mean minus 2 (23.5).
+- Author: the variance of the five recipes' means is not in the top 5% of the same ten reads dealt to the five
+  recipes at random (100,000 deals, seed 0): the share of deals at or above it exceeds 0.05.
+- Control, judged first: the author test with asked at 40k (gen-rescore/asked-r1 and gen-fresh, 26 and 30) dealt
+  in as a sixth recipe must fail. If it does not, the author verdict is could-not-judge, never a pass.
+The 2026-10-16 form is printed beside it. Spend: three reads (about 0.27M answer tokens) and three bank scores
+(133 calls each, at most 400 tokens, thinking off).
