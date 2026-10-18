@@ -85,6 +85,39 @@ def part_of(gold_quote, text):
     return n >= 3 and n / max(1, len(c)) >= 0.6 and not covers(gold_quote, text)
 
 
+def element_keys(shape, opens):
+    """The quoted keys of the object opening at the `{` that ends `opens` in `shape`, at its own depth: a port of
+    window_answer.rs `element_keys`, so the harness reads a claim's envelope from the prompt as the reader does."""
+    at = shape.find(opens)
+    if at < 0: return set()
+    body, keys, depth, start = shape[at + len(opens):], set(), 1, None
+    for i, c in enumerate(body):
+        if start is not None:
+            if c == '"':
+                if depth == 1 and body[i + 1:].lstrip().startswith(":"): keys.add(body[start:i])
+                start = None
+            continue
+        if c == '"': start = i + 1
+        elif c == "{": depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0: break
+    return keys
+
+
+PROMPT = os.path.join(corpora.REPO, "ingest/crates/corpus-engine/src/enrichment/pipeline/document_read/window_prompt.md")
+CLAIM_KEYS = element_keys(open(PROMPT).read(), '"claims": [{')
+
+
+def claim_fields(x):
+    """A claim's fields as the reader's parser reads them (window_answer.rs `fields_beside`, 3175c3f6c): a key outside
+    the claim's envelope that `fields` does not hold is one of its fields. A model of that code, not the code."""
+    f = dict(x.get("fields") or {}) if isinstance(x.get("fields") or {}, dict) else {}
+    for k, v in x.items():
+        if k not in CLAIM_KEYS and k not in f: f[k] = v
+    return f
+
+
 def windows(run):
     """{chapter: {labels, prompt, answer, reasoning}} from extract.err's traces; written out to <run>/windows/ once.
     A reasoning engine's answer opens with a <think> block, as the reader's own parser sees it (prepare_phase_json):
@@ -151,6 +184,18 @@ def load(run, cid):
         for s in g["stage_updates"]:  # score.py's order, so its `matches` indices are these
             gold.append(dict(s, folder=f, doc=doc_of_file.get(f"{f}/{s['file']}"), dt=pdate(s["date"])))
     for i, u in enumerate(gold): u["i"] = i
+    S = json.load(open(f"{run}/score.json"))
+    # The messages that may show a gold update: the one it is filed at and every message that one embeds (score.py's
+    # carriers, written into the score), since an embedded message is a document of its own (eb07f225a).
+    inside = {}
+    for emb, carriers in (S.get("carriers") or {}).items():
+        for carrier in carriers: inside.setdefault(carrier, set()).add(emb)
+    def embedded(doc, seen=()):
+        out = set()
+        for e in inside.get(doc, ()):
+            if e not in seen: out |= {e} | embedded(e, seen + (doc,))
+        return out
+    for u in gold: u["docs"] = {u["doc"]} | embedded(u["doc"]) if u["doc"] else set()
     W, refused = windows(run), refusals(run)
     shown, where, claims, subject, body = {}, {}, [], {}, {}
     for ch in sorted(W):
@@ -170,10 +215,13 @@ def load(run, cid):
             p = parts.get(x.get("about")) or {}
             claims.append(dict(ch=ch, n=k, kind=kind, about=x.get("about"), about_type=p.get("type"), about_name=p.get("name"),
                                doc=doc, label=x.get("document"), dt=dates.get(x.get("document")), quote=x.get("quote") or "",
-                               stage=(x.get("fields") or {}).get("stage"),
+                               stage=claim_fields(x).get("stage"),
                                refused=seen[(doc, kind)] <= refused[(ch, doc, kind)],
-                               hits=[u["i"] for u in gold if doc and u["doc"] == doc and covers(u["quote"], x.get("quote"))],
-                               parts=[u["i"] for u in gold if doc and u["doc"] == doc and part_of(u["quote"], x.get("quote"))]))
+                               hits=[u["i"] for u in gold if doc and doc in u["docs"] and covers(u["quote"], x.get("quote"))],
+                               parts=[u["i"] for u in gold if doc and doc in u["docs"] and part_of(u["quote"], x.get("quote"))]))
+    # Each gold update at the message whose shown text holds it, else at the message it is filed at.
+    for u in gold:
+        u["at"] = next((d for d in sorted(u["docs"]) if d in shown and covers(u["quote"], shown[d])), u["doc"])
     # A particular's gold identity: the deal most of its stage statements are (a statement citing a span of a gold
     # sentence counts for it). A tie names no deal: the particular is two deals as much as one.
     units = {}
@@ -186,7 +234,6 @@ def load(run, cid):
         if votes:
             top = max(votes.values()); tied = sorted(g for g, n in votes.items() if n == top)
             if len(tied) == 1: ident[key] = tied[0]
-    S = json.load(open(f"{run}/score.json"))
     # Each placed statement back onto its window claim: same document, the claim's quote inside its match text.
     # One quote written about two particulars (one sentence, two deals) is told apart by the record the statement
     # landed on: the claim whose particular that record's other statements come from.
@@ -225,7 +272,7 @@ def referent(D, u):
     dist = words(g.get("description")) - others
     raw_p = f"{D['c']['story']}/{u['folder']}/{u['file']}"
     raw = open(raw_p, errors="replace").read() if os.path.exists(raw_p) else ""
-    own, subj, rest = dist & words(D["body"].get(u["doc"])), dist & words(D["subject"].get(u["doc"])), dist & words(raw)
+    own, subj, rest = dist & words(D["body"].get(u["at"])), dist & words(D["subject"].get(u["at"])), dist & words(raw)
     where = "own_lines" if own else "subject_only" if subj else "quoted_only" if rest else "nowhere"
     return dict(where=where, distinguishing=sorted(dist), own_lines=sorted(own), subject=sorted(subj), raw=sorted(rest))
 
@@ -256,9 +303,9 @@ def records_of(D, cls):
 def chain(D, u):
     """One gold update from the window it was shown in to the records holding it."""
     S, g = D["S"], u["deal"]
-    ch, label = D["where"].get(u["doc"], (None, None))
+    ch, label = D["where"].get(u["at"], (None, None))
     mine = [cl for cl in D["claims"] if u["i"] in cl["hits"]]
-    on_doc = [cl for cl in D["claims"] if cl["doc"] == u["doc"] and cl["kind"] == "stage_update" and u["i"] not in cl["hits"]]
+    on_doc = [cl for cl in D["claims"] if cl["doc"] in u["docs"] and cl["kind"] == "stage_update" and u["i"] not in cl["hits"]]
     recs = sorted({r for r, cids in S["placed"].items() for cid in cids if u["i"] in S["matches"].get(cid, [])})
     view = lambda cl: dict(kind=cl["kind"], about=f"{cl['ch']}/{cl['about']}", about_name=cl["about_name"],
                            particular_is=D["ident"].get((cl["ch"], cl["about"])), stage=cl["stage"],
@@ -267,7 +314,7 @@ def chain(D, u):
     for_other = [cl for cl in mine if cl["kind"] == "stage_update" and not cl["refused"] and D["ident"].get((cl["ch"], cl["about"])) not in (g, None)]
     spans = lambda cl: len({D["gold"][h]["deal"] for h in cl["hits"]}) > 1
     part = [cl for cl in on_doc if not cl["refused"] and u["i"] in cl["parts"] and D["ident"].get((cl["ch"], cl["about"])) in (g, None)]
-    if ch is None or not covers(u["quote"], D["shown"].get(u["doc"], "")) and not mine: status = "hidden"
+    if ch is None or not covers(u["quote"], D["shown"].get(u["at"], "")) and not mine: status = "hidden"
     elif [cl for cl in mine if cl["kind"] == "stage_update"] and all(spans(cl) for cl in mine if cl["kind"] == "stage_update"):
         status = "two_deal_message"  # one claim quotes this deal's statement and another deal's
     elif for_g: status = "emitted" if any(cl["stage"] == u["stage"] for cl in for_g) else "stage_misread"
@@ -280,15 +327,15 @@ def chain(D, u):
     elif any(D["ident"].get((cl["ch"], cl["about"])) in (g, None) for cl in on_doc): status = "other_sentence_cited"
     elif {D["ident"].get((cl["ch"], cl["about"])) for cl in on_doc} & {x["deal"] for x in D["gold"] if x["doc"] == u["doc"] and x["deal"] != g}:
         status = "two_deal_message"
-    elif any(cl["doc"] == u["doc"] and cl["kind"] != "stage_update" for cl in D["claims"]): status = "wrong_kind"
+    elif any(cl["doc"] in u["docs"] and cl["kind"] != "stage_update" for cl in D["claims"]): status = "wrong_kind"
     else: status = "not_emitted"
     return dict(file=f"{u['folder']}/{u['file']}", date=u["date"], stage=u["stage"], quote=u["quote"][:200],
-                window=f"{ch} {label}" if ch else None, visible=bool(ch) and covers(u["quote"], D["shown"].get(u["doc"], "")),
+                window=f"{ch} {label}" if ch else None, visible=bool(ch) and covers(u["quote"], D["shown"].get(u["at"], "")),
                 status=status, claims=[view(cl) for cl in mine], other_statements_on_message=[view(cl) for cl in on_doc],
-                records=recs, referent=referent(D, u), resolve=[l for cl in mine for l in D["resolve"].get((u["doc"], f"{cl['ch']}/{cl['about']}"), [])],
+                records=recs, referent=referent(D, u), resolve=[l for cl in mine for l in D["resolve"].get((cl["doc"], f"{cl['ch']}/{cl['about']}"), [])],
                 spans=[view(cl) for cl in part], span_records=records_of(D, part), thought=thought(D, ch, label, u["quote"]),
-                oneshot=oneshot_of(D, u), judged=[dict(about=f"{cl['ch']}/{cl['about']}", **D["judged"][(u["doc"], f"{cl['ch']}/{cl['about']}")])
-                                                for cl in mine + part if (u["doc"], f"{cl['ch']}/{cl['about']}") in D["judged"]])
+                oneshot=oneshot_of(D, u), judged=[dict(about=f"{cl['ch']}/{cl['about']}", **D["judged"][(cl["doc"], f"{cl['ch']}/{cl['about']}")])
+                                                for cl in mine + part if (cl["doc"], f"{cl['ch']}/{cl['about']}") in D["judged"]])
 
 
 def intruders(D, units, g):
