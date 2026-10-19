@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::state::AppState;
 
-use super::corpus_ingest::{clear_last_attempt, ingest_progress_callback, record_failure};
+use super::corpus_attempt::{clear_last_attempt, ingest_progress_callback, record_failure};
 
 #[path = "corpus_install/post_install.rs"]
 mod post_install;
