@@ -47,6 +47,9 @@ def judge_id(sources, keys):
 
 
 def corpus(cid):
+    if cid == "uv-third":  # a tracker's cases: uv-support's fixed tune third, scored by converge-s2/uv_served.py --loop
+        return dict(id=cid, kind="cases", recipe=f"{REPO}/research/ontology-apps/support/recipe-third.toml",
+                    gold=f"{BENCH}/uv-support/gold")
     if cid in BANK_RECIPES:
         return dict(id=cid, kind="bank", recipe=f"{REPO}/research/ontology-apps/saltgrass/{BANK_RECIPES[cid]}",
                     bank=f"{REPO}/bench/lanes/chaos_monkey/saltgrass.toml",
