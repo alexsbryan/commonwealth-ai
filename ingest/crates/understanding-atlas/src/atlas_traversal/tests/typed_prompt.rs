@@ -7,7 +7,8 @@
 //! names. The second: times read as a day, a month or a year (6b2422bfa,
 //! 2026-10-20), so the grammar's time sentence is the port's, not the probe's;
 //! `ans_query_documentation.txt` was regenerated from `query_grammar` and
-//! differs from the probe's bytes only on that sentence.
+//! differs from the probe's bytes only on that sentence and on the grammar's
+//! later additions (the aggregate `sum`), each regenerated the same way.
 
 use super::*;
 

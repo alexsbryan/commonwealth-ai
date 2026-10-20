@@ -84,11 +84,26 @@ impl Over<'_> {
     }
 }
 
+/// What a tally or a sum groups by: an attribute of the target, or its
+/// `subject`. A ref's group is the record it holds, named by that record.
+pub(super) struct Group<'q> {
+    pub(super) attr: &'q str,
+    pub(super) is_ref: bool,
+}
+
 pub(super) enum Shape<'q> {
     List,
     Count,
-    Tally(&'q str),
-    Best { highest: bool, over: Over<'q> },
+    Tally(Group<'q>),
+    Best {
+        highest: bool,
+        over: Over<'q>,
+    },
+    /// The total of a quantity attribute, per group or (`None`) in one.
+    Sum {
+        over: &'q str,
+        by: Option<Group<'q>>,
+    },
 }
 
 /// A query whose every name was found in the declared vocabulary.
@@ -111,16 +126,19 @@ impl<'q> Checked<'q> {
     }
 
     /// The target's attributes the query names: its filters' (bar `name`),
-    /// a tally's, and an attribute an argmax/argmin ranks by.
+    /// a tally's, an attribute an argmax/argmin ranks by, and a sum's.
     pub(super) fn named_attributes(&self) -> Vec<&'q str> {
         let mut out: Vec<&'q str> = Vec::new();
-        let over = match &self.shape {
-            Shape::Tally(a)
-            | Shape::Best {
+        let over: Vec<&'q str> = match &self.shape {
+            Shape::Tally(g) => vec![g.attr],
+            Shape::Best {
                 over: Over::Attr(a, _),
                 ..
-            } => Some(*a),
-            _ => None,
+            } => vec![*a],
+            Shape::Sum { over, by } => std::iter::once(*over)
+                .chain(by.as_ref().map(|g| g.attr))
+                .collect(),
+            _ => Vec::new(),
         };
         let filtered = self
             .filters
@@ -184,18 +202,14 @@ pub(super) fn check<'q>(q: &'q TypedQuery, judge: &Judge<'q>) -> Result<Checked<
     let shape = match &q.aggregate {
         AnswerShape::None => Shape::List,
         AnswerShape::Count => Shape::Count,
-        AnswerShape::Tally(over) => {
-            if !index
-                .effective_attributes(t)
-                .iter()
-                .any(|a| &a.name == over)
-            {
-                return Err(format!(
-                    "'{over}' is not an attribute of {t}, so it cannot be tallied."
-                ));
-            }
-            Shape::Tally(over)
-        }
+        AnswerShape::Tally(over) => Shape::Tally(check_group(over, t, index, "tallied")?),
+        AnswerShape::Sum { over, by } => Shape::Sum {
+            over: check_summand(over, t, index)?,
+            by: by
+                .as_deref()
+                .map(|g| check_group(g, t, index, "grouped by"))
+                .transpose()?,
+        },
         AnswerShape::Argmax(over) => Shape::Best {
             highest: true,
             over: check_over(over, t, judge)?,
@@ -211,6 +225,53 @@ pub(super) fn check<'q>(q: &'q TypedQuery, judge: &Judge<'q>) -> Result<Checked<
         relations,
         shape,
     })
+}
+
+/// A tally's or a sum's group: a declared attribute of `t` (a ref groups by
+/// the record it holds), or `subject` when `t` declares what it is about.
+fn check_group<'q>(
+    over: &'q str,
+    t: &str,
+    index: &TypeIndex<'_>,
+    verb: &str,
+) -> Result<Group<'q>, String> {
+    if let Some(a) = index
+        .effective_attributes(t)
+        .into_iter()
+        .find(|a| a.name == over)
+    {
+        let is_ref = matches!(a.family, AttrFamily::Ref { .. });
+        return Ok(Group { attr: over, is_ref });
+    }
+    if over == SUBJECT && ref_target(index, t, SUBJECT).is_some() {
+        tracing::trace!(
+            target_type = t,
+            "atlas traversal: typed query groups by a claim's subject"
+        );
+        return Ok(Group {
+            attr: over,
+            is_ref: true,
+        });
+    }
+    Err(format!(
+        "'{over}' is not an attribute of {t}, so it cannot be {verb}."
+    ))
+}
+
+/// What a sum adds up: a quantity attribute of `t`, and nothing else.
+fn check_summand<'q>(over: &'q str, t: &str, index: &TypeIndex<'_>) -> Result<&'q str, String> {
+    let decl = index
+        .effective_attributes(t)
+        .into_iter()
+        .find(|a| a.name == over)
+        .ok_or_else(|| format!("'{over}' is not an attribute of {t}, so it cannot be summed."))?;
+    match &decl.family {
+        AttrFamily::Quantity { .. } => Ok(over),
+        other => Err(format!(
+            "'{over}' is a {} attribute; sum adds up a quantity attribute.",
+            other.key()
+        )),
+    }
 }
 
 fn check_filter<'q>(

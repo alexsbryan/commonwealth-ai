@@ -683,6 +683,26 @@ mod tests {
         assert_eq!(p.typed.unwrap().target_type, "hoard");
     }
 
+    /// A sum per referenced record (04-procurement n6, "how much we have
+    /// ordered from each supplier this year") parses as `--typed` takes it;
+    /// `group_by` with another aggregate is refused, not ignored.
+    #[test]
+    fn parse_args_takes_a_typed_sum() {
+        use corpus_engine::atlas_traversal::typed::AnswerShape;
+        let json = r#"{"target_type":"purchase_order","filters":[{"attribute":"order_date","op":"eq","value":2026,"negate":false}],"aggregate":"sum","aggregate_over":"order_total","group_by":"supplier"}"#;
+        let p = parse_args(&["c".into(), "--typed".into(), json.into()]).unwrap();
+        assert_eq!(
+            p.typed.expect("typed query parsed").aggregate,
+            AnswerShape::Sum {
+                over: "order_total".into(),
+                by: Some("supplier".into())
+            }
+        );
+        let tally = r#"{"target_type":"purchase_order","aggregate":"tally","aggregate_over":"supplier","group_by":"supplier"}"#;
+        let err = parse_args(&["c".into(), "--typed".into(), tally.into()]).unwrap_err();
+        assert!(err.contains("only sum groups"), "{err}");
+    }
+
     #[test]
     fn call_intent_direction_detection() {
         assert_eq!(

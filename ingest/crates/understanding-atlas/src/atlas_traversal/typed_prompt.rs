@@ -29,7 +29,9 @@ pub const QUERY_SYSTEM: &str = "You translate a question about a knowledge base 
 query over its schema. Use only the types, attributes and relations the schema declares. Output \
 only the JSON query.";
 
-/// The grammar and the four out-of-domain examples, verbatim from the probe.
+/// The grammar and the four out-of-domain examples, verbatim from the probe
+/// but for the time sentence and the forms added since (`sum`). The schema
+/// is still the probe's: it admits neither `tally` nor those.
 const GRAMMAR: &str = include_str!("typed_query_grammar.md");
 
 const OPS: [&str; 4] = ["eq", "lt", "gt", "contains"];

@@ -75,7 +75,7 @@ impl<'a> Atom<'a> {
 
     /// The atom ids (or written names) this atom holds under `attr`: its ref
     /// attribute's values, else a claim's `subject`, the record it is about.
-    fn held(self, attr: &str) -> Vec<&'a str> {
+    pub(super) fn held(self, attr: &str) -> Vec<&'a str> {
         if let Some(v) = self.attributes().get(attr) {
             return strings(v);
         }
@@ -375,6 +375,34 @@ impl<'a> Judge<'a> {
         Some((lo, hi))
     }
 
+    /// A quantity attribute as the ONE number a sum adds, read by the one
+    /// quantity reader ([`numbers`]); anything else is why it cannot be added.
+    /// A minus before the number is refused rather than read: [`numbers`]
+    /// reads `-50` as 50 (it reads `8.5-8.6` as a span), so summing it as
+    /// -50 would be a second reading of the value the filters judge.
+    pub(super) fn one_number(&self, atom: Atom<'_>, attr: &str) -> Result<f64, Unsummed> {
+        let held: Vec<f64> = match atom.attributes().get(attr) {
+            None | Some(Value::Null) => return Err(Unsummed::Unset),
+            Some(Value::Number(n)) => n.as_f64().into_iter().collect(),
+            Some(Value::String(s)) if s.trim_start().starts_with(['-', '\u{2212}']) => {
+                return Err(Unsummed::Signed)
+            }
+            Some(Value::String(s)) => numbers(s),
+            Some(other) => texts(other).iter().flat_map(|t| numbers(t)).collect(),
+        };
+        match held.as_slice() {
+            [x] => Ok(*x),
+            [] => Err(Unsummed::NoNumber),
+            _ => Err(Unsummed::MoreThanOne),
+        }
+    }
+
+    /// The canonical name (or description, or content) of the atom `id`
+    /// names, when it names one.
+    pub(super) fn record_name(&self, id: &str) -> Option<&'a str> {
+        self.by_id.get(id).map(|a| a.name())
+    }
+
     /// Every far end that satisfies `r` for `atom` (ignoring `negate`), each
     /// with what carried its link — the link itself and, through a `where`,
     /// the links that qualified the far end.
@@ -543,6 +571,26 @@ impl<'a> Judge<'a> {
                 )
             })
             .collect()
+    }
+}
+
+/// Why a sum could not add an atom's value: it is reported, never zeroed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Unsummed {
+    Unset,
+    NoNumber,
+    MoreThanOne,
+    Signed,
+}
+
+impl Unsummed {
+    pub(super) fn reason(self) -> &'static str {
+        match self {
+            Unsummed::Unset => "unset",
+            Unsummed::NoNumber => "no number",
+            Unsummed::MoreThanOne => "more than one number",
+            Unsummed::Signed => "a sign the quantity reader does not read",
+        }
     }
 }
 

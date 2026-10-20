@@ -15,7 +15,10 @@ QUERY GRAMMAR (answer with exactly one JSON object):
   argmax / argmin = the matching target with the largest / smallest `aggregate_over`, which is
   one of the target's time or quantity attributes, or a related type (= how many distinct
   linked entities of that type the target has, counting only those that meet the `where` of
-  the query's relation to that type).
+  the query's relation to that type); sum = the total of `aggregate_over`, a quantity attribute
+  of the target, over the matching targets, one total per value of `group_by`: one of the
+  target's attributes, or the `attr` of a relation `<target>.<attr>` to total per linked entity
+  (null = one total). Only sum takes `group_by`.
 
 EXAMPLES (a different knowledge base: books, authors, libraries):
 Q: Which books printed before 1600 are held by the Bodleian?

@@ -219,7 +219,9 @@ thing), [`ENRICHMENT_V2.md`](../ingest/crates/corpus-engine/ENRICHMENT_V2.md),
   filters `eq`/`lt`/`gt`/`contains`, times as signed-year intervals; relation
   constraints over a declared relation type or a `<type>.<attr>` ref, a named
   far end matched by folded name or alias, never a substring; a depth-2
-  `where`; `none`/`count`/`argmax`/`argmin`/`tally`) answers with a
+  `where`; `none`/`count`/`argmax`/`argmin`/`tally`, or `sum` of a quantity attribute per
+  `group_by` attribute, a ref grouping by the record it holds, an atom with no single readable
+  number reported by id and never added as 0) answers with a
   `TypedTable` whose rows carry, per evidence, the installed chunk id that holds its quote
   (`ChunkRef::cited_id`: `index_chunk` when the build placed it, else the section the read
   cited), which the brief prints
