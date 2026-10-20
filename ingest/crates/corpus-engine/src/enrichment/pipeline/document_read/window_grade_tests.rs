@@ -147,7 +147,12 @@ description = "a statement that a happening took place"
 async fn each_claim_reads_the_field_value_its_own_document_states() {
     let chapter = input_chapter(&[
         row(1, "doc-a", "Issue 42 in uv is open.", r#"{"author":"ana"}"#),
-        row(2, "doc-b", "Issue 42 moved to pip and is now closed.", r#"{"author":"bo"}"#),
+        row(
+            2,
+            "doc-b",
+            "Issue 42 moved to pip and is now closed.",
+            r#"{"author":"bo"}"#,
+        ),
     ]);
     let answer = json!({
         "particulars": [{"ref": "p1", "type": "case", "name": "issue 42", "fields": {
