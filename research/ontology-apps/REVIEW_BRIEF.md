@@ -76,6 +76,31 @@ The percentages are my estimates, not measurements.
    gold-document recall rises as windows shrink (67%, 75%, 86% at 40k, 20k, 10k). Window size is the first knob.
    The passes pipeline served 1/15 locally, so retiring it closes no door. One system defect found here: one
    malformed number (`"value":.02`) fails the strict JSON parse and loses the whole window (2 of 2 samples at 10k).
+   Fixed by bb16808b5, after those reads.
+
+   **The plan (2026-10-19, operator: "a lean startup level plan").** Target: the default commands on a 64GB machine
+   (this M2 Max; Qwen3.6-35B-A3B IQ4_NL, 128k context) make records near DeepSeek's. What the 2026-10-15 reads
+   already say (`loop/window_recall.py`, no model call): local attaches 31 of world-s4's 55 gold updates at 20k
+   against DeepSeek's 52, and the gap is in the dense windows (window 1: 12/27 against 27/27; window 3: 4/9 against
+   9/9; window 2: 15/18 against 16/18). It writes 48 statements to DeepSeek's 103 on about a quarter of the
+   reasoning, and 7 of its 10 misses were never written. A world-s4 read takes about 41 minutes.
+
+   The assumption the plan stands on: the loss is per call, a call with many statements to write drops some, so
+   calls that each write fewer recover it. It is wrong if a narrow call over window 1 still leaves most of its gold
+   unwritten. The innermost ring is that one window, scored per gold update (minutes a trial); a change that wins
+   there goes to world-s4 (two reads), then the inner ring. Each step is pre-registered with its bar before its read.
+   0. Baseline at HEAD: the daemon on the local model (config swap and restart, peer sessions told first), world-s4
+      read twice at 20k. It also checks what a local daemon may not do as a hosted one does: an empty answer under a
+      JSON grammar with thinking on (note 068f6b1f), long-call timeouts, forced-choice distributions for RESOLVE.
+   1. Window size, the lever that exists (`window_chars`): window 1's documents at 10k and 5k. No code.
+   2. If size does not close window 1: a second pass over the same window, shown the statements already written
+      and asked only for the rest, which code folds in (the repeated narrow pass). About 150 lines.
+   3. Once recall holds: minutes per window and what a 1M-token corpus would take (MTP, thinking budget).
+   Pivot: if steps 1-2 leave window 1 under 20 of 27, read it with Qwen3.8-27B (dense, downloaded) to tell the model
+   from the design. Stop: if neither model reaches 20 of 27 by any narrow call, the track is model-bound today; the
+   numbers are recorded and engineering stops. Done: world-s4 at least 8/15 served and 45/55 attached on two local
+   reads (DeepSeek 9/15, 52/55), then the inner ring within 2 deals of DeepSeek's. Spend is machine time; while the
+   daemon serves the local model, DeepSeek is off for every session on this machine.
 
 The one-shot reference under the current scorer (c138d09b1) is 68/93 served and 237/328 attached on the worlds,
 not the race table's 66/93 and 247/328.
