@@ -729,7 +729,9 @@ question the pipeline asks about a type is a method on the resolved
   (default) records every answer in `enrichment/<id>/answers.jsonl` keyed by the
   hash of the whole prompt and per-call budget (or the text embedded), one answer
   per question per run, each stamped with the model the client routes it to
-  (`AnsweredBy`); `replay` answers from that store and never calls (or probes)
+  (`AnsweredBy`), an alias stamped as the model the daemon's `/v1/models`
+  binds it to (`corpus_index::v1_models::alias_bindings`; `daemon` and
+  `recorded` refuse to start when the daemon does not answer it); `replay` answers from that store and never calls (or probes)
   the daemon; `recorded` answers from it what the run's own model gave and asks
   the daemon only the rest, recording them, so an iteration pays for the
   questions it changed; `gold` reads `answers.gold.jsonl`. Under `replay` and

@@ -323,10 +323,13 @@ pub async fn cmd_delta(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let (embed, chat) = match client.into_asked_closures(
-        corpus_engine::enrichment::asker::Asker::Daemon,
-        &super::paths::enrichment_root(&cfg.corpus_id),
-    ) {
+    let (embed, chat) = match client
+        .into_asked_closures(
+            corpus_engine::enrichment::asker::Asker::Daemon,
+            &super::paths::enrichment_root(&cfg.corpus_id),
+        )
+        .await
+    {
         Ok(ports) => ports,
         Err(e) => {
             eprintln!("error: {e}");

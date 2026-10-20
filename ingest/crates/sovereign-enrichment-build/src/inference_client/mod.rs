@@ -510,19 +510,54 @@ impl DaemonInferenceClient {
     /// `daemon`, or answered from a store with this client never called under
     /// `replay` and `gold`. The ontology layer's verbs (extract, resolve, delta)
     /// build their ports here and nowhere else.
-    pub fn into_asked_closures(
+    pub async fn into_asked_closures(
         self,
         asker: corpus_engine::enrichment::asker::Asker,
         enrichment_dir: &std::path::Path,
     ) -> std::result::Result<(EmbedFn, InferenceFn), String> {
-        // The model each question is routed to, stamped on its answer.
+        // The model each question's alias is bound to on the daemon, stamped on
+        // its answer: stamped with the alias, a recorded run reused answers of
+        // whatever model served it before (note 10d774a9).
+        let bound = if asker.needs_daemon() {
+            corpus_index::v1_models::alias_bindings(&self.chat_base)
+                .await
+                .map_err(|e| {
+                    format!(
+                        "the {} asker stamps answers with the model each alias is bound to, \
+                         and {e}",
+                        asker.label()
+                    )
+                })?
+        } else {
+            Default::default()
+        };
+        // A name the daemon binds to nothing is stamped as asked: right for a
+        // model id, the old defect for an alias the daemon does not advertise,
+        // so the names in that case are said once here.
+        let unbound: Vec<&str> = std::iter::once(self.chat_model.as_str())
+            .chain(self.chat_models_by_phase.values().map(String::as_str))
+            .chain(std::iter::once(self.embed_model.as_str()))
+            .filter(|m| !m.is_empty() && !bound.contains_key(*m))
+            .collect();
+        tracing::info!(
+            asker = asker.label(),
+            ?bound,
+            ?unbound,
+            "asker: answers stamped with the models the aliases are bound to; unbound names stamped as asked"
+        );
         let by: corpus_engine::enrichment::asker::AnsweredBy = {
             let (chat_model, by_phase) =
                 (self.chat_model.clone(), self.chat_models_by_phase.clone());
             let embed_model = self.embed_model.clone();
-            Arc::new(move |port: &str, phase: Option<&str>| match port {
-                "embed" => embed_model.clone(),
-                _ => model_for_phase(&chat_model, &by_phase, phase).to_string(),
+            Arc::new(move |port: &str, phase: Option<&str>| {
+                let asked = match port {
+                    "embed" => embed_model.as_str(),
+                    _ => model_for_phase(&chat_model, &by_phase, phase),
+                };
+                bound
+                    .get(asked)
+                    .cloned()
+                    .unwrap_or_else(|| asked.to_string())
             })
         };
         let (embed, chat) = self.into_closures();

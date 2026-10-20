@@ -249,14 +249,16 @@ pub async fn run_extract(args: &[String]) -> i32 {
     // with the closures, so each chat call bumps it and the flusher
     // task below sees the running totals.
     let usage_ledger = client.usage_ledger();
-    let (embed, chat) =
-        match client.into_asked_closures(parsed.asker, &paths::enrichment_root(&cfg.corpus_id)) {
-            Ok(ports) => ports,
-            Err(e) => {
-                eprintln!("error: {e}");
-                return 1;
-            }
-        };
+    let (embed, chat) = match client
+        .into_asked_closures(parsed.asker, &paths::enrichment_root(&cfg.corpus_id))
+        .await
+    {
+        Ok(ports) => ports,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 1;
+        }
+    };
 
     let cache = cfg.phase_cache();
     let runs = RunOutputWriter::new(paths::runs_dir(&cfg.corpus_id));

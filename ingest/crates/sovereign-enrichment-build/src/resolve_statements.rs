@@ -359,7 +359,7 @@ pub async fn run(p: &ParsedResolveStatements) -> Result<ResolveStatementsSummary
     let client = DaemonInferenceClient::new(&base, &p.model, "")
         .map_err(|e| format!("building the daemon client: {e}"))?;
     let ledger = client.usage_ledger();
-    let (_embed, infer) = client.into_asked_closures(p.asker, &p.out)?;
+    let (_embed, infer) = client.into_asked_closures(p.asker, &p.out).await?;
     let answerer = match p.answer {
         AnswerBy::Model => Answerer::Model(&infer),
         AnswerBy::Select => Answerer::Select(&infer),

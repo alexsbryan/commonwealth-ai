@@ -179,11 +179,68 @@ fn pick_default_models_from_v1(v: &serde_json::Value) -> (Option<String>, Option
     (chat, embed)
 }
 
+/// The model each alias the daemon advertises is bound to on this node
+/// (`/v1/models` rows owned `alias→<model>`), keyed by alias; the error says
+/// why the daemon gave no list. `base_url` may end in `/v1`. The answer store
+/// stamps an answer with the binding, never the alias (asker `AnsweredBy`).
+pub async fn alias_bindings(
+    base_url: &str,
+) -> Result<std::collections::BTreeMap<String, String>, String> {
+    let root = base_url.trim_end_matches('/').trim_end_matches("/v1");
+    let url = format!("{root}/v1/models");
+    let client = reqwest::Client::builder()
+        .timeout(V1_MODELS_TIMEOUT)
+        .build()
+        .map_err(|e| format!("no HTTP client for {url}: {e}"))?;
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .and_then(reqwest::Response::error_for_status)
+        .map_err(|e| format!("{url} did not answer: {e}"))?;
+    let v = resp
+        .json()
+        .await
+        .map_err(|e| format!("{url} answered no JSON: {e}"))?;
+    Ok(alias_bindings_from_v1(&v))
+}
+
+fn alias_bindings_from_v1(v: &serde_json::Value) -> std::collections::BTreeMap<String, String> {
+    let rows = v.get("data").and_then(|d| d.as_array());
+    rows.into_iter()
+        .flatten()
+        .filter_map(|m| {
+            let owner = m.get("owned_by")?.as_str()?;
+            let target = sovereign_contracts::openai_http::alias_target(owner)?;
+            Some((m.get("id")?.as_str()?.to_string(), target.to_string()))
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::{Read as _, Write as _};
     use std::net::TcpListener;
+
+    /// Failing input, named: the answer store stamped 3,842 world-s4 answers
+    /// `commonwealth/primary` whether DeepSeek or local Qwen served them
+    /// (2026-10-19). The binding is read off the alias rows; a row that is
+    /// no alias names no binding.
+    #[test]
+    fn an_alias_row_names_the_model_it_is_bound_to() {
+        let v = serde_json::json!({"data": [
+            {"id": "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL", "owned_by": "mesh"},
+            {"id": "commonwealth/primary", "owned_by": "alias→Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"},
+            {"id": "fast", "owned_by": "alias→Qwopus3.5-4B-v3-MTP-Q8_0"}]});
+        let bound = alias_bindings_from_v1(&v);
+        assert_eq!(bound.len(), 2);
+        assert_eq!(
+            bound["commonwealth/primary"],
+            "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"
+        );
+        assert_eq!(bound["fast"], "Qwopus3.5-4B-v3-MTP-Q8_0");
+    }
 
     /// A TCP server that accepts one connection and answers a valid
     /// empty HTTP 200 — just enough HTTP for the probe's status check.

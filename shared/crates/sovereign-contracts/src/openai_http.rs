@@ -314,6 +314,16 @@ pub async fn embeddings_response(
     })
 }
 
+/// What an alias row's `owned_by` opens with, before the model this node binds
+/// the alias to.
+pub const ALIAS_OWNER: &str = "alias→";
+
+/// The model an alias row's `owned_by` names this node binding it to; `None`
+/// for a row that is no alias.
+pub fn alias_target(owned_by: &str) -> Option<&str> {
+    owned_by.strip_prefix(ALIAS_OWNER)
+}
+
 /// `/v1/models` rows from `(holder, model)` pairs, holders unioned: one row
 /// per distinct id, because two holders advertising the same model are ONE
 /// dispatchable name. An id in `aliases` is owned by `alias→<target>` (this
@@ -366,7 +376,7 @@ pub fn model_rows(
             // `primary` resolve to" is node-relative by design, and this is
             // the answer that applies if the request stays here.
             owned_by: match aliases.get(&model.id) {
-                Some(target) => format!("alias→{target}"),
+                Some(target) => format!("{ALIAS_OWNER}{target}"),
                 None => owner.into(),
             },
             id: model.id,
