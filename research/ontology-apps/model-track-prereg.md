@@ -227,3 +227,15 @@ windows 2-3: 10-17, median 13; written: 10-20, median 17):
 - At most 17, inside the 35B's range, means the model is not the lever on this design, and the stop stands.
 - 18-19 is a lean, not a verdict.
 One read, so this extrapolates and does not judge.
+
+**Result, minimal (2026-10-20 09:13).** The model is the lever. Out of 27, windows 2-3 attached **24** (the 35B's
+seven reads: 10-17), and the reader wrote 24 (the 35B: 10-20). Whole read with the 35B's other windows: **8/15
+served, 50/55 attached**, at Done's bar (8/15, 45/55; DeepSeek 9/15, 52/55); `-c` alone was 39/55. The 27B wrote 28
+claims on window 2 and 16 on window 3 (the 35B: 11-17 and 2-8). Nothing was lost, and both reads hit the
+22,000-token reasoning budget before answering.
+
+Cost: 39 and 40 minutes a window at 10-11 tok/s, against the 35B's 4-5. RESOLVE ran on the 35B in 15 minutes.
+Swap peaked at 22.2 of 23.5 GB. This is one spliced read, so it extrapolates. Next is a full 27B read, priced at
+about 4 hours of windows plus RESOLVE.
+
+Data: `runs/loop/local27b-s4-w23/`, `runs/loop/model-track-pivot/`.
