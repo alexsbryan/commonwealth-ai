@@ -52,10 +52,13 @@ const SYSTEM: &str = "You read documents and write what an ontology describes, a
 /// these two values are that arm's, so its reads are the default's.
 const MAX_ANSWER_TOKENS: u32 = 64_000;
 /// The reader reasons before it answers. Set on the prompt, so the answer
-/// store keys a read by it (`asker::chat_key`). It leaves 16k of the answer
-/// for the JSON on an engine that honours it; one that does not (DeepSeek)
-/// is still held by `MAX_ANSWER_TOKENS`.
-const THINKING_TOKENS: u32 = 48_000;
+/// store keys a read by it (`asker::chat_key`). An engine that honours it
+/// closes the reasoning here and answers; one that does not (DeepSeek) is
+/// still held by `MAX_ANSWER_TOKENS`. Just above the 35B-A3B's longest
+/// reasoning on world-s4's windows (21,241 tokens over 47 calls,
+/// runs/loop/local35b-s4-*): at 48,000 the dense 27B, decoding at 11.9 tok/s,
+/// was still reasoning at the daemon's 3600s deadline (model-track-prereg.md).
+const THINKING_TOKENS: u32 = 22_000;
 
 /// What the window reader reads from a declaration: the claim kinds it reads,
 /// each with its subject type, and the types it names particulars of, each
