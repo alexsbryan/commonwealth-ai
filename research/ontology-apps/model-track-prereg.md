@@ -98,6 +98,15 @@ against the plan's 20/27.
 - Both sizes recover: 10k goes forward (half the calls), 5k's minutes reported beside it.
 - Neither recovers: size is not the lever, and the plan's step 2 (a second pass over the same window) is next.
 
+**Amended 2026-10-20 02:40, after `-w10k-a` (11/27 on windows 2-3, 32/55, 4/15) and `-w5k-a`, before any other
+result.** `-w5k-a` lost 5k window 17 (inside 20k window 4, outside windows 2-3): the model broke off its JSON
+mid-array to correct a typo in an address, restarted and looped, so the answer held no object (the case the
+reverted schema closed). As read it is could-not-judge. Without the schema 1 window in 47 has been lost (`-c`,
+`-d`, `-w10k-a`, `-w5k-a`), so about 4 in 10 reads of 24 calls lose one. A read that loses windows is recovered
+through the product's own path and reported as recovered: its cut and answers restored, extract replayed (the lost
+window fails again as it did), `enrich extract --retry-failed --asker daemon` asks the lost windows once more,
+RESOLVE fresh (arm `<read>-retry`). A window lost twice leaves the read could-not-judge.
+
 **Reported per read.** Windows 2-3 and window 1 on the 20k cut, attached of 55, served of 15, statements, windows
 read and lost, minutes.
 
