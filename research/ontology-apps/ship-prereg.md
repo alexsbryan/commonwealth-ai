@@ -53,3 +53,27 @@ live daemon. A test asserts each fixture's `expected.toml` (record ids, values, 
 
 Ship when S1-S6 pass. A failed bar is reported with its numbers. It blocks the claim for its shape, unless the
 operator narrows the claim to exclude that shape.
+
+## Results (2026-10-20, one read each, DeepSeek Flash)
+
+**S1 passes** (`ship-h1`, head 84c210f6e, `runs/loop/ship/headline.log`): the worlds serve 73/93 (bar 68) and
+attach 301/328 (bar 237); ward-story serves 7/14 (bar 6).
+
+**S2 passes**: saltgrass-ledger 30/42 (bar 23.5).
+
+**S3 passes** (`ship-uv`, `runs/loop/ship/uv.log`): 27/44 cases at the right current state (bar 15, passes reader
+14). 12 serve a wrong state, mostly reported/resolved/declined swaps; 5 match no record.
+
+**S4: 19/35 against the one-shot's 19/35 on the amended scorer; fails on the frozen one, 15 against 19** (bar 17;
+`ship-reg`, head a0585e49b). The frozen `rule_of` ranked a record's own name below how often it names an id, and
+a successor's approval quotes "superseding <old id>", so the records of can-92092826490e and can-3a33d3749895
+(each named by its own id, each folding to in force) were scored as their predecessors: two false splits and two
+false no-records. With the name first, only those four system rows move and the one-shot does not change
+(`score.amended.json` beside each frozen score). The misses left:
+- 12 retracted rules, missed by both readers. One message withdraws "the twelve superseded agent:ralph
+  proposals" and names no id; the ids are in two earlier messages. A claim about a described set is a stated limit.
+- 3 ledger entries read with no `action` ("A -> B", "superseding them is the holder's act"), so no rule matches.
+  The one-shot gets all three wrong too.
+- 1 revert that names no target message: three revert rules match and the fold stays pending, though the rule's
+  prior state (proposed) admits only one of them.
+- 1 rule neither reader records.

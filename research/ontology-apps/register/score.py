@@ -38,13 +38,19 @@ def records_from_oneshot(path, rtype):
 
 
 def rule_of(rec):
-    """The one rule a record is: the id it names most, ties to the id in its own name, then to the first named.
-    A record also names other rules (the one that replaced it, a claim quoting both), so naming is not being."""
+    """The one rule a record is: the one id in its own name; else the id it names most, then the first named.
+    A record also names other rules (the one that replaced it, a claim quoting both), so naming is not being.
+    Amended 2026-10-20 after the first system read: the name came only second, and a successor's record whose
+    approval quotes 'superseding <old id>' named the old id more often (25 to 23), so it was scored as the old
+    rule. Both reads rescored; the frozen scorer's numbers stay in the ship-prereg results."""
+    own = set(CAN.findall(rec["name"]))
+    if len(own) == 1:
+        return own.pop()
     found = CAN.findall(rec["blob"])
     if not found:
         return None
     n = collections.Counter(found)
-    return max(n, key=lambda i: (n[i], i in rec["name"], -found.index(i)))
+    return max(n, key=lambda i: (n[i], -found.index(i)))
 
 
 def status_of(rec, m):
