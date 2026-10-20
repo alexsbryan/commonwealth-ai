@@ -145,7 +145,7 @@ To build every binary a change spans: `cargo build --bins --features sovereign-c
 
 **The CLI form is the portable one and it works in every harness — including harnesses with no MCP at all, and with the daemon down.** Where your harness does expose these as MCP tools (Claude Code does; pi deliberately does not), prefer that path: it is faster and costs fewer tokens. Both resolve the tool from the same `ToolRegistry` and run the same `Tool::execute` body.
 
-(**There is no funnel.** This said "both reach the same `ToolRegistry::execute()`" until 2026-09-11; `ToolRegistry` has no `execute`. Each surface pulls a `&dyn Tool` from `get()` and calls `.execute` itself — `mcp_host::call_registry_tool` for the MCP mount, `tools_cmd::cmd_call` for the CLI, ~nine more — so the two are not equivalent in what they pass: the MCP mount builds a `ToolContext` with `conversation_id: "mcp"`, an `agent_session_token` and `x-svrn-corpus` as `corpus_scope`, the CLI one with `working_directory` and the cwd's corpus. If a tool behaves differently under the two, look there. `record_call` fires from one site only, so the call counter and the result cache cover disjoint invocations.)
+(**There is no funnel:** `ToolRegistry` has no `execute`. Each surface calls `.execute` on the `&dyn Tool` it got (`mcp_host::call_registry_tool`, `tools_cmd::cmd_call`, ~nine more) with its own `ToolContext`: the MCP mount `conversation_id: "mcp"`, an `agent_session_token`, `x-svrn-corpus` as `corpus_scope`; the CLI `working_directory` and the cwd's corpus. A tool that differs between the two differs there. `record_call` fires from one site, so the call counter and the result cache cover disjoint invocations.)
 
 ```
 sovereign tools list                           # manifest, grouped by Effect × Scope
@@ -226,9 +226,6 @@ When unsure: prefer `symbols(name)` → targeted Read of 15-25 lines around the 
 | "What does bench lane X measure, and how do I run just it?" | `bench/lanes/README.md`, then `bench/lanes/<lane>/README.md` |
 | "Is this env var declared? What's its default/status?" | `quality/env-flags.toml` (the registry; human view `docs/ENV_FLAGS.md`); a NEW env read must be declared or `cargo xtask env-gate` fails (the required keys are `name`/`cluster`/`default`/`purpose`/`status`, and `status` must be one of `guard`/`shipped`/`experiment`/`deprecated`) |
 | "Is the CLI surface I just changed covered by anything?" | `sovereign contract` (`map` / `census` / `nightly`) — promises, what can actually fail, and the last lane verdict on this host |
-| "I'm starting non-trivial work — claim it" | `commons_claim(scope, intent, ttl)` (euphemia) |
-| "Done with what I claimed" | `commons_release(claim)` |
-| "I found a cause, constraint or trap a later session would rediscover" | `commons_lessons` with its cue words first, then `commons_learn` (or `commons_correct` the lesson that is there) |
 
 ### Coordination — one claim system, euphemia's
 
@@ -253,7 +250,7 @@ half-pictures.
   it in a line and proceed.
 - **Live edits** the daemon's CodeWatcher saw (within ~5 minutes) are still
   `work_in_flight(scope, match_mode="file")`'s `observations[]`; euphemia
-  has no passive observer. Its `claims[]` are sovereign's old declarations.
+  has no passive observer.
 - **Lessons:** a cause, constraint or trap a later session would otherwise
   rediscover is a lesson (`commons_learn`, with its evidence, scoped with
   `applies_to`), after `commons_lessons` shows it is not there already. A
