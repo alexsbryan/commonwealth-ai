@@ -1246,7 +1246,11 @@ engine renders it with (`CompletionRequest::templated_thinking`, off unless
 asked), a positive think budget also goes as `reasoning_budget_tokens`, and a
 schema goes out closed by the same `additionalProperties` default the engine
 compiles it with (`sovereign_contracts::structured_output`), which leaves an
-object that declares no properties open.
+object that declares no properties open. In the embedded engine a schema waits
+for a think block the prompt opened (`think_budget::opens_think`): no mask and
+no matcher step until the accepted bytes close it (`ThinkWait`), so the
+reasoning is free and the answer after it is held to the schema; a block that
+never closes is warned at the sampler's drop.
 
 **Residency is a policy.** `embedded/idle_slot.rs` is the one idleness decider.
 It exists because the daemon is a MESH NODE and must stay available to peers

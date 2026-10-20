@@ -2778,7 +2778,7 @@ impl ModelSlot {
             });
         }
 
-        let mut sampler = build_sampler(model, request, quirks)?;
+        let mut sampler = build_sampler(model, request, quirks, &turn_opener)?;
         let mut output = String::new();
         let mut n_generated = 0usize;
         let mut decoder = encoding_rs::UTF_8.new_decoder();
@@ -3773,7 +3773,7 @@ impl ModelSlot {
         // installed on this path (dispatcher filtered structured
         // requests out), so the sampler behaves as a plain chain
         // of {temp/top-p/top-k/penalties} per the request quirks.
-        let mut sampler = build_sampler(model, request, quirks)?;
+        let mut sampler = build_sampler(model, request, quirks, &turn_opener)?;
         let mut last_token = sampler.sample(
             session.target_context(),
             prefill.n_tokens() - 1,
@@ -4526,7 +4526,8 @@ impl ModelSlot {
         // shared a batch with requests that compiled (§18.3).
         let mut samplers = requests
             .iter()
-            .map(|r| build_sampler(model, r, quirks))
+            .zip(&openers)
+            .map(|(r, opener)| build_sampler(model, r, quirks, opener))
             .collect::<Result<Vec<ConstrainedSampler>>>()?;
         let mut decoders: Vec<encoding_rs::Decoder> = (0..requests.len())
             .map(|_| encoding_rs::UTF_8.new_decoder())
@@ -5336,7 +5337,7 @@ fn stream_generate_loop(p: StreamLoopParams<'_, '_>) -> Result<()> {
             }
         }
 
-        let mut sampler = build_sampler(model, request, quirks)?;
+        let mut sampler = build_sampler(model, request, quirks, &turn_opener)?;
         let mut n_generated = 0usize;
         let mut decoder = encoding_rs::UTF_8.new_decoder();
         let mut batch = LlamaBatch::new(512, 1);
