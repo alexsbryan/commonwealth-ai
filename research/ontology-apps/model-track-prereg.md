@@ -174,3 +174,31 @@ its "neither reaches 20" held. The wrong assumption: a second look is a second d
 model re-reads every document and repeats its declines (`-rest-c` window 2: d1's forwarded "it's off" judged a
 quote again). The eight reads' spread comes from the first look's reasoning path, not from a look at the same
 frame. Next, per the plan, the pivot: Qwen3.8-27B on windows 2-3.
+
+## Pivot: Qwen3.8-27B (pre-registered 2026-10-20 05:45, before any read)
+
+**Why.** Steps 1-2 leave windows 2-3 under 20/27 on the 35B-A3B by every narrow call tried (10k, 5k, a second look).
+The plan's pivot reads them with the dense 27B to tell the model from the design.
+
+**Reads.** `local27b-s4-a` and `-b`: world-s4 at 40188f8cd (the one-look reader, `svrn-ingest` rebuilt at it,
+without the alias-stamp diff), `-c`'s 20k cut restored. The daemon's primary is `Qwen3.8-27B-UD-Q6_K_XL.gguf`
+(context 131072, the fast and embed slots unchanged, `SOVEREIGN_INFERENCE_TIMEOUT_SECS=3600`), so both the window
+reader and RESOLVE run on it; daemon askers, fresh; `RETRY=1` per the step 1 amendment.
+
+**Smoke.** First, 20k window 3 (`sec_00003`) through `enrich extract --chapters`: the answer parses, nothing is
+lost, minutes and memory (the 27B at 26 GB beside the fast slot on 64 GB). A failed smoke stops the pivot and
+carries no count.
+
+**Bars.** Valid as before. The model is the lever when both reads attach at least 20 of windows 2-3's 27 (the
+35B's best local read: 17). No harm: at least 33/55 and 4/15. Window 1 against 20/27, written beside attached,
+minutes per read.
+
+**Decisions.**
+- Both reach 20: the dense windows are model-bound on the 35B, not design-bound. These two reads are also judged
+  against Done (8/15, 45/55). Step 3 (minutes, a 1M-token corpus) is then priced on the 27B.
+- Exactly one: one more read decides.
+- Neither: per the plan's stop, the track is model-bound today. The numbers are recorded and engineering on this
+  track stops for the operator.
+
+**Prediction**, stated so it can be wrong: both reads attach at least 18 of windows 2-3, at least one reaches 20,
+and a read takes over two hours.
