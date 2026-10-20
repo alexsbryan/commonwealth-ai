@@ -888,7 +888,11 @@ question the pipeline asks about a type is a method on the resolved
   tie to the first met in fold order, so one misplaced statement cannot
   rename it), its other read names its aliases and its opening passage its
   first passage (the record view's `text`), else by its opening passage
-  (`resolution_records/named.rs`; shown, never compared), and
+  (`resolution_records/named.rs`; shown, never compared); an event record's
+  evidence is one chunk per distinct document among its statements, in
+  statement order, each in the section that statement was read in
+  (`resolution_records/evidence.rs`, 2026-10-20; an entity record keeps only
+  its `first_appearance`), and
   each claim's subject its statement's record. 3b leaves such a
   subject unresolved, and the type's atoms 3a merged from Phase-1 sketches are
   retired with every reference to them, dropped and recorded, never repointed.

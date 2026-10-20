@@ -21,7 +21,7 @@ use serde_json::{Map, Value};
 use tracing::{debug, info};
 
 use super::atoms::{
-    ArgumentReconstruction, AtomId, ChunkRef, Claim, Entity, Event, Opposition, Position, Relation,
+    ArgumentReconstruction, AtomId, Claim, Entity, Event, Opposition, Position, Relation,
     SectionPosition, SignalKind, SignalProvenance, State,
 };
 use super::edges::Edge;
@@ -50,6 +50,10 @@ use crate::EmbedFn;
 
 #[path = "resolution_records/described.rs"]
 mod described;
+#[path = "resolution_records/evidence.rs"]
+mod evidence;
+#[path = "resolution_records/link.rs"]
+mod link;
 #[path = "resolution_records/local_subjects.rs"]
 mod local_subjects;
 #[path = "resolution_records/mentions.rs"]
@@ -62,6 +66,7 @@ mod nearest;
 mod retire;
 #[path = "resolution_records/statement_atoms.rs"]
 pub mod statement_atoms;
+use link::resolve_link;
 use local_subjects::{Assigned, Spot};
 use retire::retire;
 
@@ -683,7 +688,12 @@ async fn resolve_type(
         }
         // A record is opened by a placed statement, so both are there; one
         // that is not is refused, never named or placed by a default.
-        let (Some(e), Some(section)) = (rec.evidence.first(), section_of.get(&rec.id)) else {
+        let cited = evidence::of_record(rec, &section_of);
+        let (Some(e), Some(section), Some(first)) = (
+            rec.evidence.first(),
+            section_of.get(&rec.id),
+            cited.first().cloned(),
+        ) else {
             failures.push(failure(
                 format!("record:{}", rec.id),
                 PhaseFailureKind::Other,
@@ -695,8 +705,6 @@ async fn resolve_type(
             continue;
         };
         let (document, surface, section) = (e.document.clone(), e.surface.clone(), section.clone());
-        let mut first = ChunkRef::new(section.clone(), Some(surface.clone()));
-        first.source_doc_id = Some(document.clone());
         if kind == TypeKind::Event {
             let event_type = EventType::from_str_repr(&t.name);
             let id = AtomId::event_content_hash(&rec.id, &event_type, &section, corpus_id);
@@ -707,7 +715,7 @@ async fn resolve_type(
                 description: surface,
                 event_type,
                 participants: Vec::new(),
-                evidence: vec![first],
+                evidence: cited,
                 section_position: SectionPosition::section(section),
                 causal_antecedents: Vec::new(),
                 attributes: Map::new(),
@@ -779,44 +787,6 @@ async fn resolve_type(
 /// (`resolve_link`). Reserved: the query grammar never offers it.
 pub const RESOLVE_LINK_ATTRIBUTE: &str = "__resolve_link";
 
-/// How a statement's subject was decided: by key, by the model's choice, or
-/// opened; and, when a forced choice was asked, the model's choice scores
-/// over what it was shown: the decided record's (none's, for a record the
-/// statement opened), the best other candidate's, and none's. They are the
-/// model's uncalibrated distribution over the candidates of that one
-/// question, kept for inspection; no code reads them as the chance a link is
-/// right.
-fn resolve_link(
-    how: &str,
-    choice: Option<&Choice>,
-    record: &str,
-    atom_of: &HashMap<&str, AtomId>,
-) -> Value {
-    let mut link = serde_json::json!({ "decided_by": how });
-    let Some(c) = choice else {
-        return link;
-    };
-    let chosen = c
-        .candidates
-        .iter()
-        .find(|(id, _)| id == record)
-        .map_or(c.none, |(_, p)| *p);
-    link["choice_score"] = serde_json::json!(chosen);
-    link["none_score"] = serde_json::json!(c.none);
-    if let Some((id, p)) = c
-        .candidates
-        .iter()
-        .filter(|(id, _)| id != record)
-        .max_by(|a, b| a.1.total_cmp(&b.1))
-    {
-        link["runner_up"] = serde_json::json!({
-            "record": atom_of.get(id.as_str()).map(|a| a.as_str()),
-            "score": p,
-        });
-    }
-    link
-}
-
 fn unplaced(
     report: &mut RecordsReport,
     failures: &mut Vec<PhaseFailure>,
@@ -845,3 +815,7 @@ mod declared_document_read_tests;
 #[cfg(test)]
 #[path = "resolution_records/mentions_tests.rs"]
 mod mentions_tests;
+
+#[cfg(test)]
+#[path = "resolution_records/evidence_tests.rs"]
+mod evidence_tests;
