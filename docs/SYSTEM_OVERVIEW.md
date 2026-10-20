@@ -220,14 +220,17 @@ thing), [`ENRICHMENT_V2.md`](../ingest/crates/corpus-engine/ENRICHMENT_V2.md),
   constraints over a declared relation type or a `<type>.<attr>` ref, a named
   far end matched by folded name or alias, never a substring; a depth-2
   `where`; `none`/`count`/`argmax`/`argmin`/`tally`) answers with a
-  `TypedTable` whose rows carry evidence chunk ids, which the brief prints
+  `TypedTable` whose rows carry, per evidence, the installed chunk id that holds its quote
+  (`ChunkRef::cited_id`: `index_chunk` when the build placed it, else the section the read
+  cited), which the brief prints
   as a cited table with a count line. An unset attribute sets the atom
   aside as unjudged and says so. `svrn enrich atlas-query <corpus> --typed
   '<json>'` runs one as written (`--json`: rows `{name, atom_id,
   attributes, evidence, record}`, `record` the row `atoms_lookup` shows,
   from the one builder `corpus_engine_atlas_reader::records::RecordView`). `typed_prompt::query_grammar` renders a declared
   ontology as the documentation and per-type JSON Schema a model writes one
-  against (the query-layer probe's, byte for byte); `AtlasGraph::typed_answer`
+  against (the query-layer probe's bytes, but for the attribute glosses and the time
+  sentence); `AtlasGraph::typed_answer`
   runs the same executor over a loaded graph.
 - `update/`, `meta_atlas/`, `freshness.rs`, `pii.rs`,
   `alignment_projector.rs`.
@@ -730,7 +733,12 @@ question the pipeline asks about a type is a method on the resolved
   second document never make a second candidate)
   (`enrichment/atlas/resolution_documents.rs`, rows from
   `corpus_io::section_documents`), and records a claim it cannot place in
-  `resolution_failures.json` instead of guessing. An entity type's
+  `resolution_failures.json` instead of guessing. Last, `place_index_chunks`
+  (`enrichment/atlas/resolution_placement.rs`, every recipe, stamped or not) gives every
+  evidence the installed chunk holding its quote (`ChunkRef.index_chunk`, the u64 the
+  corpus chunk endpoint opens; the first in manifest order when overlap holds it twice); a
+  record projected from document metadata cites its document's first chunk, and evidence
+  it cannot place keeps its section and is counted by reason. An entity type's
   `source = { metadata = [...], attributes = {...} }` (`MetadataSourceDecl`)
   projects one atom per distinct identity value read from those same rows'
   fields through a closed reader set (`address`, `domain`, `display_name`,

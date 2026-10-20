@@ -280,7 +280,7 @@ impl<'a> RecordView<'a> {
             "kind": a.atom_type().label(),
             "name": a.display_name(Some(120)),
             "text": truncate(atom_text(a), 400),
-            "evidence_chunks": a.evidence().iter().map(|c| c.chunk_id.clone()).collect::<Vec<_>>(),
+            "evidence_chunks": a.evidence().iter().map(|c| c.cited_id()).collect::<Vec<_>>(),
             "type": declared_type(a),
             "attributes": attributes,
             "unset": unset,

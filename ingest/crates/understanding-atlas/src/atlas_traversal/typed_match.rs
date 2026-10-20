@@ -113,8 +113,10 @@ impl<'a> Atom<'a> {
 
     /// Evidence chunk ids, through the one evidence accessor
     /// ([`AtomEnvelope::evidence`]), which knows the field each kind keeps
-    /// them in (an Entity's is its first appearance). The clone is the price
-    /// of asking about a borrowed atom; it runs once per returned row.
+    /// them in (an Entity's is its first appearance), each as the reader
+    /// cites it (`ChunkRef::cited_id`: the installed chunk when placed). The
+    /// clone is the price of asking about a borrowed atom; it runs once per
+    /// returned row.
     pub(super) fn chunk_ids(self) -> Vec<String> {
         let envelope = match self {
             Atom::Entity(e) => AtomEnvelope::Entity(e.clone()),
@@ -124,7 +126,7 @@ impl<'a> Atom<'a> {
         envelope
             .evidence()
             .into_iter()
-            .map(|c| c.chunk_id.clone())
+            .map(|c| c.cited_id())
             .collect()
     }
 }
@@ -143,7 +145,7 @@ impl Via<'_> {
             Via::Relation(r) => AtomEnvelope::Relation((*r).clone())
                 .evidence()
                 .into_iter()
-                .map(|c| c.chunk_id.clone())
+                .map(|c| c.cited_id())
                 .collect(),
             Via::Ref(a) => a.chunk_ids(),
         }

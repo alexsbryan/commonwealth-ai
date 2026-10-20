@@ -189,7 +189,7 @@ pub fn project_source_atoms(
             let refs = std::mem::take(&mut a.refs);
             let seen_in = std::mem::take(&mut a.seen_in);
             let key = a.key.clone();
-            let e = a.into_entity(src, &identity, &ty, corpus_id);
+            let e = a.into_entity(src, &identity, &ty, corpus_id, documents);
             for (doc, field) in seen_in {
                 out.participants
                     .entry(doc)
@@ -389,6 +389,7 @@ impl Accum {
         identity: &[(&str, FieldReader)],
         ty: &EntityType,
         corpus_id: &str,
+        documents: &SectionDocuments,
     ) -> Entity {
         // Each attribute takes its most frequent value, ties to the first seen.
         let chosen = |vals: &[(String, usize)]| {
@@ -427,12 +428,13 @@ impl Accum {
                 aliases.push(n.clone());
             }
         }
+        let first_appearance = metadata_appearance(&self.section, &self.document, documents);
         Entity {
             id: AtomId::exact_entity_content_hash(&self.key, ty, corpus_id),
             canonical_name,
             aliases,
             entity_type: ty.clone(),
-            first_appearance: ChunkRef::new(self.section, None),
+            first_appearance,
             description: String::new(),
             defining_quote: None,
             salience: 0.0,
@@ -449,6 +451,35 @@ impl Accum {
             concept_kind: None,
         }
     }
+}
+
+/// Where a record projected from document metadata first appears: the
+/// document whose fields it was read from, cited by that document's first
+/// installed chunk. Its evidence IS the metadata, which every chunk of the
+/// document carries (the chunk endpoint returns it per chunk), so the first
+/// chunk proves it as well as any; there is no quote to find. Placement
+/// (`resolution_placement`) leaves it as placed here and counts it apart from
+/// the quotes it places. A document the section does not hold, or one with no
+/// chunk id, leaves the record cited by its section alone, unplaced.
+fn metadata_appearance(section: &str, document: &str, documents: &SectionDocuments) -> ChunkRef {
+    let mut at = ChunkRef::new(section, None);
+    match documents
+        .document_for_section(section, document)
+        .and_then(|d| d.first_chunk().map(|id| (d, id)))
+    {
+        Some((d, id)) => {
+            // The key, as `document_for_section` and `locate` read it back.
+            at.source_doc_id = Some(d.key().to_string());
+            at.index_chunk = Some(id);
+        }
+        None => debug!(
+            section,
+            document,
+            "atlas/resolution sources: projected record's document has no installed chunk here; \
+             left unplaced"
+        ),
+    }
+    at
 }
 
 /// The name of a projected atom no document named: its identity values in key

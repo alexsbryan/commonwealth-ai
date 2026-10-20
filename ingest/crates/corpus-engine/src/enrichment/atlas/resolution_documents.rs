@@ -23,7 +23,7 @@ use corpus_index::index::EnrichmentChunkRow;
 use serde_json::{Map, Value};
 use tracing::{debug, info, trace};
 
-use super::atoms::Claim;
+use super::atoms::{ChunkRef, Claim};
 use crate::enrichment::ontology::{metadata_date, DocumentFieldsDecl, DocumentStamp};
 use crate::enrichment::pipeline::types::{PhaseFailure, PhaseFailureKind, PipelinePhase};
 
@@ -48,6 +48,10 @@ pub struct SourceDocument {
     pub(super) fields: Map<String, Value>,
     /// Each chunk's text, whitespace-folded for the anchor match.
     texts: Vec<String>,
+    /// Each chunk's installed id (`EnrichmentChunkRow::id`), parallel to
+    /// `texts`: what the daemon's chunk endpoint resolves.
+    #[serde(default)]
+    chunk_ids: Vec<u64>,
     /// Original chunk bodies, retained for accountable reading.
     raw_texts: Vec<String>,
     /// The document's canonical text (`DocumentTexts`), when the corpus's
@@ -120,6 +124,35 @@ impl SourceDocument {
     pub fn is_part(&self) -> bool {
         self.part
     }
+
+    /// The installed chunk whose folded text holds `anchor` (already
+    /// whitespace-folded) whole. Chunks that overlap can both hold it: the
+    /// first in manifest order is the one. `None` when no single chunk
+    /// holds it, a quote across a chunk boundary among them.
+    pub fn chunk_holding(&self, anchor: &str) -> Option<u64> {
+        if anchor.is_empty() {
+            return None;
+        }
+        self.texts
+            .iter()
+            .zip(&self.chunk_ids)
+            .find(|(t, _)| t.contains(anchor))
+            .map(|(_, id)| *id)
+    }
+
+    /// The document's first installed chunk in manifest order: the chunk a
+    /// record projected from the document's metadata cites, since every
+    /// chunk of the document carries that metadata (the same tie rule as
+    /// overlap in [`Self::chunk_holding`]).
+    pub fn first_chunk(&self) -> Option<u64> {
+        self.chunk_ids.first().copied()
+    }
+
+    /// Whether the document's chunks joined hold `anchor` (folded): a quote
+    /// [`Self::chunk_holding`] cannot place is then across a chunk boundary.
+    pub(super) fn chunks_hold(&self, anchor: &str) -> bool {
+        self.texts.join(" ").contains(anchor)
+    }
 }
 
 /// Section id → the source documents whose chunks the section holds.
@@ -178,6 +211,7 @@ impl SectionDocuments {
                 match docs.iter_mut().find(|d| d.key == key) {
                     Some(d) => {
                         d.texts.push(text);
+                        d.chunk_ids.push(row.id);
                         d.raw_texts.push(row.content.clone());
                         for (name, value) in metadata {
                             d.fields.entry(name).or_insert(value);
@@ -196,6 +230,7 @@ impl SectionDocuments {
                         title: title.map(str::to_string),
                         url: url.map(str::to_string),
                         texts: vec![text],
+                        chunk_ids: vec![row.id],
                         raw_texts: vec![row.content.clone()],
                         text: None,
                         part: false,
@@ -205,20 +240,24 @@ impl SectionDocuments {
             by_section.insert(section_id.to_string(), docs);
         }
         // A document whose chunks fall in several sections is read in parts;
-        // each part anchors in all of its chunks, in section order.
-        let mut whole: HashMap<String, (usize, Vec<String>)> = HashMap::new();
+        // each part anchors in all of its chunks, in section order, and the
+        // chunk ids follow their texts.
+        type Whole = (usize, Vec<String>, Vec<u64>);
+        let mut whole: HashMap<String, Whole> = HashMap::new();
         for section in &order {
             for d in by_section.get(section).into_iter().flatten() {
                 let e = whole.entry(d.key.clone()).or_default();
                 e.0 += 1;
                 e.1.extend(d.texts.iter().cloned());
+                e.2.extend(d.chunk_ids.iter().copied());
             }
         }
         for d in by_section.values_mut().flatten() {
-            if let Some((sections, texts)) = whole.get(&d.key).filter(|(n, _)| *n > 1) {
+            if let Some((sections, texts, ids)) = whole.get(&d.key).filter(|(n, _, _)| *n > 1) {
                 debug!(document = %d.key, sections, "atlas/resolution documents: a document read in parts across sections");
                 d.part = true;
                 d.texts = texts.clone();
+                d.chunk_ids = ids.clone();
             }
         }
         Self { by_section, order }
@@ -474,52 +513,15 @@ pub(super) fn locate<'d>(
     let mut found: Vec<&SourceDocument> = Vec::new();
     let mut misses: Vec<String> = Vec::new();
     for ev in &claim.evidence {
-        let section = ev.chunk_id.as_str();
-        if let Some(named) = ev.source_doc_id.as_deref() {
-            match documents.document_for_section(section, named) {
-                Some(doc) if found.iter().any(|f| f.key == doc.key) => {}
-                Some(doc) => found.push(doc),
-                None => misses.push(format!(
-                    "the evidence names document `{named}`, which section `{section}` does not hold"
-                )),
+        match evidence_documents(ev, documents) {
+            Ok(hits) => {
+                for h in hits {
+                    if !found.iter().any(|f| f.key == h.key) {
+                        found.push(h);
+                    }
+                }
             }
-            continue;
-        }
-        let docs = documents
-            .by_section
-            .get(section)
-            .map(Vec::as_slice)
-            .unwrap_or(&[]);
-        let anchor = ev.passage_preview.as_deref().map(fold_ws);
-        let hits: Vec<&SourceDocument> = match (docs, anchor.as_deref()) {
-            ([], _) => {
-                misses.push(format!("section `{section}` holds no document metadata"));
-                continue;
-            }
-            ([only], _) => vec![only],
-            (many, None | Some("")) => {
-                misses.push(format!(
-                    "section `{section}` holds {} documents and the evidence carries no anchor",
-                    many.len()
-                ));
-                continue;
-            }
-            (many, Some(a)) => many
-                .iter()
-                .filter(|d| d.texts.iter().any(|t| t.contains(a)))
-                .collect(),
-        };
-        if hits.is_empty() {
-            misses.push(format!(
-                "anchor {:?} is in none of section `{section}`'s {} documents",
-                anchor.unwrap_or_default(),
-                docs.len()
-            ));
-        }
-        for h in hits {
-            if !found.iter().any(|f| f.key == h.key) {
-                found.push(h);
-            }
+            Err(miss) => misses.push(miss),
         }
     }
     match found.as_slice() {
@@ -535,6 +537,54 @@ pub(super) fn locate<'d>(
                 .join(", ")
         )),
     }
+}
+
+/// The documents ONE evidence lands in (never empty), or why it lands in
+/// none. Evidence naming its document is in that document of its section
+/// (`chunk_id`); other evidence is in its section's one document, or in each
+/// of its several documents whose chunk text holds the anchor. [`locate`]
+/// and index-chunk placement (`resolution_placement`) both read it.
+pub(super) fn evidence_documents<'d>(
+    ev: &ChunkRef,
+    documents: &'d SectionDocuments,
+) -> Result<Vec<&'d SourceDocument>, String> {
+    let section = ev.chunk_id.as_str();
+    if let Some(named) = ev.source_doc_id.as_deref() {
+        return match documents.document_for_section(section, named) {
+            Some(doc) => Ok(vec![doc]),
+            None => Err(format!(
+                "the evidence names document `{named}`, which section `{section}` does not hold"
+            )),
+        };
+    }
+    let docs = documents
+        .by_section
+        .get(section)
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+    let anchor = ev.passage_preview.as_deref().map(fold_ws);
+    let hits: Vec<&SourceDocument> = match (docs, anchor.as_deref()) {
+        ([], _) => return Err(format!("section `{section}` holds no document metadata")),
+        ([only], _) => vec![only],
+        (many, None | Some("")) => {
+            return Err(format!(
+                "section `{section}` holds {} documents and the evidence carries no anchor",
+                many.len()
+            ))
+        }
+        (many, Some(a)) => many
+            .iter()
+            .filter(|d| d.texts.iter().any(|t| t.contains(a)))
+            .collect(),
+    };
+    if hits.is_empty() {
+        return Err(format!(
+            "anchor {:?} is in none of section `{section}`'s {} documents",
+            anchor.unwrap_or_default(),
+            docs.len()
+        ));
+    }
+    Ok(hits)
 }
 
 /// The value `field` holds in a document's metadata, in the stamp's form: a
