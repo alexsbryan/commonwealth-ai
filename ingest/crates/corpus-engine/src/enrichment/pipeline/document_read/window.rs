@@ -164,10 +164,21 @@ fn attr_line(attr: &AttrDecl) -> String {
     line
 }
 
-/// `PROMPT` with the grade slot the declaration calls for.
+/// `PROMPT` with the grade slot the declaration calls for, and the names a
+/// particular's `type` and a claim's `kind` take, each set listed apart.
 fn answer_shape(contract: &Contract<'_>) -> String {
     let graded = contract.kinds.iter().any(|(k, _)| !k.grades.is_empty());
-    PROMPT.replace("{grade}", if graded { GRADE_SLOT } else { "" })
+    let names = |it: &mut dyn Iterator<Item = &str>| it.collect::<Vec<_>>().join(" | ");
+    PROMPT
+        .replace("{grade}", if graded { GRADE_SLOT } else { "" })
+        .replace(
+            "{types}",
+            &names(&mut contract.subjects.iter().map(|t| t.name.as_str())),
+        )
+        .replace(
+            "{kinds}",
+            &names(&mut contract.kinds.iter().map(|(k, _)| k.name.as_str())),
+        )
 }
 
 /// The ontology as the prompt shows it, generated from the declaration alone.
@@ -176,7 +187,7 @@ fn ontology_text(
     policies: &OntologyPolicies,
     index: &TypeIndex<'_>,
 ) -> String {
-    let mut out = Vec::new();
+    let mut out = vec!["Statement kinds, written in `claims`:".to_string()];
     for (kind, subject) in &contract.kinds {
         out.push(format!(
             "- {} (a statement about one {}): {}",
@@ -190,6 +201,7 @@ fn ontology_text(
             ));
         }
     }
+    out.push("Types, written in `particulars`:".to_string());
     for subject in &contract.subjects {
         out.push(format!("- {}: {}", subject.name, subject.description));
         if let Some(same) = &subject.identity_criterion {

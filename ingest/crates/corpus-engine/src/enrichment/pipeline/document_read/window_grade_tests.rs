@@ -1,5 +1,6 @@
-//! Where a claim's grade is offered and read: the answer shape offers the slot
-//! only when a kind lists grades, and a grade written as an object is fields.
+//! The answer shape: it names the types and statement kinds apart, offers the
+//! grade slot only when a kind lists grades, and a grade written as an object
+//! is fields.
 
 use serde_json::json;
 
@@ -94,4 +95,45 @@ subject = "case"
     }
     assert_eq!(shown, [false, true]);
     assert!(super::answer::CLAIM_KEYS.contains("grade"));
+}
+
+/// Failing input, named: the layer-news journey (2026-10-20). Its one window
+/// wrote each happening as a particular of type `report` and each report as a
+/// claim of kind `happening`, and all 12 claims were refused: the prompt listed
+/// kinds and types in one list and asked for "a type above". Each set is listed
+/// under its own heading, and the answer shape names its members.
+#[tokio::test]
+async fn the_types_and_statement_kinds_are_named_apart() {
+    let ontology: crate::enrichment::ontology::OntologyV1 = toml::from_str(
+        r#"
+[[types]]
+name = "happening"
+kind = "event"
+description = "something that happens"
+identity_criterion = "the same occurrence"
+
+[[types]]
+name = "report"
+kind = "claim"
+force = "assertive"
+subject = "happening"
+description = "a statement that a happening took place"
+"#,
+    )
+    .unwrap();
+    let policies = ontology.into_policies();
+    let chapter = input_chapter(&[row(1, "doc-a", "A fire broke out on Mill Lane.", "{}")]);
+    let (infer, seen) = scripted(vec![json!({"particulars": [], "claims": []})]);
+    read(&chapter, &policies, &Default::default(), &infer)
+        .await
+        .unwrap();
+    let user = seen.lock().unwrap()[0].user.clone();
+    for shown in [
+        "Statement kinds, written in `claims`:\n- report (a statement about one happening)",
+        "Types, written in `particulars`:\n- happening: something that happens",
+        "\"type\": <one of: happening>",
+        "\"kind\": <one of: report>",
+    ] {
+        assert!(user.contains(shown), "{shown} not in:\n{user}");
+    }
 }
