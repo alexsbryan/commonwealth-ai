@@ -130,7 +130,27 @@ async fn resolve_and_derive(
     claims: &mut Vec<Claim>,
     answerer: Answerer<'_>,
 ) -> (Vec<Entity>, Vec<DerivedValue>) {
-    let mut entities = Vec::new();
+    resolve_and_derive_over(
+        p,
+        docs,
+        claims,
+        answerer,
+        Vec::new(),
+        Participants::default(),
+    )
+    .await
+}
+
+/// [`resolve_and_derive`] over `entities` already projected, whose documents
+/// name them as `participants` says.
+async fn resolve_and_derive_over(
+    p: &OntologyPolicies,
+    docs: &SectionDocuments,
+    claims: &mut Vec<Claim>,
+    answerer: Answerer<'_>,
+    mut entities: Vec<Entity>,
+    participants: Participants,
+) -> (Vec<Entity>, Vec<DerivedValue>) {
     let mut events = Vec::new();
     let (mut states, mut relations, mut ars) = (Vec::new(), Vec::new(), Vec::new());
     let (mut positions, mut oppositions, mut edges) = (Vec::new(), Vec::new(), Vec::new());
@@ -147,7 +167,6 @@ async fn resolve_and_derive(
         edges: &mut edges,
         trajectories: &mut trajectories,
     };
-    let participants = Participants::default();
     let mut on_document = |_: &str, _: &DocumentResolution| {};
     let (_, failures) = resolve_declared_types(
         &mut atoms,
@@ -447,5 +466,214 @@ async fn one_window_two_documents_both_owners_hold_the_one_person() {
     assert!(
         owners.iter().all(|(_, o)| *o == held),
         "{owners:?} {unresolved:?}"
+    );
+}
+
+/// 06-tasks: a sourced `member` (its records projected from each message's
+/// author), a role of `person`, which the recipe never declares and a
+/// request's `requester` refers to.
+const TASKS: &str = r#"
+[[types]]
+name = "member"
+kind = "entity"
+role_of = "person"
+description = "A member of the team."
+attributes = [{ name = "handle", type = "text" }]
+identity = ["handle"]
+source = { metadata = ["author"], attributes = { handle = "value" } }
+
+[[types]]
+name = "task"
+kind = "entity"
+description = "A piece of work."
+identity_criterion = "Two mentions are one task when they name the same piece of work."
+
+[[types]]
+name = "request"
+kind = "claim"
+force = "directive"
+subject = "task"
+description = "Someone asks for a task."
+attributes = [{ name = "requester", type = "ref", of = "person" }]
+
+[[types]]
+name = "reassignment"
+kind = "claim"
+force = "declaration"
+subject = "task"
+description = "A task is handed on."
+attributes = [{ name = "to_owner", type = "ref", of = "member" }]
+"#;
+
+const HANDED: &str = "Sam asked for the export fix; handing the export to priya.";
+const TAKEN: &str = "I'll take the export, Sam.";
+
+fn authored(id: u64, doc: &str, author: &str, content: &str) -> EnrichmentChunkRow {
+    EnrichmentChunkRow {
+        metadata_raw: Some(json!({ "id": doc, "author": author }).to_string()),
+        ..row(id, doc, content)
+    }
+}
+
+/// Two messages of one team, each its own window: sam's hands the export to
+/// priya, who wrote the other; the reader names Sam, who asked, a `person`.
+async fn tasks_resolved(answerer: Answerer<'_>) -> (Vec<Claim>, Vec<Entity>, Vec<DerivedValue>) {
+    let p = policies(TASKS);
+    let rows = [
+        authored(1, "d1", "sam", HANDED),
+        authored(2, "d2", "priya", TAKEN),
+    ];
+    let docs = SectionDocuments::from_chunk_rows([("s1", &[1u64][..]), ("s2", &[2u64][..])], &rows);
+    let projection = crate::enrichment::atlas::project_source_atoms(&docs, &p, "tasks").unwrap();
+    let mut claims = vec![
+        handed(
+            "asked",
+            Some("request"),
+            None,
+            "s1",
+            "d1",
+            HANDED,
+            "p1",
+            "the export fix",
+            json!({ "requester": read("Sam") }),
+        ),
+        handed(
+            "handed",
+            Some("reassignment"),
+            None,
+            "s1",
+            "d1",
+            HANDED,
+            "p1",
+            "the export fix",
+            json!({ "to_owner": read("priya") }),
+        ),
+        handed(
+            "sam",
+            None,
+            Some("person"),
+            "s1",
+            "d1",
+            HANDED,
+            "p2",
+            "Sam",
+            json!({}),
+        ),
+        handed(
+            "sam-2",
+            None,
+            Some("person"),
+            "s2",
+            "d2",
+            TAKEN,
+            "p2",
+            "Sam",
+            json!({}),
+        ),
+    ];
+    let (entities, lines) = resolve_and_derive_over(
+        &p,
+        &docs,
+        &mut claims,
+        answerer,
+        projection.atoms,
+        projection.participants,
+    )
+    .await;
+    (claims, entities, lines)
+}
+
+/// Point 3 (operator, 2026-10-20): 06-tasks has the implicit `person` beside
+/// `member role_of person`. RESOLVE decides each declared type apart: its
+/// resolver for `person` holds `person` records only, so a model that joins
+/// every statement to the first record it is shown still never puts Sam's
+/// person statement on sam's `member` record, and `requester` (of `person`)
+/// never holds a member. The control for that rule; it held before and after.
+#[tokio::test]
+async fn a_person_is_never_decided_into_a_member_record() {
+    let infer: crate::InferenceFn = Arc::new(move |prompt: &ChatPrompt, _| {
+        let same = if prompt.user.contains("r0") {
+            "r0"
+        } else {
+            "none"
+        };
+        let cite = if prompt.user.contains(TAKEN) {
+            "Sam"
+        } else {
+            "Sam asked"
+        };
+        let answer = json!({"particulars": [{"same_as": same, "mentions": [{"statement": "s0", "cite": cite}]}]});
+        Box::pin(async move { Ok(answer.to_string()) })
+    });
+    let (claims, entities, _) = tasks_resolved(Answerer::Model(&infer)).await;
+    let of_type = |t: &str| -> Vec<String> {
+        entities
+            .iter()
+            .filter(|e| e.entity_type.as_str_repr() == t)
+            .map(|e| e.id.as_str().to_string())
+            .collect()
+    };
+    let (people, members) = (of_type("person"), of_type("member"));
+    assert_eq!(
+        members.len(),
+        2,
+        "sam and priya, from their messages: {entities:?}"
+    );
+    assert_eq!(
+        people.len(),
+        1,
+        "Sam, joined across the two windows: {entities:?}"
+    );
+    let subject = |id: &str| {
+        claims
+            .iter()
+            .find(|c| c.id.as_str() == id)
+            .and_then(|c| c.subject.as_ref())
+            .map(|s| s.as_str().to_string())
+    };
+    for id in ["sam", "sam-2"] {
+        assert_eq!(
+            subject(id).as_ref(),
+            people.first(),
+            "{id} is on the person record"
+        );
+    }
+    let asked = claims.iter().find(|c| c.id.as_str() == "asked").unwrap();
+    assert_eq!(
+        asked.attributes.get("requester"),
+        Some(&Value::String(people[0].clone())),
+        "the requester is the person record, never sam's member record"
+    );
+}
+
+/// Point 2 (operator, 2026-10-20), failing input named: 06-tasks n1/n5. A
+/// reassignment's new owner, a `member` named in the text of a message
+/// someone else wrote (sam hands the export to priya), holds nothing: a
+/// reference to a sourced type lands only on a record the statement's own
+/// document's fields name, and d1's fields name sam alone. priya's record
+/// exists, projected from the message she wrote. Ignored until the seat
+/// decides how such a reference finds it.
+#[tokio::test]
+#[ignore = "06-tasks n1/n5: a sourced type's record named in another's text; design pending"]
+async fn a_new_owner_named_in_another_members_message_holds_their_record() {
+    let (claims, entities, lines) = tasks_resolved(Answerer::Proposed).await;
+    let priya = entities
+        .iter()
+        .find(|e| {
+            e.entity_type.as_str_repr() == "member"
+                && e.canonical_name.to_lowercase().contains("priya")
+        })
+        .map(|e| e.id.as_str().to_string())
+        .unwrap_or_else(|| panic!("priya's member record is projected: {entities:?}"));
+    let handed = claims.iter().find(|c| c.id.as_str() == "handed").unwrap();
+    let why: Vec<&String> = lines
+        .iter()
+        .filter(|l| l.atom == "handed")
+        .flat_map(|l| l.unresolved.iter().map(|u| &u.why))
+        .collect();
+    assert_eq!(
+        handed.attributes.get("to_owner"),
+        Some(&Value::String(priya)),
+        "{why:?}"
     );
 }
