@@ -360,7 +360,9 @@ impl<'a> Judge<'a> {
         kind: ValueKind,
     ) -> Option<(f64, f64)> {
         let spans: Vec<(f64, f64)> = match (atom.attributes().get(attr)?, kind) {
-            (Value::Number(n), ValueKind::Time) => n.as_f64().map(|y| (y, y + 1.0)).into_iter().collect(),
+            (Value::Number(n), ValueKind::Time) => {
+                n.as_f64().map(|y| (y, y + 1.0)).into_iter().collect()
+            }
             (Value::Number(n), _) => n.as_f64().map(|x| (x, x)).into_iter().collect(),
             (Value::String(s), ValueKind::Time) => time_spans(s),
             (Value::String(s), _) => numbers(s).into_iter().map(|x| (x, x)).collect(),
