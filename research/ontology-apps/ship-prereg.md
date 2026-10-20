@@ -94,3 +94,17 @@ false no-records. With the name first, only those four system rows move and the 
   noise. No second read is bought.
 - **The alias stamp is committed before the final read**, so the answer store it fills names the model that
   served each answer.
+
+## S5 result, first pass (2026-10-20, `census/judgments.json`, one judge, static reading of code and validator)
+
+75 owner needs: 53 run (71%), 13 inert, 9 inexpressible.
+- **E1 fails, 8/12.** In 02, 05, 06 and 07 a type that a need requires gets no records. Each of those four shows
+  `ref-target-unrecorded`: a reference to a type the reader makes no record of (e.g. `of = "person"` with no
+  person type declared) is removed at `statement_refs.rs:137-142`, and validate says nothing about it.
+- **E3 fails.** In seed-0 order the last four add one tag, `fold-needs-document-date` (05-incidents only). A fold's
+  clock comes only from `change.document.date`, and `latest`/`earliest` answer `Unordered` even when every
+  reading carries one value (`resolution_derived.rs:684`).
+- **E2, before building: 53/75.** The tags two or more use cases show, with the needs each holds:
+  ref-target-unrecorded 8 (4 use cases), totals 5 (4), computed-value 2, value-compare 2, subject-field-unheld 2.
+  Built, they hold 19 needs: a ceiling of 72/75 against the bar of 68. Single-use-case limits: as-of-state (02),
+  linked-count-filter (04), fold-needs-document-date (05).
