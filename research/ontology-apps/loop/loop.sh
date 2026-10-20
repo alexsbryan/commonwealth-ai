@@ -19,7 +19,9 @@
 # Env: NOTE="what this arm changes" (required). ASKER=replay|recorded|daemon for extract (default recorded: a
 # question asked before reuses its answer, a new one goes to the daemon). RESOLVE_ASKER=daemon re-asks every RESOLVE
 # question fresh, for a noise band (default recorded).
-# INIT=1 re-cuts the windows (enrich init). RESTORE=<arm> puts that arm's cut back first, for an exact replay.
+# INIT=1 re-cuts the windows (enrich init). RESTORE=<arm> puts that arm's cut and answers back first, for an exact replay.
+# RETRY=1 asks the windows extract lost once more (`enrich extract --retry-failed --asker daemon`, the product's own
+# recovery), its trace appended to extract.err so the retried answer is the window's; a window lost twice stands.
 # NOSCORE=1 scores and diagnoses nothing and writes no journal row: a deletion's replay, judged by
 # `table.py --same <reference arm> <arm>` on its records, asks no bank question (a bank score is 210 model calls).
 cd "$(dirname "$0")/../../.." || exit 1
@@ -43,6 +45,13 @@ one() {
   cut=~/.svrnmesh/indexes/$id/chapters.json; cfg=~/.svrnmesh/enrichment/$id/config.json
   if [ -n "$RESTORE" ]; then
     cp runs/loop/$RESTORE/$id/chapters.json $cut || { echo "$id: no saved cut in runs/loop/$RESTORE"; return; }
+    # Its answers too: the store lines its run.json brackets, appended so each is its question's latest recording,
+    # which is what a replay gives (asker_tests a_replay_gives_the_latest_recording_of_a_question).
+    set -- $(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('answers_before',''), d.get('answers_after',''))" runs/loop/$RESTORE/$id/run.json 2>/dev/null)
+    if [ -n "$2" ] && [ "$2" -gt "$1" ]; then
+      a=~/.svrnmesh/enrichment/$id/answers.jsonl; sed -n "$(( $1 + 1 )),$2p" $a > $out/restored.jsonl && cat $out/restored.jsonl >> $a
+      echo "$id: restored $RESTORE's $(( $2 - $1 )) answers as the latest"
+    fi
   elif [ -n "$INIT" ]; then  # re-cut the windows; init over a literary-pipeline config is put back
     cp $cfg $out/config.before.json
     sovereign enrich init $id --from-corpus $id --chat-model commonwealth/primary --embed-model qwen3-embedding-0.6b --force > $out/init.out 2> $out/init.err || { echo "$id: init failed"; return; }
@@ -53,6 +62,10 @@ one() {
   cp $cut $out/chapters.json; cp $cfg $out/config.json
   store=~/.svrnmesh/enrichment/$id/answers.jsonl; before=$(wc -l < $store 2>/dev/null | tr -d ' ')
   sovereign enrich extract $id --full --asker $asker > $out/extract.out 2> $out/extract.err; rx=$?
+  if [ $rx != 0 ] && [ -n "$RETRY" ]; then
+    sovereign enrich extract $id --retry-failed --asker daemon > $out/retry.out 2>> $out/extract.err; rx=$?
+    echo "$id: retried the lost windows, extract exit $rx"
+  fi
   [ $rx = 0 ] && { sovereign enrich resolve $id --asker $rasker > $out/resolve.out 2> $out/resolve.err; rr=$?; }
   after=$(wc -l < $store 2>/dev/null | tr -d ' ')
   [ "$rr" = 0 ] && mkdir -p $out/atlas && cp ~/.svrnmesh/indexes/$id/atlas/atoms.json ~/.svrnmesh/indexes/$id/atlas/edges.json $out/atlas/
@@ -66,7 +79,7 @@ one() {
   fi
   python3 -c "import json,sys; json.dump(dict(zip(sys.argv[2::2], sys.argv[3::2])), open(sys.argv[1], 'w'), indent=1)" $out/run.json \
     arm "$arm" corpus "$id" note "$NOTE" head "$head" dirty "$dirty" svrn_ingest_mtime "$bin" engine "$engine" asker "$asker" resolve_asker "$rasker" \
-    init "${INIT:-}" restore "${RESTORE:-}" extract_exit "$rx" resolve_exit "${rr:-not run}" seconds "$(( $(date +%s) - s ))" \
+    init "${INIT:-}" restore "${RESTORE:-}" retry "${RETRY:-}" extract_exit "$rx" resolve_exit "${rr:-not run}" seconds "$(( $(date +%s) - s ))" \
     answers_before "$before" answers_after "$after" noscore "${NOSCORE:-}" finished "$(date -u +%FT%TZ)"
   [ "$kind" = none ] && { echo "$id: extract exit $rx, resolve exit ${rr:-not run}; answers $before -> $after (not scored)"; return; }
   if [ "$kind" = bank ]; then
