@@ -13,6 +13,7 @@ use serde_json::Value;
 use tracing::{debug, trace};
 
 use super::super::pick::Candidate;
+use super::super::validation::field_evidence_exists;
 use super::super::{DocumentReadField, DocumentReadOutcome, DocumentReadParticular};
 use super::{text, Contract};
 use crate::enrichment::atlas::SourceDocument;
@@ -54,7 +55,13 @@ pub(super) fn unstated(
         // then its fields' quotes.
         let mut cues: Vec<String> = names_of(p);
         if let Some(fields) = p["fields"].as_object() {
-            cues.extend(fields.values().filter_map(|f| f.get("quote")).map(text));
+            cues.extend(
+                fields
+                    .values()
+                    .flat_map(field_entries)
+                    .filter_map(|f| f.get("quote"))
+                    .map(text),
+            );
         }
         let found = owns.iter().enumerate().find_map(|(k, own)| {
             cues.iter()
@@ -233,7 +240,7 @@ pub(super) fn particular_fields(
     super::subject_attrs(policies, index, &subject.name)
         .into_iter()
         .map(|a| {
-            let entry = &particular["fields"][&a.name];
+            let entry = own_entry(&particular["fields"][&a.name], document);
             let (value, evidence) = match entry {
                 Value::Object(o) if o.contains_key("value") => {
                     (o.get("value"), o.get("quote").map(text))
@@ -249,6 +256,45 @@ pub(super) fn particular_fields(
             (a.name.clone(), r)
         })
         .collect()
+}
+
+/// A field's entries: the window writes one `{value, quote}` per document that
+/// states it (`window_prompt.md`), and an older answer one object.
+fn field_entries(field: &Value) -> &[Value] {
+    match field {
+        Value::Array(entries) => entries,
+        Value::Null => &[],
+        one => std::slice::from_ref(one),
+    }
+}
+
+/// The entry `document` states: the first whose quote is in it, else the first
+/// whose value's words are, else the first written, which `reading` judges
+/// against `document` as it judged a field written once. Failing input, named:
+/// mailraw's price was written once per window (2,250, message 06), so the
+/// 2,400 of messages 03 and 05 never reached the `agree` fold and its conflict
+/// read as decided (runs/loop/ship/journeys-2, 2026-10-20).
+fn own_entry<'v>(field: &'v Value, document: &SourceDocument) -> &'v Value {
+    let entries = field_entries(field);
+    let holds = |e: &Value, key: &str| {
+        let words = text(&e[key]);
+        !words.is_empty() && field_evidence_exists(document, &words)
+    };
+    if let Some(e) = entries.iter().find(|e| holds(e, "quote")) {
+        trace!(document = %document.key(), entries = entries.len(), "document_read/window: a field's entry chosen by its quote in this document");
+        return e;
+    }
+    if let Some(e) = entries.iter().find(|e| holds(e, "value")) {
+        trace!(document = %document.key(), entries = entries.len(), "document_read/window: a field's entry chosen by its value's words in this document");
+        return e;
+    }
+    match entries.first() {
+        Some(e) => {
+            trace!(document = %document.key(), entries = entries.len(), "document_read/window: no entry of a field is in this document; the first is judged");
+            e
+        }
+        None => &Value::Null,
+    }
 }
 
 /// An identity field of a subject its metadata source names, read from the

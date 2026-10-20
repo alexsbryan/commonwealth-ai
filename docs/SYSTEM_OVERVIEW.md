@@ -648,7 +648,10 @@ question the pipeline asks about a type is a method on the resolved
   only cost). The window reader names each
   particular once across its chapter; its envelope says so (`DocumentRead.subjects = Chapter`), the projection
   carries the reference (`CHAPTER_SUBJECT_ATTRIBUTE`), and RESOLVE links a chapter's statements by it as a
-  sufficient key (`resolution_records.rs::CHAPTER_SUBJECT_KEY`), deciding only across windows. A malformed value
+  sufficient key (`resolution_records.rs::CHAPTER_SUBJECT_KEY`), deciding only across windows. The prompt lists
+  statement kinds and types under their own headings and the answer shape names each set's members; a
+  particular's field is written once per stating document (`[{value, quote}]`), and each claim reads the entry
+  its own document states (`window_particulars.rs::own_entry`), so `agree` and dated folds see every reading. A malformed value
   in the answer costs at most the element holding it (`window_answer.rs`): a bare fraction (`.02`) is read with
   its leading zero, and if the answer still does not parse each particular and claim is parsed alone, the ones
   that fail (and the claims about a failed particular) dropped and counted as `lost`; a claim key outside the

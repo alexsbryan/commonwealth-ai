@@ -1,6 +1,6 @@
 //! The answer shape: it names the types and statement kinds apart, offers the
-//! grade slot only when a kind lists grades, and a grade written as an object
-//! is fields.
+//! grade slot only when a kind lists grades, a grade written as an object is
+//! fields, and a particular's field is written once per stating document.
 
 use serde_json::json;
 
@@ -136,4 +136,41 @@ description = "a statement that a happening took place"
     ] {
         assert!(user.contains(shown), "{shown} not in:\n{user}");
     }
+}
+
+/// Failing input, named: mailraw's order price was written once per window,
+/// 2,250 from message 06, so the 2,400 of messages 03 and 05 never reached the
+/// `agree` fold and its conflict read as decided (runs/loop/ship/journeys-2,
+/// 2026-10-20). A field the window writes once per stating document gives each
+/// claim the value its own document states.
+#[tokio::test]
+async fn each_claim_reads_the_field_value_its_own_document_states() {
+    let chapter = input_chapter(&[
+        row(1, "doc-a", "Issue 42 in uv is open.", r#"{"author":"ana"}"#),
+        row(2, "doc-b", "Issue 42 moved to pip and is now closed.", r#"{"author":"bo"}"#),
+    ]);
+    let answer = json!({
+        "particulars": [{"ref": "p1", "type": "case", "name": "issue 42", "fields": {
+            "project": [{"value": "uv", "quote": "Issue 42 in uv is open."},
+                        {"value": "pip", "quote": "Issue 42 moved to pip"}]}}],
+        "claims": [{"kind": "reported_status", "about": "p1", "document": "d1",
+                    "quote": "Issue 42 in uv is open.", "fields": {"status": "open"}},
+                   {"kind": "reported_status", "about": "p1", "document": "d2",
+                    "quote": "Issue 42 moved to pip and is now closed.", "fields": {"status": "closed"}}]});
+    let policies = policies();
+    let (infer, _) = scripted(vec![answer]);
+    let raw = read(&chapter, &policies, &Default::default(), &infer)
+        .await
+        .unwrap();
+    let mut extraction = parse_response(&raw, &policies)
+        .unwrap()
+        .section_extraction
+        .unwrap();
+    validate_and_stamp(&chapter, &policies, &mut extraction).unwrap();
+    let docs = &extraction.document_read.as_ref().unwrap().documents;
+    let project: Vec<_> = docs
+        .iter()
+        .map(|d| value(&d.claims[0].subject_fields["project"]).cloned())
+        .collect();
+    assert_eq!(project, vec![Some(json!("uv")), Some(json!("pip"))]);
 }
