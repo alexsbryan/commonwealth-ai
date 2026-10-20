@@ -151,3 +151,44 @@ async fn recorded_reuses_only_what_the_same_model_answered_and_asks_the_rest() {
     assert_eq!(c(&q, None).await.unwrap(), by_n);
     assert_eq!(c(&new, None).await.unwrap(), fresh);
 }
+
+/// Failing input, named: replaying runs/loop/local35b-s4-base-a on world-s4
+/// gave read b's answers, which asked the same questions after it
+/// (2026-10-19). A question recorded twice answers with its latest line, so
+/// appending an earlier run's lines makes a replay give that run's answers
+/// (`loop.sh` RESTORE).
+#[tokio::test]
+async fn a_replay_gives_the_latest_recording_of_a_question() {
+    use std::io::Write;
+    let dir = tempfile::tempdir().unwrap();
+    let q = ChatPrompt::new("sys", "which deal?");
+    let (embed, chat, _) = counting_daemon();
+    let ask = |embed, chat| {
+        answering(Asker::Daemon, dir.path(), by("m"), embed, chat)
+            .unwrap()
+            .1
+    };
+    let first = ask(embed.clone(), chat.clone())(&q, None).await.unwrap();
+    let second = ask(embed, chat)(&q, None).await.unwrap();
+    assert_ne!(first, second);
+    let replay = || {
+        let (embed, chat) = refusing_daemon();
+        answering(Asker::Replay, dir.path(), by("m"), embed, chat)
+            .unwrap()
+            .1
+    };
+    assert_eq!(replay()(&q, None).await.unwrap(), second);
+    let store = dir.path().join(ANSWERS_FILE);
+    let earliest = std::fs::read_to_string(&store)
+        .unwrap()
+        .lines()
+        .next()
+        .unwrap()
+        .to_string();
+    let mut file = std::fs::OpenOptions::new()
+        .append(true)
+        .open(&store)
+        .unwrap();
+    writeln!(file, "{earliest}").unwrap();
+    assert_eq!(replay()(&q, None).await.unwrap(), first);
+}
