@@ -112,3 +112,47 @@ read and lost, minutes.
 
 **Prediction**, stated so it can be wrong: 5k recovers windows 2-3 on both reads and 10k on neither (10k's first
 window over them holds 10 documents, past the six `-c` reasoned over closely).
+
+## Step 2: a second look at the same window (pre-registered 2026-10-20 04:45, before any read)
+
+**Why.** Step 1 recovers neither size: `-w5k-b` attaches 14 of windows 2-3's 27 and wrote 14, under 20 whatever
+`-w5k-a` gives, and 10k writes 13 and 15. A call over fewer documents does not write more, so the step 1 assumption
+is wrong. What the reads say instead (`windows/`, no model call): the misses vary by read. Eight local reads
+each write about 17 of the 27 (11-18 attached), and together they write 24. Only 3 are never written, one of
+which DeepSeek also misses. The misses read are considered and declined, not overlooked: a forwarded "signed off,
+book it" judged a quote (`basaltville/1`), a credit markup judged no stage (`bitter_bend/3`). So a second look at the
+same window is a second draw at its margin. As independent draws at the eight reads' rates, two looks write
+about 20 of 27, before RESOLVE's loss of 2-3.
+
+**The change.** `window_rest.rs`: each window is asked twice. The second prompt is the first plus the first
+answer's statements, asking for the rest. Code folds the second answer in (the first's particular named again is
+the first's, a ref reused for another is renamed apart, and a claim already written is dropped). A second answer
+that does not parse leaves the first's, traced. It runs on every window read (DeepSeek's too), and it is reverted
+if it does not keep.
+
+**Reads.** `local35b-s4-rest-c` and `-rest-d`, paired: each restores `-c`'s or `-d`'s 20k cut and answers
+(`RESTORE`), so the first look replays that read's recorded answer (the reader's prompt is unchanged since
+76236b761), and only the second look and RESOLVE are asked fresh (`ASKER=recorded RESOLVE_ASKER=daemon`). A
+difference on a window is then the second look's alone. `run.json`'s store count checks the pairing: one new
+answer per window plus RESOLVE's. `svrn-ingest` is built at the change without the working tree's alias-stamp diff.
+
+**Smoke.** First, 20k window 3 (`sec_00003`, 9 updates) with `-c`'s cut and answers through `enrich extract
+--chapters sec_00003 --asker recorded`. The first look replays (no new store line for it), the second is asked,
+folds and adds claims, nothing is lost. Minutes reported. A failed smoke stops the step and carries no count.
+
+**Bars.** Valid as before: no window lost (a lost second look is reported, the window read on its first), RESOLVE
+answered. The second look keeps when both reads attach at least 20 of windows 2-3's 27 (`-c`/`-d`: 13, 14).
+No harm: each read at least 33/55 attached and 4/15 served. Window 1 is reported against 20/27. Written (score.json
+`matches`) is reported beside attached, against `-c`/`-d`'s 16 and 18.
+
+**Decisions.**
+- Both reach 20 with no harm: the second look stays. Next, two fully fresh reads against Done (8/15, 45/55). How it
+  serves DeepSeek is decided before it ships, and a hosted read waits for the operator.
+- Exactly one reaches 20: one fully fresh read decides.
+- Neither reaches 20: the second look is reverted, and the plan's pivot is next (Qwen3.8-27B on windows 2-3).
+
+**Reported per read.** Windows 2-3 and window 1 on the 20k cut, written and attached, attached of 55, served of
+15, statements, claims the second look added and dropped as repeats per window, minutes.
+
+**Prediction**, stated so it can be wrong: the second look adds at least 3 written updates on windows 2-3 on each
+read, and neither read reaches 20 attached (RESOLVE loses 2-3 of what is written).
