@@ -297,10 +297,11 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
         "shown_fields": shown_fields(policies),
         "max_answer_tokens": MAX_ANSWER_TOKENS,
         "thinking_tokens": THINKING_TOKENS,
+        "second_look": rest::PROMPT,
     })
 }
 
-/// Read `chapter` in one call and return the envelope `parse_response` reads.
+/// Read `chapter` in two calls (`rest`) and return the envelope `parse_response` reads.
 pub async fn read(
     chapter: &ChapterInput,
     policies: &OntologyPolicies,
@@ -346,10 +347,11 @@ pub async fn read(
             raw.len()
         ))
     };
-    let parsed = prepare_phase_json(&raw, "phase 1 (window read)")
+    let mut parsed = prepare_phase_json(&raw, "phase 1 (window read)")
         .map_err(|e| failed(e.to_string()))
         .and_then(|json| answer::parse(&json, &chapter.chapter_id).map_err(failed))?;
     debug!(chapter = %chapter.chapter_id, repaired = parsed.repaired, dropped = parsed.dropped, beside = parsed.beside, in_grade = parsed.in_grade, "document_read/window: answer parsed");
+    rest::look(&chapter.chapter_id, &prompt, &mut parsed, infer).await;
     let owns: Vec<String> = chapter
         .source_documents
         .iter()
@@ -761,3 +763,6 @@ mod refs;
 
 #[path = "window_voice.rs"]
 mod voice;
+
+#[path = "window_rest.rs"]
+mod rest;

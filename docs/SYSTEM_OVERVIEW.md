@@ -638,7 +638,10 @@ question the pipeline asks about a type is a method on the resolved
   projection sketches no subject (RESOLVE alone makes those records). The window reader is the one
   reader (ONTOLOGY_METHOD §Reading; the default from 2026-10-15, the passes reader and its waves deleted
   2026-10-16, `SOVEREIGN_READER` retired with them). It reads each
-  chapter in one call (`document_read/window.rs`, prompt `window_prompt.md`), and `enrich init` then cuts the
+  chapter in two looks (`document_read/window.rs`, prompt `window_prompt.md`): the second is the first prompt plus
+  the first answer's statements, asking for the rest, folded in by code (`window_rest.rs`: a claim already written
+  dropped, a ref reused for another particular renamed apart; a second answer that does not parse leaves the
+  first's). `enrich init` cuts the
   corpus into windows: every document in declared-clock order, cut by size only where a document ends
   (`sovereign-enrichment-build/src/window_manifest.rs`, `WINDOW_CHARS`, 20,000 characters since 2026-10-17, or the recipe's `window_chars`: a call
   writes about as many statements whatever it is shown, so the size sets coverage and read-to-read agreement, not
