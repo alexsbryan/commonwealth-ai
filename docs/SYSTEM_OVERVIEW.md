@@ -662,7 +662,8 @@ question the pipeline asks about a type is a method on the resolved
   in `window_refs.rs` (label name, candidate, words held), by any of a particular's names when the answer lists
   `other_names` for it (a name a document says it also has; typed, never a delimiter, so "Input / Output" is one
   name; `window_particulars.rs::names_for`, also used for a subject's sourced identity and for placing an
-  unstated particular). Each statement carries who says it as the answer's `said_by` read it (the document's
+  unstated particular, which is sent as its own statement on every document of the window whose own lines
+  name it, 2026-10-20, so a reference in each of them finds it). Each statement carries who says it as the answer's `said_by` read it (the document's
   words, or none for its own voice; `window_voice.rs`, kept on `SAID_BY_ATTRIBUTE` and shown by the
   record row with its grade, `corpus-engine-atlas-reader/src/records.rs`), and the other names of what it names, typed by what it refers to
   (`OTHER_NAMES_ATTRIBUTE`), which RESOLVE shows beside the subject's name and the readings' values

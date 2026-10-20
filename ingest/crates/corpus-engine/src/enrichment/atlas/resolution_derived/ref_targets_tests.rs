@@ -328,3 +328,124 @@ async fn a_movement_from_a_warehouse_holds_its_record() {
         Some(&Value::String(depot.id.as_str().to_string()))
     );
 }
+
+/// The claims a window read hands RESOLVE, from its outcomes: each claim, and
+/// each unstated particular as a statement of its own, on its document.
+fn handed_from_read(
+    read: &crate::enrichment::pipeline::document_read::DocumentRead,
+    section: &str,
+    lines: &[(&str, &str)],
+) -> Vec<Claim> {
+    let line_of = |doc: &str| lines.iter().find(|(d, _)| *d == doc).unwrap().1;
+    let local = |r: &str| r.rsplit('/').next().unwrap().to_string();
+    let mut claims = Vec::new();
+    for outcome in &read.documents {
+        let doc = outcome.document_id.as_str();
+        for (i, c) in outcome.claims.iter().enumerate() {
+            claims.push(handed(
+                &format!("{doc}-claim-{i}"),
+                Some(&c.kind),
+                None,
+                section,
+                doc,
+                line_of(doc),
+                &local(&c.subject_local_ref),
+                &c.subject_name,
+                serde_json::to_value(&c.fields).unwrap(),
+            ));
+        }
+        for (i, p) in outcome.particulars.iter().enumerate() {
+            claims.push(handed(
+                &format!("{doc}-particular-{i}"),
+                None,
+                Some(&p.subject_type),
+                section,
+                doc,
+                line_of(doc),
+                &local(&p.subject_local_ref),
+                &p.subject_name,
+                json!({}),
+            ));
+        }
+    }
+    claims
+}
+
+/// Failing input, named: 02-contracts n1 in one window. Dana Reyes owns the
+/// MSA (first email) and the NDA (second); the window names her once, and
+/// she was sent to RESOLVE on the first email only, so the NDA's owner, a
+/// reference resolved in its own document, named no record there. Sent on
+/// each document whose lines name her, she is one record (her statements
+/// share the window's subject) and both owners hold it.
+#[tokio::test]
+async fn one_window_two_documents_both_owners_hold_the_one_person() {
+    let p = policies(CONTRACTS);
+    let rows = [row(1, "m1", SIGNED_MSA), row(2, "m2", SIGNED_NDA)];
+    let docs = SectionDocuments::from_chunk_rows([("s1", &[1u64, 2][..])], &rows);
+    let text = format!("{SIGNED_MSA}\n\n{SIGNED_NDA}");
+    let chapter = crate::enrichment::pipeline::types::ChapterInput {
+        chapter_id: "s1".into(),
+        title: "Contracts".into(),
+        approx_tokens: text.len() / 4,
+        text,
+        metadata: Default::default(),
+        source_documents: docs.documents_for_section("s1").to_vec(),
+    };
+    let answer = json!({
+        "particulars": [
+            {"ref": "p1", "type": "contract", "name": "the MSA", "fields": {}},
+            {"ref": "p2", "type": "contract", "name": "the NDA", "fields": {}},
+            {"ref": "p3", "type": "person", "name": "Dana Reyes", "fields": {}}],
+        "claims": [
+            {"kind": "signed", "about": "p1", "document": "d1", "quote": SIGNED_MSA, "fields": {"owner": "p3"}},
+            {"kind": "signed", "about": "p2", "document": "d2", "quote": SIGNED_NDA, "fields": {"owner": "p3"}}]});
+    let reader: crate::InferenceFn = Arc::new(move |_: &ChatPrompt, _| {
+        let answer = answer.to_string();
+        Box::pin(async move { Ok(answer) })
+    });
+    let raw = crate::enrichment::pipeline::document_read::read_documents(
+        &chapter,
+        &p,
+        &Default::default(),
+        &reader,
+    )
+    .await
+    .unwrap();
+    let mut extraction = crate::enrichment::pipeline::document_read::parse_response(&raw, &p)
+        .unwrap()
+        .section_extraction
+        .unwrap();
+    crate::enrichment::pipeline::document_read::validate_and_stamp(&chapter, &p, &mut extraction)
+        .unwrap();
+    let read = extraction.document_read.as_ref().unwrap();
+    let mut claims = handed_from_read(read, "s1", &[("m1", SIGNED_MSA), ("m2", SIGNED_NDA)]);
+    let (entities, lines) = resolve_and_derive(&p, &docs, &mut claims, Answerer::Proposed).await;
+
+    let people: Vec<&Entity> = entities
+        .iter()
+        .filter(|e| e.entity_type.as_str_repr() == "person")
+        .collect();
+    let [dana] = people.as_slice() else {
+        panic!("one person record: {people:?}")
+    };
+    let held = Some(Value::String(dana.id.as_str().to_string()));
+    let owners: Vec<(String, Option<Value>)> = claims
+        .iter()
+        .filter(|c| c.claim_kind.as_deref() == Some("signed"))
+        .map(|c| {
+            (
+                c.id.as_str().to_string(),
+                c.attributes.get("owner").cloned(),
+            )
+        })
+        .collect();
+    let unresolved: Vec<&String> = lines
+        .iter()
+        .flat_map(|l| l.unresolved.iter().map(|u| &u.why))
+        .collect();
+    assert_eq!(owners.len(), 2, "{owners:?}");
+    assert!(
+        owners.iter().all(|(_, o)| *o == held),
+        "{owners:?} {unresolved:?}"
+    );
+}

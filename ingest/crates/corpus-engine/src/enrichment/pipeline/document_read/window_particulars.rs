@@ -1,11 +1,15 @@
 //! Particulars the window's reader named that no statement of the window is
 //! about. Each reaches RESOLVE as a statement of its own
-//! (`DocumentReadParticular`), on the first document whose own lines name it,
+//! (`DocumentReadParticular`), on every document whose own lines name it,
 //! so a person only
 //! ever spoken of is a record, decided across windows by RESOLVE like any
 //! other. Failing input, named: saltgrass (2026-10-14), whose window reader
 //! named nine characters, the killer among them, of which four became records:
-//! the window envelope sent claims only.
+//! the window envelope sent claims only. On every such document, not the
+//! first only: a reference resolves within its own document, so an owner
+//! named in the second of two emails held nothing when the person was sent
+//! on the first (02-contracts n1, 2026-10-20). What a document states is read
+//! in that document, as a field is (`own_entry`).
 
 use std::collections::BTreeSet;
 
@@ -24,8 +28,10 @@ use crate::enrichment::pipeline::types::ChapterInput;
 use crate::enrichment::reconciliation::identity_signals::fold_identity_value;
 
 /// Add every unstated particular of a statement subject type to the outcome
-/// of the first document whose own lines name it: by its name, or else by a
-/// field's quote, and that line is its evidence. One no own line names cites
+/// of each document whose own lines name it: by its name, or else by a
+/// field's quote, and that document's first such line is its evidence. The
+/// statements share the particular's chapter subject, so RESOLVE makes them
+/// one record. One no own line names cites
 /// nothing and is dropped, traced; one of a type no statement kind is about
 /// is left to the references that name it, traced.
 #[allow(clippy::too_many_arguments)]
@@ -63,39 +69,52 @@ pub(super) fn unstated(
                     .map(text),
             );
         }
-        let found = owns.iter().enumerate().find_map(|(k, own)| {
-            cues.iter()
-                .filter(|c| !c.trim().is_empty())
-                .find_map(|c| line_naming(own, c))
-                .map(|line| (k, line))
-        });
-        let Some((k, evidence)) = found else {
+        let found: Vec<(usize, String)> = owns
+            .iter()
+            .enumerate()
+            .filter_map(|(k, own)| {
+                cues.iter()
+                    .filter(|c| !c.trim().is_empty())
+                    .find_map(|c| line_naming(own, c))
+                    .map(|line| (k, line))
+            })
+            .collect();
+        if found.is_empty() {
             debug!(chapter = %chapter.chapter_id, particular = %local, %name, "document_read/window: no own line of the window names this particular; dropped");
             continue;
-        };
-        let document = &chapter.source_documents[k];
-        let (outcome, named) = &mut outcomes[k];
-        let subject_fields =
-            particular_fields(policies, index, subject, p, document, named, particulars);
-        trace!(document = %outcome.document_id, particular = %local, %name, %evidence, "document_read/window: an unstated particular sent as its own statement");
-        let mut things = vec![(name.clone(), ty.clone())];
-        things.extend(ref_values(
-            super::subject_attrs(policies, index, &ty),
-            &subject_fields,
-        ));
-        let other_names = other_names_for(
-            particulars,
-            index,
-            things.iter().map(|(n, t)| (n.as_str(), t.as_str())),
-        );
-        outcome.particulars.push(DocumentReadParticular {
-            subject_type: ty,
-            subject_local_ref: format!("{}/{local}", chapter.chapter_id),
-            subject_name: if name.is_empty() { local } else { name },
-            evidence,
-            subject_fields,
-            other_names,
-        });
+        }
+        if found.len() > 1 {
+            debug!(chapter = %chapter.chapter_id, particular = %local, %name, documents = found.len(), "document_read/window: an unstated particular sent on each document that names it");
+        }
+        for (k, evidence) in found {
+            let document = &chapter.source_documents[k];
+            let (outcome, named) = &mut outcomes[k];
+            let subject_fields =
+                particular_fields(policies, index, subject, p, document, named, particulars);
+            trace!(document = %outcome.document_id, particular = %local, %name, %evidence, "document_read/window: an unstated particular sent as its own statement");
+            let mut things = vec![(name.clone(), ty.clone())];
+            things.extend(ref_values(
+                super::subject_attrs(policies, index, &ty),
+                &subject_fields,
+            ));
+            let other_names = other_names_for(
+                particulars,
+                index,
+                things.iter().map(|(n, t)| (n.as_str(), t.as_str())),
+            );
+            outcome.particulars.push(DocumentReadParticular {
+                subject_type: ty.clone(),
+                subject_local_ref: format!("{}/{local}", chapter.chapter_id),
+                subject_name: if name.is_empty() {
+                    local.clone()
+                } else {
+                    name.clone()
+                },
+                evidence,
+                subject_fields,
+                other_names,
+            });
+        }
     }
 }
 

@@ -244,7 +244,7 @@ async fn a_window_read_reasons_first_and_reads_what_follows_the_reasoning() {
 }
 
 /// A particular no statement of the window is about goes to RESOLVE as one
-/// of its own, on the first document whose own lines name it; one no line
+/// of its own, on each document whose own lines name it; one no line
 /// names is dropped. Failing input, named: saltgrass (2026-10-14), nine
 /// characters named, four records.
 #[tokio::test]
