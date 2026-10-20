@@ -113,6 +113,14 @@ read and lost, minutes.
 **Prediction**, stated so it can be wrong: 5k recovers windows 2-3 on both reads and 10k on neither (10k's first
 window over them holds 10 documents, past the six `-c` reasoned over closely).
 
+**Step 1 result (2026-10-20 04:40): neither size recovers windows 2-3; plan step 2.** Windows 2-3 attached
+(written) of 27, window 1, total of 55, served: `-w10k-a` 11 (13), 21, 32/55, 4/15, 47 min; `-w10k-b` 11 (15), 17,
+28/55, 1/15, 48 min; `-w5k-a`, recovered (`-w5k-a-retry`: window 17 answered on the retry, 6 claims) 12 (18), 16,
+29/55, 2/15, 50 min plus 20; `-w5k-b` 14 (14), 21, 35/55, 4/15, 70 min, no window lost. Three of four reads fall
+under the no-harm floor. The prediction held for 10k and failed for 5k. The 20k reads wrote 16 and 18, so the
+reader writes no more of windows 2-3 on smaller calls. The recovery first found `--retry-failed` refusing a
+checkpoint journal never reset since before a schema change (fixed, a7c6213ee).
+
 ## Step 2: a second look at the same window (pre-registered 2026-10-20 04:45, before any read)
 
 **Why.** Step 1 recovers neither size: `-w5k-b` attaches 14 of windows 2-3's 27 and wrote 14, under 20 whatever
