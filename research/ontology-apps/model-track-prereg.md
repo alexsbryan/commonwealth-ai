@@ -202,3 +202,11 @@ minutes per read.
 
 **Prediction**, stated so it can be wrong: both reads attach at least 18 of windows 2-3, at least one reaches 20,
 and a read takes over two hours.
+
+**Smoke result (2026-10-20 13:35).** Failed, so the pivot stops and carries no count. `sec_00003` on the 27B hit
+the daemon's 3600s deadline with 42,924 tokens generated (11.9 tok/s; the 35B decodes the same reader at about
+77) and no answer; swap 18.8 of 19.5 GB. The smoke was mis-sized before it ran: the reader's thinking budget alone
+(48,000) takes 67 minutes at that rate, so no window that thinks to budget fits the hour. Windows 2-3 on the 27B
+are could-not-judge, not failed. To measure them needs a deadline of at least 2 hours per call and, at 3 windows a
+read, an estimated 8-10 machine hours for both reads. That spend is the operator's call. Until then the plan's stop
+stands as written: the 35B's best local read is 17 of 27, and engineering on this track stops.
