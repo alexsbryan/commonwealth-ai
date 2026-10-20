@@ -233,7 +233,7 @@ async fn a_document_read_reads_a_section_under_the_body_word_floor() {
         .await
         .unwrap();
     assert!(result.failures.is_empty(), "{:?}", result.failures);
-    assert_eq!(calls(&prompts), 2);
+    assert_eq!(calls(&prompts), 1);
 }
 
 #[tokio::test]
@@ -258,8 +258,8 @@ async fn production_phase1_uses_the_mock_provider_with_actual_document_context()
         .await
         .unwrap();
 
-    // One window read of the chapter, in two looks (`window_rest.rs`).
-    assert_eq!(calls(&prompts), 2);
+    // One window read of the chapter.
+    assert_eq!(calls(&prompts), 1);
     assert!(result.output.questions_by_chapter[0].questions.is_empty());
     let read = result.output.questions_by_chapter[0]
         .section_extraction
@@ -284,7 +284,7 @@ async fn production_phase1_uses_the_mock_provider_with_actual_document_context()
         .iter()
         .map(|p| p.phase_id.as_deref().unwrap_or(""))
         .collect();
-    assert_eq!(phases, [super::window::WINDOW_PHASE; 2]);
+    assert_eq!(phases, [super::window::WINDOW_PHASE]);
     // A metadata-sourced author is a declared fact the document's head
     // carries, and never text the reader reads in its body.
     for p in prompts.iter() {

@@ -26,8 +26,7 @@ async fn cached_document_read_replays_without_calling_inference() {
         )
         .await
         .unwrap();
-    // A window read is two looks (`window_rest.rs`).
-    assert_eq!(calls(&prompts), 2);
+    assert_eq!(calls(&prompts), 1);
 
     let panic_chat: crate::types::InferenceFn =
         Arc::new(|_, _| panic!("identical accountable read must use the section cache"));
@@ -40,7 +39,7 @@ async fn cached_document_read_replays_without_calling_inference() {
         .await
         .unwrap();
     assert_eq!(replay.output.questions_by_chapter.len(), 1);
-    assert_eq!(calls(&prompts), 2);
+    assert_eq!(calls(&prompts), 1);
 
     let mut identity_policy = policies.clone();
     identity_policy
@@ -58,7 +57,7 @@ async fn cached_document_read_replays_without_calling_inference() {
         .await
         .unwrap();
     assert_eq!(replay.output.questions_by_chapter.len(), 1);
-    assert_eq!(calls(&prompts), 2);
+    assert_eq!(calls(&prompts), 1);
 }
 
 #[tokio::test]
