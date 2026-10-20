@@ -60,9 +60,14 @@ pub(super) fn parse(json: &str, chapter: &str) -> Result<Parsed, String> {
 }
 
 /// The keys of a claim's envelope, read from the prompt's answer shape (its
-/// `"claims": [{...}]` element), so the prompt stays their one statement.
-pub(super) static CLAIM_KEYS: LazyLock<BTreeSet<String>> =
-    LazyLock::new(|| element_keys(super::PROMPT, "\"claims\": [{"));
+/// `"claims": [{...}]` element), so the prompt stays their one statement. The
+/// grade slot is in it whether or not a window was shown it.
+pub(super) static CLAIM_KEYS: LazyLock<BTreeSet<String>> = LazyLock::new(|| {
+    element_keys(
+        &super::PROMPT.replace("{grade}", super::GRADE_SLOT),
+        "\"claims\": [{",
+    )
+});
 
 /// The quoted keys of the object that opens with the `{` ending `opens` in
 /// `shape`, at its own depth (a nested `{<field>: <value>}` names none).

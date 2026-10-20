@@ -38,6 +38,10 @@ use crate::InferenceFn;
 
 pub(super) const WINDOW_PHASE: &str = "document_window";
 const PROMPT: &str = include_str!("window_prompt.md");
+/// A claim's `grade` in the answer shape (`{grade}` in `PROMPT`), shown only
+/// when a kind the window reads lists grades: offered to a recipe with none,
+/// the reader wrote the stage there (`the_grade_slot_is_shown_only_when_a_kind_lists_grades`).
+pub(super) const GRADE_SLOT: &str = "\"grade\": <one of its kind's grades, when it lists them>, ";
 const SYSTEM: &str = "You read documents and write what an ontology describes, as JSON.";
 /// The answer a window's call is given, its reasoning included: the engine
 /// counts both against it. A window holds about 5k tokens
@@ -157,6 +161,12 @@ fn attr_line(attr: &AttrDecl) -> String {
     line
 }
 
+/// `PROMPT` with the grade slot the declaration calls for.
+fn answer_shape(contract: &Contract<'_>) -> String {
+    let graded = contract.kinds.iter().any(|(k, _)| !k.grades.is_empty());
+    PROMPT.replace("{grade}", if graded { GRADE_SLOT } else { "" })
+}
+
 /// The ontology as the prompt shows it, generated from the declaration alone.
 fn ontology_text(
     contract: &Contract<'_>,
@@ -265,7 +275,7 @@ fn compose(
         })
         .collect::<Vec<_>>()
         .join("\n");
-    let user = PROMPT
+    let user = answer_shape(contract)
         .replace("{ontology}", &ontology_text(contract, policies, index))
         .replace("{documents}", &documents);
     let mut prompt = ChatPrompt::new(SYSTEM, user)
@@ -282,7 +292,7 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
     let contract = Contract::of(policies);
     json!({
         "reader": "window",
-        "prompt": PROMPT,
+        "prompt": answer_shape(&contract),
         "ontology": ontology_text(&contract, policies, &index),
         "shown_fields": shown_fields(policies),
         "max_answer_tokens": MAX_ANSWER_TOKENS,

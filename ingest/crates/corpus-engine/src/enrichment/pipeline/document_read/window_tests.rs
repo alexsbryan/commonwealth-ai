@@ -550,6 +550,48 @@ async fn a_field_written_in_grade_is_read_in_fields() {
     );
 }
 
+/// Failing input, named: world-s4's recipe lists no grades, yet every claim in
+/// the answer shape offered a `grade`, and the stage went there: local
+/// Qwen3.6-35B wrote it only there (`{"stage": "lead"}` in one read, `"lead"`
+/// in the next; 0 of 15 deals with a stage), and DeepSeek beside `fields` in
+/// 421 claims. The slot is shown only when a kind the window reads lists
+/// grades, and stays in the envelope an answer is read with.
+#[tokio::test]
+async fn the_grade_slot_is_shown_only_when_a_kind_lists_grades() {
+    let recipe = |grades: &str| {
+        let ontology: crate::enrichment::ontology::OntologyV1 = toml::from_str(&format!(
+            r#"
+[[types]]
+name = "case"
+kind = "entity"
+identity_criterion = "same issue number"
+
+[[types]]
+name = "remark"
+kind = "claim"
+force = "assertive"
+subject = "case"
+{grades}
+"#
+        ))
+        .unwrap();
+        ontology.into_policies()
+    };
+    let chapter = input_chapter(&[row(1, "doc-a", "Issue 42 is open.", "{}")]);
+    let mut shown = Vec::new();
+    for policies in [recipe(""), recipe(r#"grades = ["saw it", "heard it"]"#)] {
+        let empty = json!({"particulars": [], "claims": []});
+        let (infer, seen) = scripted(vec![empty]);
+        read(&chapter, &policies, &Default::default(), &infer)
+            .await
+            .unwrap();
+        let user = seen.lock().unwrap()[0].user.clone();
+        shown.push(user.contains("\"grade\": <one of its kind's grades"));
+    }
+    assert_eq!(shown, [false, true]);
+    assert!(super::answer::CLAIM_KEYS.contains("grade"));
+}
+
 /// A claim's envelope is read from the prompt's answer shape, so a key added
 /// there is never mistaken for a field written beside `fields`.
 #[test]
