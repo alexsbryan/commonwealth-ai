@@ -188,10 +188,10 @@ pub fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
 }
 
 /// Resolve the failure list `--retry-failed` should target. Prefers
-/// the per-chapter checkpoint (live, written after every chapter)
-/// over the last finalised run-file (only written by `--finalize` or
-/// pre-checkpoint legacy runs). When neither has anything, returns
-/// `Ok(None)`.
+/// the per-chapter checkpoint, this run's journal (a `--full` without
+/// `--resume` starts it fresh, `begin_phase1_checkpoint`), so it is
+/// current even mid `--resume` sequence, before any run-file; then the
+/// newest run-file. When neither has anything, returns `Ok(None)`.
 ///
 /// The first element of the returned tuple is a path the caller can
 /// surface to the operator so they know where the failure list came

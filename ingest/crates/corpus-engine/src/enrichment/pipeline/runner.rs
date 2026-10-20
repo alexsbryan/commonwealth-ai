@@ -72,7 +72,7 @@ impl ChapterSelection {
 mod checkpoint;
 use checkpoint::append_phase1_checkpoint;
 pub use checkpoint::{
-    checkpoint_processed_ids, collapse_phase1_checkpoint, read_phase1_checkpoint,
+    begin_phase1_checkpoint, checkpoint_processed_ids, collapse_phase1_checkpoint, read_phase1_checkpoint,
     Phase1CheckpointEntry,
 };
 
