@@ -3,8 +3,8 @@
 //! concern per file; re-exported flat through `embedded/mod.rs` so every
 //! `crate::embedded::<Item>` path stays valid.
 #![allow(unused_imports)]
-use super::*;
 use super::think_budget::{opens_think, ThinkWait};
+use super::*;
 use std::collections::{BTreeMap, HashMap};
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
@@ -271,9 +271,9 @@ impl ConstrainedSampler {
         self.llg_think_wait.is_none()
             && self
                 .llg_constraint
-            .as_ref()
-            .map(|llg| llg.is_stopped())
-            .unwrap_or(false)
+                .as_ref()
+                .map(|llg| llg.is_stopped())
+                .unwrap_or(false)
     }
 
     /// Latched llguidance matcher failure, if any. The decode loops
@@ -310,7 +310,11 @@ impl ConstrainedSampler {
     /// non-canonical BPE tokenisations; that's expected — the Tier 2
     /// path falls through to ordinary sampling.
     pub fn forced_next_run(&mut self, max_bytes: usize) -> Vec<LlamaToken> {
-        let Some(llg) = self.llg_constraint.as_mut().filter(|_| self.llg_think_wait.is_none()) else {
+        let Some(llg) = self
+            .llg_constraint
+            .as_mut()
+            .filter(|_| self.llg_think_wait.is_none())
+        else {
             return Vec::new();
         };
         llg.forced_ff_tokens()
@@ -427,7 +431,10 @@ pub(crate) fn build_sampler(
 
     let llg_think_wait = (llg_constraint.is_some() && opens_think(turn_opener)).then(|| {
         tracing::info!("grammar-constrained decoding waits for the think block the prompt opened");
-        (ThinkWait::default(), crate::vocab_cache::vocab_bytes_for(model))
+        (
+            ThinkWait::default(),
+            crate::vocab_cache::vocab_bytes_for(model),
+        )
     });
 
     // URL-allowlist constraint: built when the caller declares a
