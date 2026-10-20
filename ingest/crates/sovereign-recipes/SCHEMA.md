@@ -858,7 +858,7 @@ One typed attribute on a declared type. `name` and `type` are required; the rema
 | `(inline: AttrFamily)` | `AttrFamily` | **yes** | — | The value family, selected with `type = "…"`, plus its family keys. |
 | `description` | `String` | no | type default | What the attribute holds, for the extraction prompt. |
 | `derived` | `Option<String>` | no | type default | The declared path or fold that fills it, instead of the extractor (`derived.rs`). |
-| `by` | `Option<FoldBy>` | no | type default | How a record holds what its statements read of this field: `agree`, `all`, `most`, `earliest` or `latest`, decided as a fold's `by` is over each statement's reading. Absent, each statement keeps its own reading and the record holds none. |
+| `by` | `Option<FoldBy>` | no | type default | How a record holds what its statements read of this field: `agree`, `all`, `most`, `earliest` or `latest`, decided as a fold's `by` is over each statement's reading. Absent on a field of a type RESOLVE decides, the declaration language supplies `agree` when the document reader reads the declaration (`recipe_ontology::resolve_defaults` in corpus-engine); elsewhere each statement keeps its own reading and the record holds none. |
 
 ## `AttrFamily` (select with `type = "…"`)
 
@@ -1368,13 +1368,13 @@ reads it, a declared path or fold derives it (`derived = "<id>"`), the reader
 asks it of each statement of a claim kind that declares it, or of the kind's
 subject (a metadata-sourced subject is asked its identity keys only), or, for a
 claim's `subject`, RESOLVE decides it. A subject's field read this way stays on
-each statement that read it, cited, as the claim's own fields do: RESOLVE keys
-on it and writes none of those values onto the record, so statements that read
-it differently each keep their own. Give the field `by` and the record holds
-their readings folded as a fold's `by` decides (`agree`, `all`, `most`,
-`earliest` or `latest`): `{ name = "kind", type = "text", values = [...], by =
-"agree" }` holds the kind its statements agree on, and no value, said as a
-conflict, when they differ. The reader asks by the attribute's
+each statement that read it, cited, as the claim's own fields do, and RESOLVE
+keys on it. The record holds their readings folded as the field's `by` decides
+(`agree`, `all`, `most`, `earliest` or `latest`); a field of a type RESOLVE
+decides that declares no `by` folds by `agree`, which `recipe validate` prints
+(`derived: part.part_number ← fold by agree (default: no `by` declared)`): the
+record holds the value its statements agree on, and no value, said as a
+conflict with each reading cited, when they differ. The reader asks by the attribute's
 type: Choose a closed `values` set; Point at the words of open text, a
 `quantity` (the one number they write in digits) or a `time` (ISO 8601 when it
 reads as a date, the words as written otherwise); Pick a `ref` among the

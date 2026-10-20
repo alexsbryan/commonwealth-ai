@@ -904,7 +904,8 @@ question the pipeline asks about a type is a method on the resolved
   under `__folds` (`outcome::write_fold`: every outcome, decided or not, with the
   readings it folded, each cited by statement, document and words; a
   non-decided outcome leaves the attribute unset, so no filter matches it). A decided type's read field
-  that declares `by` is folded onto each record first, over what its statements
+  is folded onto each record first, by its declared `by` or, with none, by `agree`
+  (`resolve_defaults::DEFAULT_FOLD`, supplied where the policies are built, 2026-10-20), over what its statements
   read of it, by the same decider (`resolution_derived/read_fields.rs`, entity
   and event records alike); a `ref` reading counts as the record of the
   referenced type that its statement's document names in its fields and whose

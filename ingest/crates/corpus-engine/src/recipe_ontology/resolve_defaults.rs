@@ -15,6 +15,13 @@
 //! `technician` and `supplier` readings were each removed from their
 //! statements, naming no record.
 //!
+//! A read field of a type RESOLVE decides, declared without `by`, folds onto
+//! the record by [`DEFAULT_FOLD`]: the record holds the value its statements
+//! agree on, and shows a conflict, each reading cited, when they differ.
+//! Failing input, named: the census gap `subject-field-unheld` (03 n4
+//! `clause.policy`, 07 n1 `part.part_number`), whose readings stayed on each
+//! statement and never reached the record.
+//!
 //! Every default is returned as a [`SuppliedDefault`], which `recipe validate`
 //! prints, so none is silent.
 
@@ -22,6 +29,7 @@ use std::collections::BTreeSet;
 
 use tracing::{debug, trace};
 use understanding_vocab::ontology::decl::{AttrFamily, OntologyTypeDecl, TypeKind};
+use understanding_vocab::ontology::derived::FoldBy;
 use understanding_vocab::ontology::OntologyPolicies;
 
 use crate::enrichment::atlas::resolution_records::decides;
@@ -32,6 +40,9 @@ use crate::enrichment::pipeline::document_read::{statement_attributes, subject_r
 /// The identity criterion of a type decided by name, `{type}` its name.
 pub const DEFAULT_CRITERION: &str =
     "Two mentions are one {type} when they name the same {type}, however the name is written.";
+
+/// How a decided type's read field declared without `by` folds onto its record.
+pub const DEFAULT_FOLD: FoldBy = FoldBy::Agree;
 
 /// The description of a base kind declared because a reference names it.
 const IMPLICIT_DESCRIPTION: &str = "A {type} the statements refer to.";
@@ -47,6 +58,12 @@ pub enum SuppliedDefault {
         type_name: String,
         declared: bool,
         referred_by: Vec<String>,
+    },
+    /// `type_name.attribute`, a read field of a decided type declared without
+    /// `by`, folds onto the record by [`DEFAULT_FOLD`].
+    Fold {
+        type_name: String,
+        attribute: String,
     },
 }
 
@@ -71,6 +88,13 @@ impl SuppliedDefault {
                     refs.join(", ")
                 )
             }
+            Self::Fold {
+                type_name,
+                attribute,
+            } => format!(
+                "derived: {type_name}.{attribute} ← fold by {} (default: no `by` declared)",
+                DEFAULT_FOLD.label()
+            ),
         }
     }
 }
@@ -135,9 +159,47 @@ pub(crate) fn supply(policies: &mut OntologyPolicies) -> Vec<SuppliedDefault> {
             changed = true;
         }
         if !changed {
-            return supplied;
+            break;
         }
     }
+    supplied.extend(supply_folds(policies));
+    supplied
+}
+
+/// Give each read field of a type RESOLVE decides that declares no `by` the
+/// [`DEFAULT_FOLD`], returning each.
+fn supply_folds(policies: &mut OntologyPolicies) -> Vec<SuppliedDefault> {
+    let decided: Vec<String> = {
+        let index = TypeIndex::from_policies(policies);
+        policies
+            .shape
+            .types
+            .iter()
+            .filter(|t| decides(&index, &t.name))
+            .map(|t| t.name.clone())
+            .collect()
+    };
+    let mut supplied = Vec::new();
+    for t in policies
+        .shape
+        .types
+        .iter_mut()
+        .filter(|t| decided.contains(&t.name))
+    {
+        for a in t.attributes.iter_mut() {
+            if a.derived.is_some() || a.by.is_some() {
+                trace!(r#type = %t.name, attribute = %a.name, "ontology: a field derived or folded as declared");
+                continue;
+            }
+            a.by = Some(DEFAULT_FOLD);
+            debug!(r#type = %t.name, attribute = %a.name, by = DEFAULT_FOLD.label(), "ontology: a decided type's read field with no `by` folds by the default");
+            supplied.push(SuppliedDefault::Fold {
+                type_name: t.name.clone(),
+                attribute: a.name.clone(),
+            });
+        }
+    }
+    supplied
 }
 
 /// Whether `t` is recorded by something other than a default: its own

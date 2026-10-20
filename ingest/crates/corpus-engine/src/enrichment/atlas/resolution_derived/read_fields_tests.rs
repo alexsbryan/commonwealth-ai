@@ -76,7 +76,7 @@ fn report(doc: &str, subject: &str, fields: Value) -> Claim {
 
 /// A record holds its statements' one reading when they agree, none when they
 /// differ (said as a conflict), the latest document's reading under `latest`,
-/// and nothing of a field no `by` folds; each outcome is a line, cited by its
+/// and a field declared without `by` (`note`) by the default `agree`; each outcome is a line, cited by its
 /// documents, and only after RESOLVE.
 #[test]
 fn a_record_folds_what_its_statements_read_by_the_declared_policy() {
@@ -160,7 +160,7 @@ fn a_record_folds_what_its_statements_read_by_the_declared_policy() {
     assert_eq!(
         attrs("event-h1").get("note"),
         None,
-        "no `by`, no record value"
+        "no `by`: folded by agree, and its readings differ"
     );
     assert_eq!(attrs("event-h2").get("kind"), None, "the statements differ");
     let line = |atom: &str, attr: &str| {
@@ -179,6 +179,90 @@ fn a_record_folds_what_its_statements_read_by_the_declared_policy() {
     ));
     assert_eq!(line("event-h2", "size").outcome, DerivedOutcome::Nothing);
     assert_eq!(line("event-h1", "kind").derived, "by agree");
+    assert!(matches!(
+        &line("event-h1", "note").outcome,
+        DerivedOutcome::Conflict { values } if values == &["a", "b"]
+    ));
+}
+
+/// Failing input, named: the census gap `subject-field-unheld` (03-policy
+/// n4 `clause.policy`, 07-inventory n1 `part.part_number`): a decided type's
+/// read field declared without `by` stayed on each statement and never
+/// reached the record. Folded by the default `agree`, a record whose two
+/// statements read it alike holds it; one whose statements read it two ways
+/// holds none and shows the conflict, each reading cited.
+#[test]
+fn a_field_declared_without_by_folds_by_agree() {
+    let p = OntologyBlock {
+        version: 1,
+        body: toml::from_str(DECLARATION).unwrap(),
+    }
+    .policies()
+    .unwrap();
+    let docs = documents();
+    let mut entities = Vec::new();
+    let mut events = vec![happening("event-h1"), happening("event-h2")];
+    let mut claims = vec![
+        report("m1", "event-h1", json!({"note": "PN-7"})),
+        report("m2", "event-h1", json!({"note": "PN-7"})),
+        report("m3", "event-h2", json!({"note": "PN-7"})),
+        report("m4", "event-h2", json!({"note": "PN-9"})),
+    ];
+    let (mut states, mut relations, mut ars) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut positions, mut oppositions, mut edges) = (Vec::new(), Vec::new(), Vec::new());
+    let mut trajectories = BTreeMap::new();
+    let mut atoms = BuildAtoms {
+        entities: &mut entities,
+        events: &mut events,
+        states: &mut states,
+        relations: &mut relations,
+        claims: &mut claims,
+        argument_reconstructions: &mut ars,
+        positions: &mut positions,
+        oppositions: &mut oppositions,
+        edges: &mut edges,
+        trajectories: &mut trajectories,
+    };
+    derive_attributes(
+        &mut atoms,
+        &docs,
+        &Participants::new(),
+        &p,
+        DeriveStage::AfterResolve,
+        &mut |_| {},
+    )
+    .unwrap();
+    let attrs = |id: &str| {
+        events
+            .iter()
+            .find(|e| e.id.as_str() == id)
+            .unwrap()
+            .attributes
+            .clone()
+    };
+    assert_eq!(
+        attrs("event-h1").get("note"),
+        Some(&json!("PN-7")),
+        "read alike, held"
+    );
+    let h2 = attrs("event-h2");
+    assert_eq!(h2.get("note"), None, "read two ways, no value");
+    let fold = &h2[super::super::outcome::FOLDS_ATTRIBUTE]["note"];
+    assert_eq!(fold["outcome"], json!("conflict"), "{fold}");
+    let cited: Vec<(&Value, &Value)> = fold["readings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| (&r["value"], &r["document"]))
+        .collect();
+    assert_eq!(
+        cited,
+        [
+            (&json!("PN-7"), &json!("m3")),
+            (&json!("PN-9"), &json!("m4"))
+        ],
+        "{fold}"
+    );
 }
 
 const REFERENCES: &str = r#"

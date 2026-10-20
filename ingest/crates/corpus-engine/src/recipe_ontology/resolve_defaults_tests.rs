@@ -170,3 +170,48 @@ fn validate_prints_each_type_decided_by_name() {
         v.warnings
     );
 }
+
+/// Failing input, named: 07-inventory n1, `part.part_number`, an identity
+/// key declared without `by`, which stayed on each statement and never
+/// reached the record; validate said nothing. It folds by the default
+/// `agree`, a field declaring its own `by` or derived keeps it, and validate
+/// prints the default.
+#[test]
+fn a_decided_types_field_without_by_folds_by_agree() {
+    let toml = MOVEMENT_FROM_A_WAREHOUSE.replace(
+        "identity_criterion = \"Two mentions are one part when they give the same part number.\"",
+        "identity_criterion = \"Two mentions are one part when they give the same part number.\"\n\
+         attributes = [\n  { name = \"part_number\", type = \"text\" },\n  \
+         { name = \"unit\", type = \"text\", by = \"most\" },\n]",
+    );
+    let p = block(&toml).policies().unwrap();
+    let part = p.type_decl("part").unwrap();
+    let by = |name: &str| part.attributes.iter().find(|a| a.name == name).unwrap().by;
+    assert_eq!(by("part_number"), Some(FoldBy::Agree));
+    assert_eq!(
+        by("unit"),
+        Some(FoldBy::Most),
+        "a declared `by` is the recipe's"
+    );
+    assert!(block(&toml)
+        .supplied_defaults()
+        .unwrap()
+        .contains(&SuppliedDefault::Fold {
+            type_name: "part".into(),
+            attribute: "part_number".into(),
+        }));
+    let v = validate_block(&block(&toml));
+    assert!(v.errors.is_empty(), "{:?}", v.errors);
+    assert!(
+        v.notes.contains(
+            &"derived: part.part_number ← fold by agree (default: no `by` declared)".to_string()
+        ),
+        "{:?}",
+        v.notes
+    );
+    assert!(
+        !v.notes.iter().any(|n| n.contains("part.unit ← fold")),
+        "{:?}",
+        v.notes
+    );
+}

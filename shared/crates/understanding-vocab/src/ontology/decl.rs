@@ -603,8 +603,11 @@ pub struct AttrDecl {
     pub derived: Option<String>,
     /// How a record holds what its statements read of this field: `agree`,
     /// `all`, `most`, `earliest` or `latest`, decided as a fold's `by` is
-    /// over each statement's reading. Absent, each statement keeps its own
-    /// reading and the record holds none.
+    /// over each statement's reading. Absent on a field of a type RESOLVE
+    /// decides, the declaration language supplies `agree` when the document
+    /// reader reads the declaration (`recipe_ontology::resolve_defaults` in
+    /// corpus-engine); elsewhere each statement keeps its own reading and the
+    /// record holds none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub by: Option<FoldBy>,
 }
