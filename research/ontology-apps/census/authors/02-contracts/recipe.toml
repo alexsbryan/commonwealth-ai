@@ -1,0 +1,184 @@
+# Contracts at a services firm: signed agreements, their amendments, and the
+# renewal / notice / amendment correspondence. Ontology version 1.
+
+[corpus]
+id = "services-firm-contracts"
+name = "Contracts at a services firm"
+description = "Signed agreements and their amendments, read as contracts with their counterparty, type, owner, dates, notice and renewal terms, value, amendments and termination notices."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+[acquire]
+type = "local_file"
+path = "SOURCE_PATH"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "contracts-register"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is the contract file of a services firm: the signed agreements (master
+agreements, statements of work, NDAs, leases), the amendments to them, and the
+correspondence in which renewals, notices and amendments are negotiated. Every contract
+is between our firm and one counterparty; our firm is never the counterparty. A
+statement of work is made under a master agreement and belongs to it. Each contract has
+an owner on our side.
+
+A contract sets its terms: when it takes effect and ends, whether it renews
+automatically and for how long, how much notice must be given to stop a renewal or to
+terminate, and what it is worth in which currency. An amendment changes some of those
+terms from its own effective date; the amended term replaces the earlier one from that
+date, and the earlier one still held before it. A notice of termination or
+non-renewal ends a contract from the date it names; a renewal or extension keeps it in
+force. A draft or a proposal in correspondence is not a signed term.
+"""
+
+# ---- Things -------------------------------------------------------------
+
+[[enrichment.ontology.types]]
+name = "organization"
+kind = "entity"
+description = "A company, landlord or other legal person that is party to a contract with our firm (our firm is one too)."
+attributes = [
+  { name = "legal_name", type = "text", by = "most", description = "The full legal name as written in the parties clause." },
+  { name = "registration_no", type = "text", by = "agree", description = "Company or registration number, where the parties clause gives one." },
+  { name = "jurisdiction", type = "text", by = "agree", description = "Where it is incorporated or registered." },
+]
+identity_fallback = ["registration_no", "legal_name", "jurisdiction"]
+identity_criterion = "Two mentions are the same organization when they name the same legal person: the same registration number, or the same legal name in the same jurisdiction. A trading name and the legal name of one company are one organization; a parent, subsidiary or affiliate is a different organization."
+
+[[enrichment.ontology.types]]
+name = "contract"
+kind = "entity"
+description = "One signed agreement between our firm and a counterparty: a master agreement, a statement of work, an NDA or a lease."
+attributes = [
+  { name = "title", type = "text", by = "most", description = "The agreement's title as written, e.g. 'Master Services Agreement' or 'Statement of Work No. 3'." },
+  { name = "contract_ref", type = "text", by = "agree", description = "The contract number or reference printed on the agreement, if any." },
+  { name = "contract_type", type = "text", values = ["master_agreement", "statement_of_work", "nda", "lease", "other"], by = "agree" },
+  { name = "counterparty", type = "ref", of = "organization", by = "agree", description = "The other party; never our own firm." },
+  { name = "owner", type = "ref", of = "person", by = "most", description = "The person on our side responsible for the contract." },
+  { name = "master", type = "ref", of = "contract", by = "agree", description = "For a statement of work: the master agreement it is made under." },
+]
+identity_fallback = ["contract_ref", "counterparty", "title"]
+identity_necessary = ["contract_type"]
+identity_criterion = "Two mentions are the same contract when they name the same signed agreement with the same counterparty: the same title, number or date of signature. A statement of work is never the same contract as its master agreement, and each numbered statement of work is its own contract. An amendment is not a new contract; it is part of the contract it amends."
+
+# ---- What the documents state ---------------------------------------------
+
+[[enrichment.ontology.types]]
+name = "party_description"
+kind = "claim"
+force = "assertive"
+subject = "organization"
+description = "A parties clause or signature block describing a party to an agreement: its legal name, registration number, registered office, and the role it takes in that agreement."
+attributes = [
+  { name = "role", type = "text", values = ["our_firm", "client", "supplier", "landlord", "tenant", "disclosing_party", "receiving_party", "other"] },
+  { name = "registered_office", type = "text" },
+]
+
+[[enrichment.ontology.types]]
+name = "term_dates"
+kind = "claim"
+force = "declaration"
+subject = "contract"
+description = "The period a contract runs: when it takes effect and when it ends, as set by the agreement or changed by an amendment."
+grades = ["signed_instrument", "unsigned_draft", "correspondence"]
+attributes = [
+  { name = "as_of", type = "time", description = "The date from which this statement of the term applies: the contract's effective date for the original agreement, the amendment's effective date for an amendment." },
+  { name = "instrument", type = "text", description = "Which document sets it: 'original agreement' or the amendment's number." },
+  { name = "effective", type = "time", description = "The date the contract takes effect." },
+  { name = "ends", type = "time", description = "The date the contract ends (the end of the current term)." },
+]
+
+[[enrichment.ontology.types]]
+name = "renewal_term"
+kind = "claim"
+force = "declaration"
+subject = "contract"
+description = "How a contract renews and how much notice ends it: automatic renewal, the renewal period, the notice period for non-renewal and for termination, and the date by which notice must be given."
+grades = ["signed_instrument", "unsigned_draft", "correspondence"]
+attributes = [
+  { name = "as_of", type = "time" },
+  { name = "instrument", type = "text" },
+  { name = "auto_renews", type = "text", values = ["automatic", "by_agreement", "no_renewal"] },
+  { name = "renewal_period", type = "quantity", unit = "months" },
+  { name = "renewal_notice", type = "quantity", unit = "days", description = "Notice that must be given to stop an automatic renewal." },
+  { name = "termination_notice", type = "quantity", unit = "days", description = "Notice that must be given to terminate the contract." },
+  { name = "notice_deadline", type = "time", description = "The date by which notice of non-renewal must be given, where the document states it." },
+]
+
+[[enrichment.ontology.types]]
+name = "price_term"
+kind = "claim"
+force = "declaration"
+subject = "contract"
+description = "What a contract is worth: its value and currency, as set by the agreement or changed by an amendment."
+grades = ["signed_instrument", "unsigned_draft", "correspondence"]
+attributes = [
+  { name = "as_of", type = "time" },
+  { name = "instrument", type = "text" },
+  { name = "value", type = "quantity", description = "The contract value as written in digits." },
+  { name = "currency", type = "text", values = ["USD", "EUR", "GBP", "CAD", "AUD", "CHF", "JPY", "other"] },
+  { name = "basis", type = "text", values = ["total", "annual", "monthly", "rate_card", "other"] },
+]
+
+[[enrichment.ontology.types]]
+name = "amendment"
+kind = "claim"
+force = "declaration"
+subject = "contract"
+description = "An amendment to a contract: its number, when it was signed and takes effect, and which terms it changes."
+attributes = [
+  { name = "amendment_no", type = "text" },
+  { name = "signed_on", type = "time" },
+  { name = "effective", type = "time" },
+  { name = "changes", type = "text", values = ["value", "end_date", "renewal", "notice_period", "scope", "parties", "other"] },
+  { name = "summary", type = "text", description = "What the amendment changes, in its own words." },
+]
+
+[[enrichment.ontology.types]]
+name = "notice"
+kind = "claim"
+force = "declaration"
+subject = "contract"
+description = "A notice given under a contract: termination, non-renewal, renewal or extension, or the withdrawal of an earlier notice."
+attributes = [
+  { name = "action", type = "text", values = ["termination", "non_renewal", "renewal", "extension", "withdrawal"] },
+  { name = "given_on", type = "time", description = "The date the notice was given." },
+  { name = "effective_on", type = "time", description = "The date the notice takes effect." },
+  { name = "withdrawn_notice", type = "time", description = "For a withdrawal: the date of the notice it withdraws." },
+]
+
+# ---- Change ---------------------------------------------------------------
+
+[enrichment.ontology.change]
+supersedes = { term_dates = "as_of", renewal_term = "as_of", price_term = "as_of" }
+
+# ---- Derivation -----------------------------------------------------------
+
+[enrichment.ontology.tension]
+label = "discrepancy"
+between = ["term_dates", "renewal_term", "price_term"]
+not_conflicts = [
+  "an amendment that changes a term from its effective date, against the term it replaces",
+  "a statement of work's value against its master agreement's rate card or cap",
+  "a proposal or draft in correspondence against the signed term",
+  "the same value written in words and in figures",
+  "a renewal period against the initial term",
+]

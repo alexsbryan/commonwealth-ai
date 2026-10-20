@@ -1,0 +1,325 @@
+# Grants at a small charity: correspondence with funders, the applications we
+# submit, award letters, and the reports we send back.
+
+[corpus]
+id = "charity-grants"
+name = "Grant funding: applications, awards, reports"
+description = "A small charity's grant funding record: funder correspondence, application documents, award letters and grant reports."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# The correspondence is a mailbox export; applications, award letters and
+# reports travel as attachments and are read through the email extractor's
+# described-asset dispatch.
+[acquire]
+type = "local_file"
+path = "SOURCE_PATH"
+
+[extract]
+type = "email"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "charity-grants"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is a small charity's grant funding: our correspondence with funders, the
+application documents we submit, the award letters funders send, and the reports we send
+back. An application is one bid to one funder's programme for one piece of work in one
+round; if it is awarded it becomes a grant, and the grant is the same record. We say how
+much we ask for and in what currency, and when we applied; a draft is not a submission.
+A funder decides: it awards, in full or in part, or it declines; we may withdraw. An award
+letter sets conditions on how the money is used and the reports we owe, each with a
+deadline; a funder may later extend or waive a deadline. A report is one report owed for
+one period under one grant; we send it, and the funder receives, accepts or asks for more.
+Payments are instalments the funder pays against a grant, each with a date and amount.
+Our contact at a funder is the person there who writes to us or whom we write to.
+"""
+must_not = [
+  "treat a draft application or a draft report as sent",
+  "report an amount, currency or deadline the material does not state",
+]
+
+# No [voices]: every claim kind here is read by the document reader, which
+# attributes no statement to a speaker; who acted is carried by the claim kind
+# itself (funding_decision is the funder's, report_submission is ours) and by
+# `withdrawal.withdrawn_by`.
+
+# ── Who: funders and our contacts at them, read from the mail headers ──
+
+[[enrichment.ontology.types]]
+name = "funder"
+kind = "entity"
+description = "A grant-making trust, foundation, company, public body or lottery distributor, known by its mail domain."
+attributes = [{ name = "domain", type = "text" }]
+identity = ["domain"]
+source = { metadata = ["from", "to", "cc"], attributes = { domain = "domain" }, exclude = ["@bundled:mailbox_providers", "OUR_CHARITY_DOMAIN"] }
+
+[[enrichment.ontology.types]]
+name = "contact"
+kind = "entity"
+description = "A person at a funder who corresponds with us: a grants officer, programme manager or trust secretary."
+attributes = [
+  { name = "email", type = "text" },
+  { name = "name", type = "text" },
+  { name = "funder", type = "ref", of = "funder" },
+]
+identity = ["email"]
+source = { metadata = ["from", "to", "cc"], attributes = { email = "address", name = "display_name" }, refs = { funder = { of = "funder", reader = "domain" } }, exclude = ["OUR_CHARITY_DOMAIN"] }
+
+# ── What: applications (which become grants), reports owed, payments ──
+
+[[enrichment.ontology.types]]
+name = "application"
+kind = "entity"
+description = "One bid for funding to one funder's programme for one piece of work in one round; if awarded, the grant it became."
+identity_criterion = "Two mentions are one application when they are the same bid: the same funder, the same programme or fund, the same project, the same round. A funder's application or grant reference, where given, settles it. A resubmission to a later round, or the same project sent to a different funder, is a different application. The application and the grant awarded on it are one record."
+identity_fallback = ["funder", "programme", "project"]
+attributes = [
+  { name = "funder", type = "ref", of = "funder", by = "agree" },
+  { name = "programme", type = "text", by = "agree", description = "The funder's programme, fund or scheme applied to." },
+  { name = "project", type = "text", by = "agree", description = "The work the money is for, in our words." },
+  { name = "status", type = "text", values = ["pending", "awarded", "declined", "withdrawn"], derived = "application_status" },
+]
+
+[[enrichment.ontology.types]]
+name = "report"
+kind = "entity"
+description = "One report we owe a funder under one grant for one period: a progress, interim, final or financial report."
+identity_criterion = "Two mentions are one report when they are the same report owed under the same grant for the same period and of the same kind; a revised or resubmitted version of it, and a deadline extension for it, are the same report."
+identity_fallback = ["grant", "report_type", "period"]
+attributes = [
+  { name = "grant", type = "ref", of = "application", by = "agree" },
+  { name = "report_type", type = "text", values = ["progress", "interim", "final", "financial", "monitoring", "other"], by = "agree" },
+  { name = "period", type = "time", range = true, by = "agree", description = "The period the report covers." },
+  { name = "due", type = "time", by = "latest", description = "The date the report is due; a later extension replaces an earlier date." },
+  { name = "status", type = "text", values = ["due", "submitted", "accepted", "revision_requested", "waived"], derived = "report_status" },
+]
+
+[[enrichment.ontology.types]]
+name = "payment"
+kind = "entity"
+description = "One payment a funder makes against a grant: an instalment, an advance or a final payment."
+identity_criterion = "Two mentions are one payment when they are the same transfer: the same grant, the same amount, the same date or instalment. A remittance advice and our acknowledgement of the same transfer are one payment."
+identity_fallback = ["grant", "amount", "received_on"]
+attributes = [
+  { name = "grant", type = "ref", of = "application", by = "agree" },
+  { name = "amount", type = "quantity", by = "agree" },
+  { name = "currency", type = "text", values = ["GBP", "EUR", "USD", "CAD", "AUD", "NZD", "CHF", "SEK", "NOK", "DKK", "JPY", "other"], by = "agree" },
+  { name = "received_on", type = "time", by = "earliest" },
+  { name = "instalment", type = "text", by = "agree", description = "Which instalment, in the funder's words: first, second, final, advance." },
+]
+
+# ── What the material says about them ──
+
+[[enrichment.ontology.types]]
+name = "funding_request"
+kind = "claim"
+force = "directive"
+deontic = ["request"]
+subject = "application"
+description = "We ask a funder for money: the application itself, or a covering letter that sends it."
+attributes = [
+  { name = "reference", type = "text", description = "The reference this letter, form or message carries for the act it records: an application or grant number, a letter reference, or failing those the date of the act as written." },
+  { name = "dated", type = "time", description = "The date the application was sent or submitted." },
+  { name = "stage", type = "text", values = ["draft", "submitted"] },
+  { name = "amount_requested", type = "quantity" },
+  { name = "currency", type = "text", values = ["GBP", "EUR", "USD", "CAD", "AUD", "NZD", "CHF", "SEK", "NOK", "DKK", "JPY", "other"] },
+]
+
+[[enrichment.ontology.types]]
+name = "funding_decision"
+kind = "claim"
+force = "declaration"
+subject = "application"
+description = "A funder decides an application: an award, in full or in part, or a decline."
+attributes = [
+  { name = "reference", type = "text", description = "The reference this letter, form or message carries for the act it records: an application or grant number, a letter reference, or failing those the date of the act as written." },
+  { name = "dated", type = "time", description = "The date of the decision letter." },
+  { name = "outcome", type = "text", values = ["awarded", "declined"] },
+  { name = "amount_awarded", type = "quantity" },
+  { name = "currency", type = "text", values = ["GBP", "EUR", "USD", "CAD", "AUD", "NZD", "CHF", "SEK", "NOK", "DKK", "JPY", "other"] },
+  { name = "grant_period", type = "time", range = true },
+]
+
+[[enrichment.ontology.types]]
+name = "withdrawal"
+kind = "claim"
+force = "declaration"
+subject = "application"
+description = "An application is withdrawn before it is decided."
+attributes = [
+  { name = "reference", type = "text", description = "The reference this letter, form or message carries for the act it records: an application or grant number, a letter reference, or failing those the date of the act as written." },
+  { name = "dated", type = "time" },
+  { name = "withdrawn_by", type = "text", values = ["us", "funder"] },
+  { name = "reason", type = "text" },
+]
+
+[[enrichment.ontology.types]]
+name = "grant_condition"
+kind = "claim"
+force = "directive"
+deontic = ["require", "forbid", "permit"]
+subject = "application"
+description = "A condition an award places on us: how the money may be spent, acknowledgement, monitoring, match funding, timing."
+attributes = [
+  { name = "category", type = "text", values = ["use_of_funds", "reporting", "monitoring", "acknowledgement", "match_funding", "timing", "other"] },
+  { name = "deadline", type = "time" },
+]
+
+[[enrichment.ontology.types]]
+name = "reporting_requirement"
+kind = "claim"
+force = "directive"
+deontic = ["require"]
+subject = "report"
+description = "A funder sets, extends or waives a report we owe and its deadline."
+attributes = [
+  { name = "reference", type = "text", description = "The reference this letter, form or message carries for the act it records: an application or grant number, a letter reference, or failing those the date of the act as written." },
+  { name = "dated", type = "time" },
+  { name = "change", type = "text", values = ["set", "extended", "waived"] },
+]
+
+[[enrichment.ontology.types]]
+name = "report_submission"
+kind = "claim"
+force = "assertive"
+subject = "report"
+description = "We send a report to a funder, or prepare a draft of one."
+attributes = [
+  { name = "reference", type = "text", description = "The reference this letter, form or message carries for the act it records: an application or grant number, a letter reference, or failing those the date of the act as written." },
+  { name = "dated", type = "time" },
+  { name = "stage", type = "text", values = ["draft", "sent"] },
+]
+
+[[enrichment.ontology.types]]
+name = "report_response"
+kind = "claim"
+force = "assertive"
+subject = "report"
+description = "A funder answers a report: it was received, accepted, or more is asked of it."
+attributes = [
+  { name = "reference", type = "text", description = "The reference this letter, form or message carries for the act it records: an application or grant number, a letter reference, or failing those the date of the act as written." },
+  { name = "dated", type = "time" },
+  { name = "response", type = "text", values = ["received", "accepted", "revision_requested"] },
+]
+
+[[enrichment.ontology.types]]
+name = "payment_notice"
+kind = "claim"
+force = "assertive"
+subject = "payment"
+description = "A remittance advice, a funder's note that it has paid, or our acknowledgement that a payment arrived."
+
+# ── When things change ──
+
+[enrichment.ontology.change]
+supersedes = { funding_decision = "document_date", reporting_requirement = "document_date" }
+document = { date = "date", thread = "thread_id", id = "message_id", author = "from" }
+
+[enrichment.ontology.tension]
+label = "discrepancy"
+between = ["funding_decision", "reporting_requirement"]
+not_conflicts = [
+  "an award for less than the amount requested",
+  "a deadline extended or waived after it was first set",
+  "a payment instalment smaller than the amount awarded",
+  "a draft that differs from what was sent",
+]
+
+[[enrichment.ontology.folds]]
+id = "application_status"
+by = "protocol"
+from = ["^subject"]
+
+[enrichment.ontology.folds.protocol]
+identity = "reference"
+effective_time = "dated"
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "applied"
+claim_kind = "funding_request"
+state = "pending"
+when = { stage = "submitted" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "awarded"
+claim_kind = "funding_decision"
+state = "awarded"
+when = { outcome = "awarded" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "declined"
+claim_kind = "funding_decision"
+state = "declined"
+when = { outcome = "declined" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "withdrawn"
+claim_kind = "withdrawal"
+state = "withdrawn"
+when = { withdrawn_by = "us" }
+
+[[enrichment.ontology.folds]]
+id = "report_status"
+by = "protocol"
+from = ["^subject"]
+
+[enrichment.ontology.folds.protocol]
+identity = "reference"
+effective_time = "dated"
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "report_set"
+claim_kind = "reporting_requirement"
+state = "due"
+when = { change = "set" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "report_extended"
+claim_kind = "reporting_requirement"
+state = "due"
+when = { change = "extended" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "report_waived"
+claim_kind = "reporting_requirement"
+state = "waived"
+when = { change = "waived" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "report_sent"
+claim_kind = "report_submission"
+state = "submitted"
+when = { stage = "sent" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "report_received"
+claim_kind = "report_response"
+state = "submitted"
+when = { response = "received" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "report_accepted"
+claim_kind = "report_response"
+state = "accepted"
+when = { response = "accepted" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "report_revision"
+claim_kind = "report_response"
+state = "revision_requested"
+when = { response = "revision_requested" }
