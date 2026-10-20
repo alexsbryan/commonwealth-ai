@@ -743,6 +743,10 @@ mod names_tests;
 #[path = "window_lifecycle_tests.rs"]
 mod lifecycle_tests;
 
+#[cfg(test)]
+#[path = "window_grade_tests.rs"]
+mod grade_tests;
+
 #[path = "window_particulars.rs"]
 mod particulars;
 
