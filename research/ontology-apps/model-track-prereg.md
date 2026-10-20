@@ -57,3 +57,49 @@ the daemon holds the answer to it after the think block, 2b9c1b527), otherwise a
 **Bars.** Valid: no window lost, RESOLVE answered. No harm: each read at least 33/55 attached and 4/15 served
 (the `-c`/`-d` floor; their spread is 6). A read under the bar is the schema costing recall: examined before it
 stays, never kept on its structural merit alone. Reported: windows lost, statements, minutes (the mask's cost).
+
+**Result (2026-10-20 00:25): the schema is not kept** (reverted, b836d3b00). Both valid, no window lost. `-e`:
+4/15, 42/55 (25/27, 14/18, 3/9), 43 min. `-f`: 1/15, 29/55 (17/27, 9/18, 3/9), 30 min, under the bar. Examined:
+`-f`'s window 1 wrote 21 stage updates (26, 24, 25 in `-c`, `-d`, `-e`), so the gold updates its claims match fell
+to 35/55 (44, 41, 42), and RESOLVE lost 6 more (3/9 decided right). The RESOLVE part is outside the window call;
+the reader part is not explained.
+
+## Step 1: window size over the dense windows (pre-registered 2026-10-20 00:50, before any read)
+
+**Why windows 2-3.** Step 0 moved the gap: window 1 reached 25/27 and 19/27, while windows 2-3 attached 13 and 14 of
+their 27 updates (`-c`, `-d`) against DeepSeek's 25 at 20k (`w20-s245`; 26 at 40k, `w40-head`). In `-c`'s window 3
+every document is named and d7-d15 are reasoned over 1-5 times each, so the plan's assumption stands as stated:
+the loss is per call, and a call over fewer documents writes more of what each holds. It is wrong if these
+documents read at 5k still leave most of their updates unattached.
+
+**Reads.** `local35b-s4-w10k-a`, `-w5k-a`, `-w10k-b`, `-w5k-b`, in that order, one launchd job
+(`runs/loop/model-track-step1/`): world-s4 at b836d3b00 (the reader `-c`/`-d` read with), `svrn-ingest` rebuilt
+at it and nothing after, the daemon and askers as for `-e`/`-f`.
+The cut is the product's: `enrich init` over world-s4's index from a copy of its recipe with `window_chars` set,
+under a diagnostic id since removed, saved with the recipe copy at `runs/loop/cut-s4-w{10,5}k/` and put back with
+`RESTORE`. World-s4's own recipe is untouched. 10k cuts 11 windows (20k windows 2-3 become its 3-6 and the first
+document of 7) and 5k cuts 24 (its 5-14; its 5 opens with window 1's last document), so every count is taken on the
+20k cut, each message by its date (`window_recall.py --by local35b-s4-base-c`).
+
+**Smoke.** First, one window at each size through `enrich extract --chapters` (10k `sec_00005`, 9 window-3
+updates; 5k `sec_00010`, 4): the answer parses, nothing is lost, minutes. A failed smoke stops the step and
+carries no count.
+
+**Bars.** Valid: no window lost, RESOLVE answered. The band is the 20k reads at this reader, `-c` and `-d` (windows
+2-3: 13 and 14 of 27), with `-e`/`-f` (17, 12) and the 2026-10-15 reads (15, 19) beside them. A size
+recovers windows 2-3 when both its reads attach at least 20 of the 27, above every local 20k read on any code and
+5 under DeepSeek. No harm, as in step 0: each read at least 33/55 attached and 4/15 served. Window 1 is reported
+against the plan's 20/27.
+
+**Decisions.**
+- One size recovers windows 2-3 with no harm: size is the lever for the dense windows, and that size is read
+  against Done (8/15, 45/55, two reads). How it would ship, the shipped default or a size bound to the serving
+  model, is decided against DeepSeek at the same size first (DeepSeek attaches 52 at 20k); never a recipe edit.
+- Both sizes recover: 10k goes forward (half the calls), 5k's minutes reported beside it.
+- Neither recovers: size is not the lever, and the plan's step 2 (a second pass over the same window) is next.
+
+**Reported per read.** Windows 2-3 and window 1 on the 20k cut, attached of 55, served of 15, statements, windows
+read and lost, minutes.
+
+**Prediction**, stated so it can be wrong: 5k recovers windows 2-3 on both reads and 10k on neither (10k's first
+window over them holds 10 documents, past the six `-c` reasoned over closely).
