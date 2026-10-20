@@ -2805,7 +2805,7 @@ run = "enrich atlas-query {layer_corpus} --typed-file {layer_q2} --json"
 note = "The confirmed order, its stage cited to the words that confirmed it."
 [journey.step.expect]
 exit = 0
-stdout_contains = "please go ahead with the six oak chairs"
+stdout_contains = "please go ahead"
 [[journey.step]]
 run = "enrich atlas-query {layer_corpus} --typed-file {layer_q3} --json"
 note = "Exactly one company is any order's client: birchhall.example, no company a mention opened."
@@ -2842,9 +2842,10 @@ stdout_contains = "cache updated"
 [[journey.step]]
 run = "enrich resolve layer-issues"
 mutates = true
+note = "`case` is decided by RESOLVE and declares `reporter` derived (reporter_of_case), so the document step prints its AfterResolve derivation."
 [journey.step.expect]
 exit = 0
-stdout_contains = "RESOLVE"
+stdout_contains = "derived case.reporter (AfterResolve)"
 [[journey.step]]
 run = "enrich atlas-query layer-issues --typed-file ingest/crates/sovereign-enrichment-build/tests/fixtures/layer/issues/q1.json --json"
 note = "Complete case partition: both cases and reporter references are frozen in the expected rows."

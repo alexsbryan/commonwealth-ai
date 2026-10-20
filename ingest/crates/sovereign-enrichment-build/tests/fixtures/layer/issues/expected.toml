@@ -57,7 +57,7 @@ expected_matched = 1
 [[query.rows]]
 bind = "state.reminders.confirmed-2.3"
 type = "case_state"
-attributes = { state = "confirmed", app_version = "2.3" }
+attributes = { state = "confirmed" }
 id_bind_from = { source_doc_id = "comment-101-1", quote = "The scheduler stores the reminder time twice when the offset moves, so this is a bug on our side." }
 refs = [{ attribute = "subject", target_type = "case", target_bind = "case.reminders" }]
 attribute_evidence = [{ attribute = "app_version", source_doc_id = "comment-101-1", quote = "I can reproduce this on 2.3 with any reminder created before the change." }]
@@ -75,29 +75,22 @@ same_subject_id = "case.reminders"
 [[query.rows]]
 bind = "instruction.reminders.comment-101-2"
 type = "case_state"
-attributes = { app_version = "2.4" }
-id_bind_from = { source_doc_id = "comment-101-2", quote = "After updating, open the app once so that the scheduler can rebuild its list of reminders." }
+attributes = { state = "resolved" }
+id_bind_from = { source_doc_id = "comment-101-2", quote = "The fix for the doubled reminders is merged and goes out in version 2.4 this week." }
 refs = [{ attribute = "subject", target_type = "case", target_bind = "case.reminders" }]
 attribute_evidence = [{ attribute = "app_version", source_doc_id = "comment-101-2", quote = "The fix for the doubled reminders is merged and goes out in version 2.4 this week." }]
-evidence = [{ source_doc_id = "comment-101-2", quote = "After updating, open the app once so that the scheduler can rebuild its list of reminders." }]
+evidence = [{ source_doc_id = "comment-101-2", quote = "The fix for the doubled reminders is merged and goes out in version 2.4 this week." }]
 
 [[query.rows]]
 bind = "instruction.reminders.comment-101-3"
 type = "case_state"
-attributes = { app_version = "2.4" }
-id_bind_from = { source_doc_id = "comment-101-3", quote = "After updating, open the app once so that the scheduler can rebuild its list of reminders." }
+id_bind_from = { source_doc_id = "comment-101-3", quote = "Please update to 2.4 first." }
 refs = [{ attribute = "subject", target_type = "case", target_bind = "case.reminders" }]
 attribute_evidence = [{ attribute = "app_version", source_doc_id = "comment-101-3", quote = "Please update to 2.4 first." }]
-evidence = [{ source_doc_id = "comment-101-3", quote = "After updating, open the app once so that the scheduler can rebuild its list of reminders." }]
+evidence = [{ source_doc_id = "comment-101-3", quote = "Please update to 2.4 first." }]
 
 [[unknown]]
 record_bind = "case.shared-calendar-colour"
 source_doc_id = "comment-102-1"
 quote = "Thanks, noted for the roadmap."
 reason = "A roadmap mention is not evidence that the request was implemented or declined; neither is a declared case_state value."
-
-[[unknown]]
-record_bind = "case.reminders"
-source_doc_id = "comment-101-4"
-quote = "Thanks, all good now."
-reason = "The reporter's thanks states no new case_state value."

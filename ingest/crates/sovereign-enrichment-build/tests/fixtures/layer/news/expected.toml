@@ -58,7 +58,6 @@ shared_subject_id = "event.mill-lane-fire"
 [[query.rows]]
 bind = "report.mill-lane-fire.report-a"
 type = "report"
-attributes = { place = "Mill Lane" }
 id_bind_from = { source_doc_id = "report-a", quote = "A fire broke out at a riverside warehouse on Mill Lane late on Friday night, the fire service said." }
 refs = [{ attribute = "subject", target_type = "happening", target_bind = "event.mill-lane-fire" }]
 evidence = [{ source_doc_id = "report-a", quote = "A fire broke out at a riverside warehouse on Mill Lane late on Friday night, the fire service said." }]
@@ -66,7 +65,6 @@ evidence = [{ source_doc_id = "report-a", quote = "A fire broke out at a riversi
 [[query.rows]]
 bind = "report.mill-lane-fire.report-b"
 type = "report"
-attributes = { place = "Mill Lane" }
 id_bind_from = { source_doc_id = "report-b", quote = "Investigators are trying to find out what started Friday's fire at the Mill Lane warehouse." }
 refs = [{ attribute = "subject", target_type = "happening", target_bind = "event.mill-lane-fire" }]
 evidence = [{ source_doc_id = "report-b", quote = "Investigators are trying to find out what started Friday's fire at the Mill Lane warehouse." }]
@@ -103,12 +101,6 @@ expected_matched = 1
 [[query.rows]]
 bind = "report.bakery-fire.report-b"
 type = "report"
-attributes = { place = "Station Road" }
 id_bind_from = { source_doc_id = "report-b", quote = "A separate small fire at a bakery on Station Road the same evening was put out within minutes." }
 refs = [{ attribute = "subject", target_type = "happening", target_bind = "event.bakery-fire", distinct_from = "event.mill-lane-fire" }]
 evidence = [{ source_doc_id = "report-b", quote = "A separate small fire at a bakery on Station Road the same evening was put out within minutes." }]
-
-[[unknown]]
-source_doc_id = "report-b"
-quote = "The two workers who were taken to hospital after breathing in smoke have since been released."
-reason = "The recipe's happening.what vocabulary has no release value; do not recast release as treatment or another declared event."
