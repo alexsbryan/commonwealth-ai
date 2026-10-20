@@ -128,6 +128,7 @@ VerifyVerdict = {"kind": "supported" | "contradicted" | "unsupported" | "abstain
 
 | rung | tier | decides |
 |---|---|---|
+| `class/opinion` | any | a claim offered as the writer's view is `not_checkable`, decided before any search or model call by a marker rule kept as data (`svrn/crates/sovereign-daemon/data/opinion_markers.toml`): a first-person view ("I think", "in my view") or a judgement ("overstates", "misguided"), each a whole word, case-insensitive, any whitespace between a phrase's words, a straight apostrophe matching a curly one. `verifier` names the rule as `opinion=<digest>` of its markers, `opinion=none` where it does not read |
 | `class/no-specifics` | any | a claim carrying no number, date or name is `not_checkable` |
 | `fast/value-presence` | fast | each specific of the claim is looked for in the passages lexical search returns for the claim and for the specific; one found in none is `unsupported`, named in `specifics_absent`; otherwise `abstained`, because presence is not support |
 | `checker/chunk-support` | checker | the in-turn gate's per-claim register judges each of the claim's best three lexical candidates in turn (the reference host's `CHECKER_PASSAGES`, named in `verifier` as `passages=3`); support at or above 0.5 on any is `supported`, otherwise `unsupported`. The register says support or not, so this rung never says `contradicted` |
@@ -640,7 +641,7 @@ A host advertising `evidence:verify_sentences` verifies by this section;
 advertises it (`svrn/crates/sovereign-daemon/src/routes_oicp_verify.rs`),
 its floor `verify_floor` in its data file
 (`svrn/crates/sovereign-daemon/data/sentence_search.toml`). Its rungs are
-`class/no-specifics`, then `sentences/floor` (`unsupported`, no
+`class/opinion` (§2.6), then `class/no-specifics`, then `sentences/floor` (`unsupported`, no
 evidence), then `fast/value-presence` as a hint (`abstained`), then
 `checker/sentence-support` judging the best candidate sentences, with a
 differing figure, date or quantity making `contradicted`; its specifics

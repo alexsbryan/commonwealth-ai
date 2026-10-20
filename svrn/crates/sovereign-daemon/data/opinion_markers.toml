@@ -1,0 +1,72 @@
+# Opinion at verify's door (OICP v0.6 §2.6, rung `class/opinion`): the
+# reference host's rule, read by `routes_oicp_verify_opinion::OpinionRule`.
+# A claim holding any marker below is offered as the writer's view and is
+# answered `not_checkable` before any search or model call. Markers match as
+# whole words, case-insensitive: not preceded or followed by a letter, digit,
+# underscore or apostrophe; the words of a phrase with any whitespace between
+# them; a straight apostrophe in a marker matches a straight or a curly one.
+# Each key is a group of markers, named in the trace when one matches. A
+# value that is not a list of strings, or a marker with no words, fails the
+# daemon's tests; should a binary run with it anyway, no claim is held at the
+# door and `verifier` says `opinion=none`. An edit to a marker changes
+# `verifier` (`opinion=<digest of the groups and markers>`), then a rebuild.
+#
+# Provenance: zoracite `explorations/v2-book-figures/door_rule.json` at
+# c825ca3, decider A, tuned on the seeded `tune` half of the 1,131 by-meaning
+# calibration items. Measured there (`score.txt` §1): 189/209 opinions
+# silenced and 0/604 checkable claims (supported, contradicted, derived,
+# derived-wrong) wrongly silenced over both halves; 88/103 opinions on the
+# held-out half against 101/106 on the tuning half, so it partly fits its
+# tuning half.
+
+# The writer speaking of their own view.
+first_person = [
+  "I think",
+  "I believe",
+  "I suspect",
+  "I doubt",
+  "I judge",
+  "I find",
+  "I read",
+  "I'd wager",
+  "I would wager",
+  "I feel",
+  "I consider",
+  "I argue",
+  "I contend",
+  "I agree",
+  "I disagree",
+  "in my view",
+  "in my opinion",
+  "to my mind",
+  "strikes me",
+  "it seems to me",
+  "I'm convinced",
+  "I am convinced",
+]
+
+# A judgement passed on someone or something.
+judgement = [
+  "overstates",
+  "overstate",
+  "overestimates",
+  "underestimates",
+  "exaggerated",
+  "wrongly",
+  "misguided",
+  "foolish",
+  "unjust",
+  "unfairly",
+  "dangerous",
+  "dangerously",
+  "persuasive",
+  "implausible",
+  "arrogant",
+  "deserves more",
+  "strikes me",
+  "feels like",
+  "feels too",
+  "seems arrogant",
+  "seems dangerous",
+  "seems implausible",
+]
