@@ -1,0 +1,3 @@
+{"rule_type": "rule", "status_attribute": "standing",
+ "values": {"proposed": "proposed", "in_force": "active", "superseded": "superseded", "retracted": "retracted"},
+ "frozen": "2026-10-20, from recipe.blind.toml's `standing` values, before any read"}

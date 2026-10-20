@@ -50,6 +50,9 @@ def corpus(cid):
     if cid == "uv-third":  # a tracker's cases: uv-support's fixed tune third, scored by converge-s2/uv_served.py --loop
         return dict(id=cid, kind="cases", recipe=f"{REPO}/research/ontology-apps/support/recipe-third.toml",
                     gold=f"{BENCH}/uv-support/gold")
+    if cid == "canon-register":  # a register of rules in force (ship S4), scored by register/score.py
+        return dict(id=cid, kind="register", recipe=f"{REPO}/research/ontology-apps/register/recipe.toml",
+                    gold=f"{BENCH}/canon-register/gold/rules.json")
     if cid in BANK_RECIPES:
         return dict(id=cid, kind="bank", recipe=f"{REPO}/research/ontology-apps/saltgrass/{BANK_RECIPES[cid]}",
                     bank=f"{REPO}/bench/lanes/chaos_monkey/saltgrass.toml",
