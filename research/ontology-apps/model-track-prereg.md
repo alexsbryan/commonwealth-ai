@@ -36,3 +36,10 @@ bb16808b5).
 the second was stopped. The 2026-10-15 reads ran the daemon with `SOVEREIGN_INFERENCE_TIMEOUT_SECS=3600`, set by hand
 (5800027c1); the local config swap does not carry it. Reads `-a` and `-b` run again on a daemon started with 3600,
 nothing else changed.
+
+**Amended 2026-10-19 21:25, after reads `-a` and `-b`, both could-not-judge.** `-a` parsed every window but filed
+the stage under the answer shape's `grade` slot (an object), so no record kept one (0/15 served; 32/55 attached,
+window 1 22/27). `-b` did the same as a string and lost window 1 whole to malformed JSON (6 of 21 particulars
+missing a brace), so extract exited 1 and nothing was scored. Fixed: bbcccac14, c5825d1dd. Not fixed: one malformed
+element still loses its window. Reads `-c` and `-d` at c5825d1dd, same daemon, same bars; a window lost to malformed
+JSON is reported as such, and a read that loses one is could-not-judge as before.
