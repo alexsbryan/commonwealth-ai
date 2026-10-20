@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The port holds the probe's bytes. `data/` was written by
-//! `research/ontology-retrieval/ontology-proof/ans/k2_query.py`'s own
-//! `documentation()` and `schema()` over ft-ans-dev-b's `atlas/ontology.json`,
-//! with each attribute gloss moved into the attribute's `description`
-//! (`ans_policies.json`) — the one departure the module names.
+//! The port holds the probe's bytes, but for two named departures. `data/` was
+//! written by `research/ontology-retrieval/ontology-proof/ans/k2_query.py`'s
+//! own `documentation()` and `schema()` over ft-ans-dev-b's
+//! `atlas/ontology.json`, with each attribute gloss moved into the attribute's
+//! `description` (`ans_policies.json`) — the first departure, which the module
+//! names. The second: times read as a day, a month or a year (6b2422bfa,
+//! 2026-10-20), so the grammar's time sentence is the port's, not the probe's;
+//! `ans_query_documentation.txt` was regenerated from `query_grammar` and
+//! differs from the probe's bytes only on that sentence.
 
 use super::*;
 
