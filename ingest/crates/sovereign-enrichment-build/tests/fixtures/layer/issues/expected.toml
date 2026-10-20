@@ -68,7 +68,7 @@ id = "q3"
 file = "q3.json"
 question = "Which reminder-case state mentions version 2.4, and what post-update instruction follows?"
 kind = "version-2.4 value and duplicate-instruction source preservation"
-expected_matched = 2
+expected_matched = [1, 2]
 distinct_row_ids = true
 same_subject_id = "case.reminders"
 
@@ -84,6 +84,7 @@ evidence = [{ source_doc_id = "comment-101-2", quote = "The fix for the doubled 
 [[query.rows]]
 bind = "instruction.reminders.comment-101-3"
 type = "case_state"
+optional = true
 id_bind_from = { source_doc_id = "comment-101-3", quote = "Please update to 2.4 first." }
 refs = [{ attribute = "subject", target_type = "case", target_bind = "case.reminders" }]
 attribute_evidence = [{ attribute = "app_version", source_doc_id = "comment-101-3", quote = "Please update to 2.4 first." }]

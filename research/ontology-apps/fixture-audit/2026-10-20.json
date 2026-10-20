@@ -1051,5 +1051,47 @@
         "amend": 1
       }
     }
-  }
+  },
+  "expressed": [
+    {
+      "item": 8,
+      "fixture": "issues",
+      "where": "issues/expected.toml query q3 row instruction.reminders.comment-101-3",
+      "was": "required row",
+      "now": "optional = true",
+      "schema": "research/ontology-apps/journeys/score_baseline.py: optional rows are scored when bound, never omitted, never extra"
+    },
+    {
+      "item": 12,
+      "fixture": "issues",
+      "where": "issues/expected.toml query q3 expected_matched",
+      "was": "2",
+      "now": "[1, 2]",
+      "schema": "expected_matched as an inclusive [min, max], audited against 1 required + 1 optional row"
+    },
+    {
+      "item": 15,
+      "fixture": "issues",
+      "where": "svrn/docs/cli-contract.toml journey layer-issues-default-path step q3 stdout_contains",
+      "was": "\"matched\": 2",
+      "now": "\"state\": \"resolved\"",
+      "schema": "one stdout_contains fragment that every faithful outcome prints: the determined comment-101-2 row's state (the tightened state = resolved)"
+    },
+    {
+      "item": 21,
+      "fixture": "news",
+      "where": "news/expected.toml query q2 expected_matched",
+      "was": "2",
+      "now": "[2, 3], plus an optional row report.workers-treated.report-b-release anchored on report-b's \"The two workers who were taken to hospital after breathing in smoke have since been released.\" with subject event.workers-treated",
+      "schema": "The range can only be audited against rows, so the third outcome this item judged faithful is written as the optional row it describes. Same-document duplicates bind by row text."
+    },
+    {
+      "item": 23,
+      "fixture": "news",
+      "where": "svrn/docs/cli-contract.toml journey layer-news-default-path step q2 stdout_contains",
+      "was": "\"matched\": 2",
+      "now": "\"hit\": true",
+      "schema": "No fragment is determined for both the 2-row and 3-row outcomes (claim rows print reader content, and ref ends print id/type/name/key), so the step asserts only the hit and its note says why."
+    }
+  ]
 }

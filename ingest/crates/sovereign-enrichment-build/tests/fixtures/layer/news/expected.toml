@@ -74,7 +74,7 @@ id = "q2"
 file = "q2.json"
 question = "Which reports contain the workers-treated sentence, and what happening does each report cite?"
 kind = "duplicate-source and subject-reference check"
-expected_matched = 2
+expected_matched = [2, 3]
 shared_subject_id = "event.workers-treated"
 
 [[query.rows]]
@@ -90,6 +90,14 @@ type = "report"
 id_bind_from = { source_doc_id = "report-b", quote = "Two workers were treated for smoke inhalation and taken to the county hospital as a precaution." }
 refs = [{ attribute = "subject", target_type = "happening", target_bind = "event.workers-treated" }]
 evidence = [{ source_doc_id = "report-b", quote = "Two workers were treated for smoke inhalation and taken to the county hospital as a precaution." }]
+
+[[query.rows]]
+bind = "report.workers-treated.report-b-release"
+type = "report"
+optional = true
+id_bind_from = { source_doc_id = "report-b", quote = "The two workers who were taken to hospital after breathing in smoke have since been released." }
+refs = [{ attribute = "subject", target_type = "happening", target_bind = "event.workers-treated" }]
+evidence = [{ source_doc_id = "report-b", quote = "The two workers who were taken to hospital after breathing in smoke have since been released." }]
 
 [[query]]
 id = "q3"
