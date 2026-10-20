@@ -279,6 +279,7 @@ fn compose(
         .replace("{ontology}", &ontology_text(contract, policies, index))
         .replace("{documents}", &documents);
     let mut prompt = ChatPrompt::new(SYSTEM, user)
+        .with_response_schema("window", answer_schema::answer_schema(contract, policies))
         .with_phase_id(WINDOW_PHASE)
         .with_max_output_tokens(MAX_ANSWER_TOKENS);
     prompt.thinking_tokens = Some(THINKING_TOKENS);
@@ -293,6 +294,7 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
     json!({
         "reader": "window",
         "prompt": answer_shape(&contract),
+        "schema": answer_schema::answer_schema(&contract, policies),
         "ontology": ontology_text(&contract, policies, &index),
         "shown_fields": shown_fields(policies),
         "max_answer_tokens": MAX_ANSWER_TOKENS,
@@ -755,6 +757,9 @@ mod shown;
 
 #[path = "window_answer.rs"]
 mod answer;
+
+#[path = "window_schema.rs"]
+mod answer_schema;
 
 #[path = "window_refs.rs"]
 mod refs;

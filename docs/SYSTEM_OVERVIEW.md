@@ -652,7 +652,10 @@ question the pipeline asks about a type is a method on the resolved
   claim's envelope (the keys `window_prompt.md` gives a claim, read from it) is a field written beside `fields` and
   is read in it, and so is each key of a `grade` written as an object (a grade is one of its kind's grades, never
   an object). The answer shape offers a claim's `grade` (`window.rs::GRADE_SLOT`) only when a kind the window reads
-  lists grades; the envelope keeps it either way. A reference value resolves
+  lists grades; the envelope keeps it either way. The window call carries the answer's JSON Schema
+  (`window_schema.rs`), built from the lists the prompt renders: kinds, types and grades as enums, values typed by
+  `attribute_schema`, `fields` closed to declared names; the engine holds the answer to it once the think block
+  closes. A reference value resolves
   in `window_refs.rs` (label name, candidate, words held), by any of a particular's names when the answer lists
   `other_names` for it (a name a document says it also has; typed, never a delimiter, so "Input / Output" is one
   name; `window_particulars.rs::names_for`, also used for a subject's sourced identity and for placing an
