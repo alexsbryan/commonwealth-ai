@@ -77,3 +77,20 @@ false no-records. With the name first, only those four system rows move and the 
 - 1 revert that names no target message: three revert rules match and the fold stays pending, though the rule's
   prior state (proposed) admits only one of them.
 - 1 rule neither reader records.
+
+## Operator rulings (2026-10-20, after the S1-S4 results)
+
+- **S4 stands on the amended scorer: passes, 19/35 against the one-shot's 19/35.** The frozen 15 is reported beside
+  it. The register claim covers rules named by id. A withdrawal by description ("the twelve superseded
+  proposals") is outside the claim.
+- **Frozen fixture truths change only through a blind audit.** An assertion holds what the recipe's declaration and
+  the source documents alone determine. An agent that sees no run output audits every assertion in the issues,
+  news and mailraw fixtures (passing and failing alike) and returns keep, amend or optional with a reason.
+  Its amendments land in one commit before the next journey. What fails after that is the reader's.
+- **A particular's field holds one value per stating document**, so `agree` and dated folds see every reading.
+  The window answer is reshaped; it is not a prompt rule. It is in the final read.
+- **One final read, approved (about 1.5-2.5M output tokens):** one read per corpus as above, after every change
+  that touches reading or RESOLVE has landed and passed a one-window smoke test. Ward is reported beside its
+  noise. No second read is bought.
+- **The alias stamp is committed before the final read**, so the answer store it fills names the model that
+  served each answer.
