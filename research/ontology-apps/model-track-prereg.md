@@ -210,3 +210,10 @@ the daemon's 3600s deadline with 42,924 tokens generated (11.9 tok/s; the 35B de
 are could-not-judge, not failed. To measure them needs a deadline of at least 2 hours per call and, at 3 windows a
 read, an estimated 8-10 machine hours for both reads. That spend is the operator's call. Until then the plan's stop
 stands as written: the 35B's best local read is 17 of 27, and engineering on this track stops.
+
+**Amendment (2026-10-20 07:36, before any read).** The operator directed the pivot on: the smoke and both reads run at f55e4aeb6, whose window
+reader reasons up to 22,000 tokens (was 48,000), just above the 35B's longest reasoning on these windows (21,241
+over 47 calls). The daemon closes the 27B's think block there and it answers, so the 27B is never held tighter
+than the 35B was. Nothing else changes: same cut, askers, bars and decisions. Price at 11.9 tok/s: at most about
+35 minutes per window, so a read of 6 windows plus RESOLVE runs to about 4 hours and both to about 8. The smoke is
+repeated on `sec_00003` under the same bar, and a second failed smoke stops the pivot.
