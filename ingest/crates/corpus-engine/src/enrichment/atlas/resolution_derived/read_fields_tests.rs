@@ -323,8 +323,10 @@ fn deal(id: &str) -> Entity {
 /// A reference holds a record or nothing: a reading that folds equal to a
 /// company the statement's own message names in its fields counts as that
 /// company's record, never its words, and is dropped when the company is in
-/// the exclusion set `ours`; a mention, or a company only another message
-/// names, is never held and stays on the derivation line, cited.
+/// the exclusion set `ours`; a company only another message names is held by
+/// its exact identity value (`sourced_anywhere`, 2026-10-20: before, it was
+/// never held); a mention is never held and stays on the derivation line,
+/// cited.
 #[test]
 fn a_record_holds_the_record_its_statements_pick_or_nothing() {
     let p = OntologyBlock {
@@ -431,11 +433,17 @@ fn a_record_holds_the_record_its_statements_pick_or_nothing() {
         "the mention is kept, cited, and never counted"
     );
     assert_eq!(held("entity-d2"), Some(json!(pge)));
-    assert_eq!(held("entity-d3"), None, "m4's fields name no pge.com");
+    assert_eq!(
+        held("entity-d3"),
+        Some(json!(pge)),
+        "m4's fields name no pge.com, but m3's metadata projected it: held by its exact identity value"
+    );
     let d3 = line("entity-d3");
-    assert_eq!(d3.outcome, DerivedOutcome::Nothing);
-    assert_eq!(d3.unresolved.len(), 1, "{d3:?}");
-    assert_eq!(d3.unresolved[0].claim, "claim-6");
+    assert!(
+        matches!(&d3.outcome, DerivedOutcome::Decided { values, .. } if values == &[pge.clone()]),
+        "{d3:?}"
+    );
+    assert!(d3.unresolved.is_empty(), "{d3:?}");
     assert_eq!(held("entity-d4"), None, "our own side is never held");
     let d4 = line("entity-d4");
     assert_eq!(d4.outcome, DerivedOutcome::Nothing);

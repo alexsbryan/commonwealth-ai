@@ -11,7 +11,9 @@
 //! record is in an exclusion set over the type (`exclusions_of`). A reading
 //! that names no such record is a window read's name for a subject: it
 //! counts as the record RESOLVE put the same document's statements read
-//! under that name on (`SUBJECT_NAME_ATTRIBUTE`). A reading
+//! under that name on (`SUBJECT_NAME_ATTRIBUTE`). Failing both, a reading of
+//! a metadata-sourced type counts as the one record of it any document's
+//! metadata projected whose identity value it folds equal to. A reading
 //! of a thing the window read gave other names (`OTHER_NAMES_ATTRIBUTE`) lands
 //! by its value, then by each other name. One that
 //! names none of these is never held and never
@@ -32,7 +34,7 @@ use crate::enrichment::atlas::precision::{Precision, SourcePrecision};
 use crate::enrichment::atlas::resolution_records::{decides, BuildAtoms};
 use crate::enrichment::atlas::resolution_sources::key_name;
 use crate::enrichment::ontology::derived::{FoldBy, SetDecl};
-use crate::enrichment::ontology::{AttrDecl, AttrFamily, OntologyPolicies, TypeIndex};
+use crate::enrichment::ontology::{AttrDecl, AttrFamily, OntologyPolicies, SourceDecl, TypeIndex};
 use crate::enrichment::pipeline::document_read::{
     field_readings, other_names, window_subject_name, DocumentReadField, SUBJECT_FIELDS_ATTRIBUTE,
 };
@@ -115,8 +117,8 @@ fn record_read(
 }
 
 /// The one record of type `of` that `doc` names `want` by (its fields, or a
-/// window subject name, in that order), `None` when none does, or why several
-/// do.
+/// window subject name, in that order; failing both, for a metadata-sourced
+/// `of`, [`sourced_anywhere`]), `None` when none does, or why several do.
 fn record_named(
     graph: &Graph<'_>,
     doc: &str,
@@ -168,9 +170,60 @@ fn record_named(
         .collect();
     match subjects.len() {
         1 => Ok(Some(*subjects.first().unwrap())),
-        0 => Ok(None),
+        0 => sourced_anywhere(graph, doc, of, want),
         n => Err(format!(
             "the document's statements about {want:?} are on {n} `{of}` records"
+        )),
+    }
+}
+
+/// The one record of a metadata-sourced `of` with identity keys, projected
+/// from any document's metadata, whose joined identity value folds equal to
+/// `want`: a member a message names in its text who wrote another message.
+/// Failing input, named: 06-tasks n1/n5, a new owner named by someone other
+/// than the message's author held nothing (2026-10-20). Exact identity value
+/// only: a display name ("Priya Shah" for handle "priya") does not land.
+/// Several such records refuse, with the count; none is `None`; nothing is
+/// minted.
+fn sourced_anywhere(
+    graph: &Graph<'_>,
+    doc: &str,
+    of: &str,
+    want: &str,
+) -> Result<Option<usize>, String> {
+    let keys = graph.index.effective_identity(of);
+    let sourced = graph
+        .index
+        .get(of)
+        .is_some_and(|t| matches!(t.source, Some(SourceDecl::Metadata(_))));
+    if !sourced || keys.is_empty() {
+        return Ok(None);
+    }
+    let found: BTreeSet<usize> = graph
+        .participants
+        .values()
+        .flatten()
+        .filter_map(|(_, id)| graph.entity_at.get(id.as_str()).copied())
+        .filter(|&i| {
+            let e = &graph.entities[i];
+            let t = e.entity_type.as_str_repr();
+            (t == of || graph.index.is_a(t, of))
+                && fold_identity_value(&key_name(&e.attributes, keys.iter().map(String::as_str)))
+                    .is_some_and(|k| k == want)
+        })
+        .collect();
+    debug!(
+        document = doc,
+        of,
+        want,
+        found = found.len(),
+        "atlas/derived: a reading names a sourced record another document's metadata projected"
+    );
+    match found.len() {
+        0 => Ok(None),
+        1 => Ok(found.first().copied()),
+        n => Err(format!(
+            "{n} `{of}` records other documents' metadata name are {want:?}"
         )),
     }
 }

@@ -917,7 +917,9 @@ question the pipeline asks about a type is a method on the resolved
   is dropped (`excluded`) when that record is in an exclusion set over the type
   (`DerivedPolicy::exclusions_of`, the one `pick.rs` reads too); failing a named
   record it counts as the one RESOLVE put the same document's statements a window read
-  under that name on (`SUBJECT_NAME_ATTRIBUTE`, 2026-10-15), and otherwise is
+  under that name on (`SUBJECT_NAME_ATTRIBUTE`, 2026-10-15); failing that, for a metadata-sourced type, the
+  one record of it any document's metadata projected with that exact identity value (several refuse, with the
+  count; `read_fields::sourced_anywhere`, 2026-10-20), and otherwise is
   never held: it stays on the derivation line under `unresolved`, cited by its
   statement, document, words and evidence, so a served reference is a record of
   its type or nothing; RESOLVE itself writes no record value. A read

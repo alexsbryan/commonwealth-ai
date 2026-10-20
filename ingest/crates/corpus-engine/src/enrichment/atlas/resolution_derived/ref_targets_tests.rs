@@ -518,12 +518,27 @@ fn authored(id: u64, doc: &str, author: &str, content: &str) -> EnrichmentChunkR
 /// Two messages of one team, each its own window: sam's hands the export to
 /// priya, who wrote the other; the reader names Sam, who asked, a `person`.
 async fn tasks_resolved(answerer: Answerer<'_>) -> (Vec<Claim>, Vec<Entity>, Vec<DerivedValue>) {
-    let p = policies(TASKS);
-    let rows = [
+    tasks_resolved_in(TASKS, &[], answerer).await
+}
+
+/// [`tasks_resolved`] under the declaration `toml`, with `more` documents
+/// in a third section, read for their metadata only.
+async fn tasks_resolved_in(
+    toml: &str,
+    more: &[EnrichmentChunkRow],
+    answerer: Answerer<'_>,
+) -> (Vec<Claim>, Vec<Entity>, Vec<DerivedValue>) {
+    let p = policies(toml);
+    let mut rows = vec![
         authored(1, "d1", "sam", HANDED),
         authored(2, "d2", "priya", TAKEN),
     ];
-    let docs = SectionDocuments::from_chunk_rows([("s1", &[1u64][..]), ("s2", &[2u64][..])], &rows);
+    rows.extend(more.iter().cloned());
+    let rest: Vec<u64> = more.iter().map(|r| r.id).collect();
+    let docs = SectionDocuments::from_chunk_rows(
+        [("s1", &[1u64][..]), ("s2", &[2u64][..]), ("s3", &rest[..])],
+        &rows,
+    );
     let projection = crate::enrichment::atlas::project_source_atoms(&docs, &p, "tasks").unwrap();
     let mut claims = vec![
         handed(
@@ -651,10 +666,10 @@ async fn a_person_is_never_decided_into_a_member_record() {
 /// someone else wrote (sam hands the export to priya), holds nothing: a
 /// reference to a sourced type lands only on a record the statement's own
 /// document's fields name, and d1's fields name sam alone. priya's record
-/// exists, projected from the message she wrote. Ignored until the seat
-/// decides how such a reference finds it.
+/// exists, projected from the message she wrote, and the reference now
+/// finds it by her handle among every document's projected members
+/// (`read_fields::sourced_anywhere`).
 #[tokio::test]
-#[ignore = "06-tasks n1/n5: a sourced type's record named in another's text; design pending"]
 async fn a_new_owner_named_in_another_members_message_holds_their_record() {
     let (claims, entities, lines) = tasks_resolved(Answerer::Proposed).await;
     let priya = entities
@@ -674,6 +689,41 @@ async fn a_new_owner_named_in_another_members_message_holds_their_record() {
     assert_eq!(
         handed.attributes.get("to_owner"),
         Some(&Value::String(priya)),
+        "{why:?}"
+    );
+}
+
+/// The fallback refuses where it cannot choose: two records a reading of a
+/// `member` could be, priya the author of d2 and priya the lead d3 names
+/// (a `lead` is a `member`, projected from its own field), so `to_owner`
+/// holds neither and says how many.
+#[tokio::test]
+async fn a_name_two_sourced_records_hold_is_refused_with_the_count() {
+    let toml = format!(
+        "{TASKS}\n[[types]]\nname = \"lead\"\nkind = \"entity\"\nspecializes = \"member\"\n\
+         description = \"A team lead.\"\nattributes = [{{ name = \"handle\", type = \"text\" }}]\n\
+         identity = [\"handle\"]\nsource = {{ metadata = [\"lead\"], attributes = {{ handle = \"value\" }} }}\n"
+    );
+    let lead = EnrichmentChunkRow {
+        metadata_raw: Some(json!({ "id": "d3", "author": "sam", "lead": "priya" }).to_string()),
+        ..row(3, "d3", "Roster for the quarter.")
+    };
+    let (claims, entities, lines) = tasks_resolved_in(&toml, &[lead], Answerer::Proposed).await;
+    let priyas = entities
+        .iter()
+        .filter(|e| e.canonical_name.to_lowercase().contains("priya"))
+        .count();
+    assert_eq!(priyas, 2, "a member and a lead: {entities:?}");
+    let handed = claims.iter().find(|c| c.id.as_str() == "handed").unwrap();
+    assert_eq!(handed.attributes.get("to_owner"), None);
+    let why: Vec<&String> = lines
+        .iter()
+        .filter(|l| l.atom == "handed")
+        .flat_map(|l| l.unresolved.iter().map(|u| &u.why))
+        .collect();
+    assert!(
+        why.iter()
+            .any(|w| w.contains("2 `member` records other documents' metadata name")),
         "{why:?}"
     );
 }
