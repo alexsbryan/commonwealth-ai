@@ -165,8 +165,14 @@ async fn install(engine: &Arc<CorpusEngine>, corpus_id: &str) -> corpus_index::R
     (prepared.run)(None).await.map(drop)
 }
 
-/// Start an install on its own task and return once its partition is on
-/// disk, so a cancel lands mid-ingest.
+/// Start an install on its own task and return once it is registered for
+/// cancel with its partition on disk, so a cancel lands mid-ingest.
+///
+/// Both, because they are different moments: the partition exists once the
+/// index opens, and the cancel flag is registered only after the dedup seed
+/// read that follows (`engine/ingest.rs`, `cancel_registry.register`). A
+/// wait on the partition alone returned inside that gap — 2-5 ms at rest,
+/// wider under load — and the cancel then found nothing to stop.
 async fn install_in_flight(
     f: &Fixture,
     corpus_id: &str,
@@ -175,10 +181,16 @@ async fn install_in_flight(
     let (engine, id) = (Arc::clone(&f.engine), corpus_id.to_string());
     let task = tokio::spawn(async move { install(&engine, &id).await });
     let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
-    while !IngestPort::corpus_disk_status(f.engine.as_ref(), corpus_id).partition_present {
+    loop {
+        let registered = LocalCorpusPort::ingest_in_flight(f.engine.as_ref(), corpus_id);
+        if registered
+            && IngestPort::corpus_disk_status(f.engine.as_ref(), corpus_id).partition_present
+        {
+            break;
+        }
         assert!(
             tokio::time::Instant::now() < deadline,
-            "the partition never appeared"
+            "the install never registered with its partition on disk"
         );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }

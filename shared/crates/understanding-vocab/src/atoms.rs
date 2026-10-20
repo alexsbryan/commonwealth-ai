@@ -310,9 +310,11 @@ fn short_hash(input: &str) -> String {
 }
 
 /// Reference to a specific passage in the corpus. Step 3a fills
-/// `chunk_id` with the section id (the grain we have from sketches);
-/// Phase 5 refines it to the paragraph chunk id once the full chunk
-/// index is traversed.
+/// `chunk_id` with the section id (the grain we have from sketches),
+/// and it stays the section id: resolution reads it as the section the
+/// quote was read from. The installed index chunk that holds the quote
+/// is placed separately, in `index_chunk`, at the end of the atlas
+/// build.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChunkRef {
     pub chunk_id: String,
@@ -326,6 +328,15 @@ pub struct ChunkRef {
     /// backfills it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_doc_id: Option<String>,
+    /// Id of the installed corpus chunk whose text holds
+    /// `passage_preview` whole, placed when the atlas is built from a
+    /// recipe. This is the id the daemon's chunk endpoint resolves
+    /// (`/v1/corpora/{corpus}/chunks/{id}`); `chunk_id` (a section id)
+    /// is not. `None` when unplaced: no quote, no owning document
+    /// found, the quote spans a chunk boundary, or an `atoms.json`
+    /// written before placement existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index_chunk: Option<u64>,
 }
 
 impl ChunkRef {
@@ -334,6 +345,19 @@ impl ChunkRef {
             chunk_id: chunk_id.into(),
             passage_preview: preview,
             source_doc_id: None,
+            index_chunk: None,
+        }
+    }
+
+    /// The id a reader cites this evidence by: the installed chunk
+    /// (`index_chunk`, as a decimal string) when the build placed one,
+    /// else `chunk_id` as before. The one decider for every row that
+    /// lists evidence (`atoms_lookup`, `enrich atlas-query --json`), so an
+    /// atlas built before placement reads exactly as it did.
+    pub fn cited_id(&self) -> String {
+        match self.index_chunk {
+            Some(id) => id.to_string(),
+            None => self.chunk_id.clone(),
         }
     }
 

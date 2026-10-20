@@ -109,6 +109,7 @@
       "Bash(./scripts/ralph-check.sh *)",
       "Bash(scripts/ralph-mark.sh *)",
       "Bash(./scripts/ralph-mark.sh *)",
+      "Bash(ralph-result *)",
       "Bash(euphemia learn *)",
       "Bash(euphemia correct *)",
       "Bash(euphemia lessons *)"

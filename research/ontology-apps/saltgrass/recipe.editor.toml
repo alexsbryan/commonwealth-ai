@@ -1,0 +1,221 @@
+# The Saltgrass Ledger — a manuscript-reading recipe for its author.
+#
+# A sixteen-chapter village mystery set in Glasswater Stave. Read the way an
+# editor reads a mystery: who is in it, what happened (and when, by the tide),
+# who says what about it, what the narration itself establishes, what the
+# tide ledger and other written records show, what each character knows or
+# suspects as the book goes on, who has a reason, and where the objects that
+# matter are. Chapters are read in book order; the clock is narrative.
+
+[corpus]
+id = "saltgrass-editor"
+name = "The Saltgrass Ledger — manuscript"
+description = "A sixteen-chapter mystery manuscript set in the salvage port of Glasswater Stave, read as characters, incidents, accounts, records, knowledge and motive in chapter order."
+license = "private"
+mesh_sharing = false
+query_sharing = false
+schema_version = 1
+
+# The manuscript as one markdown file (or a folder of them), one heading per
+# chapter, chapters in reading order.
+[acquire]
+type = "local_file"
+path = "/Users/alexsbryan/.svrnmesh/bench-corpora/chaos-saltgrass/saltgrass-ledger.txt"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "mystery-manuscript"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This is the manuscript of a mystery novel, The Saltgrass Ledger, in sixteen
+chapters. Corwin Pellow, harbormaster of Glasswater Stave for twenty-one years,
+is found floating in the lock basin at dawn; Maren Ashquill, who keeps the tide
+ledger of gate openings, vessels and water heights, starts to ask what the
+ledger saw. Read it as an editor reads a mystery. The villagers are the
+characters; what happened is a set of incidents, each at a time and a place,
+and each opening of the lock gates is an incident the ledger records. Keep
+apart four ways the book tells you something: what a character SAYS happened
+(which may be a lie, a mistake, rumour or a guess), what the NARRATION itself
+shows happening, what a written RECORD in the story shows (the tide ledger,
+Pellow's own notes, letters), and what a character KNOWS, SUSPECTS or HIDES at
+that point in the book. Note how a speaker could know what they claim: saw it,
+heard it, was told it, or only supposes it — the village is sure of things it
+cannot have seen. Record every reason a character has, or is said to have, to
+want Pellow gone or to lie. Track where the objects that matter are and who
+holds them. Order is the order of the chapters, not the calendar; times of day
+and states of the tide are the story's own clock and should be kept as written.
+"""
+must_not = [
+  "Present what a character says as what happened; only the narration or a record in the story establishes an incident.",
+  "Invent incidents, motives or a solution the manuscript does not contain, or guess who killed Pellow.",
+  "Rewrite or suggest replacement prose for the manuscript.",
+]
+max_entities_per_section = 25
+
+# ── Things ─────────────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "character"
+kind = "entity"
+description = "A person in the story: a villager of Glasswater Stave, a crew member, a visitor, the dead harbormaster."
+identity_criterion = "One character when the same person is meant: a full name, surname, first name, nickname, kin term ('her father') or title ('the harbormaster', 'the widow') that the scene makes refer to the same person. A title names whoever holds it at that point in the book, so 'the harbormaster' after Pellow's death may be someone else. Two people sharing a surname are different characters."
+attributes = [
+  { name = "occupation", type = "text", by = "most", description = "What they do in the port: lock-keeper, salvager, publican, harbormaster." },
+  { name = "household", type = "text", by = "most", description = "The family or house they belong to." },
+]
+
+[[enrichment.ontology.types]]
+name = "object"
+kind = "entity"
+description = "A physical thing that matters to the story: the tide ledger and its pages, the painted gauge, the gates, a vessel, a letter, a lantern, a coat, a tool."
+identity_criterion = "One object when the same physical thing is meant, by its name, its owner ('Pellow's notebook') or a description the scene ties to it. A vessel is identified by its name. A single page or entry of the ledger is part of the ledger, not a separate object, unless it is torn out or copied."
+attributes = [
+  { name = "sort", type = "text", by = "agree", values = ["vessel", "record", "gear", "clothing", "personal effect", "cargo", "other"] },
+  { name = "owner", type = "ref", of = "character" },
+]
+
+# ── What happened ──────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "incident"
+kind = "event"
+description = "Something that happens or is said to happen in the story-world: Pellow's last crossing of the cobbles, the death, the finding of the body, a meeting, a quarrel, an opening of the gates."
+participants = { actor = "character", witness = "character", victim = "character" }
+identity_criterion = "One incident when the same occurrence is meant: the same people doing the same thing at the same place on the same tide or night, however differently it is described or dated by different speakers. Two speakers placing one event at different hours are describing one incident, not two."
+attributes = [
+  { name = "when", type = "time", description = "When it happens, as the text gives it: a date, an hour, a state of the tide ('two hours after high water')." },
+  { name = "where", type = "text", description = "Where it happens, as written: the lock basin, the gates, the cobbles, a cottage." },
+  { name = "what", type = "text", description = "What happened, in a short phrase." },
+]
+
+[[enrichment.ontology.types]]
+name = "tie"
+kind = "relation"
+from = "character"
+to = "character"
+description = "A standing bond between two characters."
+attributes = [
+  { name = "nature", type = "text", values = ["kin", "marriage", "courtship", "employment", "debt", "partnership", "friendship", "rivalry", "grudge", "other"] },
+]
+
+[[enrichment.ontology.types]]
+name = "frame_of_mind"
+kind = "state"
+of = "character"
+description = "A character's condition at that point in the book: afraid, grieving, guilty, suspicious, defiant, relieved."
+
+# ── What the book tells the reader ─────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "account"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "incident"
+label = "account"
+description = "What a character says happened — to another character, in dialogue or reported speech. May be true, mistaken, rumour or a lie."
+grades = ["saw it", "heard it", "was told", "supposes"]
+attributes = [
+  { name = "speaker", type = "ref", of = "character" },
+  { name = "told_to", type = "ref", of = "character" },
+  { name = "source_named", type = "ref", of = "character", description = "Who the speaker says they had it from, when they were told." },
+]
+
+[[enrichment.ontology.types]]
+name = "narrated"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "incident"
+description = "What the narration itself shows happening, not filtered through a character's say-so."
+
+[[enrichment.ontology.types]]
+name = "record"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "incident"
+description = "What a written record inside the story shows: an entry of the tide ledger (an opening of the gates, the vessels through, the height on the gauge), Pellow's notes, a letter, a bill."
+attributes = [
+  { name = "document", type = "ref", of = "object", description = "The record it is written in." },
+  { name = "written_by", type = "ref", of = "character" },
+  { name = "altered", type = "text", values = ["as written", "corrected", "missing", "torn out", "forged"] },
+  { name = "vessel", type = "ref", of = "object", description = "A vessel the entry records through the gates." },
+  { name = "water_height", type = "quantity", unit = "ft", description = "The height of water against the painted gauge." },
+  { name = "gates", type = "text", values = ["opened inward", "opened outward", "opened both ways", "kept shut"] },
+]
+
+[[enrichment.ontology.types]]
+name = "knowledge"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "character"
+description = "What a character is shown to know, suspect, believe, conceal or deny about an incident at that point in the book."
+attributes = [
+  { name = "about", type = "ref", of = "incident" },
+  { name = "stance", type = "text", values = ["knows", "suspects", "believes", "doubts", "conceals", "denies", "learns"] },
+  { name = "how", type = "text", values = ["saw it", "heard it", "was told", "read it", "worked it out", "unexplained"] },
+]
+
+[[enrichment.ontology.types]]
+name = "motive"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "character"
+description = "A reason a character has, or is said to have, to want Pellow gone, to harm someone, or to lie: a debt, a secret Pellow wrote down, a cargo, a grudge, a love."
+attributes = [
+  { name = "against", type = "ref", of = "character" },
+  { name = "reason", type = "text" },
+  { name = "alleged_by", type = "ref", of = "character", description = "Who says so; empty when the narration shows it." },
+]
+
+[[enrichment.ontology.types]]
+name = "custody"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "object"
+description = "Where an object is or who has it at that point in the story, as said or shown."
+attributes = [
+  { name = "held_by", type = "ref", of = "character" },
+  { name = "where", type = "text", description = "Where it is, as written." },
+  { name = "said_by", type = "ref", of = "character", description = "Who says so; empty when the narration shows it." },
+]
+
+[enrichment.ontology.voices]
+not_entities = ["the narrator"]
+
+[enrichment.ontology.change]
+clock = "narrative"
+
+[enrichment.ontology.tension]
+label = "contradiction"
+between = ["account", "narrated", "record", "custody", "motive"]
+same = ["subject"]
+not_conflicts = [
+  "One speaker's account given before they learned something and another given after it: that is a changed mind, shown as such, not a contradiction.",
+  "A rumour repeated by several villagers is one story told many times, not several witnesses agreeing.",
+  "Water heights read at different hours of the same tide differ by nature.",
+  "A title ('the harbormaster') naming different people before and after Pellow's death.",
+  "A character's lie that the narration later exposes is the plot, not a slip; report it as a lie told.",
+]
+
+[enrichment.ontology.derive]
+configurations = true

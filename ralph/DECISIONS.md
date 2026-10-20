@@ -2162,6 +2162,16 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose (operator, asked by the seat with both options priced: "Close, file residue"): pc-partial-decline-verdict stays [x]; measure-2 closes at b43e0e20f as the reading it is; the two shapes and the 35B decline-plus-GK Grounded label go below the cut as pc-partial-decline-residue with their transcripts as fixtures.
 - Because: a third round costs ~2.5 h (code plus a 2 h reading alone) for one false label in 40 turns and one miss that predates the row; the operator ruled the residue a cleanup, not a blocker. The seat stopped the director's resolution session (an operator STOP, 18:11Z) so it would not reopen the row against the ruling; it had already merged the readings (379e56f1e).
 
+**every-kind-finish-1 · 2026-10-15 · REVIEW-audit-ek-verify · director** — this commit
+- Needed: the audit (findings e68365a17) found ek-window-refs' outcome unreached on saltgrass-asked, because the window model writes ref fields as its own particular labels (`p6`) and `window.rs` `reading` refuses them before projection; and TESTALL (14644/4) and PREPUSH (arch-gate) red on files outside the range. The package asked whether the label repair is its own row, and whether the audit closes against the range.
+- Chose: (1) one repair row, `ek-window-ref-labels`, inserted before the audit, which now depends on it and re-runs the same saltgrass replay after it: a Ref value equal to a same-window particular's `ref` of type `of` (or is_a it) reads as that particular's name, in both `reading` callers, CONTRACT_VERSION bumped, no prompt change. (2) The audit row keeps TESTALL and PREPUSH and now says how to read a red: files with no commit in 60eeeb73c..HEAD are recorded foreign, a red on a file this queue touched is §6.
+- Because: ek-window-refs' own text ("a window read's ref field resolves to the record its window read under that name") implies the fix; the label IS the window's name for the particular, and the charter decides fixing a row whose premise the tree contradicts. It changes no prompt and no RESOLVE question, so it replays at zero spend. Closing on the campaign's share with foreign reds recorded is the settled precedent (A10 rd-1, browser-dial-3, the-link-7); the bar is unchanged for anything this queue touched.
+
+**every-kind-finish-2 · 2026-10-15 · REVIEW-audit-ek-verify · director** — this commit
+- Needed: every-kind-finish-1 said `ek-window-ref-labels` "changes no RESOLVE question"; that was wrong. On saltgrass-asked the newly Supported speaker labels change the atoms and so RESOLVE's candidate sets, and the row's `--asker recorded` resolve asked the local model 9 new RESOLVE questions (18 chat + 2 embed lines; store 293 -> 313, mtime moved). The worker asked: accept, or treat as a spend breach (truncate to 293).
+- Chose: accept the 20 recorded lines; the audit row's saltgrass resolve becomes `--asker replay`, so re-running it can no longer reach a model, and the mtime rule reads "a prompt or the replays' inputs" changed. TESTALL and PREPUSH stay as the row has them.
+- Because: no RESOLVE template changed in 60eeeb73c..HEAD (the only diffs under `resolve_records` are the `REASON_TOKENS` re-export and the new `reasoned_wave`, both used by waves only), so the new questions are the row's intended reading change reaching RESOLVE, not a prompt change. The spend was the row's own prescribed command, local, zero external tokens; truncating would not un-spend it and would leave the audit permanently §6. Keeping the lines is reversible (drop lines 294-313).
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -13811,3 +13821,76 @@ Falsified if: a pool halt with "merge conflict" recurs while the merge applies c
 Causes, from b43e0e20f's findings: `pivot_answers`' value test (a fresh number or a capitalised mid-sentence word) misses a lowercase or code-span answer after " but " (sovereign-core runtime/grounding/decline.rs); `strip_gk_caveat` (repair.rs:58) keeps only the text after a mid-text "from general knowledge:", so `declines_asked_fact` (decline.rs:155) never sees the opening decline. Fixtures, kept in the main tree: target/ralph/phase-c/pc-partial-decline-verdict-measure-2/phase-c/pdm/runs/4b-chatask-r3-q1-warmup.txt (answers) and .../runs/4b-firm-r1.transcripts.jsonl (declines). The 4B gk_rescue "1945-06-23" release to a conference-room question (1 of 3) is pd-anchor-unenriched's case.
 
 </details>
+
+## every-kind-finish-1 · 2026-10-15 — speaker labels get a repair row; foreign gate reds are recorded, not §6
+
+<details><summary>reasoning, evidence, package</summary>
+
+Evidence, reproduced by the director:
+
+- `~/.svrnmesh/enrichment/saltgrass-asked/runs/questions-full-007.json` (11:52): every `speaker`
+  reading is unknown; the reasons are `"pN" is neither a character this document's fields name nor
+  words it holds` (p2, p3, p4, p5, p6, p8, p10) and `the window read states no value`. Not one is
+  Supported.
+- `~/.svrnmesh/indexes/saltgrass-asked/atlas/derived_decisions.jsonl`: reference lines are only
+  (account, place, nothing) 10, (notice, place, nothing) 16, (sighting, place, nothing) 1.
+- `window.rs:418-457`: the Ref arm accepts a named Record/Mention candidate or words in the
+  document, and nothing else. `window_prompt.md:16` asks for `"ref": <your label, such as p1>` and
+  :8 has claims name particulars by `ref`. So the label never reaches `read_fields.rs` `record_read`
+  (third rule, `SUBJECT_NAME_ATTRIBUTE`).
+- Foreign reds: `git log --oneline 60eeeb73c..HEAD -- <file>` is empty for all nine named files
+  (f26_egress_census.rs, chat_round_trip.rs, identity_and_health.rs, found_and_join.rs,
+  engine_conformance/{run,server}.rs, desktop commands/reading.rs, llama_router/live.rs,
+  model_slot.rs).
+
+Rejected: reopening ek-window-refs. It is committed and its rule is right; the gap is upstream in
+the window envelope, and a separate row is revertible on its own. Rejected: a prompt change telling
+the model to write names (charter: the operator's, and it spends).
+
+Falsified if: after `ek-window-ref-labels`, the saltgrass replay still shows zero
+(type, `speaker`, decided) reference lines while some speaker particular is the subject of a
+statement in the same document. That would mean the label is not the blocker, or the third rule
+does not fire. Also falsified if the replay prints `no recorded answer` or moves an answer-store
+mtime, which would mean the repair changed a prompt.
+
+REVIEW-AFTER: the precedent closes audits on a campaign's own share, but no clause of this charter
+names it. The arch-gate red (`model_slot.rs` 6146->6209, band +5 files) blocks pre-push for the
+whole branch until its owner splits it; it belongs to the lane that landed c4a0b8f61..96921a3a8.
+
+</details>
+
+## every-kind-finish-2 · 2026-10-15 — saltgrass's 9 local RESOLVE answers stand; the audit's resolve replays
+
+<details><summary>reasoning, evidence, package</summary>
+
+Evidence, reproduced by the director:
+
+- `git diff 60eeeb73c..HEAD -- .../atlas/resolve_records.rs .../resolve_records/select.rs`: the
+  re-export line and `const REASON_TOKENS` -> `pub(crate)`; `wave.rs` adds `reasoned_wave` only.
+  No `*prompt*` or `.md` template under ingest/ changed in the range.
+- `tail -n 20 ~/.svrnmesh/enrichment/saltgrass-asked/answers.jsonl`: 9 resolve_reason + 9
+  resolve_select (commonwealth/primary), 2 embed (qwen3-embedding-0.6b).
+- `sovereign enrich resolve saltgrass-asked --asker replay` (director, after the worker's run):
+  exit 0, 0 `no recorded answer`, `read statements as atoms: 8 state(s), 0 relation(s)`, store
+  mtime 1792091658 / 4,336,213 bytes before and after, and the (type, attribute, outcome)
+  reference counts identical to the worker's table (18 speaker decided, ledger hand/vessel
+  decided).
+
+Rejected: truncating answers.jsonl to 293 lines. The questions were already asked; removing the
+answers makes every replay print `no recorded answer`, so the audit could never pass without
+asking them again.
+
+Falsified if: a later `--asker replay` resolve on saltgrass-asked at this HEAD prints
+`no recorded answer` or moves the store's mtime, or a diff shows a RESOLVE prompt template changed
+in 60eeeb73c..HEAD.
+
+REVIEW-AFTER: the charter leaves model spend to the operator. This accepts spend already made by the
+row's own command (9 local questions, zero external tokens) and spends nothing further; the operator
+may drop lines 294-313 of the store if it should not stand.
+
+</details>
+
+**Correction to every-kind-finish-2 (2026-10-15, operator's seat).** "Local, zero external tokens" was wrong:
+`commonwealth/primary` is the daemon's remote engine, `deepseek-flash` (`~/.svrnmesh/config.toml` `[engine]`,
+since the 2026-10-13 ceiling test), so the 9 RESOLVE answers were DeepSeek Flash calls. The operator kept them,
+labelled in `research/ontology-apps/saltgrass/resolve-labels.jsonl` (6901ea816, whose message also says "local").

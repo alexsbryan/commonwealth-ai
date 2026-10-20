@@ -1,0 +1,233 @@
+# A delivery company's vans: drivers' daily check emails, garage job sheets and
+# invoices, fuel receipts. Built from DESCRIPTION.md (partner not available; see
+# transcript.md for which answers are the description's and which are assumed).
+
+[corpus]
+id = "fleet-vans"
+name = "Delivery vans: checks, garage work and fuel"
+description = "Drivers' daily check emails, garage job sheets and invoices, and fuel receipts for a fleet of 25 delivery vans, read as vans, drivers, defects, garage jobs, mileage readings, service due dates and daily allocations."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# Assumed: the material is a mailbox export (maildir / .eml). Daily checks are
+# emails; garage job sheets, invoices and fuel receipts arrive as emails or as
+# their attachments, which the email extractor dispatches as described assets.
+[acquire]
+type = "local_file"
+path = "SOURCE_PATH"
+
+[extract]
+type = "email"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "van-fleet"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This is the record of a delivery company's 25 vans, kept by the person who looks after
+them. Drivers send a daily check email for the van they have that day: its mileage and any
+defects they found. Garages send job sheets and invoices for services and repairs: which
+van, the work done, what it cost and in what currency, the date, often the mileage, and
+when the next service is due by mileage or by date. Fuel receipts may carry the van and its
+mileage. A van is known by its registration plate; spacing and case in a plate do not
+make a different van. A defect is one fault on one van: the same fault reported on several
+daily checks before it is fixed is one defect, and a garage saying it repaired that fault is
+what fixes it.
+"""
+must_not = [
+  "say a van is roadworthy or safe to drive: it reports what the checks and garages said, nothing more",
+]
+
+# ── Things ────────────────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "van"
+kind = "entity"
+description = "One of the company's vans, known by its registration plate, with its make and model and its year."
+identity = ["registration"]
+identity_criterion = "Two mentions are one van when they give the same registration plate, ignoring spaces and letter case. A fleet number or nickname names the same van only where the text ties it to that plate."
+attributes = [
+  { name = "registration", type = "text", by = "agree", description = "The registration plate, e.g. AB19 CDE." },
+  { name = "model", type = "text", by = "most", description = "Make and model, e.g. Ford Transit Custom." },
+  { name = "year", type = "time", by = "most", description = "Year of manufacture or first registration." },
+]
+
+[[enrichment.ontology.types]]
+name = "driver"
+kind = "entity"
+role_of = "person"
+description = "A driver who sends daily check emails, known by the address they send from."
+identity = ["email"]
+attributes = [
+  { name = "email", type = "text" },
+  { name = "name", type = "text" },
+]
+source = { metadata = ["from"], attributes = { email = "address", name = "display_name" } }
+
+[[enrichment.ontology.types]]
+name = "garage"
+kind = "entity"
+description = "A garage, dealer or tyre/repair business that services or repairs the vans."
+identity = ["vat_number"]
+identity_fallback = ["name"]
+identity_criterion = "Two mentions are one garage when they give the same VAT number, or without one the same business name at the same place; a branch of a chain at another address is a different garage."
+attributes = [
+  { name = "name", type = "text", by = "most" },
+  { name = "vat_number", type = "text", by = "agree" },
+  { name = "address", type = "text", by = "latest" },
+]
+
+[[enrichment.ontology.types]]
+name = "defect"
+kind = "entity"
+description = "One fault found on one van (a worn tyre, a broken mirror, a warning light), from when a driver reports it until a garage fixes it."
+identity_criterion = "Two mentions are one defect when they are the same fault on the same van and no repair of it was reported between them; the same fault reported again after a repair is a new report of that defect reopening it."
+attributes = [
+  { name = "van", type = "ref", of = "van", by = "agree" },
+  { name = "item", type = "text", by = "most", values = ["tyres", "brakes", "lights", "mirrors", "wipers_washers", "bodywork", "engine", "electrical", "load_area", "warning_light", "other"] },
+  { name = "description", type = "text" },
+  { name = "status", type = "text", derived = "defect_status", values = ["open", "awaiting_parts", "fixed", "no_fault_found"] },
+]
+
+[[enrichment.ontology.types]]
+name = "garage_job"
+kind = "event"
+description = "One service or repair a garage did on a van, as its job sheet or invoice records it."
+identity_criterion = "Two mentions are one job when they carry the same job or invoice number, or, without a number, the same van at the same garage on the same date."
+attributes = [
+  { name = "job_number", type = "text", description = "Job sheet or invoice number." },
+  { name = "job_type", type = "text", by = "agree", values = ["service", "repair", "mot", "tyres", "inspection", "recovery"] },
+  { name = "van", type = "ref", of = "van", by = "agree" },
+  { name = "garage", type = "ref", of = "garage", by = "agree" },
+  { name = "work_done", type = "text", description = "The work done, in the garage's words." },
+  { name = "cost", type = "quantity", by = "latest", description = "Total charged; the invoice figure over a job-sheet estimate." },
+  { name = "currency", type = "text", by = "agree", values = ["GBP", "EUR", "USD", "other"] },
+  { name = "done_on", type = "time", by = "agree", description = "The date the work was done." },
+]
+
+# ── What the documents say ────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "job_record"
+kind = "claim"
+force = "assertive"
+subject = "garage_job"
+description = "A job sheet or invoice line stating work done on a van, its cost and date."
+
+[[enrichment.ontology.types]]
+name = "garage_details"
+kind = "claim"
+force = "assertive"
+subject = "garage"
+description = "A garage stating who it is on its job sheet or invoice: its name, address and VAT number."
+
+[[enrichment.ontology.types]]
+name = "mileage_reading"
+kind = "claim"
+force = "assertive"
+subject = "van"
+description = "A van's odometer reading as a driver, a garage or a fuel receipt reports it."
+attributes = [
+  { name = "odometer", type = "quantity", unit = "mi" },
+  { name = "read_on", type = "time", description = "The day of the reading." },
+  { name = "reported_by", type = "text", values = ["driver", "garage", "fuel_receipt"] },
+]
+
+[[enrichment.ontology.types]]
+name = "allocation"
+kind = "claim"
+force = "assertive"
+subject = "van"
+description = "That a driver had a van on a given day, as a daily check or the fleet manager says."
+attributes = [
+  { name = "driver", type = "ref", of = "driver" },
+  { name = "day", type = "time" },
+]
+
+[[enrichment.ontology.types]]
+name = "defect_update"
+kind = "claim"
+force = "assertive"
+subject = "defect"
+description = "A driver reporting a defect, or a garage saying it fixed it, is waiting for parts, or found no fault."
+attributes = [
+  { name = "outcome", type = "text", values = ["reported", "awaiting_parts", "fixed", "no_fault_found"] },
+  { name = "update_ref", type = "text", description = "What identifies this report: the job or invoice number, else the check's date and van." },
+  { name = "on", type = "time", description = "When the defect was found or the fix was done." },
+  { name = "reported_by", type = "ref", of = "driver" },
+  { name = "garage", type = "ref", of = "garage" },
+]
+
+[[enrichment.ontology.types]]
+name = "service_due"
+kind = "claim"
+force = "assertive"
+subject = "van"
+description = "When a van's next service is due, by mileage, by date, or both, as a garage or service sticker states it."
+attributes = [
+  { name = "due_mileage", type = "quantity", unit = "mi" },
+  { name = "due_date", type = "time" },
+]
+
+# ── Change ────────────────────────────────────────────────────────────────
+
+[enrichment.ontology.change]
+supersedes = { service_due = "document_date" }
+document = { date = "date", thread = "thread_id", id = "message_id", author = "from" }
+
+[[enrichment.ontology.folds]]
+id = "defect_status"
+by = "protocol"
+from = ["^subject"]
+
+[enrichment.ontology.folds.protocol]
+identity = "update_ref"
+effective_time = "on"
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "reported"
+claim_kind = "defect_update"
+state = "open"
+when = { outcome = "reported" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "awaiting_parts"
+claim_kind = "defect_update"
+state = "awaiting_parts"
+when = { outcome = "awaiting_parts" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "fixed"
+claim_kind = "defect_update"
+state = "fixed"
+when = { outcome = "fixed" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "no_fault_found"
+claim_kind = "defect_update"
+state = "no_fault_found"
+when = { outcome = "no_fault_found" }
+
+# ── Derivation ────────────────────────────────────────────────────────────
+
+[enrichment.ontology.tension]
+label = "discrepancy"
+between = ["mileage_reading"]
+same = ["subject"]
+not_conflicts = [
+  "Two readings of one van on different days differ: mileage rises over time. Only a later reading lower than an earlier one is a discrepancy.",
+  "A driver's reading and a garage's reading on the same day can differ by the miles driven to and from the garage.",
+]

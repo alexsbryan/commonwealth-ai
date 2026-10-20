@@ -1,0 +1,222 @@
+# A seven-person product team's agreed work, read out of its meeting notes and
+# team chat. Work is agreed in conversation; the tracker is not kept up to date,
+# so the tasks, their owners, due dates, status, blockers, requesters,
+# reassignments and projects are read from what people said.
+
+[corpus]
+id = "team-agreed-work"
+name = "Team agreed work (meeting notes + chat)"
+description = "A seven-person product team's meeting notes and team chat, read as the tasks the team agreed to do: owner, due date, status over time, blockers, who asked and why, reassignments, and project or milestone."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# Assumption: the notes and the chat are exported to one JSON Lines file, one
+# record per chat message or per meeting-notes entry, each carrying its text
+# (`text`), an ISO 8601 `date`, the channel/thread or meeting it belongs to
+# (`thread`), who wrote it (`author`) and its own `id`.
+[acquire]
+type = "local_file"
+path = "SOURCE_PATH"
+
+[extract]
+type = "jsonl"
+content_field = "text"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[retrieval]
+personal_scope = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "team-work"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is a seven-person product team's meeting notes and team chat. Work is agreed
+in conversation, not in a tracker: a task exists when someone takes it on or is given it
+("I'll do the export by Friday", "agreed: Sam owns the onboarding fix"). Each task has an
+owner (a team member), often a due date, and belongs to a project or a milestone. Someone
+asked for it, usually with a reason. Its status moves between open, in progress, blocked,
+done and dropped as people report on it; a task can be blocked by another task, and it
+can be handed from one owner to another. The same task is talked about in many messages
+under different wordings; a follow-up or a sub-task is a different task. Lines quoted from
+an earlier message are not new statements.
+"""
+
+# ── Who and what the work hangs on ──
+
+[[enrichment.ontology.types]]
+name = "member"
+kind = "entity"
+role_of = "person"
+description = "A member of the seven-person team: someone who writes in the chat and the notes, and owns or is handed tasks."
+attributes = [{ name = "handle", type = "text", description = "The name the member writes under in the chat and the notes." }]
+identity = ["handle"]
+source = { metadata = ["author"], attributes = { handle = "value" } }
+
+[[enrichment.ontology.types]]
+name = "project"
+kind = "entity"
+description = "A body of work the team runs under a name: a product area, an initiative, a launch."
+identity_criterion = "Two mentions are one project when they name the same body of work, by its name or an evident short form of it."
+
+[[enrichment.ontology.types]]
+name = "milestone"
+kind = "entity"
+description = "A dated checkpoint within a project: a release, a beta, a demo, a sprint goal."
+identity_criterion = "Two mentions are one milestone when they name the same checkpoint of the same project (the same release, demo or deadline), even when its date moved."
+attributes = [
+  { name = "project", type = "ref", of = "project", by = "latest", description = "The project the milestone belongs to." },
+  { name = "target_date", type = "time", by = "latest", description = "The date the milestone is set for, as last stated." },
+]
+
+[[enrichment.ontology.types]]
+name = "task"
+kind = "entity"
+description = "A piece of work the team agreed someone would do."
+identity_criterion = "Two mentions are one task when they name the same piece of work toward the same outcome, however it is worded. A follow-up, a sub-task, or the same kind of work for a different project is a different task."
+attributes = [
+  { name = "owner", type = "ref", of = "member", by = "latest", description = "Who currently owns the task." },
+  { name = "due", type = "time", by = "latest", description = "The date the task is due, as last stated." },
+  { name = "project", type = "ref", of = "project", by = "latest", description = "The project the task belongs to." },
+  { name = "milestone", type = "ref", of = "milestone", by = "latest", description = "The milestone the task counts toward." },
+  { name = "status", type = "text", values = ["open", "in_progress", "blocked", "done", "dropped"], derived = "task_status", description = "The task's current status, as last reported." },
+]
+
+# ── What people say about tasks ──
+
+[[enrichment.ontology.types]]
+name = "commitment"
+kind = "claim"
+force = "commissive"
+subject = "task"
+description = "Someone takes a task on, or the team agrees that someone will do it."
+
+[[enrichment.ontology.types]]
+name = "request"
+kind = "claim"
+force = "directive"
+deontic = ["request"]
+subject = "task"
+description = "Someone asks for a task to be done, usually saying why."
+attributes = [
+  { name = "requester", type = "ref", of = "person", description = "Who asked for the task." },
+  { name = "reason", type = "text", description = "Why they asked: the problem, customer, or goal behind it." },
+]
+
+[[enrichment.ontology.types]]
+name = "status_update"
+kind = "claim"
+force = "assertive"
+subject = "task"
+description = "A report of where a task stands: started, blocked, finished, dropped, or reopened."
+attributes = [
+  { name = "status", type = "text", values = ["open", "in_progress", "blocked", "done", "dropped"], description = "The status the report puts the task in." },
+  { name = "changed_at", type = "time", description = "When the change happened, when the message names a time other than its own." },
+  { name = "note", type = "text", description = "What the report gives as cause or detail (what it waits on, why it was dropped)." },
+]
+
+[[enrichment.ontology.types]]
+name = "dependency"
+kind = "claim"
+force = "assertive"
+subject = "task"
+description = "A statement that a task cannot proceed until another task is done, or that it no longer waits on it."
+attributes = [
+  { name = "blocked_by", type = "ref", of = "task", description = "The task this task waits on." },
+  { name = "blocking", type = "text", values = ["blocks", "no_longer_blocks"], description = "Whether the other task blocks this one, or has stopped blocking it." },
+]
+
+[[enrichment.ontology.types]]
+name = "reassignment"
+kind = "claim"
+force = "declaration"
+subject = "task"
+description = "A task is handed from one owner to another."
+attributes = [
+  { name = "from_owner", type = "ref", of = "member", description = "Who owned the task before." },
+  { name = "to_owner", type = "ref", of = "member", description = "Who owns it now." },
+  { name = "reason", type = "text", description = "Why it was handed over." },
+]
+
+[[enrichment.ontology.types]]
+name = "milestone_plan"
+kind = "claim"
+force = "declaration"
+subject = "milestone"
+description = "The team sets or moves a milestone: what it is, which project it belongs to, the date it is set for."
+
+[[enrichment.ontology.types]]
+name = "project_decision"
+kind = "claim"
+force = "declaration"
+subject = "project"
+description = "The team decides something about a project as a whole: starts it, pauses or resumes it, changes its priority, cancels or finishes it."
+attributes = [
+  { name = "decision", type = "text", values = ["start", "pause", "resume", "reprioritise", "cancel", "finish"], description = "What was decided about the project." },
+]
+
+# ── Status over time ──
+
+[[enrichment.ontology.folds]]
+id = "task_status"
+by = "protocol"
+from = ["^subject"]
+
+[enrichment.ontology.folds.protocol]
+identity = "status"
+effective_time = "changed_at"
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "reported_open"
+claim_kind = "status_update"
+state = "open"
+when = { status = "open" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "reported_in_progress"
+claim_kind = "status_update"
+state = "in_progress"
+when = { status = "in_progress" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "reported_blocked"
+claim_kind = "status_update"
+state = "blocked"
+when = { status = "blocked" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "reported_done"
+claim_kind = "status_update"
+state = "done"
+when = { status = "done" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "reported_dropped"
+claim_kind = "status_update"
+state = "dropped"
+when = { status = "dropped" }
+
+[enrichment.ontology.change]
+document = { date = "date", thread = "thread", id = "id", author = "author" }
+supersedes = { reassignment = "document_date" }
+
+[enrichment.ontology.tension]
+label = "conflict"
+between = ["status_update", "commitment"]
+not_conflicts = [
+  "a task reopened after it was reported done",
+  "a due date moved by a later agreement",
+  "a task handed to a new owner after someone else took it on",
+]

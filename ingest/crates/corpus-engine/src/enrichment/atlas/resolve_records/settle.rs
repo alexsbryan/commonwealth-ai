@@ -18,10 +18,9 @@ use std::collections::BTreeMap;
 
 use tracing::{debug, info};
 
+use super::apart::offerable;
 use super::fields::{self, compare_necessary, declared_keys};
-use super::select::{
-    decision_call, offerable, question, reason_call, Ask, Candidate, LABELS, NONE,
-};
+use super::select::{decision_call, question, reason_call, Ask, Candidate, LABELS, NONE};
 use super::weigh::{weigh, Zone};
 use super::{
     Answerer, Choice, Criterion, Decision, Document, DocumentResolution, Held, Outcome, Proposal,

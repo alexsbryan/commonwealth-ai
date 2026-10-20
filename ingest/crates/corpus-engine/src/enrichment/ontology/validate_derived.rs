@@ -473,7 +473,12 @@ fn validate_protocol_rule(
             ),
         );
     }
-    if rule.when.is_empty() {
+    // A kind that declares no field (a pinned lifecycle lever's,
+    // `recipe_ontology/lifecycle.rs`) is identified by the state it enters
+    // (`protocol.rs`), and choosing the kind is its qualification. A kind with
+    // fields is held to its identity field and a `when`, so a typo still refuses.
+    let by_state = index.extracted_attributes(&claim.name).is_empty();
+    if rule.when.is_empty() && !by_state {
         fail(
             errors,
             format!(
@@ -482,7 +487,9 @@ fn validate_protocol_rule(
             ),
         );
     }
-    validate_protocol_claim_field(claim, identity, Some("text"), rule, errors, fail);
+    if !by_state {
+        validate_protocol_claim_field(claim, identity, Some("text"), rule, errors, fail);
+    }
     if let Some(field) = effective_time {
         validate_protocol_claim_field(claim, field, Some("time"), rule, errors, fail);
     }

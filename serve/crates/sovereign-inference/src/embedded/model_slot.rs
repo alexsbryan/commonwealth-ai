@@ -2785,7 +2785,7 @@ impl ModelSlot {
             });
         }
 
-        let mut sampler = build_sampler(model, request, quirks)?;
+        let mut sampler = build_sampler(model, request, quirks, &turn_opener)?;
         let mut output = String::new();
         let mut n_generated = 0usize;
         let mut decoder = encoding_rs::UTF_8.new_decoder();
@@ -3322,7 +3322,7 @@ impl ModelSlot {
             );
         }
 
-        if saw_close_tag && !saw_open_tag {
+        if saw_close_tag && !saw_open_tag && turn_opener.is_empty() {
             tracing::warn!(
                 model = model_id,
                 "thinking-tag stray close: model emitted </think> without a \
@@ -3780,7 +3780,7 @@ impl ModelSlot {
         // installed on this path (dispatcher filtered structured
         // requests out), so the sampler behaves as a plain chain
         // of {temp/top-p/top-k/penalties} per the request quirks.
-        let mut sampler = build_sampler(model, request, quirks)?;
+        let mut sampler = build_sampler(model, request, quirks, &turn_opener)?;
         let mut last_token = sampler.sample(
             session.target_context(),
             prefill.n_tokens() - 1,
@@ -3790,6 +3790,7 @@ impl ModelSlot {
 
         let mut output = String::new();
         let mut decoder = encoding_rs::UTF_8.new_decoder();
+        let mut think = super::think_budget::ThinkBudget::new(request, &turn_opener);
         // Streaming bookkeeping. `finish_reason` defaults to Length —
         // the `while` condition exiting means max_tokens was hit; every
         // break overwrites it with the specific reason (same idiom as
@@ -3815,6 +3816,7 @@ impl ModelSlot {
         }
         if let Ok(piece) = model.token_to_piece(last_token, &mut decoder, true, None) {
             output.push_str(&piece);
+            think.observe(&piece);
             if let Some(s) = sink {
                 match s.send_piece(&piece) {
                     StreamSend::Sent => {}
@@ -3927,16 +3929,27 @@ impl ModelSlot {
             // exclusively here since on the MTP path we need the
             // full run length to make the threshold call.
             const MIN_FORCED_RUN_FOR_MTP: usize = 3;
-            let forced_peek: Vec<LlamaToken> =
-                if jump_fwd_enabled && jump_fwd_t2_enabled && n_generated < max_tokens {
-                    sampler.forced_next_run(MAX_FORCED_BYTES)
-                } else {
+            // A spent think block is closed by writing CLOSE as a forced
+            // run (think_budget.rs), so the model answers from what it has.
+            let think_close = think.due().then(|| {
+                tracing::info!(think_tokens = think.tokens(), think_budget = think.budget(), n_generated, "mtp: think budget spent, closing the think block");
+                model.str_to_token(super::think_budget::CLOSE, AddBos::Never).unwrap_or_else(|e| {
+                    tracing::warn!(error = %e, "mtp: the think close did not tokenize; the block runs on");
                     Vec::new()
-                };
+                })
+            });
+            let closing = think_close.is_some();
+            let forced_peek: Vec<LlamaToken> = if let Some(close) = think_close {
+                close
+            } else if jump_fwd_enabled && jump_fwd_t2_enabled && n_generated < max_tokens {
+                sampler.forced_next_run(MAX_FORCED_BYTES)
+            } else {
+                Vec::new()
+            };
             // Commit only when the run clears the threshold. Cap at
             // MAX_JUMP_FWD_RUN so the verify batch stays bounded.
             let mut forced_run: Vec<LlamaToken> = Vec::new();
-            if forced_peek.len() >= MIN_FORCED_RUN_FOR_MTP {
+            if closing || forced_peek.len() >= MIN_FORCED_RUN_FOR_MTP {
                 let cap = forced_peek.len().min(MAX_JUMP_FWD_RUN);
                 for &ftok in &forced_peek[..cap] {
                     if model.is_eog_token(ftok) {
@@ -3947,7 +3960,8 @@ impl ModelSlot {
                         .token_to_piece(ftok, &mut decoder, true, None)
                         .unwrap_or_default();
                     output.push_str(&piece);
-                    jump_fwd_bytes_n += piece.len();
+                    think.observe(&piece);
+                    jump_fwd_bytes_n += piece.len() * usize::from(!closing);
                     forced_run.push(ftok);
                     n_generated += 1;
                     if let Some(s) = sink {
@@ -3968,7 +3982,7 @@ impl ModelSlot {
                         break;
                     }
                 }
-                if !forced_run.is_empty() {
+                if !forced_run.is_empty() && !closing {
                     jump_fwd_runs += 1;
                     jump_fwd_n += forced_run.len();
                     if forced_run.len() > jump_fwd_max {
@@ -4042,6 +4056,7 @@ impl ModelSlot {
                         .token_to_piece(next_token, &mut decoder, true, None)
                         .unwrap_or_default();
                     output.push_str(&piece);
+                    think.observe(&piece);
                     if let Some(s) = sink {
                         match s.send_piece(&piece) {
                             StreamSend::Sent => {}
@@ -4192,6 +4207,7 @@ impl ModelSlot {
                     .token_to_piece(tok, &mut decoder, true, None)
                     .unwrap_or_default();
                 output.push_str(&piece);
+                think.observe(&piece);
                 n_generated += 1;
                 if let Some(s) = sink {
                     match s.send_piece(&piece) {
@@ -4222,6 +4238,7 @@ impl ModelSlot {
                 .token_to_piece(next_token, &mut decoder, true, None)
                 .unwrap_or_default();
             output.push_str(&piece);
+            think.observe(&piece);
             n_generated += 1;
             if let Some(s) = sink {
                 match s.send_piece(&piece) {
@@ -4516,7 +4533,8 @@ impl ModelSlot {
         // shared a batch with requests that compiled (§18.3).
         let mut samplers = requests
             .iter()
-            .map(|r| build_sampler(model, r, quirks))
+            .zip(&openers)
+            .map(|(r, opener)| build_sampler(model, r, quirks, opener))
             .collect::<Result<Vec<ConstrainedSampler>>>()?;
         let mut decoders: Vec<encoding_rs::Decoder> = (0..requests.len())
             .map(|_| encoding_rs::UTF_8.new_decoder())
@@ -5336,7 +5354,7 @@ fn stream_generate_loop(p: StreamLoopParams<'_, '_>) -> Result<()> {
             }
         }
 
-        let mut sampler = build_sampler(model, request, quirks)?;
+        let mut sampler = build_sampler(model, request, quirks, &turn_opener)?;
         let mut n_generated = 0usize;
         let mut decoder = encoding_rs::UTF_8.new_decoder();
         let mut batch = LlamaBatch::new(512, 1);
@@ -5521,7 +5539,7 @@ fn stream_generate_loop(p: StreamLoopParams<'_, '_>) -> Result<()> {
         // else: FIM partial-keep — the prompt's KV slice stays resident
         // for the next request's LCP (see generate_stream_sync_fim).
 
-        if saw_close_tag && !saw_open_tag {
+        if saw_close_tag && !saw_open_tag && turn_opener.is_empty() {
             tracing::warn!(
                 model = model_id,
                 "thinking-tag stray close (typed stream): model emitted \
@@ -5645,122 +5663,5 @@ mod total_model_bytes_tests {
 }
 
 #[cfg(test)]
-mod stream_consumer_liveness_tests {
-    //! The half-open SSE client: reads nothing, drops nothing.
-    //!
-    //! A `blocking_send` into a full channel parks forever against such
-    //! a consumer, and the generation loop's deadline check — which sits
-    //! at the TOP of the loop — never gets to run. The slot's context
-    //! mutex stays held indefinitely, and on a daemon serving roughly
-    //! one concurrent turn that is the whole node.
-    //!
-    //! RETARGETED by noun-convergence rung nc-17. These tests used to
-    //! watch `send_stream_piece`, the legacy `Result<String>` sender —
-    //! which by then nothing streamed on, because `complete_stream` had
-    //! become a copy of the typed routing path and the typed path used a
-    //! bare `blocking_send`. The hardening was guarding the dead half.
-    //! They now watch [`StreamSink`], which every streaming completion
-    //! goes through.
-    use super::{StreamFrame, StreamSend, StreamSink};
-    use std::time::{Duration, Instant};
-
-    /// RED-FIRST (order mesh-scale-t0, item 5). Runs the send on its own
-    /// thread and refuses to wait forever for it: on the pre-fix
-    /// `blocking_send` the thread never reports back, `recv_timeout`
-    /// expires, and the assertion fails naming the pin. (The test itself
-    /// still terminates — a hanging test proves nothing and blocks the
-    /// suite, which is why this is structured as a watched thread rather
-    /// than a direct call.)
-    #[test]
-    fn a_consumer_that_stops_reading_frees_the_slot_within_the_deadline() {
-        // Capacity 1, filled and never read — and the receiver is HELD,
-        // so the channel is full rather than closed. A closed channel
-        // would return `ReceiverGone` and pass for the wrong reason.
-        let (tx, _rx_held_open) = tokio::sync::mpsc::channel::<StreamFrame>(1);
-        tx.try_send(StreamFrame::Token("first".into()))
-            .expect("prime the buffer");
-
-        let budget = Duration::from_millis(300);
-        let deadline = Instant::now() + budget;
-
-        let (report_tx, report_rx) = std::sync::mpsc::channel();
-        let started = Instant::now();
-        std::thread::spawn(move || {
-            let sink = StreamSink::with_deadline(&tx, deadline);
-            let outcome = sink.send_piece("second");
-            let _ = report_tx.send((outcome, started.elapsed()));
-        });
-
-        // Generous slack: we are asserting BOUNDED, not fast.
-        let (outcome, elapsed) = report_rx
-            .recv_timeout(budget + Duration::from_secs(3))
-            .expect(
-                "the send never returned — a half-open consumer is pinning the slot \
-                 indefinitely, and the wall-clock deadline cannot fire because the \
-                 generation loop is parked inside the send",
-            );
-
-        assert_eq!(
-            outcome,
-            StreamSend::DeadlineExceeded,
-            "a full channel at the deadline must report the consumer, not the receiver"
-        );
-        assert!(
-            elapsed >= budget,
-            "must not give up EARLY either — a healthy consumer that is briefly \
-             slow has the whole budget to catch up (elapsed {elapsed:?})"
-        );
-        assert!(
-            elapsed < budget + Duration::from_secs(1),
-            "released far too late: {elapsed:?} against a {budget:?} budget"
-        );
-    }
-
-    /// A consumer that IS reading must be unaffected — the poll loop
-    /// must not turn a healthy stream into a stuttering one.
-    #[test]
-    fn a_reading_consumer_is_delivered_immediately() {
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<StreamFrame>(4);
-        let sink = StreamSink::with_deadline(&tx, Instant::now() + Duration::from_secs(30));
-        let started = Instant::now();
-        assert_eq!(sink.send_piece("tok"), StreamSend::Sent);
-        assert!(
-            started.elapsed() < Duration::from_millis(50),
-            "an unblocked send must not pay the poll interval"
-        );
-        assert!(matches!(rx.try_recv(), Ok(StreamFrame::Token(s)) if s == "tok"));
-    }
-
-    /// A dropped receiver stays a clean cancel, distinct from a stalled
-    /// consumer — collapsing the two would make every cancelled stream
-    /// look like a client fault.
-    #[test]
-    fn a_dropped_receiver_is_still_reported_as_cancellation() {
-        let (tx, rx) = tokio::sync::mpsc::channel::<StreamFrame>(1);
-        drop(rx);
-        let sink = StreamSink::with_deadline(&tx, Instant::now() + Duration::from_secs(30));
-        assert_eq!(sink.send_piece("tok"), StreamSend::ReceiverGone);
-    }
-
-    /// The terminal frame must never be sent after a non-`Sent` piece —
-    /// it would block on the same full channel the piece just gave up
-    /// on. Structural in both loops; asserted here so a future edit that
-    /// drops the guard has something to fail against.
-    #[test]
-    fn a_stalled_send_leaves_room_for_no_terminal_frame() {
-        let (tx, _rx_held_open) = tokio::sync::mpsc::channel::<StreamFrame>(1);
-        tx.try_send(StreamFrame::Token("first".into()))
-            .expect("prime the buffer");
-        let sink = StreamSink::with_deadline(&tx, Instant::now() + Duration::from_millis(50));
-        assert_eq!(sink.send_piece("second"), StreamSend::DeadlineExceeded);
-        assert!(
-            tx.try_send(StreamFrame::Finish {
-                reason: super::FinishReason::Stop,
-                usage: None,
-            })
-            .is_err(),
-            "the channel is still full — a Finish frame here would park the \
-             decode loop exactly as the token send just did"
-        );
-    }
-}
+#[path = "model_slot_stream_liveness_tests.rs"]
+mod stream_consumer_liveness_tests;

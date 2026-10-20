@@ -5,7 +5,7 @@
 
 use super::*;
 use crate::atlas_traversal::engine::AtlasView;
-use crate::atlas_traversal::typed_check::signed_years;
+use crate::atlas_traversal::typed_check::{signed_years, time_spans};
 use crate::enrichment::atlas::atoms::{AtomId, ChunkRef, Claim, Entity, Relation, SectionRange};
 use crate::enrichment::ontology::OntologyPolicies;
 use crate::taxonomy::{
@@ -577,6 +577,26 @@ fn years_read_signed_with_span_shorthand() {
     assert_eq!(signed_years("abc 300"), [300.0]);
 }
 
+/// Business dates read as their day or month, never as stray years: read as
+/// years, `2026-10-20` was 2026, 10 and 20, so it passed "before the year 100".
+#[test]
+fn dates_read_as_their_day_or_month() {
+    let day = time_spans("2026-10-20");
+    assert_eq!(day.len(), 1);
+    let (start, end) = day[0];
+    assert!(2026.79 < start && end < 2026.81 && end > start, "{day:?}");
+    assert_eq!(time_spans("20 October 2026"), day);
+    assert_eq!(time_spans("Oct 20, 2026"), day);
+    let month = time_spans("October 2026");
+    assert_eq!(month, time_spans("2026-10"));
+    assert!(month[0].0 <= start && end <= month[0].1);
+    let december = time_spans("2026-12");
+    assert_eq!(december[0].1, 2027.0);
+    assert_eq!(time_spans("2026"), [(2026.0, 2027.0)]);
+    assert_eq!(time_spans("c. 320 B.C."), [(-320.0, -319.0)]);
+    assert!(time_spans("2026-10-20")[0].1 <= time_spans("2026-10-21")[0].0);
+}
+
 /// A declared CLAIM type is listed like an entity type: its claims are the
 /// rows, named by their content and cited by their own evidence.
 #[test]
@@ -586,6 +606,34 @@ fn a_claim_type_lists_its_claims() {
     assert_eq!(names(&r), ["Struck at Lampsacus under Philip III"]);
     assert_eq!(r.claims.len(), 1);
     assert_eq!(r.table.unwrap().rows[0].evidence, ["sec_c1"]);
+}
+
+/// A claim type's declared `subject` links its claims to the record they are
+/// about, both ways, like a ref attribute. The issues journey asks "the
+/// confirmed states of the cases mira reported" through `case_state.subject`,
+/// refused as no ref until 2026-10-20.
+#[test]
+fn a_claim_reaches_its_subject_and_back() {
+    let about = |coin: &str| {
+        format!(
+            r#"{{"target_type":"attribution","filters":[],"relations":[{{"relation":"attribution.subject","other_type":"coin","other_name":"{coin}","negate":false,"where":null}}]}}"#
+        )
+    };
+    let r = run(&about("Lampsacus stater"));
+    assert_eq!(
+        names(&r),
+        [
+            "A later Sidonian issue",
+            "Struck at Lampsacus under Philip III"
+        ]
+    );
+    assert!(run(&about("Sidonian stater"))
+        .table
+        .unwrap()
+        .rows
+        .is_empty());
+    let attributed = r#"{"target_type":"coin","filters":[],"relations":[{"relation":"attribution.subject","other_type":"attribution","other_name":null,"negate":false,"where":null}]}"#;
+    assert_eq!(names(&run(attributed)), ["Lampsacus stater"]);
 }
 
 /// The brief renders the table: one cited line per row, absent attributes as

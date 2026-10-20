@@ -24,6 +24,11 @@ def main(run):
     sliced = L.run_documents(run, found)
     url_id = {d["url"]: str(d["id"]) for d in map(json.loads, filter(str.strip, (U.ROOT / "raw/documents.jsonl").read_text().splitlines()))}
     docs = None if sliced is None or isinstance(sliced, str) else {url_id[u] for u in sliced["documents"] if u in url_id}
+    served(run, atoms, docs)
+
+
+def served(run, atoms, docs):
+    """The served-state count of one read: its atoms, over the documents it read (None: the whole tune fold)."""
     g = json.loads((U.ROOT / "gold/cases.json").read_text())
     tune = {c["id"] for c in g["cases"] if c["fold"] == "tune"}
     gold_doc, _, _, _ = U.load_gold("tune")
@@ -46,7 +51,21 @@ def main(run):
     print(f"{run}: {len(latest)} gold cases with a state on the run's documents: {dict(out)}")
     print(f"  case records {len(recs)}, serving a state {sum(1 for a in recs.values() if a.get('state'))}")
     print(f"  gold -> served, where they differ: {dict(swaps.most_common())}")
+    return {"cases": len(latest), "outcomes": dict(out), "records": len(recs),
+            "serving": sum(1 for a in recs.values() if a.get("state")), "swaps": dict(swaps.most_common())}
+
+
+def loop_arm(out):
+    """A loop read (runs/loop/<arm>/<corpus>): its atlas over the documents its corpus holds; writes score.json."""
+    atoms = json.loads((out / "atlas/atoms.json").read_text())["atoms"]
+    corpus = json.loads((out / "run.json").read_text())["corpus"]
+    raw = pathlib.Path.home() / f".svrnmesh/bench-corpora/{corpus}/raw/documents.jsonl"
+    docs = {str(json.loads(l)["id"]) for l in raw.read_text().splitlines() if l.strip()}
+    (out / "score.json").write_text(json.dumps(served(out, atoms, docs), indent=1))
 
 
 if __name__ == "__main__":
-    main(pathlib.Path(sys.argv[1]).resolve())
+    if sys.argv[1] == "--loop":
+        loop_arm(pathlib.Path(sys.argv[2]).resolve())
+    else:
+        main(pathlib.Path(sys.argv[1]).resolve())

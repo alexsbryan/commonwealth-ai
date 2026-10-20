@@ -29,7 +29,7 @@ const CONTEXT_BYTES: usize = 200;
 /// A window read's chapter-wide subject, `<chapter>/<reference>`
 /// (`SubjectScope::Chapter`): a sufficient key, so a chapter's statements of
 /// one particular link with no question, and a supplied value no other
-/// reference of the same chapter may join (`select::necessary_compatible`),
+/// reference of the same chapter may join (`apart::necessary_compatible`),
 /// so RESOLVE decides identity only across windows. Reserved: no recipe
 /// declares it.
 pub const CHAPTER_SUBJECT_KEY: &str = "__chapter_subject";
@@ -57,8 +57,7 @@ pub struct Criterion {
 }
 
 /// A closed-valued attribute as READ asks it: one forced choice over its
-/// declared values. RESOLVE asks it of identity-necessary attributes, the
-/// passes reader of every closed-valued field it reads.
+/// declared values. RESOLVE asks it of identity-necessary attributes.
 #[derive(Debug, Clone)]
 pub struct ClosedAttr {
     pub name: String,
@@ -548,7 +547,7 @@ impl Resolver {
             .iter()
             .map(|s| declared_keys(criterion, s))
             .collect();
-        let key_hits = select::key_hits(&self.by_key, &folded_keys);
+        let key_hits = apart::key_hits(&self.by_key, &folded_keys);
         let field_named = fields::named(doc, &self.by_field);
         let supplied = read::provided(criterion, doc, statements, |s| &s.keys);
         let chosen = read::provided(criterion, doc, statements, |s| &s.read);
@@ -606,7 +605,7 @@ impl Resolver {
                 }));
                 continue;
             }
-            plan[i] = select::key_plan(
+            plan[i] = apart::key_plan(
                 criterion,
                 s,
                 &key_hits[i],
@@ -630,7 +629,7 @@ impl Resolver {
                 &self.estimate,
                 &mut seen,
             );
-            select::settle_field(
+            apart::settle_field(
                 criterion,
                 statements,
                 &supplied,
@@ -748,7 +747,7 @@ impl Resolver {
             }
         };
         let reads_weighed = read_infer.is_some();
-        let gated = select::gate_plans(
+        let gated = apart::gate_plans(
             criterion,
             statements,
             &asked,
@@ -1027,6 +1026,7 @@ impl Resolver {
 }
 
 mod answer;
+mod apart;
 mod by;
 mod described;
 pub use described::Described;
@@ -1044,14 +1044,12 @@ mod read;
 mod seed;
 mod select;
 mod settle;
-mod wave;
 mod weigh;
 use fields::{declared_keys, key_edges};
 
-pub(crate) use read::choice_question;
-pub(crate) use select::{decision_call, LABELS, NONE};
-pub(crate) use wave::{compose as compose_wave, decision_wave, wave_text};
-pub use wave::{one_by_one, singles as wave_singles};
+pub(crate) use select::LABELS;
+#[cfg(test)]
+pub(crate) use select::NONE;
 
 pub use answer::{cite_found, ProposalRule, QUOTE_LABEL};
 use answer::{judge, prompt, Proposed};

@@ -41,7 +41,7 @@ pub struct CorpusFieldReport {
 #[derive(Debug, Clone, PartialEq)]
 enum FieldUse {
     Stamp(DocumentStamp),
-    /// `change.document.author`, among the facts the passes reader prefills.
+    /// `change.document.author`, among a document's declared facts.
     Author,
     Source(String),
 }

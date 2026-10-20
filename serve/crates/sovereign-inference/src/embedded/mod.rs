@@ -32,6 +32,7 @@ mod rpc_distribution;
 mod rpc_warm_cache;
 mod sampler;
 mod server_sampling;
+mod think_budget;
 
 pub(crate) use compute_backend::*;
 pub use embed_only::*;

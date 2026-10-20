@@ -18,7 +18,7 @@ Writes <run dir>/decisions.jsonl; prints the counts.
 import json, os, re, sys
 from collections import Counter
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import misses
+import corpora, misses
 
 UNIT = re.compile(r'#\\?"([^"\\]+)\\?"')
 
@@ -74,6 +74,7 @@ def judge(D, s, q):
 
 if __name__ == "__main__":
     run, cid = sys.argv[1], sys.argv[2]
+    corpora.refuse_held_out(cid, "decisions.py")
     D = misses.load(run, cid)
     rows = []
     for s, q in parse(run).items():

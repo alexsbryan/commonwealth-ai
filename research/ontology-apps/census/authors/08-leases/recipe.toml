@@ -1,0 +1,239 @@
+# Residential lettings for a small landlord (40 flats).
+# Material: tenancy agreements (as text), the landlord's email with tenants and
+# contractors, and contractor invoices. Read as one mailbox: agreements and
+# invoices are assumed to arrive or be sent as email attachments, which the
+# email extractor dispatches through the described-asset substrate.
+
+[corpus]
+id = "lettings-40-flats"
+name = "Residential lettings - 40 flats"
+description = "A small landlord's tenancy agreements, email with tenants and contractors, and contractor invoices, read as flats, tenants, tenancies, rent changes, notices and maintenance jobs."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+[acquire]
+type = "local_file"
+path = "SOURCE_PATH"
+
+[extract]
+type = "email"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "residential-lettings"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is a small landlord's record of 40 flats: the tenancy agreements, the
+landlord's email with tenants and contractors, and contractor invoices. A flat is one
+let unit, known by its building and flat number. A tenancy is one agreement letting one
+flat to one or more tenants from a start date, at a monthly rent in a currency, with a
+deposit held. A tenant who moves to another of the landlord's flats is the same person
+with a new tenancy; a renewal of the same flat to the same tenants continues the same
+tenancy. Rent changes take effect from a stated date, which may be later than the email
+announcing them. A notice to quit is served by the landlord or the tenant on a date and
+names the date the flat is to be given up. A maintenance job is one fault in one flat,
+from the tenant's report to the contractor's repair and invoice; the same fault reported
+again before it is fixed is the same job. A flat is empty between the end of one tenancy
+and the start of the next.
+"""
+must_not = [
+  "give legal advice on notices, evictions or deposit disputes",
+  "treat a figure quoted from an earlier email in a reply as a new statement of rent, deposit or cost",
+]
+
+# ── Things ────────────────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "flat"
+kind = "entity"
+description = "One let residential unit owned by the landlord, known by building and flat number."
+attributes = [
+  { name = "building", type = "text", by = "agree" },
+  { name = "flat_number", type = "text", by = "agree" },
+  { name = "occupancy", type = "text", values = ["let", "vacant"], by = "latest" },
+]
+identity_fallback = ["building", "flat_number"]
+identity_criterion = "Two mentions are one flat when they name the same building and the same flat number ('Flat 3, Elm Court', 'no. 3 Elm Ct', 'the Elm Court flat 3'). Different flat numbers in the same building are different flats."
+
+[[enrichment.ontology.types]]
+name = "tenant"
+kind = "entity"
+role_of = "person"
+description = "A person named on a tenancy agreement as a tenant of one of the flats."
+attributes = [
+  { name = "name", type = "text" },
+  { name = "email", type = "text" },
+  { name = "phone", type = "text" },
+]
+identity_fallback = ["name", "email", "phone"]
+identity_criterion = "Two mentions are one tenant when they are the same person: the same full name together with the same email address or phone number. A tenant who moves to another of the landlord's flats is the same person with a new tenancy, never a new tenant. Two people sharing a surname at one flat are different tenants."
+
+[[enrichment.ontology.types]]
+name = "contractor"
+kind = "entity"
+description = "A tradesperson or firm the landlord engages to repair or maintain a flat."
+attributes = [
+  { name = "name", type = "text" },
+  { name = "trade", type = "text", values = ["plumber", "electrician", "gas_engineer", "heating", "builder", "roofer", "carpenter", "locksmith", "decorator", "cleaner", "handyman", "other"] },
+  { name = "email", type = "text" },
+]
+identity_fallback = ["name", "email"]
+identity_criterion = "Two mentions are one contractor when they name the same tradesperson or firm: the same business or personal name, or the same email address. A firm and the engineer it sends are one contractor for the landlord's purposes."
+
+[[enrichment.ontology.types]]
+name = "tenancy"
+kind = "entity"
+description = "One tenancy agreement: one flat let to one or more tenants from a start date. A renewal to the same tenants of the same flat continues it; a move to another flat is a new tenancy."
+attributes = [
+  { name = "flat", type = "ref", of = "flat", by = "agree" },
+  { name = "tenants", type = "ref", of = "tenant", by = "all" },
+  { name = "start", type = "time", by = "agree" },
+  { name = "end", type = "time", by = "latest" },
+]
+identity_criterion = "Two mentions are one tenancy when they concern the same flat let to the same tenants for an unbroken period. A renewal or rent change for the same tenants in the same flat is the same tenancy; the same tenant in a different flat, or the same flat after a gap with other tenants, is a different tenancy."
+
+[[enrichment.ontology.types]]
+name = "maintenance_job"
+kind = "entity"
+description = "One fault in one flat and the work to put it right, from the report to the repair and invoice."
+attributes = [
+  { name = "flat", type = "ref", of = "flat", by = "agree" },
+  { name = "problem", type = "text", by = "earliest" },
+  { name = "fixed_by", type = "ref", of = "contractor", by = "latest" },
+  { name = "status", type = "text", values = ["reported", "acknowledged", "contractor_booked", "in_progress", "fixed", "not_fixed", "cancelled"], by = "latest" },
+]
+identity_criterion = "Two mentions are one maintenance job when they concern the same fault in the same flat that has not yet been fixed: a tenant chasing a leaking tap is the same job; the same tap leaking again after a completed repair is a new job."
+
+# ── What the sources say ──────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "agreement_terms"
+kind = "claim"
+force = "declaration"
+subject = "tenancy"
+description = "The terms a tenancy agreement (or a renewal agreement) sets: the monthly rent, its currency and the deposit held."
+attributes = [
+  { name = "monthly_rent", type = "quantity" },
+  { name = "currency", type = "text", values = ["GBP", "EUR", "USD", "other"] },
+  { name = "deposit", type = "quantity" },
+  { name = "signed_on", type = "time" },
+]
+
+[[enrichment.ontology.types]]
+name = "rent_change"
+kind = "claim"
+force = "declaration"
+subject = "tenancy"
+description = "A change to the monthly rent of a tenancy and the date it takes effect."
+attributes = [
+  { name = "new_rent", type = "quantity" },
+  { name = "previous_rent", type = "quantity" },
+  { name = "currency", type = "text", values = ["GBP", "EUR", "USD", "other"] },
+  { name = "effective_from", type = "time" },
+]
+
+[[enrichment.ontology.types]]
+name = "renewal"
+kind = "claim"
+force = "commissive"
+subject = "tenancy"
+description = "A renewal or extension of a tenancy for a further term, with its dates."
+attributes = [
+  { name = "agreed_on", type = "time" },
+  { name = "new_term", type = "time", range = true },
+  { name = "renewal_type", type = "text", values = ["fixed_term", "periodic", "extension"] },
+]
+
+[[enrichment.ontology.types]]
+name = "notice_to_quit"
+kind = "claim"
+force = "declaration"
+subject = "tenancy"
+description = "A notice ending a tenancy, served by the landlord or a tenant, with the date served and the date the flat is to be given up."
+attributes = [
+  { name = "served_by", type = "text", values = ["landlord", "tenant", "agent"] },
+  { name = "served_on", type = "time" },
+  { name = "quit_date", type = "time" },
+  { name = "grounds", type = "text" },
+  { name = "notice_status", type = "text", values = ["served", "withdrawn", "accepted", "disputed"] },
+]
+
+[[enrichment.ontology.types]]
+name = "occupancy_change"
+kind = "claim"
+force = "assertive"
+subject = "flat"
+description = "A flat being moved into, moved out of, left empty or re-let, and from when."
+attributes = [
+  { name = "change", type = "text", values = ["moved_in", "moved_out", "empty", "relet"] },
+  { name = "effective_from", type = "time" },
+]
+
+[[enrichment.ontology.types]]
+name = "maintenance_request"
+kind = "claim"
+force = "directive"
+deontic = ["request"]
+subject = "maintenance_job"
+description = "A report that something in a flat is wrong and needs fixing, with when it was reported and by whom."
+attributes = [
+  { name = "reported_on", type = "time" },
+  { name = "reported_by", type = "ref", of = "tenant" },
+  { name = "urgency", type = "text", values = ["emergency", "urgent", "routine"] },
+]
+
+[[enrichment.ontology.types]]
+name = "repair_update"
+kind = "claim"
+force = "assertive"
+subject = "maintenance_job"
+description = "A report on the progress of a repair: a contractor booked, attending, the work done or not done."
+attributes = [
+  { name = "contractor", type = "ref", of = "contractor" },
+  { name = "on", type = "time" },
+  { name = "work_done", type = "text" },
+]
+
+[[enrichment.ontology.types]]
+name = "invoice"
+kind = "claim"
+force = "assertive"
+subject = "maintenance_job"
+description = "A contractor's invoice for work on a maintenance job: who invoiced, the number, the date and the amount."
+attributes = [
+  { name = "contractor", type = "ref", of = "contractor" },
+  { name = "invoice_number", type = "text" },
+  { name = "invoice_date", type = "time" },
+  { name = "amount", type = "quantity" },
+  { name = "currency", type = "text", values = ["GBP", "EUR", "USD", "other"] },
+]
+
+# ── What holds when ───────────────────────────────────────────────────────
+
+[enrichment.ontology.change]
+supersedes = { rent_change = "effective_from", agreement_terms = "document_date", occupancy_change = "effective_from" }
+document = { date = "date", thread = "thread_id", id = "message_id", author = "from" }
+
+# ── What to notice ────────────────────────────────────────────────────────
+
+[enrichment.ontology.tension]
+label = "discrepancy"
+between = ["agreement_terms", "rent_change", "invoice"]
+not_conflicts = [
+  "A rent change that takes effect after the agreement's start is a change of rent, not a contradiction of the agreement.",
+  "A renewal agreement at a new rent replaces the earlier terms; it does not contradict them.",
+  "Two invoices for the same job (a call-out and a return visit) are two charges, not a conflict.",
+]

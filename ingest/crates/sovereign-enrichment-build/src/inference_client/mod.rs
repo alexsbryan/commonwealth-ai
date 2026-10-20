@@ -50,10 +50,12 @@ pub(crate) use corpus_index::v1_models::{probe_daemon_status, DaemonProbe, V1_MO
 /// 168s; full sections take far longer). When reqwest's timeout
 /// fires the daemon keeps the inference slot, so subsequent
 /// requests pile up against a held lock — a cascading failure
-/// that looks like the daemon itself is wedged. 1800s leaves
-/// generous headroom; if the request really is stuck, the user
-/// will notice on a 30-minute hang.
-const CHAT_TIMEOUT: Duration = Duration::from_secs(1800);
+/// that looks like the daemon itself is wedged. So this must outlast
+/// the daemon's own limit (`SOVEREIGN_INFERENCE_TIMEOUT_SECS`), which
+/// frees the slot: a window read reasoning to its 48k budget on a local
+/// model runs ~36 min at 30 tok/s, so long runs set 3600s there and
+/// this sits 5 min past it (1800s here cut those reads first).
+const CHAT_TIMEOUT: Duration = Duration::from_secs(3900);
 
 /// Default embed request timeout. Embeddings are fast; we keep this
 /// tight so a hung embed surface doesn't freeze a whole run.
@@ -523,14 +525,7 @@ impl DaemonInferenceClient {
                 _ => model_for_phase(&chat_model, &by_phase, phase).to_string(),
             })
         };
-        let (embed, mut chat) = self.into_closures();
-        // A/B valve and rollback hatch for forced-choice waves: the daemon is
-        // asked each question of a wave alone, the request pattern before
-        // waves, with the same questions, keys and answers.
-        if std::env::var("SOVEREIGN_WAVES_ONE_BY_ONE").is_ok_and(|v| v == "1") {
-            tracing::info!("inference_client: SOVEREIGN_WAVES_ONE_BY_ONE=1 — each wave's questions go to the daemon one by one");
-            chat = corpus_engine::enrichment::atlas::resolve_records::one_by_one(chat);
-        }
+        let (embed, chat) = self.into_closures();
         corpus_engine::enrichment::asker::answering(asker, enrichment_dir, by, embed, chat)
             .map_err(|e| format!("the {} asker: {e}", asker.label()))
     }

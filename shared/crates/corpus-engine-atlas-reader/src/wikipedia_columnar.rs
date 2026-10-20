@@ -701,6 +701,7 @@ impl WikiAtlasProvider {
                     chunk_id: r.chunk_id.clone(),
                     passage_preview: None,
                     source_doc_id: None,
+                    index_chunk: None,
                 }],
                 payload: Vec::new(),
             });

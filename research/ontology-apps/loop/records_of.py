@@ -1,8 +1,8 @@
 """records_of.py <corpus id> <recipe.toml> <out.json>: a corpus's records as the public typed query gives them.
 
 Every type the recipe's ontology declares is listed with `sovereign enrich atlas-query <id> --typed`; an
-entity record carries its attributes (references by the referenced record's name) and the statements whose
-subject it is; a statement with no subject record stands alone. The shape is score_bank.py's (and a one-shot's).
+entity record carries its attributes (references by the referenced record's name), its first passage (the
+passage it was first read from, when a reader's name names it) and the statements whose subject it is; a statement with no subject record stands alone. The shape is score_bank.py's (and a one-shot's).
 The typed listing shows at most 64 rows per type (ENUMERATE_MAX); a type it capped is named in `capped`.
 """
 import ast, json, subprocess, sys, tomllib
@@ -22,7 +22,8 @@ def rows(t):
     recs = []
     for x in d.get("rows", []):
         rec = ast.literal_eval(x["record"]) if isinstance(x["record"], str) else x["record"]
-        recs.append(dict(rec, name=x.get("name") or rec.get("name"), text=x.get("name") or rec.get("text")))
+        recs.append(dict(rec, name=x.get("name") or rec.get("name"), text=x.get("name") or rec.get("text"),
+                         passage=rec.get("text") or ""))
     return recs, [n for n in d.get("notes", []) if "showing the first" in n]
 
 
@@ -43,10 +44,16 @@ for t in types:
             claims.append((t["name"], rec))
         else:
             r = dict(type=t["name"], name=rec.get("name"), attributes=plain(rec), claims=[])
+            # An entity's text is its first passage (the record's opening passage, once a reader's name names it).
+            if rec["passage"] and rec["passage"] != rec.get("name"):
+                r["first_passage"] = rec["passage"]
             records.append(r); by_id[rec["id"]] = r
 for kind, rec in claims:
     subj = next((r["id"] for r in rec.get("refs") or [] if r.get("attribute") == "subject"), None)
-    c = dict(kind=kind, quote=rec.get("text") or rec.get("name"), attributes={k: v for k, v in plain(rec).items() if k != "subject"})
+    # Who says a statement and its grade are row keys beside its attributes (records.rs), shown with them.
+    voice = {k: rec[k] for k in ("said_by", "grade") if rec.get(k)}
+    c = dict(kind=kind, quote=rec.get("text") or rec.get("name"),
+             attributes={**{k: v for k, v in plain(rec).items() if k != "subject"}, **voice})
     if subj in by_id: by_id[subj]["claims"].append(c)
     else: records.append(dict(type=kind, name=c["quote"], attributes=c["attributes"], claims=[]))
 json.dump(dict(records=records, capped=capped), open(out, "w"), indent=1)

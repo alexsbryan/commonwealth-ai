@@ -1,0 +1,1097 @@
+{
+  "rule": "An assertion holds exactly what the recipe's declaration and the source documents together determine, no more and no less: what someone holding only the recipe, the documents and the assertion, never having seen a run, would write.",
+  "assertions": [
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml lookup.targets person.mira type",
+      "assertion": "type = \"person\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "person is declared sourced from metadata author, and issue-101 is authored by mira."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml lookup.targets person.mira id_from",
+      "assertion": "q1 row case.reminders ref reporter",
+      "verdict": "keep",
+      "to": null,
+      "why": "reporter_of_case folds the earliest non-maintainer author of the case's documents, which is mira (issue-101, author_association NONE)."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml lookup.targets person.mira attributes.login",
+      "assertion": "login = \"mira\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "login is the declared identity read from metadata author = value, so it is exactly the author field."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml lookup.targets person.mira identity_source",
+      "assertion": "issue-101 author = mira",
+      "verdict": "keep",
+      "to": null,
+      "why": "issue-101's author metadata is mira and author is a declared source."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml lookup.targets person.olu type",
+      "assertion": "type = \"person\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "person is declared sourced from metadata author, and issue-102 is authored by olu."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml lookup.targets person.olu id_from",
+      "assertion": "q1 row case.shared-calendar-colour ref reporter",
+      "verdict": "keep",
+      "to": null,
+      "why": "reporter_of_case folds the earliest non-maintainer author of the case's documents, which is olu (issue-102, author_association NONE)."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml lookup.targets person.olu attributes.login",
+      "assertion": "login = \"olu\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "login is the declared identity read from metadata author = value, so it is exactly the author field."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml lookup.targets person.olu identity_source",
+      "assertion": "issue-102 author = olu",
+      "verdict": "keep",
+      "to": null,
+      "why": "issue-102's author metadata is olu and author is a declared source."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/q1.json",
+      "assertion": "{\"target_type\":\"case\"}",
+      "verdict": "keep",
+      "to": null,
+      "why": "\"List every case\" is a case query with no condition."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q1 expected_matched",
+      "assertion": "2",
+      "verdict": "keep",
+      "to": null,
+      "why": "Under the case identity criterion thread 101 is one problem (doubled reminders) and thread 102 one request (shared-calendar colours), so there are exactly two cases."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q1 distinct_case_ids",
+      "assertion": "true",
+      "verdict": "keep",
+      "to": null,
+      "why": "The double-reminder bug and the colour request are different underlying problems."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q1 row case.reminders type",
+      "assertion": "type = \"case\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "q1 targets case."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q1 row case.reminders id_bind_from",
+      "assertion": "issue-101: \"Since the clocks went forward on Sunday every reminder in my calendar fires twice, one hour apart.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "This sentence states the underlying problem or request the case is (\"one underlying problem or request\")."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q1 row case.reminders refs reporter",
+      "assertion": "reporter -> person.mira, key \"mira\", source author=mira",
+      "verdict": "keep",
+      "to": null,
+      "why": "reporter_of_case = earliest [!maintainer_post] author; issue-101 by mira (NONE) is the earliest such document, and the person identity is login."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q1 row case.reminders evidence",
+      "assertion": "issue-101: \"Since the clocks went forward on Sunday every reminder in my calendar fires twice, one hour apart.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "The case is stated in this sentence of its opening document."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q1 row case.shared-calendar-colour type",
+      "assertion": "type = \"case\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "q1 targets case."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q1 row case.shared-calendar-colour id_bind_from",
+      "assertion": "issue-102: \"It would help a great deal to give each shared calendar its own colour in the week view.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "This sentence states the underlying problem or request the case is (\"one underlying problem or request\")."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q1 row case.shared-calendar-colour refs reporter",
+      "assertion": "reporter -> person.olu, key \"olu\", source author=olu",
+      "verdict": "keep",
+      "to": null,
+      "why": "reporter_of_case = earliest [!maintainer_post] author; issue-102 by olu (NONE) is the earliest such document, and the person identity is login."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q1 row case.shared-calendar-colour evidence",
+      "assertion": "issue-102: \"It would help a great deal to give each shared calendar its own colour in the week view.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "The case is stated in this sentence of its opening document."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/q2.json filters state",
+      "assertion": "{\"attribute\":\"state\",\"op\":\"eq\",\"value\":\"confirmed\"}",
+      "verdict": "keep",
+      "to": null,
+      "why": "state is a closed vocabulary, so eq on \"confirmed\" is exact."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/q2.json filters app_version",
+      "assertion": "{\"attribute\":\"app_version\",\"op\":\"eq\",\"value\":\"2.3\"}",
+      "verdict": "amend",
+      "to": "{\"attribute\":\"app_version\",\"op\":\"contains\",\"value\":\"2.3\"}",
+      "why": "app_version is free text (\"the app version the statement names\") and the sources write \"2.3\" and \"version 2.3\", so only containment of 2.3 is determined."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/q2.json relations",
+      "assertion": "case_state.subject -> case whose case.reporter is person mira",
+      "verdict": "keep",
+      "to": null,
+      "why": "The reminder case is the one whose derived reporter is mira, so the relation picks it out by declared structure."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q2 expected_matched",
+      "assertion": "1",
+      "verdict": "keep",
+      "to": null,
+      "why": "comment-101-1 is the only maintainer statement confirming the bug, and it names 2.3; issue-101's 2.3 statement is a report, not a confirmation."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q2 row state.reminders.confirmed-2.3 type",
+      "assertion": "type = \"case_state\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "q2 targets the declared claim kind case_state."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q2 row state.reminders.confirmed-2.3 attributes.state",
+      "assertion": "state = \"confirmed\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "\"I can reproduce this ... this is a bug on our side\" maps to confirmed and to no other declared value."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q2 row state.reminders.confirmed-2.3 attributes.app_version",
+      "assertion": "app_version = \"2.3\"",
+      "verdict": "amend",
+      "to": "app_version not asserted exactly; asserted by q2.json op contains \"2.3\" and by attribute_evidence",
+      "why": "app_version is free text and \"2.3\", \"version 2.3\" or \"v2.3\" are all faithful; the scorer compares attributes only by equality."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q2 row state.reminders.confirmed-2.3 id_bind_from",
+      "assertion": "comment-101-1: \"The scheduler stores the reminder time twice when the offset moves, so this is a bug on our side.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "\"this is a bug on our side\" itself confirms the case."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q2 row state.reminders.confirmed-2.3 refs subject",
+      "assertion": "subject -> case.reminders",
+      "verdict": "keep",
+      "to": null,
+      "why": "The comment is in thread 101 and speaks of the doubled reminders."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q2 row state.reminders.confirmed-2.3 attribute_evidence app_version",
+      "assertion": "comment-101-1: \"I can reproduce this on 2.3 with any reminder created before the change.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "This is the sentence of the confirming comment that names the version."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q2 row state.reminders.confirmed-2.3 evidence",
+      "assertion": "comment-101-1: \"The scheduler stores ... bug on our side.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "The confirmation is cited to the comment that makes it."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/q3.json filters app_version",
+      "assertion": "{\"attribute\":\"app_version\",\"op\":\"eq\",\"value\":\"2.4\"}",
+      "verdict": "amend",
+      "to": "{\"attribute\":\"app_version\",\"op\":\"contains\",\"value\":\"2.4\"}",
+      "why": "app_version is free text and the source writes \"version 2.4\" and \"2.4\", so only containment is determined."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/q3.json relations",
+      "assertion": "case_state.subject -> case whose case.reporter is person mira",
+      "verdict": "keep",
+      "to": null,
+      "why": "It selects the reminder case by its derived reporter."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q3 expected_matched",
+      "assertion": "2",
+      "verdict": "optional",
+      "to": null,
+      "why": "Only comment-101-2 (\"The fix ... is merged and goes out in version 2.4\") is determined. comment-101-3's \"Please update to 2.4 first.\" is an instruction whose case_state reading depends on context (the scorer's own semantic note says so), so the count is 1 or 2. The schema cannot express this."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q3 distinct_row_ids",
+      "assertion": "true",
+      "verdict": "keep",
+      "to": null,
+      "why": "If comment-101-3 yields a statement, it is a separate document's statement, and the scorer judges this only when both rows are bound."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q3 same_subject_id",
+      "assertion": "\"case.reminders\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "Both comments are in thread 101 about the doubled reminders, and the scorer judges this only when every row is bound."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q3 row instruction.reminders.comment-101-2 type",
+      "assertion": "type = \"case_state\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "q3 targets case_state."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q3 row instruction.reminders.comment-101-2 attributes.app_version",
+      "assertion": "app_version = \"2.4\"",
+      "verdict": "amend",
+      "to": "app_version not asserted exactly; asserted by q3.json op contains \"2.4\" and by attribute_evidence",
+      "why": "The free-text app_version could be written \"2.4\" or \"version 2.4\" (the source's own words)."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q3 row instruction.reminders.comment-101-2 attributes.state",
+      "assertion": "(absent)",
+      "verdict": "tighten",
+      "to": "state = \"resolved\"",
+      "why": "\"The fix for the doubled reminders is merged\" can only be resolved among reported/confirmed/resolved/declined, and leaving it unasserted would pass a wrong state."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q3 row instruction.reminders.comment-101-2 id_bind_from",
+      "assertion": "comment-101-2: \"After updating, open the app once so that the scheduler can rebuild its list of reminders.\"",
+      "verdict": "amend",
+      "to": "comment-101-2: \"The fix for the doubled reminders is merged and goes out in version 2.4 this week.\"",
+      "why": "The post-update instruction does not state where the case stands; the fix sentence does."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q3 row instruction.reminders.comment-101-2 refs subject",
+      "assertion": "subject -> case.reminders",
+      "verdict": "keep",
+      "to": null,
+      "why": "Thread 101, the doubled reminders."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q3 row instruction.reminders.comment-101-2 attribute_evidence app_version",
+      "assertion": "comment-101-2: \"The fix for the doubled reminders is merged and goes out in version 2.4 this week.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "This is the sentence that names 2.4."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q3 row instruction.reminders.comment-101-2 evidence",
+      "assertion": "comment-101-2: \"After updating, open the app once ...\"",
+      "verdict": "amend",
+      "to": "comment-101-2: \"The fix for the doubled reminders is merged and goes out in version 2.4 this week.\"",
+      "why": "The instruction line is not a case_state statement; the resolution is."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q3 row instruction.reminders.comment-101-3 (presence)",
+      "assertion": "a case_state row from comment-101-3 is required",
+      "verdict": "optional",
+      "to": null,
+      "why": "\"Please update to 2.4 first.\" is an instruction, and a reader may or may not read it as a resolved state. The schema has no optional row, so the row stays required."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q3 row instruction.reminders.comment-101-3 type",
+      "assertion": "type = \"case_state\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "If present, the row is a case_state."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q3 row instruction.reminders.comment-101-3 attributes.app_version",
+      "assertion": "app_version = \"2.4\"",
+      "verdict": "amend",
+      "to": "app_version not asserted exactly; asserted by q3.json op contains \"2.4\" and by attribute_evidence",
+      "why": "app_version is free text, so only containment of 2.4 is determined."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q3 row instruction.reminders.comment-101-3 id_bind_from",
+      "assertion": "comment-101-3: \"After updating, open the app once so that the scheduler can rebuild its list of reminders.\"",
+      "verdict": "amend",
+      "to": "comment-101-3: \"Please update to 2.4 first.\"",
+      "why": "The repeated instruction states no case_state and names no version; the only sentence that could carry this row's state and 2.4 is \"Please update to 2.4 first.\""
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q3 row instruction.reminders.comment-101-3 refs subject",
+      "assertion": "subject -> case.reminders",
+      "verdict": "keep",
+      "to": null,
+      "why": "Thread 101."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q3 row instruction.reminders.comment-101-3 attribute_evidence app_version",
+      "assertion": "comment-101-3: \"Please update to 2.4 first.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "This is the sentence that names 2.4."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml query q3 row instruction.reminders.comment-101-3 evidence",
+      "assertion": "comment-101-3: \"After updating, open the app once ...\"",
+      "verdict": "amend",
+      "to": "comment-101-3: \"Please update to 2.4 first.\"",
+      "why": "The instruction line is not a case_state statement."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml unknown case.shared-calendar-colour comment-102-1",
+      "assertion": "\"Thanks, noted for the roadmap.\" yields no case_state",
+      "verdict": "keep",
+      "to": null,
+      "why": "Noting a request for the roadmap neither confirms, resolves nor declines it, and \"reported\" was already stated by issue-102."
+    },
+    {
+      "fixture": "issues",
+      "where": "issues/expected.toml unknown case.reminders comment-101-4",
+      "assertion": "\"Thanks, all good now.\" yields no case_state",
+      "verdict": "optional",
+      "to": "[[unknown]] removed (no assertion)",
+      "why": "\"all good now\" faithfully reads as the reporter stating the case resolved, and equally as thanks that states nothing new, so neither a claim nor its absence is determined."
+    },
+    {
+      "fixture": "issues",
+      "where": "svrn/docs/cli-contract.toml journey layer-issues-default-path step corpus install stdout_contains",
+      "assertion": "\"installed\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "This is the CLI's install acknowledgement and does not read the documents."
+    },
+    {
+      "fixture": "issues",
+      "where": "svrn/docs/cli-contract.toml journey layer-issues-default-path step enrich init stdout_contains",
+      "assertion": "\"custom ontology\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "The recipe declares [enrichment.ontology], so init selects the custom atlas."
+    },
+    {
+      "fixture": "issues",
+      "where": "svrn/docs/cli-contract.toml journey layer-issues-default-path step enrich extract stdout_contains",
+      "assertion": "\"cache updated\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "This is the CLI's extract acknowledgement."
+    },
+    {
+      "fixture": "issues",
+      "where": "svrn/docs/cli-contract.toml journey layer-issues-default-path step enrich resolve stdout_contains",
+      "assertion": "\"RESOLVE\"",
+      "verdict": "tighten",
+      "to": "\"derived case.reporter (AfterResolve)\"",
+      "why": "case has an identity_criterion (RESOLVE decides it) and declares reporter derived = reporter_of_case, so the document step prints this line, which is the analogue of mailraw's asserted line; \"RESOLVE\" alone would pass a run that derived no reporter."
+    },
+    {
+      "fixture": "issues",
+      "where": "svrn/docs/cli-contract.toml journey layer-issues-default-path step q1 stdout_contains",
+      "assertion": "\"\\\"matched\\\": 2\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "There are exactly two cases."
+    },
+    {
+      "fixture": "issues",
+      "where": "svrn/docs/cli-contract.toml journey layer-issues-default-path step q2 stdout_contains",
+      "assertion": "\"\\\"matched\\\": 1\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "There is one confirmed state naming 2.3 (comment-101-1)."
+    },
+    {
+      "fixture": "issues",
+      "where": "svrn/docs/cli-contract.toml journey layer-issues-default-path step q3 stdout_contains",
+      "assertion": "\"\\\"matched\\\": 2\"",
+      "verdict": "optional",
+      "to": null,
+      "why": "The count is 1 or 2, depending on whether comment-101-3's instruction is read as a case_state. One stdout_contains string cannot express either-or, and a claim row prints the reader's content rather than the source quote, so the assertion is left unchanged."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml lookup.targets event.mill-lane-fire type",
+      "assertion": "type = \"happening\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "happening is the declared event type that report claims are about."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml lookup.targets event.mill-lane-fire id_from",
+      "assertion": "q1 rows report.mill-lane-fire.report-a/-b subject",
+      "verdict": "keep",
+      "to": null,
+      "why": "report.subject is the declared subject ref to happening."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml lookup.targets event.mill-lane-fire attributes.what",
+      "assertion": "what = \"a fire starting or burning\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "what is a closed vocabulary, and the cited sentences describe exactly this value."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml lookup.targets event.mill-lane-fire evidence report-a",
+      "assertion": "report-a: \"A fire broke out at a riverside warehouse on Mill Lane late on Friday night, the fire service said.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "This sentence of the document mentions the happening."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml lookup.targets event.mill-lane-fire evidence report-b",
+      "assertion": "report-b: \"Investigators are trying to find out what started Friday's fire at the Mill Lane warehouse.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "This sentence of the document mentions the happening."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml lookup.targets event.workers-treated type",
+      "assertion": "type = \"happening\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "happening is the declared event type that report claims are about."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml lookup.targets event.workers-treated id_from",
+      "assertion": "q2 rows report.workers-treated.report-a/-b subject",
+      "verdict": "keep",
+      "to": null,
+      "why": "report.subject is the declared subject ref to happening."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml lookup.targets event.workers-treated attributes.what",
+      "assertion": "what = \"a person being hurt or treated\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "what is a closed vocabulary, and the cited sentences describe exactly this value."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml lookup.targets event.workers-treated evidence report-a",
+      "assertion": "report-a: \"Two workers were treated for smoke inhalation and taken to the county hospital as a precaution.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "This sentence of the document mentions the happening."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml lookup.targets event.workers-treated evidence report-b",
+      "assertion": "report-b: \"Two workers were treated for smoke inhalation and taken to the county hospital as a precaution.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "This sentence of the document mentions the happening."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml lookup.targets event.bakery-fire type",
+      "assertion": "type = \"happening\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "happening is the declared event type that report claims are about."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml lookup.targets event.bakery-fire id_from",
+      "assertion": "q3 row report.bakery-fire.report-b subject",
+      "verdict": "keep",
+      "to": null,
+      "why": "report.subject is the declared subject ref to happening."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml lookup.targets event.bakery-fire attributes.what",
+      "assertion": "what = \"a fire starting or burning\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "what is a closed vocabulary, and the cited sentences describe exactly this value."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml lookup.targets event.bakery-fire evidence report-b",
+      "assertion": "report-b: \"A separate small fire at a bakery on Station Road the same evening was put out within minutes.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "This sentence of the document mentions the happening."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml lookup.targets event.mill-lane-fire same_id",
+      "assertion": "true",
+      "verdict": "keep",
+      "to": null,
+      "why": "Both reports describe a fire at the Mill Lane warehouse on Friday night, which is the same occurrence under the identity criterion (kind, place, time)."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml lookup.targets event.workers-treated same_id",
+      "assertion": "true",
+      "verdict": "keep",
+      "to": null,
+      "why": "The verbatim sentence in both reports, and report-b's own \"two workers who were taken to hospital after breathing in smoke\", name the same two workers, the same cause and the same hospital."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml lookup.targets event.bakery-fire distinct_from",
+      "assertion": "event.mill-lane-fire",
+      "verdict": "keep",
+      "to": null,
+      "why": "\"A separate small fire at a bakery on Station Road\" is a different place and is called separate."
+    },
+    {
+      "fixture": "news",
+      "where": "news/q1.json filters place",
+      "assertion": "{\"attribute\":\"place\",\"op\":\"eq\",\"value\":\"Mill Lane\"}",
+      "verdict": "amend",
+      "to": "{\"attribute\":\"place\",\"op\":\"contains\",\"value\":\"Mill Lane\"} plus relation report.subject -> happening where what eq \"a fire starting or burning\"",
+      "why": "place is free text (\"where it happened\": \"Mill Lane\", \"a riverside warehouse on Mill Lane\", \"the Mill Lane warehouse\"), and the question asks for Mill Lane *fire* reports; a reader may also place the evacuation or treatment on Mill Lane, so only the subject relation makes the count of 2 determined."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q1 expected_matched",
+      "assertion": "2",
+      "verdict": "keep",
+      "to": null,
+      "why": "Each report states the Mill Lane fire once (report-a: \"A fire broke out ...\"; report-b: \"Friday's fire at the Mill Lane warehouse\")."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q1 shared_subject_id",
+      "assertion": "\"event.mill-lane-fire\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "This is the same occurrence, as for same_id."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q1 row report.mill-lane-fire.report-a type",
+      "assertion": "type = \"report\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "q1 targets the declared report claim."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q1 row report.mill-lane-fire.report-a attributes.place",
+      "assertion": "place = \"Mill Lane\"",
+      "verdict": "amend",
+      "to": "place not asserted exactly; asserted by q1.json op contains \"Mill Lane\"",
+      "why": "place is free text, and the document's own words include \"a riverside warehouse on Mill Lane\" and \"the Mill Lane warehouse\"."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q1 row report.mill-lane-fire.report-a id_bind_from",
+      "assertion": "report-a: \"A fire broke out at a riverside warehouse on Mill Lane late on Friday night, the fire service said.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "In this document, this is the sentence that tells of the Mill Lane fire taking place."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q1 row report.mill-lane-fire.report-a refs subject",
+      "assertion": "subject -> happening event.mill-lane-fire",
+      "verdict": "keep",
+      "to": null,
+      "why": "The report's subject is the warehouse fire."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q1 row report.mill-lane-fire.report-a evidence",
+      "assertion": "report-a: \"A fire broke out at a riverside warehouse on Mill Lane late on Friday night, the fire service said.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "This is the same sentence as the anchor."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q1 row report.mill-lane-fire.report-b type",
+      "assertion": "type = \"report\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "q1 targets the declared report claim."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q1 row report.mill-lane-fire.report-b attributes.place",
+      "assertion": "place = \"Mill Lane\"",
+      "verdict": "amend",
+      "to": "place not asserted exactly; asserted by q1.json op contains \"Mill Lane\"",
+      "why": "place is free text, and the document's own words include \"a riverside warehouse on Mill Lane\" and \"the Mill Lane warehouse\"."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q1 row report.mill-lane-fire.report-b id_bind_from",
+      "assertion": "report-b: \"Investigators are trying to find out what started Friday's fire at the Mill Lane warehouse.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "In this document, this is the sentence that tells of the Mill Lane fire taking place. It is the only sentence of report-b that does."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q1 row report.mill-lane-fire.report-b refs subject",
+      "assertion": "subject -> happening event.mill-lane-fire",
+      "verdict": "keep",
+      "to": null,
+      "why": "The report's subject is the warehouse fire."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q1 row report.mill-lane-fire.report-b evidence",
+      "assertion": "report-b: \"Investigators are trying to find out what started Friday's fire at the Mill Lane warehouse.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "This is the same sentence as the anchor."
+    },
+    {
+      "fixture": "news",
+      "where": "news/q2.json relations",
+      "assertion": "report.subject -> happening where what eq \"a person being hurt or treated\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "what is closed, so eq on the declared value answers \"which reports cite the workers treated\"."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q2 expected_matched",
+      "assertion": "2",
+      "verdict": "optional",
+      "to": null,
+      "why": "report-b's \"The two workers who were taken to hospital after breathing in smoke have since been released\" also tells, in a relative clause, that they were taken to hospital, which is the same kind of presupposed mention q1 accepts from report-b. A reader may write a second treated report from report-b, so the count is 2 or 3. The schema cannot express this."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q2 shared_subject_id",
+      "assertion": "\"event.workers-treated\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "This is the same occurrence, as for same_id."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q2 row report.workers-treated.report-a type",
+      "assertion": "type = \"report\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "q2 targets report."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q2 row report.workers-treated.report-a id_bind_from",
+      "assertion": "report-a: \"Two workers were treated for smoke inhalation and taken to the county hospital as a precaution.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "The sentence itself states that the workers were treated."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q2 row report.workers-treated.report-a refs subject",
+      "assertion": "subject -> event.workers-treated",
+      "verdict": "keep",
+      "to": null,
+      "why": "The report is about the treatment happening."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q2 row report.workers-treated.report-a evidence",
+      "assertion": "report-a: \"Two workers were treated for smoke inhalation and taken to the county hospital as a precaution.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "This is the same sentence as the anchor."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q2 row report.workers-treated.report-b type",
+      "assertion": "type = \"report\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "q2 targets report."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q2 row report.workers-treated.report-b id_bind_from",
+      "assertion": "report-b: \"Two workers were treated for smoke inhalation and taken to the county hospital as a precaution.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "The sentence itself states that the workers were treated."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q2 row report.workers-treated.report-b refs subject",
+      "assertion": "subject -> event.workers-treated",
+      "verdict": "keep",
+      "to": null,
+      "why": "The report is about the treatment happening."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q2 row report.workers-treated.report-b evidence",
+      "assertion": "report-b: \"Two workers were treated for smoke inhalation and taken to the county hospital as a precaution.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "This is the same sentence as the anchor."
+    },
+    {
+      "fixture": "news",
+      "where": "news/q3.json filters place",
+      "assertion": "{\"attribute\":\"place\",\"op\":\"eq\",\"value\":\"Station Road\"}",
+      "verdict": "amend",
+      "to": "{\"attribute\":\"place\",\"op\":\"contains\",\"value\":\"Station Road\"}",
+      "why": "place is free text, and \"a bakery on Station Road\" is as faithful as \"Station Road\"."
+    },
+    {
+      "fixture": "news",
+      "where": "news/q3.json relations",
+      "assertion": "report.subject -> happening where what eq \"a fire starting or burning\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "The question asks for the separate fire, and what is closed."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q3 expected_matched",
+      "assertion": "1",
+      "verdict": "keep",
+      "to": null,
+      "why": "Only the bakery sentence places anything on Station Road."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q3 row report.bakery-fire.report-b type",
+      "assertion": "type = \"report\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "q3 targets report."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q3 row report.bakery-fire.report-b attributes.place",
+      "assertion": "place = \"Station Road\"",
+      "verdict": "amend",
+      "to": "place not asserted exactly; asserted by q3.json op contains \"Station Road\"",
+      "why": "place is free text (\"a bakery on Station Road\" is a faithful reading)."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q3 row report.bakery-fire.report-b id_bind_from",
+      "assertion": "report-b: \"A separate small fire at a bakery on Station Road the same evening was put out within minutes.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "The sentence states that the bakery fire took place."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q3 row report.bakery-fire.report-b refs subject + distinct_from",
+      "assertion": "subject -> event.bakery-fire, distinct_from event.mill-lane-fire",
+      "verdict": "keep",
+      "to": null,
+      "why": "The bakery fire is \"separate\" and on a different road."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml query q3 row report.bakery-fire.report-b evidence",
+      "assertion": "report-b: \"A separate small fire at a bakery on Station Road the same evening was put out within minutes.\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "This is the same sentence as the anchor."
+    },
+    {
+      "fixture": "news",
+      "where": "news/expected.toml unknown report-b release sentence",
+      "assertion": "\"The two workers who were taken to hospital ... have since been released.\" yields no report",
+      "verdict": "optional",
+      "to": "[[unknown]] removed (no assertion)",
+      "why": "The release has no declared what value, but the sentence also states that the workers were taken to hospital after breathing in smoke (\"a person being hurt or treated\"). A reader may cite it for the treatment report or not."
+    },
+    {
+      "fixture": "news",
+      "where": "svrn/docs/cli-contract.toml journey layer-news-default-path step corpus install stdout_contains",
+      "assertion": "\"installed\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "This is the CLI's install acknowledgement."
+    },
+    {
+      "fixture": "news",
+      "where": "svrn/docs/cli-contract.toml journey layer-news-default-path step enrich init stdout_contains",
+      "assertion": "\"custom ontology\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "The recipe declares [enrichment.ontology]."
+    },
+    {
+      "fixture": "news",
+      "where": "svrn/docs/cli-contract.toml journey layer-news-default-path step enrich extract stdout_contains",
+      "assertion": "\"cache updated\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "This is the CLI's extract acknowledgement."
+    },
+    {
+      "fixture": "news",
+      "where": "svrn/docs/cli-contract.toml journey layer-news-default-path step enrich resolve stdout_contains",
+      "assertion": "\"RESOLVE\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "happening has an identity_criterion and the recipe declares no derived attribute, so the RESOLVE decisions line is all the declaration determines."
+    },
+    {
+      "fixture": "news",
+      "where": "svrn/docs/cli-contract.toml journey layer-news-default-path step q1 stdout_contains",
+      "assertion": "\"\\\"matched\\\": 2\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "There are two Mill Lane fire reports under the amended q1.json."
+    },
+    {
+      "fixture": "news",
+      "where": "svrn/docs/cli-contract.toml journey layer-news-default-path step q2 stdout_contains",
+      "assertion": "\"\\\"matched\\\": 2\"",
+      "verdict": "optional",
+      "to": null,
+      "why": "The count is 2 or 3 (see q2 expected_matched). One stdout_contains string cannot express either-or, and claim rows print the reader's content rather than the source quote, so the assertion is left unchanged."
+    },
+    {
+      "fixture": "news",
+      "where": "svrn/docs/cli-contract.toml journey layer-news-default-path step q3 stdout_contains",
+      "assertion": "\"\\\"matched\\\": 1\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "There is one Station Road fire report."
+    },
+    {
+      "fixture": "mailraw",
+      "where": "mailraw/q1.json relations",
+      "assertion": "order.client -> company where web_domain eq \"birchhall.example\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "web_domain is the company's sourced identity read from the header domain, so eq on birchhall.example is exact."
+    },
+    {
+      "fixture": "mailraw",
+      "where": "mailraw/q2.json filters stage",
+      "assertion": "{\"attribute\":\"stage\",\"op\":\"eq\",\"value\":\"confirmed\"}",
+      "verdict": "keep",
+      "to": null,
+      "why": "stage is closed (asked/quoted/confirmed/cancelled)."
+    },
+    {
+      "fixture": "mailraw",
+      "where": "mailraw/q3.json relations",
+      "assertion": "company target, relation order.client -> order",
+      "verdict": "keep",
+      "to": null,
+      "why": "\"Which companies are any order's client\" is exactly this relation."
+    },
+    {
+      "fixture": "mailraw",
+      "where": "svrn/docs/cli-contract.toml journey layer-default-path step corpus install stdout_contains",
+      "assertion": "\"installed\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "This is the CLI's install acknowledgement."
+    },
+    {
+      "fixture": "mailraw",
+      "where": "svrn/docs/cli-contract.toml journey layer-default-path step enrich init stdout_contains",
+      "assertion": "\"custom ontology\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "The recipe declares [enrichment.ontology]."
+    },
+    {
+      "fixture": "mailraw",
+      "where": "svrn/docs/cli-contract.toml journey layer-default-path step enrich extract stdout_contains",
+      "assertion": "\"cache updated\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "This is the CLI's extract acknowledgement."
+    },
+    {
+      "fixture": "mailraw",
+      "where": "svrn/docs/cli-contract.toml journey layer-default-path step enrich resolve stdout_contains",
+      "assertion": "\"derived order.stage (AfterResolve)\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "order has an identity_criterion and stage is derived = order_stage, so this exact line is determined."
+    },
+    {
+      "fixture": "mailraw",
+      "where": "svrn/docs/cli-contract.toml journey layer-default-path step q1 (client key) stdout_contains",
+      "assertion": "\"\\\"key\\\": \\\"birchhall.example\\\"\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "The client is Birch Hall Trust (02, 05, 06 from birchhall.example), and a company's key is its identity web_domain."
+    },
+    {
+      "fixture": "mailraw",
+      "where": "svrn/docs/cli-contract.toml journey layer-default-path step q1 (one order) stdout_contains",
+      "assertion": "\"\\\"matched\\\": 1\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "Messages 02, 03, 05 and 06 (and the 01 note and the 04 timber note) are about one piece of work, six oak chairs for Birch Hall Trust."
+    },
+    {
+      "fixture": "mailraw",
+      "where": "svrn/docs/cli-contract.toml journey layer-default-path step q1 (stage) stdout_contains",
+      "assertion": "\"\\\"stage\\\": \\\"confirmed\\\"\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "05's \"The board approved it this morning: please go ahead\" is confirmed. 06's \"our purchase order now has ... at 2,250\" is an agreement at a new price, not a new quote or a cancellation."
+    },
+    {
+      "fixture": "mailraw",
+      "where": "svrn/docs/cli-contract.toml journey layer-default-path step q1 (price) stdout_contains",
+      "assertion": "\"\\\"outcome\\\": \\\"conflict\\\"\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "price is declared by = \"agree\" over 2,400 dollars (03, 05) and 2,250 dollars (06), which disagree."
+    },
+    {
+      "fixture": "mailraw",
+      "where": "svrn/docs/cli-contract.toml journey layer-default-path step q2 stdout_contains",
+      "assertion": "\"please go ahead with the six oak chairs\"",
+      "verdict": "amend",
+      "to": "\"please go ahead\"",
+      "why": "The recipe's story cites the stage to 05's \"please go ahead\", and a faithful citation of those words need not run on through \"with the six oak chairs\"."
+    },
+    {
+      "fixture": "mailraw",
+      "where": "svrn/docs/cli-contract.toml journey layer-default-path step q3 stdout_contains",
+      "assertion": "\"\\\"matched\\\": 1\"",
+      "verdict": "keep",
+      "to": null,
+      "why": "Only Birch Hall Trust (birchhall.example) is any order's client, and the criterion \"the same organisation, however it is named\" puts 01's prose mention on that record."
+    }
+  ],
+  "counts": {
+    "total": 128,
+    "by_verdict": {
+      "keep": 104,
+      "amend": 15,
+      "optional": 7,
+      "tighten": 2
+    },
+    "by_fixture": {
+      "issues": {
+        "keep": 43,
+        "amend": 9,
+        "optional": 4,
+        "tighten": 2
+      },
+      "news": {
+        "keep": 49,
+        "amend": 5,
+        "optional": 3
+      },
+      "mailraw": {
+        "keep": 12,
+        "amend": 1
+      }
+    }
+  },
+  "expressed": [
+    {
+      "item": 8,
+      "fixture": "issues",
+      "where": "issues/expected.toml query q3 row instruction.reminders.comment-101-3",
+      "was": "required row",
+      "now": "optional = true",
+      "schema": "research/ontology-apps/journeys/score_baseline.py: optional rows are scored when bound, never omitted, never extra"
+    },
+    {
+      "item": 12,
+      "fixture": "issues",
+      "where": "issues/expected.toml query q3 expected_matched",
+      "was": "2",
+      "now": "[1, 2]",
+      "schema": "expected_matched as an inclusive [min, max], audited against 1 required + 1 optional row"
+    },
+    {
+      "item": 15,
+      "fixture": "issues",
+      "where": "svrn/docs/cli-contract.toml journey layer-issues-default-path step q3 stdout_contains",
+      "was": "\"matched\": 2",
+      "now": "\"state\": \"resolved\"",
+      "schema": "one stdout_contains fragment that every faithful outcome prints: the determined comment-101-2 row's state (the tightened state = resolved)"
+    },
+    {
+      "item": 21,
+      "fixture": "news",
+      "where": "news/expected.toml query q2 expected_matched",
+      "was": "2",
+      "now": "[2, 3], plus an optional row report.workers-treated.report-b-release anchored on report-b's \"The two workers who were taken to hospital after breathing in smoke have since been released.\" with subject event.workers-treated",
+      "schema": "The range can only be audited against rows, so the third outcome this item judged faithful is written as the optional row it describes. Same-document duplicates bind by row text."
+    },
+    {
+      "item": 23,
+      "fixture": "news",
+      "where": "svrn/docs/cli-contract.toml journey layer-news-default-path step q2 stdout_contains",
+      "was": "\"matched\": 2",
+      "now": "\"hit\": true",
+      "schema": "No fragment is determined for both the 2-row and 3-row outcomes (claim rows print reader content, and ref ends print id/type/name/key), so the step asserts only the hit and its note says why."
+    }
+  ]
+}

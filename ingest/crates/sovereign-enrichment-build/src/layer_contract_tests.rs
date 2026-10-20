@@ -2,19 +2,17 @@
 //! The six contracts of campaign ontology-layer (ONTOLOGY_METHOD §Invariants),
 //! each a test on fixtures of the three shapes (`tests/fixtures/layer/`: mail,
 //! an issue tracker, news), run through the default path's own code: the
-//! manifest `enrich init` builds from the rows, Phase 1 through the
-//! `PhaseRunner` (the passes reader), and `atlas-resolve`'s whole layer
-//! (`resolve_with_inputs`: 3a, 3b, stamps, RESOLVE, derived folds), with the
-//! model answered by a scripted oracle through the Asker.
+//! windows `enrich init` cuts from the rows (one document each, `run_as`),
+//! Phase 1 through the `PhaseRunner` (the window reader), and
+//! `atlas-resolve`'s whole layer (`resolve_with_inputs`: 3a, 3b, stamps,
+//! RESOLVE, derived folds), with the model answered by a scripted oracle
+//! through the Asker.
 //!
 //! The oracle reads only what a question shows and never a type or attribute
-//! name: Locate takes the first claim kind for a line of six words or more and
-//! "none" otherwise; an act takes its first value when the document shows such
-//! a line and "none" otherwise, in both wordings; a citation takes the last
-//! marked sentence of six words or more, or the first marked when none has
-//! six (a citation offers no "none"); Choose takes the first value;
-//! RESOLVE's choice takes the first candidate when one is shown. So a contract
-//! that fails is the code's.
+//! name: a window read is answered by `window_answer`'s rules (a statement is
+//! a line of its own of six words or more); RESOLVE's choice takes the first
+//! candidate when one is shown, and any other forced choice its first label.
+//! So a contract that fails is the code's.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -34,7 +32,8 @@ use serde_json::{json, Map, Value};
 use super::atlas_resolve::{collect_section_extractions, resolve_with_inputs, ResolvePhase};
 use super::atlas_resolve_documents::{from_documents, DECISIONS_FILE, DERIVED_FILE};
 use super::config::{EnrichConfig, CONFIG_SCHEMA_VERSION};
-use super::corpus_io::{build_manifest_from_corpus_rows, hydrate_corpus_chapters_from_rows};
+use super::corpus_io::hydrate_corpus_chapters_from_rows;
+use super::window_manifest::build_window_manifest;
 
 #[path = "layer_contract_tests/contracts.rs"]
 mod contracts;
@@ -48,8 +47,15 @@ mod protocol;
 mod reader;
 #[path = "layer_contract_tests/records.rs"]
 mod records;
+#[path = "layer_contract_tests/window_oracle.rs"]
+mod window_oracle;
+
+use window_oracle::{listed_fields, own_lines, shown_documents, window_answer};
 
 const SHAPES: [&str; 3] = ["mail", "issues", "news"];
+
+/// A window cap no two documents fit under: each document its own window.
+const ONE_DOCUMENT: usize = 1;
 
 fn fixture_dir(shape: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("tests/fixtures/layer/{shape}"))
@@ -207,24 +213,15 @@ impl Run {
     }
 }
 
-/// How the oracle answers a Choose: the first value, or (`Spread`) a value
-/// picked from the question's own bytes, so statements of different
-/// documents get different values while the oracle still reads no name.
+/// How the window oracle reads a closed value: the first, or (`Spread`) one
+/// picked from the statement's bytes and its document's declared facts', so
+/// different documents read different values while the oracle reads no name.
 #[derive(Clone, Copy, PartialEq)]
 enum Choose {
     First,
     Spread,
 }
 
-/// The value a `Spread` Choose picks among `labels` (the last is "none").
-fn spread_pick(prompt: &ChatPrompt, labels: usize) -> usize {
-    let sum: usize = prompt.user.bytes().map(usize::from).sum();
-    sum % (labels - 1).max(1)
-}
-
-/// The scripted oracle (module doc), recording every question it is asked. A
-/// wave is answered question by question, as a port that cannot batch does
-/// (`resolve_records::one_by_one`), so it records each single question.
 /// What a fixture knows of its particulars, for a model that answers RESOLVE
 /// right: per declared type, words that place a statement (a company's name in
 /// the statement's own words; for any other type, words in its document) and
@@ -253,183 +250,79 @@ fn candidate_blocks(user: &str, labels: &[String]) -> Vec<String> {
     blocks
 }
 
+/// The scripted oracle (module doc), recording every question it is asked.
 fn oracle(asked: Arc<Mutex<Vec<ChatPrompt>>>, choose: Choose, parties: Parties) -> InferenceFn {
-    corpus_engine::enrichment::atlas::resolve_records::one_by_one(Arc::new(
-        move |prompt: &ChatPrompt, _| {
-            asked.lock().unwrap().push(prompt.clone());
-            let labels: Vec<String> = prompt
-                .response_schema
-                .as_ref()
-                .and_then(|s| s["enum"].as_array())
-                .map(|a| a.iter().map(|l| l.as_str().unwrap().to_string()).collect())
-                .unwrap_or_default();
-            let phase = prompt.phase_id.clone().unwrap_or_default();
-            // RESOLVE's reasoning before its choice: words the choice is read after,
-            // which the oracle's choice does not read.
-            let answer = if phase == "resolve_reason" {
-                Ok("Under the rule, the statement's own words decide.".to_string())
-            } else if labels.is_empty() {
-                Err(corpus_engine::Error::Extraction(format!(
-                    "the oracle answers forced choices only; `{phase}` is not one"
-                )))
-            } else {
-                let pick = match phase.as_str() {
-                    "document_passes_locate" => {
-                        let line = prompt
-                            .user
-                            .rsplit_once("\n\nLine ")
-                            .and_then(|(_, rest)| rest.split_once('"'))
-                            .and_then(|(_, rest)| rest.split_once("\"\n"))
-                            .map(|(text, _)| text)
-                            .unwrap_or("");
-                        if line.split_whitespace().count() >= 6 {
-                            0
-                        } else {
-                            labels.len() - 1
-                        }
-                    }
-                    // An act question sees the whole document, and the oracle
-                    // no line class: a line under a quote mark is the one kind
-                    // the fixtures carry, so it is read as carried.
-                    "document_passes_act" => {
-                        let view = prompt
-                            .user
-                            .split_once("<<<\n")
-                            .and_then(|(_, rest)| rest.split_once("\n>>>"))
-                            .map_or("", |(view, _)| view);
-                        let shows = view
-                            .lines()
-                            .filter_map(|l| l.split_once(' ').map(|(_, text)| text))
-                            .any(|t| t.split_whitespace().count() >= 6 && !t.starts_with('>'));
-                        if shows {
-                            0
-                        } else {
-                            labels.len() - 1
-                        }
-                    }
-                    // The last such sentence, so a sentence two documents
-                    // both write is the one each cites
-                    // (`a_line_written_in_two_documents_is_two_occurrences`).
-                    "document_passes_cite" => prompt
+    Arc::new(move |prompt: &ChatPrompt, _| {
+        asked.lock().unwrap().push(prompt.clone());
+        let labels: Vec<String> = prompt
+            .response_schema
+            .as_ref()
+            .and_then(|s| s["enum"].as_array())
+            .map(|a| a.iter().map(|l| l.as_str().unwrap().to_string()).collect())
+            .unwrap_or_default();
+        let phase = prompt.phase_id.clone().unwrap_or_default();
+        // RESOLVE's reasoning before its choice: words the choice is read after,
+        // which the oracle's choice does not read.
+        let answer = if phase == "resolve_reason" {
+            Ok("Under the rule, the statement's own words decide.".to_string())
+        } else if phase == "document_window" {
+            Ok(window_answer(&prompt.user, choose, parties).to_string())
+        } else if labels.is_empty() {
+            Err(corpus_engine::Error::Extraction(format!(
+                "the oracle answers forced choices only; `{phase}` is not one"
+            )))
+        } else {
+            let pick = match phase.as_str() {
+                // A statement the fixture places is answered right: the
+                // candidate showing its mark, or none when none does.
+                // Every other one, the first.
+                "resolve_select" if !parties.is_empty() => {
+                    let of = prompt
                         .user
-                        .lines()
-                        .filter_map(|l| l.strip_prefix('[').and_then(|r| r.split_once("] ")))
-                        .filter(|(_, text)| text.split_whitespace().count() >= 6)
-                        .filter_map(|(label, _)| labels.iter().position(|l| l == label))
-                        .last()
-                        .unwrap_or(0),
-                    "document_passes_choose" if choose == Choose::Spread => {
-                        spread_pick(prompt, labels.len())
-                    }
-                    // A line naming a party the fixture knows is answered
-                    // right: the company kind, then the party's own first and
-                    // last words; a line naming none, none.
-                    "document_passes_mention" if !parties.is_empty() => {
-                        let line = prompt
-                            .user
-                            .rsplit_once("Line ")
-                            .and_then(|(_, rest)| rest.split_once(": \""))
-                            .and_then(|(_, rest)| rest.split_once('"'))
-                            .map_or("", |(text, _)| text);
-                        let named = parties
+                        .strip_prefix("Type: ")
+                        .and_then(|rest| rest.split_whitespace().next())
+                        .unwrap_or("");
+                    let statement = prompt
+                        .user
+                        .split_once("its words in [[ ]]:")
+                        .map_or("", |(_, statement)| statement);
+                    let words = statement
+                        .split_once("[[")
+                        .and_then(|(_, rest)| rest.split_once("]]"))
+                        .map_or("", |(words, _)| words);
+                    let document = prompt
+                        .user
+                        .split_once("Document titled")
+                        .and_then(|(_, rest)| rest.split_once("\n>>>"))
+                        .map_or("", |(document, _)| document);
+                    let placed = parties.iter().find(|(t, key, _)| {
+                        *t == of
+                            && if of == "company" {
+                                words.contains(key)
+                            } else {
+                                document.to_lowercase().contains(&key.to_lowercase())
+                            }
+                    });
+                    match placed {
+                        Some((_, _, mark)) => candidate_blocks(&prompt.user, &labels)
                             .iter()
-                            .find(|(of, name, _)| *of == "company" && line.contains(name))
-                            .map(|(_, name, _)| name);
-                        let shown = |want: &str| {
-                            labels.iter().position(|l| {
-                                prompt.user.lines().any(|row| {
-                                    row.strip_prefix(&format!("{l} ")).is_some_and(|w| {
-                                        w.trim_matches(|c: char| !c.is_alphanumeric()) == want
-                                    })
-                                })
-                            })
-                        };
-                        let pick = match named {
-                            None => None,
-                            Some(_) if prompt.user.contains("Which kind of thing does line") => {
-                                labels.iter().position(|l| {
-                                    prompt
-                                        .user
-                                        .lines()
-                                        .any(|row| row.starts_with(&format!("{l} company")))
-                                })
-                            }
-                            Some(name) if prompt.user.contains("start?") => {
-                                shown(name.split_whitespace().next().unwrap())
-                            }
-                            Some(name) => shown(name.split_whitespace().last().unwrap()),
-                        };
-                        pick.unwrap_or(labels.len() - 1)
+                            .position(|block| block.to_lowercase().contains(&mark.to_lowercase()))
+                            .unwrap_or(labels.len() - 1),
+                        None => 0,
                     }
-                    // A statement the fixture places is answered right: the
-                    // candidate showing its mark, or none when none does.
-                    // Every other one, the first.
-                    "resolve_select" if !parties.is_empty() => {
-                        let of = prompt
-                            .user
-                            .strip_prefix("Type: ")
-                            .and_then(|rest| rest.split_whitespace().next())
-                            .unwrap_or("");
-                        let statement = prompt
-                            .user
-                            .split_once("its words in [[ ]]:")
-                            .map_or("", |(_, statement)| statement);
-                        let words = statement
-                            .split_once("[[")
-                            .and_then(|(_, rest)| rest.split_once("]]"))
-                            .map_or("", |(words, _)| words);
-                        let document = prompt
-                            .user
-                            .split_once("Document titled")
-                            .and_then(|(_, rest)| rest.split_once("\n>>>"))
-                            .map_or("", |(document, _)| document);
-                        let placed = parties.iter().find(|(t, key, _)| {
-                            *t == of
-                                && if of == "company" {
-                                    words.contains(key)
-                                } else {
-                                    document.to_lowercase().contains(&key.to_lowercase())
-                                }
-                        });
-                        match placed {
-                            Some((_, _, mark)) => candidate_blocks(&prompt.user, &labels)
-                                .iter()
-                                .position(|block| {
-                                    block.to_lowercase().contains(&mark.to_lowercase())
-                                })
-                                .unwrap_or(labels.len() - 1),
-                            None => 0,
-                        }
-                    }
-                    // About names a particular on a line the oracle would
-                    // locate (six words or more), the first such line shown,
-                    // and on none otherwise; every other About answer is the
-                    // first label.
-                    "document_passes_about"
-                        if prompt.user.contains("first named or described?") =>
-                    {
-                        prompt
-                            .user
-                            .lines()
-                            .filter_map(|l| {
-                                l.split_once(" line ").and_then(|(_, r)| r.split_once(": "))
-                            })
-                            .position(|(_, text)| text.split_whitespace().count() >= 6)
-                            .unwrap_or(labels.len() - 1)
-                    }
-                    _ => 0,
-                };
-                let rest = 0.1 / labels.len() as f64;
-                let dist: Map<String, Value> = labels
-                    .iter()
-                    .enumerate()
-                    .map(|(i, l)| (l.clone(), json!(if i == pick { 0.9 } else { rest })))
-                    .collect();
-                Ok(Value::Object(dist).to_string())
+                }
+                _ => 0,
             };
-            Box::pin(async move { answer })
-        },
-    ))
+            let rest = 0.1 / labels.len() as f64;
+            let dist: Map<String, Value> = labels
+                .iter()
+                .enumerate()
+                .map(|(i, l)| (l.clone(), json!(if i == pick { 0.9 } else { rest })))
+                .collect();
+            Ok(Value::Object(dist).to_string())
+        };
+        Box::pin(async move { answer })
+    })
 }
 
 /// A deterministic embedding of the text alone.
@@ -494,13 +387,23 @@ async fn run_as(
     let corpus_id = "layer-fixture";
     let cfg = config(corpus_id, spec.clone());
     let rows = fixture.rows();
-    let manifest =
-        build_manifest_from_corpus_rows(corpus_id, rows.clone(), None, None, 1, None).unwrap();
     let texts = fixture
         .ingested
         .as_ref()
         .map(|i| i.texts.clone())
         .unwrap_or_default();
+    // Windows as `enrich init` cuts them for a recipe that reads documents,
+    // one document each (at `WINDOW_CHARS` a fixture is one window): the
+    // window reader reads every document and RESOLVE decides every identity
+    // across them. One window's particulars across its documents are
+    // corpus-engine's (`window_tests.rs`).
+    let policies = spec.policies();
+    let date = policies
+        .change
+        .document
+        .as_ref()
+        .and_then(|d| d.date.as_deref());
+    let manifest = build_window_manifest(corpus_id, rows.clone(), &texts, date, ONE_DOCUMENT);
     let chapters = hydrate_corpus_chapters_from_rows(&manifest, &rows, &texts);
     let documents = SectionDocuments::from_chunk_rows(
         manifest
@@ -537,7 +440,6 @@ async fn run_as(
         .unwrap();
     let sections = collect_section_extractions(&phase1.output.questions_by_chapter);
 
-    let policies = spec.policies();
     let inputs = from_documents(|| Ok(documents), &policies, corpus_id, true).unwrap();
     let atlas = work.path().join("atlas");
     std::fs::create_dir_all(&atlas).unwrap();
@@ -572,18 +474,6 @@ async fn run_as(
 async fn run(fixture: &Fixture) -> Run {
     let store = tempfile::tempdir().unwrap();
     run_with(fixture, Asker::Daemon, store.path()).await
-}
-
-/// The declared names of a fixture's types and attributes.
-fn declared_names(policies: &OntologyPolicies) -> BTreeSet<String> {
-    policies
-        .shape
-        .types
-        .iter()
-        .flat_map(|t| {
-            std::iter::once(t.name.clone()).chain(t.attributes.iter().map(|a| a.name.clone()))
-        })
-        .collect()
 }
 
 #[tokio::test]

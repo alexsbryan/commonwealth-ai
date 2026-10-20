@@ -14,14 +14,18 @@ use crate::enrichment::ontology::{AttrFamily, TypeIndex, TypeKind};
 use super::typed::{AnswerShape, AttrFilter, FilterOp, Scalar, TypedQuery, Where};
 use super::typed_match::Judge;
 
+/// `<claim type>.subject`: a claim's link to the record it is about, which the
+/// claim holds beside its attributes rather than as one.
+pub(super) const SUBJECT: &str = "subject";
+
 /// How a link between two declared types is carried.
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Link<'q> {
     /// A Relation atom of this declared relation type (or a subtype).
     Relation(&'q str),
-    /// The atom's own ref attribute holds the far end.
+    /// The atom's own ref attribute (or a claim's `subject`) holds the far end.
     RefOut(&'q str),
-    /// The far end's ref attribute holds the atom.
+    /// The far end's ref attribute (or a claim's `subject`) holds the atom.
     RefIn(&'q str),
 }
 
@@ -38,6 +42,8 @@ pub(super) enum Operand {
     /// Folded text.
     Text(String),
     Num(f64),
+    /// A time bound, `[start, end)` on the signed-year axis (`time_spans`).
+    Span(f64, f64),
 }
 
 pub(super) struct CheckedFilter<'q> {
@@ -245,13 +251,14 @@ fn check_filter<'q>(
     };
     let operand = match kind {
         ValueKind::Name | ValueKind::Text => Operand::Text(fold(&text)),
-        ValueKind::Time => Operand::Num(
-            match &f.value {
-                Scalar::Number(n) => n.as_f64(),
-                Scalar::Text(s) => signed_years(s).first().copied(),
+        ValueKind::Time => {
+            let (start, end) = match &f.value {
+                Scalar::Number(n) => n.as_f64().map(|y| (y, y + 1.0)),
+                Scalar::Text(s) => time_spans(s).first().copied(),
             }
-            .ok_or_else(|| format!("'{text}' does not read as a year."))?,
-        ),
+            .ok_or_else(|| format!("'{text}' does not read as a date or a year."))?;
+            Operand::Span(start, end)
+        }
         ValueKind::Quantity => Operand::Num(
             numbers(&text)
                 .first()
@@ -349,15 +356,22 @@ fn check_where<'q>(
 }
 
 /// The type a ref attribute `owner.attr` points at, if it is one.
+/// The type `<owner>.<attr>` points at: a declared ref attribute's `of`, else,
+/// for `subject`, the claim type's declared subject (the is-about link a claim
+/// holds beside its attributes, `Atom::held`).
 fn ref_target<'a>(index: &TypeIndex<'a>, owner: &str, attr: &str) -> Option<&'a str> {
-    index
+    let declared = index
         .effective_attributes(owner)
         .into_iter()
-        .find(|a| a.name == attr)
-        .and_then(|a| match &a.family {
+        .find(|a| a.name == attr);
+    match declared {
+        Some(a) => match &a.family {
             AttrFamily::Ref { of } => Some(of.as_str()),
             _ => None,
-        })
+        },
+        None if attr == SUBJECT => index.get(owner).and_then(|d| d.subject.as_deref()),
+        None => None,
+    }
 }
 
 fn check_over<'q>(over: &'q str, t: &str, judge: &Judge<'q>) -> Result<Over<'q>, String> {
@@ -403,6 +417,79 @@ fn check_over<'q>(over: &'q str, t: &str, judge: &Judge<'q>) -> Result<Over<'q>,
         return Err(format!("no declared relation or ref joins {t} and {over}."));
     }
     Ok(Over::Related(over, links))
+}
+
+/// The spans a time value names on the signed-year axis, each half-open
+/// `[start, end)`: a date is its day (`2026-10-20`, `20 October 2026`,
+/// `October 20, 2026`), a month its month (`2026-10`, `October 2026`), and
+/// anything else its years (`signed_years`), each `[y, y + 1)`. Business
+/// records date to the day; read as bare years, `2026-10-20` was the years
+/// 2026, 10 and 20.
+pub(super) fn time_spans(text: &str) -> Vec<(f64, f64)> {
+    static ISO: OnceLock<Regex> = OnceLock::new();
+    static WORDS: OnceLock<Regex> = OnceLock::new();
+    let iso = ISO
+        .get_or_init(|| Regex::new(r"\b(\d{4})-(\d{1,2})(?:-(\d{1,2}))?\b").expect("static regex"));
+    let words = WORDS.get_or_init(|| {
+        Regex::new(
+            r"(?i)\b(?:(\d{1,2})\s+)?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?(?:\s+(\d{1,2}))?,?\s+(\d{4})\b",
+        )
+        .expect("static regex")
+    });
+    let mut out: Vec<(f64, f64)> = iso
+        .captures_iter(text)
+        .filter_map(|c| {
+            let num = |i: usize| c.get(i).and_then(|m| m.as_str().parse::<u32>().ok());
+            let year = num(1)?;
+            calendar_span(year as i32, num(2)?, num(3))
+        })
+        .collect();
+    if out.is_empty() {
+        out = words
+            .captures_iter(text)
+            .filter_map(|c| {
+                const MONTHS: [&str; 12] = [
+                    "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov",
+                    "dec",
+                ];
+                let month = MONTHS.iter().position(|m| *m == c[2].to_lowercase())? as u32 + 1;
+                let day = c.get(1).or(c.get(3)).and_then(|m| m.as_str().parse().ok());
+                calendar_span(c[4].parse().ok()?, month, day)
+            })
+            .collect();
+    }
+    if out.is_empty() {
+        out = signed_years(text)
+            .into_iter()
+            .map(|y| (y, y + 1.0))
+            .collect();
+    }
+    out
+}
+
+/// One day, or one month when `day` is `None`, as a span of fractional years.
+fn calendar_span(year: i32, month: u32, day: Option<u32>) -> Option<(f64, f64)> {
+    use chrono::Datelike;
+    let days = |y: i32| {
+        if chrono::NaiveDate::from_ymd_opt(y, 2, 29).is_some() {
+            366.0
+        } else {
+            365.0
+        }
+    };
+    let at = |d: chrono::NaiveDate| f64::from(d.year()) + f64::from(d.ordinal0()) / days(d.year());
+    let start = chrono::NaiveDate::from_ymd_opt(year, month, day.unwrap_or(1))?;
+    let end = match day {
+        Some(_) => start.succ_opt()?,
+        None if month == 12 => chrono::NaiveDate::from_ymd_opt(year + 1, 1, 1)?,
+        None => chrono::NaiveDate::from_ymd_opt(year, month + 1, 1)?,
+    };
+    let end = if end.year() > start.year() {
+        f64::from(end.year())
+    } else {
+        at(end)
+    };
+    Some((at(start), end))
 }
 
 /// The years a time value names, in order, signed: B.C. (or BC / BCE)

@@ -1,0 +1,194 @@
+# Spare parts at three warehouses: an ontology-v1 recipe.
+#
+# The material is the warehouse mailbox: receipts from suppliers, transfers
+# between the three warehouses, issues of parts to field technicians, and the
+# monthly stock-take sheets sent as text. Every statement is read as a claim
+# about one part, so the part record collects its number, description and
+# unit of measure from every line that names it.
+
+[corpus]
+id = "spare-parts-warehouses"
+name = "Spare parts at three warehouses"
+description = "Warehouse emails and monthly stock-take sheets, read as parts, warehouses, technicians and suppliers, every receipt, transfer, issue and return, and every stock count."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# A mailbox export (maildir or .eml files). The stock-take sheets are assumed
+# to arrive as the text of a warehouse email or a plain-text attachment to one.
+[acquire]
+type = "local_file"
+path = "SOURCE_PATH"
+
+[extract]
+type = "email"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "spare-parts-inventory"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is a spare-parts manager's record of three warehouses that supply field
+technicians: the warehouse emails (receipts from suppliers, transfers between
+warehouses, issues of parts to technicians) and the monthly stock-take sheets, sent as
+text. A part is known by our part number, with a description and the unit it is
+counted in. Every movement moves a quantity of one part on a date: a receipt into a
+warehouse from a supplier, a transfer out of one warehouse and into another, an issue
+from a warehouse to a technician, or a technician returning parts to a warehouse. A
+stock-take line is a count of one part at one warehouse on the count date, sometimes
+printed with the quantity the records expected and the part's reorder level. A request
+or an order for parts is not a movement until someone reports that the parts moved.
+"""
+must_not = [
+  "give a quantity worked out from movements as if it had been counted",
+]
+# A stock-take sheet lists every part a warehouse holds, one line each.
+max_entities_per_section = 60
+# Small windows so a long sheet is read line by line, not summarised.
+window_chars = 4000
+
+[[enrichment.ontology.types]]
+name = "part"
+kind = "entity"
+description = "A spare part we stock, known by our part number, with a description and the unit it is counted in."
+identity = ["part_number"]
+identity_fallback = ["description"]
+identity_criterion = "Two mentions are one part when they carry the same part number, ignoring case, spaces and dashes. A supplier's or manufacturer's number for the item is not our part number. Without a part number, the same description names the same part only when nothing in it differs: a 24 V relay and a 12 V relay are two parts."
+attributes = [
+  { name = "part_number", type = "text", description = "Our part number for the item, as written." },
+  { name = "description", type = "text", by = "most", description = "What the part is, as the sheets and emails describe it." },
+  { name = "unit_of_measure", type = "text", values = ["each", "pair", "set", "kit", "pack", "box", "roll", "metre", "litre", "kilogram"], by = "most", description = "The unit the part is counted and moved in." },
+]
+
+[[enrichment.ontology.types]]
+name = "warehouse"
+kind = "entity"
+specializes = "place"
+description = "One of the three warehouses that hold spare parts, named by its site, town or code."
+
+[[enrichment.ontology.types]]
+name = "technician"
+kind = "entity"
+role_of = "person"
+description = "A field technician who is issued parts and carries them to jobs."
+
+[[enrichment.ontology.types]]
+name = "supplier"
+kind = "entity"
+role_of = "institution"
+description = "A company that ships parts to one of the warehouses."
+
+[[enrichment.ontology.types]]
+name = "receipt"
+kind = "claim"
+force = "assertive"
+subject = "part"
+description = "Parts from a supplier arrived at a warehouse and were booked in."
+attributes = [
+  { name = "quantity", type = "quantity", description = "How many units arrived." },
+  { name = "warehouse", type = "ref", of = "warehouse", description = "The warehouse that received them." },
+  { name = "supplier", type = "ref", of = "supplier" },
+  { name = "date", type = "time", description = "When they arrived." },
+  { name = "reference", type = "text", description = "Purchase order, delivery note or goods-received number." },
+]
+
+[[enrichment.ontology.types]]
+name = "transfer"
+kind = "claim"
+force = "assertive"
+subject = "part"
+description = "Parts sent from one of our warehouses to another: reported by the sending warehouse when they leave, or by the receiving warehouse when they arrive."
+attributes = [
+  { name = "quantity", type = "quantity", description = "How many units were sent or arrived." },
+  { name = "from_warehouse", type = "ref", of = "warehouse" },
+  { name = "to_warehouse", type = "ref", of = "warehouse" },
+  { name = "leg", type = "text", values = ["dispatched", "arrived"], description = "Whether this report is of the parts leaving or arriving." },
+  { name = "date", type = "time" },
+  { name = "reference", type = "text", description = "Transfer note number, the same on both legs." },
+]
+
+[[enrichment.ontology.types]]
+name = "issue"
+kind = "claim"
+force = "assertive"
+subject = "part"
+description = "Parts handed out from a warehouse to a technician."
+attributes = [
+  { name = "quantity", type = "quantity", description = "How many units were issued." },
+  { name = "warehouse", type = "ref", of = "warehouse", description = "The warehouse that issued them." },
+  { name = "technician", type = "ref", of = "technician" },
+  { name = "date", type = "time" },
+  { name = "reference", type = "text", description = "Issue slip, job or work-order number." },
+]
+
+[[enrichment.ontology.types]]
+name = "return"
+kind = "claim"
+force = "assertive"
+subject = "part"
+description = "A technician brought issued parts back to a warehouse."
+attributes = [
+  { name = "quantity", type = "quantity" },
+  { name = "warehouse", type = "ref", of = "warehouse", description = "The warehouse the parts came back to." },
+  { name = "technician", type = "ref", of = "technician" },
+  { name = "condition", type = "text", values = ["unused", "faulty"], description = "Unused parts go back on the shelf; faulty ones do not." },
+  { name = "date", type = "time" },
+  { name = "reference", type = "text" },
+]
+
+[[enrichment.ontology.types]]
+name = "stock_count"
+kind = "claim"
+force = "assertive"
+subject = "part"
+label = "count"
+description = "How many units of a part a warehouse had when they were counted: a line of a monthly stock-take sheet, or a spot check."
+grades = ["stock-take", "spot-check", "estimate"]
+attributes = [
+  { name = "counted", type = "quantity", description = "The number of units counted." },
+  { name = "warehouse", type = "ref", of = "warehouse", description = "The warehouse counted." },
+  { name = "counted_on", type = "time", description = "The date of the count." },
+  { name = "expected", type = "quantity", description = "The quantity the records said should be there, when the sheet prints one." },
+  { name = "reorder_level", type = "quantity", description = "The level at or below which the part is reordered, when the sheet prints one." },
+]
+
+[[enrichment.ontology.types]]
+name = "request"
+kind = "claim"
+force = "directive"
+deontic = ["request"]
+subject = "part"
+description = "Someone asks for parts to be issued, transferred or ordered. Nothing has moved yet."
+attributes = [
+  { name = "quantity", type = "quantity" },
+  { name = "warehouse", type = "ref", of = "warehouse", description = "The warehouse asked to supply them." },
+  { name = "technician", type = "ref", of = "technician", description = "The technician they are for, if any." },
+  { name = "date", type = "time", description = "When they are needed, if said." },
+]
+
+[enrichment.ontology.change]
+document = { date = "date", thread = "thread_id", id = "message_id", author = "from" }
+
+[enrichment.ontology.tension]
+label = "count discrepancy"
+between = ["stock_count"]
+same = ["subject", "warehouse", "counted_on"]
+not_conflicts = [
+  "counts of the same part at two different warehouses",
+  "counts of the same part taken on different dates, which the movements between them explain",
+]
+
+[enrichment.ontology.derive]
+configurations = false

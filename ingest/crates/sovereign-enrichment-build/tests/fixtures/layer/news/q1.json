@@ -1,0 +1,1 @@
+{"target_type":"report","filters":[{"attribute":"place","op":"contains","value":"Mill Lane"}],"relations":[{"relation":"report.subject","other_type":"happening","where":{"filters":[{"attribute":"what","op":"eq","value":"a fire starting or burning"}]}}]}

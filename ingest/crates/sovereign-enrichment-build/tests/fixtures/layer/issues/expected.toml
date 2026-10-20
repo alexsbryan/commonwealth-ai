@@ -1,0 +1,97 @@
+schema_version = 1
+fixture = "issues"
+source = "documents.jsonl"
+
+[lookup]
+tool = "atoms_lookup"
+corpus = "layer-issues"
+ids_from = "query.rows[].atom_id"
+types_from = "expected.query.rows[].type"
+assert_same_fields = ["id", "type", "attributes", "refs", "evidence"]
+target_fields = ["id", "type", "attributes"]
+evidence_source = "installed corpus chunks, mapped to source_doc_id and exact quote"
+
+[[lookup.targets]]
+bind = "person.mira"
+type = "person"
+id_from = { query_id = "q1", row_bind = "case.reminders", ref_attribute = "reporter" }
+attributes = { login = "mira" }
+identity_source = { source_doc_id = "issue-101", metadata_field = "author", value = "mira" }
+
+[[lookup.targets]]
+bind = "person.olu"
+type = "person"
+id_from = { query_id = "q1", row_bind = "case.shared-calendar-colour", ref_attribute = "reporter" }
+attributes = { login = "olu" }
+identity_source = { source_doc_id = "issue-102", metadata_field = "author", value = "olu" }
+
+[[query]]
+id = "q1"
+file = "q1.json"
+question = "List every case and its reporter."
+kind = "complete case partition"
+expected_matched = 2
+distinct_case_ids = true
+
+[[query.rows]]
+bind = "case.reminders"
+type = "case"
+id_bind_from = { source_doc_id = "issue-101", quote = "Since the clocks went forward on Sunday every reminder in my calendar fires twice, one hour apart." }
+refs = [{ attribute = "reporter", type = "person", target_bind = "person.mira", key = "mira", source = { field = "author", value = "mira" } }]
+evidence = [{ source_doc_id = "issue-101", quote = "Since the clocks went forward on Sunday every reminder in my calendar fires twice, one hour apart." }]
+
+[[query.rows]]
+bind = "case.shared-calendar-colour"
+type = "case"
+id_bind_from = { source_doc_id = "issue-102", quote = "It would help a great deal to give each shared calendar its own colour in the week view." }
+refs = [{ attribute = "reporter", type = "person", target_bind = "person.olu", key = "olu", source = { field = "author", value = "olu" } }]
+evidence = [{ source_doc_id = "issue-102", quote = "It would help a great deal to give each shared calendar its own colour in the week view." }]
+
+[[query]]
+id = "q2"
+file = "q2.json"
+question = "Which confirmed state places the reminder case on version 2.3?"
+kind = "state attribute and subject reference"
+expected_matched = 1
+
+[[query.rows]]
+bind = "state.reminders.confirmed-2.3"
+type = "case_state"
+attributes = { state = "confirmed" }
+id_bind_from = { source_doc_id = "comment-101-1", quote = "The scheduler stores the reminder time twice when the offset moves, so this is a bug on our side." }
+refs = [{ attribute = "subject", target_type = "case", target_bind = "case.reminders" }]
+attribute_evidence = [{ attribute = "app_version", source_doc_id = "comment-101-1", quote = "I can reproduce this on 2.3 with any reminder created before the change." }]
+evidence = [{ source_doc_id = "comment-101-1", quote = "The scheduler stores the reminder time twice when the offset moves, so this is a bug on our side." }]
+
+[[query]]
+id = "q3"
+file = "q3.json"
+question = "Which reminder-case state mentions version 2.4, and what post-update instruction follows?"
+kind = "version-2.4 value and duplicate-instruction source preservation"
+expected_matched = [1, 2]
+distinct_row_ids = true
+same_subject_id = "case.reminders"
+
+[[query.rows]]
+bind = "instruction.reminders.comment-101-2"
+type = "case_state"
+attributes = { state = "resolved" }
+id_bind_from = { source_doc_id = "comment-101-2", quote = "The fix for the doubled reminders is merged and goes out in version 2.4 this week." }
+refs = [{ attribute = "subject", target_type = "case", target_bind = "case.reminders" }]
+attribute_evidence = [{ attribute = "app_version", source_doc_id = "comment-101-2", quote = "The fix for the doubled reminders is merged and goes out in version 2.4 this week." }]
+evidence = [{ source_doc_id = "comment-101-2", quote = "The fix for the doubled reminders is merged and goes out in version 2.4 this week." }]
+
+[[query.rows]]
+bind = "instruction.reminders.comment-101-3"
+type = "case_state"
+optional = true
+id_bind_from = { source_doc_id = "comment-101-3", quote = "Please update to 2.4 first." }
+refs = [{ attribute = "subject", target_type = "case", target_bind = "case.reminders" }]
+attribute_evidence = [{ attribute = "app_version", source_doc_id = "comment-101-3", quote = "Please update to 2.4 first." }]
+evidence = [{ source_doc_id = "comment-101-3", quote = "Please update to 2.4 first." }]
+
+[[unknown]]
+record_bind = "case.shared-calendar-colour"
+source_doc_id = "comment-102-1"
+quote = "Thanks, noted for the roadmap."
+reason = "A roadmap mention is not evidence that the request was implemented or declined; neither is a declared case_state value."

@@ -75,6 +75,26 @@ pub fn read_phase1_checkpoint(path: &Path) -> Result<Vec<Phase1CheckpointEntry>>
     Ok(out)
 }
 
+/// Start a new run's journal. A `--full` run without `--resume` continues
+/// nothing, so an older run's entries (another cut, or an entry schema the
+/// reader now refuses) are never read as this run's by `--retry-failed`,
+/// `--resume` or `--finalize`. Returns how many entries were dropped.
+pub fn begin_phase1_checkpoint(path: &Path) -> Result<usize> {
+    let held = match std::fs::read_to_string(path) {
+        Ok(text) => text.lines().filter(|line| !line.trim().is_empty()).count(),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(e) => {
+            return Err(Error::Database(format!(
+                "read checkpoint {}: {e}",
+                path.display()
+            )))
+        }
+    };
+    std::fs::remove_file(path)
+        .map_err(|e| Error::Database(format!("drop checkpoint {}: {e}", path.display())))?;
+    Ok(held)
+}
+
 /// Aggregate a checkpoint into `(extracted, failures)` deduped by
 /// chapter_id with last-write-wins semantics. Used by `--finalize`
 /// when reconstructing a canonical `Phase1Output`.
@@ -139,4 +159,54 @@ pub(super) fn append_phase1_checkpoint(path: &Path, entry: &Phase1CheckpointEntr
     writeln!(f, "{line}")
         .map_err(|e| Error::Database(format!("write checkpoint {}: {e}", path.display())))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::enrichment::pipeline::types::PhaseFailureKind;
+
+    /// world-s4, 2026-10-20: the journal still held entries written before a
+    /// particular's `words` field was deleted, so `--retry-failed` refused to
+    /// start after a fresh `--full` lost a window.
+    #[test]
+    fn a_fresh_run_reads_none_of_an_older_runs_journal() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("_phase1_checkpoint.jsonl");
+        std::fs::write(
+            &path,
+            "{\"kind\":\"success\",\"chapter_id\":\"sec_00001\"}\n\n",
+        )
+        .unwrap();
+        assert!(
+            read_phase1_checkpoint(&path).is_err(),
+            "the older journal is unreadable"
+        );
+
+        assert_eq!(begin_phase1_checkpoint(&path).unwrap(), 1);
+        let lost = Phase1Failure {
+            chapter_id: "sec_00017".into(),
+            reason: "no recognisable JSON object".into(),
+            raw_response_head: None,
+            failure_kind: PhaseFailureKind::ParseDrift,
+        };
+        append_phase1_checkpoint(
+            &path,
+            &Phase1CheckpointEntry::Failure {
+                chapter_id: "sec_00017".into(),
+                failure: lost,
+            },
+        )
+        .unwrap();
+        let entries = read_phase1_checkpoint(&path).unwrap();
+        assert_eq!(
+            entries.iter().map(|e| e.chapter_id()).collect::<Vec<_>>(),
+            ["sec_00017"]
+        );
+
+        assert_eq!(
+            begin_phase1_checkpoint(&dir.path().join("none.jsonl")).unwrap(),
+            0
+        );
+    }
 }

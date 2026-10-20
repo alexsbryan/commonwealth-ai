@@ -1,0 +1,1 @@
+{"target_type":"report","relations":[{"relation":"report.subject","other_type":"happening","where":{"filters":[{"attribute":"what","op":"eq","value":"a person being hurt or treated"}]}}]}

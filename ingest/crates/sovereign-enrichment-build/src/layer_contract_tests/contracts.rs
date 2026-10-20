@@ -27,33 +27,8 @@ fn supplied(policies: &OntologyPolicies) -> BTreeSet<(String, String)> {
     out
 }
 
-/// The `(type, attribute)` a Choose, Point or Pick question asks, from its
-/// rendered text.
-pub(super) fn chosen(prompt: &ChatPrompt) -> (String, String) {
-    let line = |tag: &str| {
-        prompt
-            .user
-            .lines()
-            .find_map(|l| l.strip_prefix(tag))
-            .unwrap_or_else(|| panic!("a Choose question names its {tag}: {}", prompt.user))
-            .to_string()
-    };
-    let ty = line("Type: ");
-    let ty = ty.split(" (").next().unwrap().to_string();
-    let attr = line("Attribute: ");
-    let attr = attr.split([',', ' ']).next().unwrap().to_string();
-    (ty, attr)
-}
-
-/// The phases that ask a field of a statement.
-pub(super) const FIELD_PHASES: [&str; 3] = [
-    "document_passes_choose",
-    "document_passes_point",
-    "document_passes_pick",
-];
-
 /// C1: a model question asks only what declared structure leaves open: no
-/// question of a kind the plan does not generate, and no Choose of a value a
+/// question the default path does not ask, and no field to write that a
 /// declared field, key, reference or derivation supplies.
 #[tokio::test]
 async fn c1_questions_ask_only_what_declared_structure_leaves_open() {
@@ -61,38 +36,34 @@ async fn c1_questions_ask_only_what_declared_structure_leaves_open() {
         let f = Fixture::load(shape);
         let supplied = supplied(&f.policies());
         let run = run(&f).await;
-        let mut kinds = BTreeMap::<String, usize>::new();
+        let (mut reads, mut fields) = (0, 0);
         for p in &run.prompts {
-            let phase = p.phase_id.clone().unwrap_or_default();
-            *kinds.entry(phase.clone()).or_default() += 1;
+            let phase = p.phase_id.as_deref().unwrap_or_default();
             assert!(
                 matches!(
-                    phase.as_str(),
-                    "document_passes_locate"
-                        | "document_passes_mention"
-                        | "document_passes_choose"
-                        | "document_passes_point"
-                        | "document_passes_pick"
-                        | "document_passes_about"
-                        | "document_passes_act"
-                        | "document_passes_cite"
-                        | "resolve_reason"
-                        | "resolve_select"
+                    phase,
+                    "document_window" | "resolve_reason" | "resolve_select"
                 ),
-                "{shape}: a question the plan does not generate: `{phase}`"
+                "{shape}: a question the default path does not ask: `{phase}`"
             );
-            if FIELD_PHASES.contains(&phase.as_str()) {
-                let asked = chosen(p);
-                assert!(
-                    !supplied.contains(&asked),
-                    "{shape}: `{phase}` asked {asked:?}, which declared structure supplies"
-                );
+            if phase != "document_window" {
+                continue;
+            }
+            reads += 1;
+            for (owner, listed) in listed_fields(&p.user).1 {
+                for (name, _, _) in listed {
+                    fields += 1;
+                    let asked = (owner.to_string(), name.to_string());
+                    assert!(
+                        !supplied.contains(&asked),
+                        "{shape}: the window read asks {asked:?}, which declared structure supplies"
+                    );
+                }
             }
         }
         assert!(
-            kinds.contains_key("document_passes_locate")
-                || kinds.contains_key("document_passes_act"),
-            "{shape}: {kinds:?}"
+            reads > 0 && fields > 0,
+            "{shape}: {reads} read(s), {fields} field(s)"
         );
     }
 }
@@ -141,11 +112,11 @@ fn quotes(user: &str) -> Vec<(&str, String)> {
         .collect()
 }
 
-/// C2, narrowed 2026-10-10: a READ turn holds one document's text. A RESOLVE
-/// turn holds its own document's text plus, for its candidates, their
-/// statements' cited lines, each on a line marked as quoted from another
-/// document and no wider than the lines its statement cites; no other
-/// document's text. That a quote never becomes a citation is
+/// C2, narrowed 2026-10-10: a READ turn holds its window's text, here one
+/// document's. A RESOLVE turn holds its own document's text plus, for its
+/// candidates, their statements' cited words, each on a line marked as
+/// quoted from another document and no wider than what its statement cites;
+/// no other document's text. That a quote never becomes a citation is
 /// `resolve_records::tests::a_cite_copied_from_a_candidates_quote_is_refused_never_a_citation`:
 /// the default path asks the forced choice, which cites nothing, and no
 /// fixture record holds two documents, so a check here could not fail.
@@ -154,20 +125,19 @@ async fn c2_a_read_turn_holds_one_document_and_a_resolve_turn_adds_only_marked_q
     for shape in SHAPES {
         let f = planted(&Fixture::load(shape));
         let n = f.documents.len();
-        let (content, _) = f.fields();
-        let lines: Vec<Vec<String>> = f
-            .documents
+        let run = run(&f).await;
+        // What each statement cites, by its document's place in the fixture.
+        let cited: Vec<(usize, String)> = run
+            .atoms()
             .iter()
-            .map(|d| {
-                d[&content]
-                    .as_str()
-                    .unwrap()
-                    .lines()
-                    .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
-                    .collect()
+            .filter(|a| a["atom_type"] == "Claim")
+            .filter_map(|a| {
+                let doc = a["data"]["evidence"][0]["source_doc_id"].as_str()?;
+                let at = f.documents.iter().position(|d| d["id"] == doc)?;
+                let anchor = a["data"]["anchor"].as_str()?.split_whitespace();
+                Some((at, anchor.collect::<Vec<_>>().join(" ")))
             })
             .collect();
-        let run = run(&f).await;
         let (mut asked_resolve, mut quoted) = (0, 0);
         for p in &run.prompts {
             let phase = p.phase_id.as_deref().unwrap_or("-");
@@ -208,15 +178,12 @@ async fn c2_a_read_turn_holds_one_document_and_a_resolve_turn_adds_only_marked_q
             );
             for (line, quote) in quotes(&p.user) {
                 quoted += 1;
-                // The reader cites whole lines, so a quote bounded to them is
-                // a run of whole lines of one other document, never a window.
-                let whole_lines = (0..n).filter(|j| !own.contains(j)).any(|j| {
-                    (0..lines[j].len())
-                        .any(|a| (a..lines[j].len()).any(|b| lines[j][a..=b].join(" ") == quote))
-                });
+                // The words a statement of another document cites, never
+                // more of that document.
+                let bounded = cited.iter().any(|(j, c)| !own.contains(j) && *c == quote);
                 assert!(
-                    whole_lines,
-                    "{shape}: a quote not bounded to another document's cited lines: {line}\n{}",
+                    bounded,
+                    "{shape}: a quote not bounded to another document's cited words: {line}\n{}",
                     p.user
                 );
             }
@@ -301,26 +268,22 @@ async fn c3_every_link_and_value_carries_its_source_and_precision() {
 }
 
 /// C3 for the values identity rests on: RESOLVE says where each necessary
-/// value it used came from (a declared field, the reader's Choose, its own
+/// value it used came from (a declared field, the reader's reading, its own
 /// READ), and one a model chose never forbids a candidate outright. News, its
-/// `what` chosen by the reader, the oracle spreading its Choose over values so
-/// two documents' statements disagree, or there would be nothing to forbid.
+/// `what` read by the reader, the oracle spreading its closed values so two
+/// documents' statements disagree, or there would be nothing to forbid.
 #[tokio::test]
 async fn c3_a_necessary_value_says_its_source_and_a_readers_never_forbids() {
     let f = Fixture::load("news");
     let store = tempfile::tempdir().unwrap();
     let run = run_choosing(&f, Asker::Daemon, store.path(), Choose::Spread).await;
-    let picks: BTreeSet<usize> = run
-        .prompts
+    let picks: BTreeSet<String> = run
+        .atoms()
         .iter()
-        .filter(|p| p.phase_id.as_deref() == Some("document_passes_choose"))
-        .filter(|p| chosen(p).1 == "what")
-        .map(|p| {
-            let labels = p.response_schema.as_ref().unwrap()["enum"]
-                .as_array()
-                .unwrap()
-                .len();
-            spread_pick(p, labels)
+        .filter(|a| a["atom_type"] == "Claim")
+        .filter_map(|a| {
+            let what = &a["data"]["attributes"]["__document_read_subject_fields"]["what"];
+            what["value"].as_str().map(str::to_string)
         })
         .collect();
     assert!(
@@ -460,7 +423,7 @@ async fn c4_records_are_the_same_in_any_document_order() {
 
 /// The lines written word for word in two or more of `f`'s documents, with
 /// those documents' ids: whole unmarked lines of six words or more, which the
-/// oracle locates.
+/// oracle reads as statements.
 fn repeated_lines(f: &Fixture) -> BTreeMap<String, Vec<String>> {
     let (content, _) = f.fields();
     let mut at: BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -481,8 +444,8 @@ fn repeated_lines(f: &Fixture) -> BTreeMap<String, Vec<String>> {
 
 /// Equal text is not the same occurrence (CONVERGE S1; after ChunkKey and the
 /// line classes, its third instance): a line written word for word in two
-/// documents, in one section (mail, issues) or two (news), is asked in each,
-/// read into a placed claim from each, and every fold reaches each claim
+/// documents is shown as each one's own (each read in its own window), read
+/// into a placed claim from each, and every fold reaches each claim
 /// through its own document, never none and never the other.
 #[tokio::test]
 async fn a_line_written_in_two_documents_is_two_occurrences() {
@@ -498,11 +461,10 @@ async fn a_line_written_in_two_documents_is_two_occurrences() {
         for (line, docs) in &repeated {
             for doc in docs {
                 assert!(
-                    super::reader::line_questions(&run).iter().any(|p| {
-                        super::reader::in_doc(p, doc)
-                            && folded(super::reader::asked_line(p)) == folded(line)
-                    }),
-                    "{shape}: {line:?} is not asked in {doc}"
+                    own_lines(&run, Some(&format!("id: {doc}")))
+                        .iter()
+                        .any(|l| folded(l) == folded(line)),
+                    "{shape}: {line:?} is not shown as {doc}'s own"
                 );
                 let claim = atoms
                     .iter()

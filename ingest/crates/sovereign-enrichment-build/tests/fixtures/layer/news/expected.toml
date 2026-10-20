@@ -1,0 +1,114 @@
+schema_version = 1
+fixture = "news"
+source = "documents.jsonl"
+
+[lookup]
+tool = "atoms_lookup"
+corpus = "layer-news"
+ids_from = "query.rows[].atom_id"
+types_from = "expected.query.rows[].type"
+assert_same_fields = ["id", "type", "attributes", "refs", "evidence"]
+target_fields = ["id", "type", "attributes", "evidence"]
+evidence_source = "installed corpus chunks, mapped to source_doc_id and exact quote"
+
+[[lookup.targets]]
+bind = "event.mill-lane-fire"
+type = "happening"
+id_from = [
+  { query_id = "q1", row_bind = "report.mill-lane-fire.report-a", ref_attribute = "subject" },
+  { query_id = "q1", row_bind = "report.mill-lane-fire.report-b", ref_attribute = "subject" },
+]
+same_id = true
+attributes = { what = "a fire starting or burning" }
+evidence = [
+  { source_doc_id = "report-a", quote = "A fire broke out at a riverside warehouse on Mill Lane late on Friday night, the fire service said." },
+  { source_doc_id = "report-b", quote = "Investigators are trying to find out what started Friday's fire at the Mill Lane warehouse." },
+]
+
+[[lookup.targets]]
+bind = "event.workers-treated"
+type = "happening"
+id_from = [
+  { query_id = "q2", row_bind = "report.workers-treated.report-a", ref_attribute = "subject" },
+  { query_id = "q2", row_bind = "report.workers-treated.report-b", ref_attribute = "subject" },
+]
+same_id = true
+attributes = { what = "a person being hurt or treated" }
+evidence = [
+  { source_doc_id = "report-a", quote = "Two workers were treated for smoke inhalation and taken to the county hospital as a precaution." },
+  { source_doc_id = "report-b", quote = "Two workers were treated for smoke inhalation and taken to the county hospital as a precaution." },
+]
+
+[[lookup.targets]]
+bind = "event.bakery-fire"
+type = "happening"
+id_from = [{ query_id = "q3", row_bind = "report.bakery-fire.report-b", ref_attribute = "subject" }]
+distinct_from = "event.mill-lane-fire"
+attributes = { what = "a fire starting or burning" }
+evidence = [{ source_doc_id = "report-b", quote = "A separate small fire at a bakery on Station Road the same evening was put out within minutes." }]
+
+[[query]]
+id = "q1"
+file = "q1.json"
+question = "Which Mill Lane fire reports are present, and do they identify one occurrence?"
+kind = "complete Mill Lane fire-source partition"
+expected_matched = 2
+shared_subject_id = "event.mill-lane-fire"
+
+[[query.rows]]
+bind = "report.mill-lane-fire.report-a"
+type = "report"
+id_bind_from = { source_doc_id = "report-a", quote = "A fire broke out at a riverside warehouse on Mill Lane late on Friday night, the fire service said." }
+refs = [{ attribute = "subject", target_type = "happening", target_bind = "event.mill-lane-fire" }]
+evidence = [{ source_doc_id = "report-a", quote = "A fire broke out at a riverside warehouse on Mill Lane late on Friday night, the fire service said." }]
+
+[[query.rows]]
+bind = "report.mill-lane-fire.report-b"
+type = "report"
+id_bind_from = { source_doc_id = "report-b", quote = "Investigators are trying to find out what started Friday's fire at the Mill Lane warehouse." }
+refs = [{ attribute = "subject", target_type = "happening", target_bind = "event.mill-lane-fire" }]
+evidence = [{ source_doc_id = "report-b", quote = "Investigators are trying to find out what started Friday's fire at the Mill Lane warehouse." }]
+
+[[query]]
+id = "q2"
+file = "q2.json"
+question = "Which reports contain the workers-treated sentence, and what happening does each report cite?"
+kind = "duplicate-source and subject-reference check"
+expected_matched = [2, 3]
+shared_subject_id = "event.workers-treated"
+
+[[query.rows]]
+bind = "report.workers-treated.report-a"
+type = "report"
+id_bind_from = { source_doc_id = "report-a", quote = "Two workers were treated for smoke inhalation and taken to the county hospital as a precaution." }
+refs = [{ attribute = "subject", target_type = "happening", target_bind = "event.workers-treated" }]
+evidence = [{ source_doc_id = "report-a", quote = "Two workers were treated for smoke inhalation and taken to the county hospital as a precaution." }]
+
+[[query.rows]]
+bind = "report.workers-treated.report-b"
+type = "report"
+id_bind_from = { source_doc_id = "report-b", quote = "Two workers were treated for smoke inhalation and taken to the county hospital as a precaution." }
+refs = [{ attribute = "subject", target_type = "happening", target_bind = "event.workers-treated" }]
+evidence = [{ source_doc_id = "report-b", quote = "Two workers were treated for smoke inhalation and taken to the county hospital as a precaution." }]
+
+[[query.rows]]
+bind = "report.workers-treated.report-b-release"
+type = "report"
+optional = true
+id_bind_from = { source_doc_id = "report-b", quote = "The two workers who were taken to hospital after breathing in smoke have since been released." }
+refs = [{ attribute = "subject", target_type = "happening", target_bind = "event.workers-treated" }]
+evidence = [{ source_doc_id = "report-b", quote = "The two workers who were taken to hospital after breathing in smoke have since been released." }]
+
+[[query]]
+id = "q3"
+file = "q3.json"
+question = "Which separate fire did the second report place on Station Road?"
+kind = "distinct fire and place-reference check"
+expected_matched = 1
+
+[[query.rows]]
+bind = "report.bakery-fire.report-b"
+type = "report"
+id_bind_from = { source_doc_id = "report-b", quote = "A separate small fire at a bakery on Station Road the same evening was put out within minutes." }
+refs = [{ attribute = "subject", target_type = "happening", target_bind = "event.bakery-fire", distinct_from = "event.mill-lane-fire" }]
+evidence = [{ source_doc_id = "report-b", quote = "A separate small fire at a bakery on Station Road the same evening was put out within minutes." }]

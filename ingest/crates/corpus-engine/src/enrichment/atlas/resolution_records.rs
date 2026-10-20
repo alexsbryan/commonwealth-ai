@@ -42,9 +42,8 @@ use crate::enrichment::ontology::{
 };
 use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType, EventType};
 use crate::enrichment::pipeline::document_read::{
-    about_type, field_readings, mention_words, supported_values, ABOUT_ATTRIBUTE,
-    CHAPTER_SUBJECT_ATTRIBUTE, LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE,
-    SUBJECT_FIELDS_ATTRIBUTE,
+    about_type, field_readings, supported_values, ABOUT_ATTRIBUTE, CHAPTER_SUBJECT_ATTRIBUTE,
+    LOCAL_REF_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE,
 };
 use crate::enrichment::pipeline::types::{PhaseFailure, PhaseFailureKind};
 use crate::EmbedFn;
@@ -55,10 +54,14 @@ mod described;
 mod local_subjects;
 #[path = "resolution_records/mentions.rs"]
 mod mentions;
+#[path = "resolution_records/named.rs"]
+mod named;
 #[path = "resolution_records/nearest.rs"]
 mod nearest;
 #[path = "resolution_records/retire.rs"]
 mod retire;
+#[path = "resolution_records/statement_atoms.rs"]
+pub mod statement_atoms;
 use local_subjects::{Assigned, Spot};
 use retire::retire;
 
@@ -320,9 +323,13 @@ async fn resolve_type(
     let mut read_local_ref_of = HashMap::<usize, String>::new();
     let mut chapter_subject_of = HashMap::<usize, String>::new();
     let mut read_subject_fields_of = HashMap::<usize, Map<String, Value>>::new();
+    let mut subject_name_of = HashMap::<usize, described::ReadNames>::new();
     for (i, claim) in atoms.claims.iter_mut().enumerate() {
         if !of_kinds(claim) {
             continue;
+        }
+        if let Some(read) = described::ReadNames::of(&claim.attributes) {
+            subject_name_of.insert(i, read);
         }
         claim.subject = None;
         if let Some(Value::String(document)) = claim.attributes.remove(SOURCE_DOCUMENT_ATTRIBUTE) {
@@ -354,7 +361,7 @@ async fn resolve_type(
     }
 
     // One decider: the Phase-1 atoms of the type go first, whatever follows,
-    // in either kind a sketch may have named it. The passes reader sketches
+    // in either kind a sketch may have named it. The document reader sketches
     // no subject, so these come from the general extractor's sketches. A
     // source's records are not Phase-1 sketches: they stay, and are seeded.
     let retired: BTreeSet<AtomId> = atoms
@@ -395,8 +402,13 @@ async fn resolve_type(
         .chain(t.identity_necessary.iter())
         .map(String::as_str)
         .collect();
-    let described_of = described::of_claims(&read_subject_fields_of, &chapter_subject_of, &carried);
-    debug!(r#type = %t.name, claims = described_of.len(), "atlas/resolve: what readers read each subject to be is shown on both sides of its question");
+    let described_of = described::of_claims(
+        &read_subject_fields_of,
+        &subject_name_of,
+        &chapter_subject_of,
+        &carried,
+    );
+    debug!(r#type = %t.name, claims = described_of.len(), named = subject_name_of.len(), "atlas/resolve: what readers read each subject to be is shown on both sides of its question");
     let declared: Vec<(DocumentStamp, &str)> = policies
         .change
         .document
@@ -468,23 +480,12 @@ async fn resolve_type(
             });
             placed.len() - 1
         });
-        let Some(mut start) = placed[k].body.find(&anchor) else {
+        let Some(start) = placed[k].body.find(&anchor) else {
             let why = format!("anchor {anchor:?} is not in document `{}`", doc.key);
             unplaced(&mut report, failures, claim, kind, &t.name, why);
             continue;
         };
-        let mut end = start + anchor.len();
-        // A mention's statement is its words on its line, so two named on one
-        // line are two statements the question tells apart.
-        if let Some(words) = mention_words(&claim.attributes).map(fold_ws) {
-            let Some(at) = placed[k].body[start..end].find(&words) else {
-                let why = format!("mention {words:?} is not on its line {anchor:?}");
-                unplaced(&mut report, failures, claim, kind, &t.name, why);
-                continue;
-            };
-            start += at;
-            end = start + words.len();
-        }
+        let end = start + anchor.len();
         let mut keys = BTreeMap::new();
         if let Some(fields) = read_subject_fields_of.get(&i) {
             for key in criterion.keys.iter().chain(t.identity_necessary.iter()) {
@@ -669,6 +670,11 @@ async fn resolve_type(
     // Records become the type's atoms, in the type's own kind; a seeded
     // record is its source's atom already.
     let mut atom_of: HashMap<&str, AtomId> = HashMap::new();
+    let read_statement: HashMap<&str, &Statement> = placed
+        .iter()
+        .flat_map(|p| &p.statements)
+        .map(|s| (s.id.as_str(), s))
+        .collect();
     for rec in resolver.records() {
         if let Some(id) = seeded.atoms.get(&rec.id) {
             debug!(r#type = %t.name, record = %rec.id, statements = rec.statements.len(), "atlas/resolve: a seeded record keeps its source's atom");
@@ -713,13 +719,14 @@ async fn resolve_type(
         let id = AtomId::exact_entity_content_hash(&rec.id, &ty, corpus_id);
         debug!(r#type = %t.name, record = %rec.id, atom = %id.as_str(), statements = rec.statements.len(), "atlas/resolve: record becomes an atom");
         atom_of.insert(rec.id.as_str(), id.clone());
+        let called = named::of_record(&t.name, rec, &read_statement, surface);
         atoms.entities.push(Entity {
             id,
-            canonical_name: surface,
-            aliases: Vec::new(),
+            canonical_name: called.name,
+            aliases: called.aliases,
             entity_type: ty.clone(),
             first_appearance: first,
-            description: String::new(),
+            description: called.first_passage,
             defining_quote: None,
             salience: 0.0,
             enrichment_depth: EnrichmentDepth::Extracted,

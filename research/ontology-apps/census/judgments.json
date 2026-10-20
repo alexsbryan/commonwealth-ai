@@ -1,0 +1,2302 @@
+{
+ "judged": "2026-10-20",
+ "method": "A need runs only when a typed query (or a short set of them, one per named record) in the grammar of typed_query_grammar.md, checked against typed_check.rs/typed_match.rs, returns rows whose own attributes state the answer over records this recipe's build makes, each attribute traced to its writer (a claim field the reader reads, a `by` or protocol fold, a metadata source, or RESOLVE) in corpus-engine/src/enrichment and the `sovereign recipe validate` output (all twelve exit 0); a need whose weakest required part is declared but not written onto any record or not reachable by the query is inert, and one whose required part is not declared at all (or only in guidance prose) is inexpressible. Edge cases the owner's words do not name were not used to fail a need, and per-record argmax with a date bound was accepted as answering a per-record state question.",
+ "use_cases": [
+  {
+   "id": "01-recruiting",
+   "record_types_run": true,
+   "record_types_note": "organization and correspondent are metadata-sourced from from/to/cc; candidate, opening and application are RESOLVE-decided with statement kinds about them. Every type the seven needs require gets records.",
+   "needs": [
+    {
+     "n": 1,
+     "need": "For each opening, which candidates are in play and at what stage (applied, screen, onsite, offer, hired, rejected, withdrew)?",
+     "verdict": "runs",
+     "declared_by": "application.opening (ref, by=agree), application.candidate (ref, by=agree), application.stage derived = fold application_stage (protocol over stage_move/offer_terms/offer_response)",
+     "executed_by": "validator: `derived: application.stage <- fold application_stage by protocol, after RESOLVE`; ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived.rs:148 (derived value written on the record), resolution_derived/protocol.rs:31 (protocol fold over the record's claims); document_date stamped from change.document.date",
+     "query": {
+      "target_type": "application",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "application.opening",
+        "other_type": "opening",
+        "other_name": "<opening>",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "One query per opening lists its applications, each row carrying stage and the candidate it links."
+    },
+    {
+     "n": 2,
+     "need": "Who referred or sourced each candidate (an employee, an agency, or the candidate applied directly)?",
+     "verdict": "runs",
+     "declared_by": "application.channel (closed text, by=earliest), application.referrer (ref correspondent, by=earliest), application.agency (ref organization, by=earliest)",
+     "executed_by": "ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/read_fields.rs:51 (a `by` subject field folds onto the record), read_fields.rs:370; earliest orders by the document clock, which change.document.date supplies (resolution_derived.rs:283-300)",
+     "query": {
+      "target_type": "application",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "application.candidate",
+        "other_type": "candidate",
+        "other_name": "<candidate>",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "The earliest-introduction fold lands channel, referrer and agency on the application; refs resolve to the header-sourced correspondent and organization records."
+    },
+    {
+     "n": 3,
+     "need": "Who interviewed a candidate, for which opening, on what date, and what each interviewer recommended?",
+     "verdict": "runs",
+     "declared_by": "interview_feedback (claim, subject application): interviewer (ref correspondent), interview_date (time), round, recommendation (closed)",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86; ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/statement_refs.rs:137-142 (a statement's ref holds the record its reading names)",
+     "query": {
+      "target_type": "interview_feedback",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "interview_feedback.subject",
+        "other_type": "application",
+        "other_name": null,
+        "negate": false,
+        "where": {
+         "filters": [],
+         "relations": [
+          {
+           "relation": "application.candidate",
+           "other_type": "candidate",
+           "other_name": "<candidate>",
+           "negate": false
+          },
+          {
+           "relation": "application.opening",
+           "other_type": "opening",
+           "other_name": "<opening>",
+           "negate": false
+          }
+         ]
+        }
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Each feedback claim carries its interviewer, date and recommendation and reaches the application, hence candidate and opening."
+    },
+    {
+     "n": 4,
+     "need": "What we offered (base salary, currency, start date) and whether the offer was accepted, declined or revised.",
+     "verdict": "runs",
+     "declared_by": "offer_terms (claim, subject application): base_salary, currency, start_date, move; application.offer_status derived = fold offer_status (protocol)",
+     "executed_by": "validator: `derived: application.offer_status <- fold offer_status by protocol`; ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived.rs:148 (derived value written on the record), resolution_derived/protocol.rs:31 (protocol fold over the record's claims)",
+     "query": [
+      {
+       "target_type": "offer_terms",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "offer_terms.subject",
+         "other_type": "application",
+         "other_name": null,
+         "negate": false,
+         "where": {
+          "filters": [],
+          "relations": [
+           {
+            "relation": "application.candidate",
+            "other_type": "candidate",
+            "other_name": "<candidate>",
+            "negate": false
+           }
+          ]
+         }
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "application",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "application.candidate",
+         "other_type": "candidate",
+         "other_name": "<candidate>",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Offer claims carry the terms; the protocol fold puts extended/revised/accepted/declined on the application."
+    },
+    {
+     "n": 5,
+     "need": "When a candidate moved stage, and on whose say-so.",
+     "verdict": "runs",
+     "declared_by": "stage_move (claim, subject application): move, decider_role, decided_by (ref correspondent), effective_on; document_date stamp",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86; validator: `document fields: document_date <- date ... stamped on each claim`",
+     "query": {
+      "target_type": "stage_move",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "stage_move.subject",
+        "other_type": "application",
+        "other_name": null,
+        "negate": false,
+        "where": {
+         "filters": [],
+         "relations": [
+          {
+           "relation": "application.candidate",
+           "other_type": "candidate",
+           "other_name": "<candidate>",
+           "negate": false
+          }
+         ]
+        }
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Each move is a cited claim with its date stamp, effective_on and the decider."
+    },
+    {
+     "n": 6,
+     "need": "Which agencies are owed a fee for a hire, and how much.",
+     "verdict": "inexpressible",
+     "declared_by": "agency_fee (claim, subject application): amount, currency, fee_percent; fee_terms (claim, subject organization): fee_percent, flat_fee",
+     "executed_by": null,
+     "query": null,
+     "gap": "computed-value",
+     "why": "Hires by agency and any fee an agency's own invoice states are held, but the fee owed before an invoice is fee_percent x the offer's base_salary, which no fold or query computes; it is not declared anywhere."
+    },
+    {
+     "n": 7,
+     "need": "A candidate who applies to two openings is one person with two applications.",
+     "verdict": "runs",
+     "declared_by": "candidate identity = [email] + identity_criterion; application identity_criterion (one candidate for one opening)",
+     "executed_by": "validator: `identity: candidate -> RESOLVE under its identity_criterion`; validator: `identity: application -> RESOLVE under its identity_criterion`",
+     "query": {
+      "target_type": "application",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "application.candidate",
+        "other_type": "candidate",
+        "other_name": "<candidate>",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "RESOLVE makes one candidate record and one application per opening, linked by application.candidate."
+    }
+   ]
+  },
+  {
+   "id": "02-contracts",
+   "record_types_run": false,
+   "record_types_note": "organization and contract are RESOLVE-decided and get records. The contract owner is `ref of person`; `person` is an undeclared base kind that no statement is about and no source supplies, so the document reader makes no record of it and the owner reference holds nothing.",
+   "needs": [
+    {
+     "n": 1,
+     "need": "Every contract with its counterparty, type (master agreement, statement of work, NDA, lease), and owner on our side.",
+     "verdict": "inert",
+     "declared_by": "contract.counterparty (ref organization, by=agree), contract.contract_type (closed, by=agree), contract.owner (ref person, by=most)",
+     "executed_by": null,
+     "query": null,
+     "gap": "ref-target-unrecorded",
+     "why": "Counterparty and type run, but owner points at the base kind `person`, of which no record exists, so every owner reading is unresolved and dropped (read_fields.rs:93-115, statement_refs.rs:137-142); validate gives no warning because `person` is not a declared type (document_read/schema.rs:186-216)."
+    },
+    {
+     "n": 2,
+     "need": "Each contract's effective date, end date, and notice period for renewal or termination.",
+     "verdict": "runs",
+     "declared_by": "term_dates (claim, subject contract): as_of, effective, ends; renewal_term: as_of, renewal_notice, termination_notice",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86; argmax over a time attribute: typed.rs:469-533",
+     "query": [
+      {
+       "target_type": "term_dates",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "term_dates.subject",
+         "other_type": "contract",
+         "other_name": "<contract>",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "argmax",
+       "aggregate_over": "as_of"
+      },
+      {
+       "target_type": "renewal_term",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "renewal_term.subject",
+         "other_type": "contract",
+         "other_name": "<contract>",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "argmax",
+       "aggregate_over": "as_of"
+      }
+     ],
+     "gap": null,
+     "why": "Per contract, the term statement with the latest as_of gives the current effective and end dates and notice periods, amendments included."
+    },
+    {
+     "n": 3,
+     "need": "The contract's value and currency, and how an amendment changed it.",
+     "verdict": "runs",
+     "declared_by": "price_term (claim, subject contract): as_of, instrument, value, currency, basis",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86",
+     "query": {
+      "target_type": "price_term",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "price_term.subject",
+        "other_type": "contract",
+        "other_name": "<contract>",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Every price statement is held with its as_of and the instrument that set it, so the original and each amended value list side by side."
+    },
+    {
+     "n": 4,
+     "need": "Which amendments apply to which contract, in order, and what each changed.",
+     "verdict": "runs",
+     "declared_by": "amendment (claim, subject contract): amendment_no, signed_on, effective, changes (closed), summary",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86",
+     "query": {
+      "target_type": "amendment",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "amendment.subject",
+        "other_type": "contract",
+        "other_name": "<contract>",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Each amendment claim reaches its contract and carries its number, effective date and what it changed."
+    },
+    {
+     "n": 5,
+     "need": "Which contracts are in force today, and which were in force on a given past date.",
+     "verdict": "inert",
+     "declared_by": "change.supersedes = { term_dates = as_of, renewal_term = as_of, price_term = as_of }; notice (claim)",
+     "executed_by": null,
+     "query": null,
+     "gap": "as-of-state",
+     "why": "change.supersedes is read only by the tension comparability pass (analysis/tension_fields.rs:93-102), so a superseded term still matches a date filter, and an auto-renewed term past its written end date has no statement covering the date; selecting the set of contracts whose current term covers a date needs each contract's state at that date."
+    },
+    {
+     "n": 6,
+     "need": "Which contracts renew automatically and the date by which notice must be given.",
+     "verdict": "inexpressible",
+     "declared_by": "renewal_term.auto_renews (closed), renewal_term.notice_deadline (time, only where the document states it)",
+     "executed_by": null,
+     "query": null,
+     "gap": "computed-value",
+     "why": "Auto-renewal runs, but the notice date is usually end date minus the notice period, and nothing derives a date by arithmetic (FoldBy is first/agree/most/all/earliest/latest/protocol, shared/crates/understanding-vocab/src/ontology/derived.rs:143-158)."
+    },
+    {
+     "n": 7,
+     "need": "A statement of work belongs to its master agreement.",
+     "verdict": "runs",
+     "declared_by": "contract.master (ref contract, by=agree)",
+     "executed_by": "ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/read_fields.rs:51 (a `by` subject field folds onto the record), read_fields.rs:370; contract is a RESOLVE-decided type, so a master named in the document is a particular the reference lands on (document_read/window.rs:63-92)",
+     "query": {
+      "target_type": "contract",
+      "filters": [
+       {
+        "attribute": "contract_type",
+        "op": "eq",
+        "value": "statement_of_work",
+        "negate": false
+       }
+      ],
+      "relations": [
+       {
+        "relation": "contract.master",
+        "other_type": "contract",
+        "other_name": "<master agreement>",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "The master reference folds onto the SOW record and links two contract records."
+    }
+   ]
+  },
+  {
+   "id": "03-policy-register",
+   "record_types_run": true,
+   "record_types_note": "policy and clause are RESOLVE-decided and get records; every other need is served by claims about them.",
+   "needs": [
+    {
+     "n": 1,
+     "need": "Every policy, with its owner and the area it governs.",
+     "verdict": "runs",
+     "declared_by": "policy.owner (text, by=most), policy.area (text, by=most)",
+     "executed_by": "ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/read_fields.rs:51 (a `by` subject field folds onto the record), read_fields.rs:370",
+     "query": {
+      "target_type": "policy",
+      "filters": [],
+      "relations": [],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Owner and area fold onto each policy record."
+    },
+    {
+     "n": 2,
+     "need": "Which version of each policy is in force now, and which was in force on a given past date.",
+     "verdict": "runs",
+     "declared_by": "policy_decision (claim, subject policy): action, effective, version, decided_on",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86; argmax over a time attribute with an lt bound: typed.rs:469-533, typed_match.rs:309-345",
+     "query": {
+      "target_type": "policy_decision",
+      "filters": [
+       {
+        "attribute": "effective",
+        "op": "lt",
+        "value": "<date>",
+        "negate": false
+       }
+      ],
+      "relations": [
+       {
+        "relation": "policy_decision.subject",
+        "other_type": "policy",
+        "other_name": "<policy>",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "argmax",
+      "aggregate_over": "effective"
+     },
+     "gap": null,
+     "why": "Per policy, the decision with the latest effective date before the asked date names the version (or the retirement) in force then; change.supersedes itself executes only in the tension pass, and a decision with no stated effective date is set aside and counted in the answer's notes."
+    },
+    {
+     "n": 3,
+     "need": "When and by whom each policy was approved, amended or retired.",
+     "verdict": "runs",
+     "declared_by": "policy_decision: action, decided_by (text), decided_on, effective, minute_ref",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86",
+     "query": {
+      "target_type": "policy_decision",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "policy_decision.subject",
+        "other_type": "policy",
+        "other_name": "<policy>",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Each decision claim carries action, decider as written and dates."
+    },
+    {
+     "n": 4,
+     "need": "What each amendment changed (the clause before and after).",
+     "verdict": "inert",
+     "declared_by": "clause_change (claim, subject clause): change, before, after, effective; clause.policy (ref policy, no `by`)",
+     "executed_by": null,
+     "query": null,
+     "gap": "subject-field-unheld",
+     "why": "Before/after wording runs per clause, but the clause's policy is declared without `by`, so it stays on each statement and never reaches the clause record (read_fields.rs:41-54 folds only attributes with `by`); no query links an amendment's clause changes to the policy amended, and validate is silent."
+    },
+    {
+     "n": 5,
+     "need": "Which policy replaced a retired one.",
+     "verdict": "runs",
+     "declared_by": "policy_decision.replaced_by (ref policy)",
+     "executed_by": "ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/statement_refs.rs:137-142 (a statement's ref holds the record its reading names)",
+     "query": {
+      "target_type": "policy",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "policy_decision.replaced_by",
+        "other_type": "policy_decision",
+        "other_name": null,
+        "negate": false,
+        "where": {
+         "filters": [
+          {
+           "attribute": "action",
+           "op": "eq",
+           "value": "retired",
+           "negate": false
+          }
+         ],
+         "relations": [
+          {
+           "relation": "policy_decision.subject",
+           "other_type": "policy",
+           "other_name": "<retired policy>",
+           "negate": false
+          }
+         ]
+        }
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "The retirement claim's replaced_by lands on the replacing policy record."
+    },
+    {
+     "n": 6,
+     "need": "Every rule a policy imposes (who must or must not do what) with the clause it comes from.",
+     "verdict": "runs",
+     "declared_by": "rule (directive claim, deontic require/forbid/permit, subject clause): bearer, conditions, exceptions",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86",
+     "query": {
+      "target_type": "rule",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "rule.subject",
+        "other_type": "clause",
+        "other_name": "<clause>",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Each rule is a directive claim about its clause."
+    }
+   ]
+  },
+  {
+   "id": "04-procurement",
+   "record_types_run": true,
+   "record_types_note": "supplier and contact are metadata-sourced; purchase is RESOLVE-decided. All needed types get records.",
+   "needs": [
+    {
+     "n": 1,
+     "need": "Every purchase request: who asked, for what, how many, estimated cost and currency.",
+     "verdict": "runs",
+     "declared_by": "purchase_request (claim): requester (ref contact), item, quantity, quantity_unit, estimated_cost, currency",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86; ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/statement_refs.rs:137-142 (a statement's ref holds the record its reading names)",
+     "query": {
+      "target_type": "purchase_request",
+      "filters": [],
+      "relations": [],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Each request claim carries every asked field; the requester lands on the header-sourced contact."
+    },
+    {
+     "n": 2,
+     "need": "Who approved or rejected each request, and when; requests above 10,000 need two approvals.",
+     "verdict": "inexpressible",
+     "declared_by": "approval (claim): approver (ref contact), decision; the two-approval rule only in guidance prose",
+     "executed_by": null,
+     "query": null,
+     "gap": "linked-count-filter",
+     "why": "Who and when run, but the two-approval rule is held only as guidance text: the status fold moves to approved on one approval, and the query can rank by how many approvals a purchase has (argmax/argmin) but not keep those with fewer than two (typed_query_grammar.md:14-18)."
+    },
+    {
+     "n": 3,
+     "need": "The purchase order a request became, its supplier and its total.",
+     "verdict": "runs",
+     "declared_by": "purchase_order (claim, subject purchase): reference, supplier (ref supplier), order_total, currency",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86; ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/statement_refs.rs:137-142 (a statement's ref holds the record its reading names)",
+     "query": {
+      "target_type": "purchase_order",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "purchase_order.subject",
+        "other_type": "purchase",
+        "other_name": "<purchase>",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "The PO claim shares the purchase record with its request and carries supplier and total."
+    },
+    {
+     "n": 4,
+     "need": "The invoices against each purchase order and whether the invoiced amount matches the order.",
+     "verdict": "inert",
+     "declared_by": "invoice (claim, subject purchase): invoiced_amount; tension `mismatch` between purchase_order and invoice",
+     "executed_by": null,
+     "query": null,
+     "gap": "value-compare",
+     "why": "Invoices per purchase list, but the match is declared only as a tension, whose edges are no relation the typed query reaches (typed_check.rs:278-330 admits declared relation types and refs only), and no filter compares an invoice's amount with its order's total (typed_check.rs:216-275 compares an attribute to a literal)."
+    },
+    {
+     "n": 5,
+     "need": "Each order's status (requested, approved, ordered, delivered, invoiced, paid, cancelled).",
+     "verdict": "runs",
+     "declared_by": "purchase.status derived = fold purchase_status (protocol)",
+     "executed_by": "validator: `derived: purchase.status <- fold purchase_status by protocol`; ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived.rs:148 (derived value written on the record), resolution_derived/protocol.rs:31 (protocol fold over the record's claims)",
+     "query": {
+      "target_type": "purchase",
+      "filters": [
+       {
+        "attribute": "status",
+        "op": "eq",
+        "value": "<status>",
+        "negate": false
+       }
+      ],
+      "relations": [],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "The protocol fold over dated claims puts the status on the purchase."
+    },
+    {
+     "n": 6,
+     "need": "Our suppliers, with their contacts, and how much we have ordered from each this year.",
+     "verdict": "inexpressible",
+     "declared_by": "supplier (metadata), contact.organization (ref supplier), purchase_order.order_total",
+     "executed_by": null,
+     "query": null,
+     "gap": "totals",
+     "why": "Suppliers and contacts run, but the amount ordered per supplier is a sum of order totals and the query aggregates only none/count/argmax/argmin (typed.rs:134-145)."
+    }
+   ]
+  },
+  {
+   "id": "05-incidents",
+   "record_types_run": false,
+   "record_types_note": "incident (event), service and action_item are RESOLVE-decided and get records. Responders, actors, severity setters and action owners are `ref of person`, an undeclared base kind of which the document reader makes no record.",
+   "needs": [
+    {
+     "n": 1,
+     "need": "Every incident with its severity, the services it affected, when it started, was detected, was mitigated and was resolved.",
+     "verdict": "runs",
+     "declared_by": "incident (event); severity_call (severity, set_at); impact (subject service, incident ref); milestone (stage, at)",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86; ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/statement_refs.rs:137-142 (a statement's ref holds the record its reading names); argmax typed.rs:469-533",
+     "query": [
+      {
+       "target_type": "incident",
+       "filters": [],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "severity_call",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "severity_call.subject",
+         "other_type": "incident",
+         "other_name": null,
+         "negate": false,
+         "where": {
+          "filters": [
+           {
+            "attribute": "incident_id",
+            "op": "contains",
+            "value": "<INC-id>",
+            "negate": false
+           }
+          ],
+          "relations": []
+         }
+        }
+       ],
+       "aggregate": "argmax",
+       "aggregate_over": "set_at"
+      },
+      {
+       "target_type": "service",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "impact.subject",
+         "other_type": "impact",
+         "other_name": null,
+         "negate": false,
+         "where": {
+          "filters": [],
+          "relations": [
+           {
+            "relation": "impact.incident",
+            "other_type": "incident",
+            "other_name": null,
+            "negate": false
+           }
+          ]
+         }
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "milestone",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "milestone.subject",
+         "other_type": "incident",
+         "other_name": null,
+         "negate": false,
+         "where": {
+          "filters": [
+           {
+            "attribute": "incident_id",
+            "op": "contains",
+            "value": "<INC-id>",
+            "negate": false
+           }
+          ],
+          "relations": []
+         }
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Per incident, severity (latest set_at), affected services and the four milestone times are each held as typed claim fields."
+    },
+    {
+     "n": 2,
+     "need": "Who responded to each incident and in what role (incident commander, communications, responder).",
+     "verdict": "inert",
+     "declared_by": "role_assignment: person (ref person), role (closed)",
+     "executed_by": null,
+     "query": null,
+     "gap": "ref-target-unrecorded",
+     "why": "The role is held but the person points at the base kind `person`, of which no record exists, so the reference is dropped (statement_refs.rs:137-142)."
+    },
+    {
+     "n": 3,
+     "need": "The timeline of each incident: what was observed or done, when, by whom.",
+     "verdict": "inert",
+     "declared_by": "timeline_entry: at, entry_kind, actor (ref person), service",
+     "executed_by": null,
+     "query": null,
+     "gap": "ref-target-unrecorded",
+     "why": "What and when are held; `by whom` is a ref to `person`, which gets no record, so it is dropped."
+    },
+    {
+     "n": 4,
+     "need": "The root cause stated in the postmortem.",
+     "verdict": "runs",
+     "declared_by": "root_cause (claim, subject incident, grades postmortem/investigation/hypothesis): cause_kind, contribution, service",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86",
+     "query": {
+      "target_type": "root_cause",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "root_cause.subject",
+        "other_type": "incident",
+        "other_name": null,
+        "negate": false,
+        "where": {
+         "filters": [
+          {
+           "attribute": "incident_id",
+           "op": "contains",
+           "value": "<INC-id>",
+           "negate": false
+          }
+         ],
+         "relations": []
+        }
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Root-cause claims are graded and reach their incident."
+    },
+    {
+     "n": 5,
+     "need": "The follow-up actions from each postmortem, with an owner, a due date and whether each is done.",
+     "verdict": "inert",
+     "declared_by": "action_item.owner (ref person, by=latest), action_item.due (by=latest), action_item.status (by=latest); follow_up/action_progress claims carry no fields",
+     "executed_by": null,
+     "query": null,
+     "gap": "fold-needs-document-date",
+     "why": "No change.document is declared on a plaintext extractor, so the fold clock is empty (resolution_derived.rs:283-300) and every `latest` fold returns Unordered even on one reading (resolution_derived.rs:685); owner is also a ref to unrecorded `person`."
+    },
+    {
+     "n": 6,
+     "need": "Incidents that are the same outage reported twice are one incident.",
+     "verdict": "runs",
+     "declared_by": "incident identity_criterion (same outage, however reported)",
+     "executed_by": "validator: `identity: incident -> RESOLVE under its identity_criterion`",
+     "query": {
+      "target_type": "incident",
+      "filters": [],
+      "relations": [],
+      "aggregate": "count",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "RESOLVE decides incident sameness under the criterion."
+    },
+    {
+     "n": 7,
+     "need": "How severity changed during an incident.",
+     "verdict": "runs",
+     "declared_by": "severity_call: severity, set_at, reason",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86",
+     "query": {
+      "target_type": "severity_call",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "severity_call.subject",
+        "other_type": "incident",
+        "other_name": null,
+        "negate": false,
+        "where": {
+         "filters": [
+          {
+           "attribute": "incident_id",
+           "op": "contains",
+           "value": "<INC-id>",
+           "negate": false
+          }
+         ],
+         "relations": []
+        }
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Every severity call is held with its time, so the sequence lists (set_by is dropped, but who set it is not asked)."
+    }
+   ]
+  },
+  {
+   "id": "06-tasks",
+   "record_types_run": false,
+   "record_types_note": "member is metadata-sourced from the author field; project, milestone and task are RESOLVE-decided. The requester is `ref of person` (no record), and member records are offered to a reference only on a document whose own author field names them (pick.rs:1-11), so a member named in another's message is no candidate.",
+   "needs": [
+    {
+     "n": 1,
+     "need": "Every task we agreed to do, with its owner and due date.",
+     "verdict": "inert",
+     "declared_by": "task.owner (ref member, by=latest), task.due (time, by=latest)",
+     "executed_by": null,
+     "query": null,
+     "gap": "ref-target-unrecorded",
+     "why": "Due runs, but an owner reading lands only on a member the message's own author field names (read_fields.rs:120-149; member is no statement subject, so window_particulars.rs:49-51 drops its mentions), so an owner named by someone else is dropped."
+    },
+    {
+     "n": 2,
+     "need": "Each task's status (open, in progress, blocked, done, dropped) and when it last changed.",
+     "verdict": "runs",
+     "declared_by": "task.status derived = fold task_status (protocol over status_update)",
+     "executed_by": "validator: `derived: task.status <- fold task_status by protocol`; ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived.rs:148 (derived value written on the record), resolution_derived/protocol.rs:31 (protocol fold over the record's claims); the fold's readings with their report dates are written on the record (resolution_derived/outcome.rs:22-62)",
+     "query": {
+      "target_type": "task",
+      "filters": [
+       {
+        "attribute": "status",
+        "op": "eq",
+        "value": "<status>",
+        "negate": false
+       }
+      ],
+      "relations": [],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "The protocol fold sets status and the record row carries its dated history."
+    },
+    {
+     "n": 3,
+     "need": "Which tasks block which other tasks.",
+     "verdict": "runs",
+     "declared_by": "dependency (claim, subject task): blocked_by (ref task), blocking (blocks/no_longer_blocks)",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86; ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/statement_refs.rs:137-142 (a statement's ref holds the record its reading names)",
+     "query": [
+      {
+       "target_type": "task",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "dependency.subject",
+         "other_type": "dependency",
+         "other_name": null,
+         "negate": false,
+         "where": {
+          "filters": [
+           {
+            "attribute": "blocking",
+            "op": "eq",
+            "value": "blocks",
+            "negate": false
+           }
+          ],
+          "relations": [
+           {
+            "relation": "dependency.blocked_by",
+            "other_type": "task",
+            "other_name": "<blocking task>",
+            "negate": false
+           }
+          ]
+         }
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "task",
+       "filters": [
+        {
+         "attribute": "name",
+         "op": "eq",
+         "value": "<blocking task>",
+         "negate": false
+        }
+       ],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Blocked tasks reach their blocker by a resolved task reference; the blocker's own status says whether the block still stands."
+    },
+    {
+     "n": 4,
+     "need": "Who asked for each task and why.",
+     "verdict": "inert",
+     "declared_by": "request (directive claim): requester (ref person), reason",
+     "executed_by": null,
+     "query": null,
+     "gap": "ref-target-unrecorded",
+     "why": "Reason is held; requester points at undeclared `person` (is_a follows `specializes` only, type_index.rs:76-81, so member records do not count), and the reference is dropped."
+    },
+    {
+     "n": 5,
+     "need": "Tasks that were reassigned, and to whom.",
+     "verdict": "inert",
+     "declared_by": "reassignment: from_owner, to_owner (ref member), reason",
+     "executed_by": null,
+     "query": null,
+     "gap": "ref-target-unrecorded",
+     "why": "The new owner is usually named by someone else in the message, and a member the document's author field does not name is no Pick candidate (pick.rs:1-11), so to_owner is dropped."
+    },
+    {
+     "n": 6,
+     "need": "Which tasks belong to which project or milestone.",
+     "verdict": "runs",
+     "declared_by": "task.project (ref project, by=latest), task.milestone (ref milestone, by=latest)",
+     "executed_by": "ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/read_fields.rs:51 (a `by` subject field folds onto the record), read_fields.rs:370",
+     "query": {
+      "target_type": "task",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "task.project",
+        "other_type": "project",
+        "other_name": "<project>",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "project and milestone are RESOLVE-decided, so the references land on records."
+    }
+   ]
+  },
+  {
+   "id": "07-inventory",
+   "record_types_run": false,
+   "record_types_note": "part is RESOLVE-decided and gets records. Validator: `makes no record of warehouse (entity), technician (entity), supplier (entity): no statement kind is about them, RESOLVE decides none of them and no source supplies them.`",
+   "needs": [
+    {
+     "n": 1,
+     "need": "Every part, with its part number, description and unit of measure.",
+     "verdict": "inert",
+     "declared_by": "part.part_number (identity key, no `by`), part.description (by=most), part.unit_of_measure (by=most)",
+     "executed_by": null,
+     "query": null,
+     "gap": "subject-field-unheld",
+     "why": "Description and unit fold onto the record; part_number is declared without `by`, so it stays on each statement (read_fields.rs:41-54) and RESOLVE writes no identity value onto the record (resolution_records.rs:719-737)."
+    },
+    {
+     "n": 2,
+     "need": "How many of each part each warehouse holds, as of the last stock-take and as of the latest movement.",
+     "verdict": "inexpressible",
+     "declared_by": "stock_count: counted, counted_on, warehouse (ref, unrecorded); movement claims' quantity",
+     "executed_by": null,
+     "query": null,
+     "gap": "totals",
+     "why": "The balance after the last count is the count plus or minus every later movement, a sum no fold or query computes (typed.rs:134-145); the per-warehouse split also fails because the warehouse reference is dropped."
+    },
+    {
+     "n": 3,
+     "need": "Every movement: a receipt from a supplier, a transfer between warehouses, an issue to a technician, with quantity and date.",
+     "verdict": "inert",
+     "declared_by": "receipt/transfer/issue: quantity, date, warehouse/from_warehouse/to_warehouse/technician/supplier (refs)",
+     "executed_by": null,
+     "query": null,
+     "gap": "ref-target-unrecorded",
+     "why": "Quantity and date are held, but every from/to is a ref to a type with no record (validator warning), so it is removed from the statement (statement_refs.rs:137-142)."
+    },
+    {
+     "n": 4,
+     "need": "Where a stock-take count disagreed with what the movements imply.",
+     "verdict": "inexpressible",
+     "declared_by": "tension between stock_count only (same subject, warehouse, counted_on); stock_count.expected",
+     "executed_by": null,
+     "query": null,
+     "gap": "totals",
+     "why": "What the movements imply is a running sum; the tension compares counts with counts, and no filter compares counted with expected (typed_check.rs:216-275)."
+    },
+    {
+     "n": 5,
+     "need": "Which technician holds which issued parts.",
+     "verdict": "inert",
+     "declared_by": "issue.technician, return.technician (ref technician)",
+     "executed_by": null,
+     "query": null,
+     "gap": "ref-target-unrecorded",
+     "why": "technician gets no record, so the reference is dropped; holdings would also need issued minus returned."
+    },
+    {
+     "n": 6,
+     "need": "Parts below their reorder level.",
+     "verdict": "inexpressible",
+     "declared_by": "stock_count.reorder_level, stock_count.counted",
+     "executed_by": null,
+     "query": null,
+     "gap": "value-compare",
+     "why": "Both numbers are held on a count, but a filter compares an attribute only with a literal (typed_match.rs:309-345), never with another attribute or a running balance."
+    }
+   ]
+  },
+  {
+   "id": "08-leases",
+   "record_types_run": true,
+   "record_types_note": "flat, tenancy and maintenance_job are statement subjects; tenant and contractor carry an identity_criterion, so RESOLVE decides them and the window reader names their particulars (document_read/window.rs:63-92). All needed types get records.",
+   "needs": [
+    {
+     "n": 1,
+     "need": "Every tenancy: which flat, which tenants, start and end date, monthly rent and currency, deposit held.",
+     "verdict": "runs",
+     "declared_by": "tenancy.flat (by=agree), tenancy.tenants (by=all), tenancy.start (by=agree), tenancy.end (by=latest); agreement_terms: monthly_rent, currency, deposit",
+     "executed_by": "ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/read_fields.rs:51 (a `by` subject field folds onto the record), read_fields.rs:370; ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86",
+     "query": [
+      {
+       "target_type": "tenancy",
+       "filters": [],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "agreement_terms",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "agreement_terms.subject",
+         "other_type": "tenancy",
+         "other_name": null,
+         "negate": false,
+         "where": {
+          "filters": [],
+          "relations": [
+           {
+            "relation": "tenancy.flat",
+            "other_type": "flat",
+            "other_name": "<flat>",
+            "negate": false
+           }
+          ]
+         }
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Tenancy fields fold onto the record and the agreed terms are claims about it."
+    },
+    {
+     "n": 2,
+     "need": "Rent changes over time, and when each took effect.",
+     "verdict": "runs",
+     "declared_by": "rent_change: new_rent, previous_rent, currency, effective_from",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86",
+     "query": {
+      "target_type": "rent_change",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "rent_change.subject",
+        "other_type": "tenancy",
+        "other_name": null,
+        "negate": false,
+        "where": {
+         "filters": [],
+         "relations": [
+          {
+           "relation": "tenancy.flat",
+           "other_type": "flat",
+           "other_name": "<flat>",
+           "negate": false
+          }
+         ]
+        }
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Each rent change is held with its effective date."
+    },
+    {
+     "n": 3,
+     "need": "Renewals and notices to quit, with their dates.",
+     "verdict": "runs",
+     "declared_by": "renewal: agreed_on, new_term, renewal_type; notice_to_quit: served_by, served_on, quit_date, notice_status",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86",
+     "query": [
+      {
+       "target_type": "renewal",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "renewal.subject",
+         "other_type": "tenancy",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "notice_to_quit",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "notice_to_quit.subject",
+         "other_type": "tenancy",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Both are dated claims about the tenancy."
+    },
+    {
+     "n": 4,
+     "need": "Every maintenance request: which flat, what was wrong, when it was reported, who fixed it, its status and cost.",
+     "verdict": "runs",
+     "declared_by": "maintenance_job.flat (by=agree), problem (by=earliest), fixed_by (ref contractor, by=latest), status (by=latest); maintenance_request.reported_on; invoice.amount",
+     "executed_by": "ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/read_fields.rs:51 (a `by` subject field folds onto the record), read_fields.rs:370; ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86",
+     "query": [
+      {
+       "target_type": "maintenance_job",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "maintenance_job.flat",
+         "other_type": "flat",
+         "other_name": "<flat>",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "maintenance_request",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "maintenance_request.subject",
+         "other_type": "maintenance_job",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "invoice",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "invoice.subject",
+         "other_type": "maintenance_job",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Job fields fold with the document clock; reported date and invoice amount are claim fields."
+    },
+    {
+     "n": 5,
+     "need": "Which flats are empty and since when.",
+     "verdict": "runs",
+     "declared_by": "flat.occupancy (let/vacant, by=latest); occupancy_change: change, effective_from",
+     "executed_by": "ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/read_fields.rs:51 (a `by` subject field folds onto the record), read_fields.rs:370; argmax typed.rs:469-533",
+     "query": [
+      {
+       "target_type": "flat",
+       "filters": [
+        {
+         "attribute": "occupancy",
+         "op": "eq",
+         "value": "vacant",
+         "negate": false
+        }
+       ],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "occupancy_change",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "occupancy_change.subject",
+         "other_type": "flat",
+         "other_name": "<flat>",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "argmax",
+       "aggregate_over": "effective_from"
+      }
+     ],
+     "gap": null,
+     "why": "As declared, occupancy folds from statements about the flat and the latest occupancy change dates it; it answers only where the mail states occupancy (the author's own doubt)."
+    },
+    {
+     "n": 6,
+     "need": "A tenant who moves to another of my flats is the same person with a new tenancy.",
+     "verdict": "runs",
+     "declared_by": "tenant identity_criterion; tenancy identity_criterion",
+     "executed_by": "validator: `identity: tenant -> RESOLVE under its identity_criterion`; validator: `identity: tenancy -> RESOLVE under its identity_criterion`",
+     "query": {
+      "target_type": "tenancy",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "tenancy.tenants",
+        "other_type": "tenant",
+        "other_name": "<tenant>",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "RESOLVE keeps one tenant and separate tenancies, linked by tenancy.tenants."
+    }
+   ]
+  },
+  {
+   "id": "09-grants",
+   "record_types_run": true,
+   "record_types_note": "funder and contact are metadata-sourced; application, report and payment are RESOLVE-decided. All needed types get records.",
+   "needs": [
+    {
+     "n": 1,
+     "need": "Every application: which funder, which programme, how much we asked for and in what currency, when we applied.",
+     "verdict": "runs",
+     "declared_by": "application.funder (by=agree), programme (by=agree); funding_request: amount_requested, currency, dated",
+     "executed_by": "ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/read_fields.rs:51 (a `by` subject field folds onto the record), read_fields.rs:370; ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86",
+     "query": [
+      {
+       "target_type": "application",
+       "filters": [],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "funding_request",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "funding_request.subject",
+         "other_type": "application",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Funder and programme fold onto the application; the request claim carries amount, currency and date."
+    },
+    {
+     "n": 2,
+     "need": "The outcome of each application (pending, awarded, declined, withdrawn), and the amount awarded.",
+     "verdict": "runs",
+     "declared_by": "application.status derived = fold application_status (protocol); funding_decision.amount_awarded",
+     "executed_by": "validator: `derived: application.status <- fold application_status by protocol`; ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived.rs:148 (derived value written on the record), resolution_derived/protocol.rs:31 (protocol fold over the record's claims)",
+     "query": [
+      {
+       "target_type": "application",
+       "filters": [
+        {
+         "attribute": "status",
+         "op": "eq",
+         "value": "awarded",
+         "negate": false
+        }
+       ],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "funding_decision",
+       "filters": [
+        {
+         "attribute": "outcome",
+         "op": "eq",
+         "value": "awarded",
+         "negate": false
+        }
+       ],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Status is a protocol fold over dated claims; the decision claim carries the award."
+    },
+    {
+     "n": 3,
+     "need": "The conditions of each award, and every reporting deadline it imposes.",
+     "verdict": "runs",
+     "declared_by": "grant_condition (directive claim): category, deadline; report.grant (ref application), report.due (by=latest)",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86; ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/read_fields.rs:51 (a `by` subject field folds onto the record), read_fields.rs:370",
+     "query": [
+      {
+       "target_type": "grant_condition",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "grant_condition.subject",
+         "other_type": "application",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "report",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "report.grant",
+         "other_type": "application",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Conditions are directive claims on the award; each report owed carries its latest due date."
+    },
+    {
+     "n": 4,
+     "need": "Which reports we have sent and which are overdue.",
+     "verdict": "runs",
+     "declared_by": "report.status derived = fold report_status (protocol); report.due",
+     "executed_by": "ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived.rs:148 (derived value written on the record), resolution_derived/protocol.rs:31 (protocol fold over the record's claims)",
+     "query": [
+      {
+       "target_type": "report",
+       "filters": [
+        {
+         "attribute": "status",
+         "op": "eq",
+         "value": "submitted",
+         "negate": false
+        }
+       ],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "report",
+       "filters": [
+        {
+         "attribute": "status",
+         "op": "eq",
+         "value": "due",
+         "negate": false
+        },
+        {
+         "attribute": "due",
+         "op": "lt",
+         "value": "<today>",
+         "negate": false
+        }
+       ],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Overdue is status due with a due date before today, a literal date filter."
+    },
+    {
+     "n": 5,
+     "need": "Payments received against each award, with dates and amounts.",
+     "verdict": "runs",
+     "declared_by": "payment (entity): grant (ref application), amount, currency, received_on (by folds)",
+     "executed_by": "ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/read_fields.rs:51 (a `by` subject field folds onto the record), read_fields.rs:370",
+     "query": {
+      "target_type": "payment",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "payment.grant",
+        "other_type": "application",
+        "other_name": "<award>",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Each payment record carries grant, amount and date."
+    },
+    {
+     "n": 6,
+     "need": "Our contact at each funder.",
+     "verdict": "runs",
+     "declared_by": "contact (metadata source, refs funder by domain)",
+     "executed_by": "validator: `source: contact <- document fields from, to, cc (email: address, name: display_name)`",
+     "query": {
+      "target_type": "contact",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "contact.funder",
+        "other_type": "funder",
+        "other_name": "<funder>",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Contacts are header-sourced and linked to their funder by domain."
+    }
+   ]
+  },
+  {
+   "id": "10-fleet",
+   "record_types_run": true,
+   "record_types_note": "van, garage, defect and garage_job (event) are RESOLVE-decided; driver is sourced from the from field. All needed types get records.",
+   "needs": [
+    {
+     "n": 1,
+     "need": "Every van, by registration, with its model and year.",
+     "verdict": "runs",
+     "declared_by": "van.registration (by=agree), model (by=most), year (by=most)",
+     "executed_by": "ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/read_fields.rs:51 (a `by` subject field folds onto the record), read_fields.rs:370",
+     "query": {
+      "target_type": "van",
+      "filters": [],
+      "relations": [],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "All three fold onto the van record."
+    },
+    {
+     "n": 2,
+     "need": "Each van's mileage over time, from the readings drivers and garages report.",
+     "verdict": "runs",
+     "declared_by": "mileage_reading: odometer, read_on, reported_by",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86",
+     "query": {
+      "target_type": "mileage_reading",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "mileage_reading.subject",
+        "other_type": "van",
+        "other_name": "<registration>",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Each reading is a dated claim about the van."
+    },
+    {
+     "n": 3,
+     "need": "Every defect reported, on which van, by which driver, and whether and when it was fixed.",
+     "verdict": "runs",
+     "declared_by": "defect.van (by=agree), defect.status (protocol); defect_update: outcome, on, reported_by (ref driver)",
+     "executed_by": "ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived.rs:148 (derived value written on the record), resolution_derived/protocol.rs:31 (protocol fold over the record's claims); ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/statement_refs.rs:137-142 (a statement's ref holds the record its reading names)",
+     "query": [
+      {
+       "target_type": "defect",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "defect.van",
+         "other_type": "van",
+         "other_name": "<registration>",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "defect_update",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "defect_update.subject",
+         "other_type": "defect",
+         "other_name": null,
+         "negate": false,
+         "where": {
+          "filters": [],
+          "relations": [
+           {
+            "relation": "defect.van",
+            "other_type": "van",
+            "other_name": "<registration>",
+            "negate": false
+           }
+          ]
+         }
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "The defect's van and status are on its record; each update carries who reported it (the sender) and when it was fixed."
+    },
+    {
+     "n": 4,
+     "need": "Every service and repair: which van, which garage, the work done, the cost and currency, the date.",
+     "verdict": "runs",
+     "declared_by": "garage_job (event): van, garage, job_type, cost (by=latest), currency, done_on (folds); job_record claims (no fields)",
+     "executed_by": "ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/read_fields.rs:51 (a `by` subject field folds onto the record), read_fields.rs:370; ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86",
+     "query": [
+      {
+       "target_type": "garage_job",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "garage_job.van",
+         "other_type": "van",
+         "other_name": "<registration>",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "job_record",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "job_record.subject",
+         "other_type": "garage_job",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Van, garage, cost and date fold onto the job; work_done has no `by` and is unheld, but the work done is the job_record statement's own text, which is what the owner asks for."
+    },
+    {
+     "n": 5,
+     "need": "When each van's next service is due by mileage or by date.",
+     "verdict": "runs",
+     "declared_by": "service_due (claim, subject van): due_mileage, due_date",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86; argmax typed.rs:469-533",
+     "query": [
+      {
+       "target_type": "service_due",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "service_due.subject",
+         "other_type": "van",
+         "other_name": "<registration>",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "argmax",
+       "aggregate_over": "due_date"
+      },
+      {
+       "target_type": "service_due",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "service_due.subject",
+         "other_type": "van",
+         "other_name": "<registration>",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "argmax",
+       "aggregate_over": "due_mileage"
+      }
+     ],
+     "gap": null,
+     "why": "Where a garage states the next service, the latest statement per van answers it; a due point the documents never state would need arithmetic."
+    },
+    {
+     "n": 6,
+     "need": "Which driver had which van on which day.",
+     "verdict": "runs",
+     "declared_by": "allocation (claim, subject van): driver (ref driver), day",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86; ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/statement_refs.rs:137-142 (a statement's ref holds the record its reading names)",
+     "query": {
+      "target_type": "van",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "allocation.subject",
+        "other_type": "allocation",
+        "other_name": null,
+        "negate": false,
+        "where": {
+         "filters": [
+          {
+           "attribute": "day",
+           "op": "eq",
+           "value": "<date>",
+           "negate": false
+          }
+         ],
+         "relations": [
+          {
+           "relation": "allocation.driver",
+           "other_type": "driver",
+           "other_name": "<driver>",
+           "negate": false
+          }
+         ]
+        }
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "The daily check's sender is the driver record and the day is a typed time."
+    }
+   ]
+  },
+  {
+   "id": "11-expenses",
+   "record_types_run": true,
+   "record_types_note": "employee is sourced from from/to/cc; expense_claim is RESOLVE-decided. All needed types get records (project is a text value, which the needs only group by).",
+   "needs": [
+    {
+     "n": 1,
+     "need": "Every expense claim: who claimed, for what, the amount and currency, the date incurred, the category, the client project if any.",
+     "verdict": "runs",
+     "declared_by": "expense_claim.claimant (ref employee, by=agree), purpose, amount, currency, incurred, category, project (by=latest)",
+     "executed_by": "ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/read_fields.rs:51 (a `by` subject field folds onto the record), read_fields.rs:370",
+     "query": {
+      "target_type": "expense_claim",
+      "filters": [],
+      "relations": [],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Every field folds onto the claim record with the document clock."
+    },
+    {
+     "n": 2,
+     "need": "Who approved or rejected each claim, and when.",
+     "verdict": "runs",
+     "declared_by": "approval_decision: decision, approver (ref employee), effective_on",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86; ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/statement_refs.rs:137-142 (a statement's ref holds the record its reading names)",
+     "query": {
+      "target_type": "approval_decision",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "approval_decision.subject",
+        "other_type": "expense_claim",
+        "other_name": null,
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "The approver is the reply's sender, a header-sourced employee."
+    },
+    {
+     "n": 3,
+     "need": "Each claim's status (submitted, approved, rejected, paid) and the payment date.",
+     "verdict": "runs",
+     "declared_by": "expense_claim.status derived = fold claim_status (protocol); payment_notice.effective_on",
+     "executed_by": "validator: `derived: expense_claim.status <- fold claim_status by protocol`; ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived.rs:148 (derived value written on the record), resolution_derived/protocol.rs:31 (protocol fold over the record's claims)",
+     "query": [
+      {
+       "target_type": "expense_claim",
+       "filters": [
+        {
+         "attribute": "status",
+         "op": "eq",
+         "value": "paid",
+         "negate": false
+        }
+       ],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "payment_notice",
+       "filters": [
+        {
+         "attribute": "outcome",
+         "op": "eq",
+         "value": "paid",
+         "negate": false
+        }
+       ],
+       "relations": [
+        {
+         "relation": "payment_notice.subject",
+         "other_type": "expense_claim",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Status is the protocol fold; the payment notice carries the value date."
+    },
+    {
+     "n": 4,
+     "need": "Totals per employee, per project and per category for a period.",
+     "verdict": "inexpressible",
+     "declared_by": null,
+     "executed_by": null,
+     "query": null,
+     "gap": "totals",
+     "why": "A sum of amounts per group is no answer shape (typed.rs:134-145: none/count/argmax/argmin/tally, where tally counts records per value) and no fold sums (derived.rs:143-158)."
+    },
+    {
+     "n": 5,
+     "need": "Claims that break policy (over the limit for their category, or missing a receipt).",
+     "verdict": "runs",
+     "declared_by": "expense_submission.receipt (attached/missing); expense_claim.category, amount",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86",
+     "query": [
+      {
+       "target_type": "expense_claim",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "expense_submission.subject",
+         "other_type": "expense_submission",
+         "other_name": null,
+         "negate": false,
+         "where": {
+          "filters": [
+           {
+            "attribute": "receipt",
+            "op": "eq",
+            "value": "missing",
+            "negate": false
+           }
+          ],
+          "relations": []
+         }
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "expense_claim",
+       "filters": [
+        {
+         "attribute": "category",
+         "op": "eq",
+         "value": "meals",
+         "negate": false
+        },
+        {
+         "attribute": "amount",
+         "op": "gt",
+         "value": "<meals limit>",
+         "negate": false
+        }
+       ],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Missing receipts are a typed field; over-limit is one query per category with the limit as a literal, since the limits are policy the material does not carry."
+    },
+    {
+     "n": 6,
+     "need": "Claims re-submitted after a rejection are the same claim.",
+     "verdict": "runs",
+     "declared_by": "expense_claim identity_criterion; rule resubmission_after_rejection",
+     "executed_by": "validator: `identity: expense_claim -> RESOLVE under its identity_criterion`",
+     "query": {
+      "target_type": "expense_claim",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "expense_submission.subject",
+        "other_type": "expense_submission",
+        "other_name": null,
+        "negate": false,
+        "where": {
+         "filters": [
+          {
+           "attribute": "action",
+           "op": "eq",
+           "value": "resubmitted",
+           "negate": false
+          }
+         ],
+         "relations": []
+        }
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "RESOLVE keeps a resubmission on the same record."
+    }
+   ]
+  },
+  {
+   "id": "12-coliving",
+   "record_types_run": true,
+   "record_types_note": "housemate, house_rule, chore and purchase (event) are RESOLVE-decided; all needed types get records. No change.document is declared, so no fold has a clock (the author declared none).",
+   "needs": [
+    {
+     "n": 1,
+     "need": "The house rules in force now, and when each was agreed.",
+     "verdict": "runs",
+     "declared_by": "decision (claim, subject house_rule): outcome, decided_on, takes_effect",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86; negated relation with a where: typed_match.rs:255-306",
+     "query": [
+      {
+       "target_type": "house_rule",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "decision.subject",
+         "other_type": "decision",
+         "other_name": null,
+         "negate": false,
+         "where": {
+          "filters": [
+           {
+            "attribute": "outcome",
+            "op": "eq",
+            "value": "agreed",
+            "negate": false
+           }
+          ],
+          "relations": []
+         }
+        },
+        {
+         "relation": "decision.subject",
+         "other_type": "decision",
+         "other_name": null,
+         "negate": true,
+         "where": {
+          "filters": [
+           {
+            "attribute": "outcome",
+            "op": "eq",
+            "value": "dropped",
+            "negate": false
+           }
+          ],
+          "relations": []
+         }
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "decision",
+       "filters": [
+        {
+         "attribute": "outcome",
+         "op": "eq",
+         "value": "agreed",
+         "negate": false
+        }
+       ],
+       "relations": [
+        {
+         "relation": "decision.subject",
+         "other_type": "house_rule",
+         "other_name": "<rule>",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Rules with an agreed decision and no dropped decision are the rules in force; the agreed decision dates each."
+    },
+    {
+     "n": 2,
+     "need": "Rules that were proposed but not agreed, and who objected.",
+     "verdict": "runs",
+     "declared_by": "proposal (claim); decision.outcome; stance: respondent (ref housemate), position",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86; ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/statement_refs.rs:137-142 (a statement's ref holds the record its reading names)",
+     "query": [
+      {
+       "target_type": "house_rule",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "proposal.subject",
+         "other_type": "proposal",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        },
+        {
+         "relation": "decision.subject",
+         "other_type": "decision",
+         "other_name": null,
+         "negate": true,
+         "where": {
+          "filters": [
+           {
+            "attribute": "outcome",
+            "op": "eq",
+            "value": "agreed",
+            "negate": false
+           }
+          ],
+          "relations": []
+         }
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "stance",
+       "filters": [
+        {
+         "attribute": "position",
+         "op": "eq",
+         "value": "objects",
+         "negate": false
+        }
+       ],
+       "relations": [
+        {
+         "relation": "stance.subject",
+         "other_type": "house_rule",
+         "other_name": "<rule>",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Proposed-not-agreed is a negated relation; objectors are housemate records (RESOLVE-decided, so named particulars)."
+    },
+    {
+     "n": 3,
+     "need": "How a rule changed when it was amended, and which rules were dropped.",
+     "verdict": "runs",
+     "declared_by": "decision: outcome amended/dropped, wording",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86",
+     "query": [
+      {
+       "target_type": "decision",
+       "filters": [
+        {
+         "attribute": "outcome",
+         "op": "eq",
+         "value": "amended",
+         "negate": false
+        }
+       ],
+       "relations": [
+        {
+         "relation": "decision.subject",
+         "other_type": "house_rule",
+         "other_name": "<rule>",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "house_rule",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "decision.subject",
+         "other_type": "decision",
+         "other_name": null,
+         "negate": false,
+         "where": {
+          "filters": [
+           {
+            "attribute": "outcome",
+            "op": "eq",
+            "value": "dropped",
+            "negate": false
+           }
+          ],
+          "relations": []
+         }
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Amendments carry their wording; dropped rules are those with a dropped decision."
+    },
+    {
+     "n": 4,
+     "need": "The chore rota: who has which chore in which week, and whether it got done.",
+     "verdict": "runs",
+     "declared_by": "assignment: assignee (ref housemate), week, basis; completion: week, outcome, done_by",
+     "executed_by": "ingest/crates/understanding-atlas/src/atlas_traversal/typed_check.rs:372 (`<claim>.subject` link), typed_match.rs:78-86; ingest/crates/corpus-engine/src/enrichment/atlas/resolution_derived/statement_refs.rs:137-142 (a statement's ref holds the record its reading names)",
+     "query": [
+      {
+       "target_type": "assignment",
+       "filters": [
+        {
+         "attribute": "week",
+         "op": "eq",
+         "value": "<week date>",
+         "negate": false
+        }
+       ],
+       "relations": [
+        {
+         "relation": "assignment.subject",
+         "other_type": "chore",
+         "other_name": "<chore>",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "completion",
+       "filters": [
+        {
+         "attribute": "week",
+         "op": "eq",
+         "value": "<week date>",
+         "negate": false
+        }
+       ],
+       "relations": [
+        {
+         "relation": "completion.subject",
+         "other_type": "chore",
+         "other_name": "<chore>",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Assignments and completions are week-dated claims about the chore."
+    },
+    {
+     "n": 5,
+     "need": "Shared purchases: who paid, how much and in what currency, and who owes whom.",
+     "verdict": "inexpressible",
+     "declared_by": "purchase.payer (by=agree); expense: amount, currency, split, share; debt (subject debtor): creditor, amount, status",
+     "executed_by": null,
+     "query": null,
+     "gap": "totals",
+     "why": "Payer, amount and currency run, but who owes whom is each housemate's share across purchases less what was paid back, a sum (and a split) nothing computes; debt claims hold only debts someone states, and a later `settled` does not net an earlier `owed`."
+    },
+    {
+     "n": 6,
+     "need": "A rule, a chore or a purchase mentioned several times in the chat is one thing.",
+     "verdict": "runs",
+     "declared_by": "house_rule, chore, purchase identity_criterion",
+     "executed_by": "validator: `identity: house_rule -> RESOLVE under its identity_criterion` (and chore, purchase)",
+     "query": {
+      "target_type": "house_rule",
+      "filters": [],
+      "relations": [],
+      "aggregate": "count",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "RESOLVE decides sameness for all three."
+    }
+   ]
+  }
+ ],
+ "gap_tags": {
+  "ref-target-unrecorded": "A reference whose target the document reader makes no record of: an undeclared base kind such as `person`, a declared type with no identity_criterion that no statement is about, or a sourced type named in the text but not in that document's own fields. The reading is never minted into a record and is removed from the statement (resolution_derived/read_fields.rs:93-165, statement_refs.rs:137-142, pick.rs:1-11 'nothing is minted here', document_read/window_particulars.rs:49-51); validate warns only for declared types (document_read/schema.rs:186-216), never for `of = \"person\"`.",
+  "as-of-state": "Which records were in a state at a date (today or past) when later statements replace earlier ones or a term runs on past its written end: change.supersedes is read only by the tension comparability pass (corpus-engine/src/enrichment/atlas/analysis/tension_fields.rs:93-102), and a date filter matches every statement, superseded or not (typed_match.rs:309-345). Refuted where the ask is per named record (03 n2 runs by argmax with an lt bound) or the lifecycle is monotone (12 n1 runs by a negated relation); confirmed for a set selected by its current term (02 n5).",
+  "computed-value": "A value derived by arithmetic from other values (notice date = end date - notice period; agency fee = fee_percent x base salary): the fold registry is first/agree/most/all/earliest/latest/protocol (shared/crates/understanding-vocab/src/ontology/derived.rs:143-158) and paths only walk the graph; nothing computes.",
+  "totals": "A sum of a quantity over records, per group and period (ordered per supplier, expenses per employee, stock balance from movements, who owes whom): the answer shapes are none/count/argmax/argmin/tally, and tally counts records per value (ingest/crates/understanding-atlas/src/atlas_traversal/typed.rs:134-145, 432-466); no fold sums (derived.rs:143-158).",
+  "value-compare": "A filter comparing one value with another value (an invoice's amount with its order's total; a count with its reorder level) rather than with a literal: check_filter reads the operand from the query's literal only (typed_check.rs:216-275) and filter_holds compares the attribute with it (typed_match.rs:309-345); a declared tension that does compare is not a relation the typed query can reach (typed_check.rs:278-330).",
+  "linked-count-filter": "Keeping the records with fewer (or more) than N linked records (requests above 10,000 with fewer than two approvals): argmax/argmin over a related type returns only the extreme (typed.rs:469-533, typed_query_grammar.md:14-18), filters apply to the target's own attributes, and a protocol rule cannot require N distinct moves.",
+  "subject-field-unheld": "A RESOLVE-decided record's own field (a clause's policy, a part's number) declared without `by`: it stays on each statement and never reaches the record (read_fields.rs:41-54 folds only attributes with `by`; RESOLVE writes no field, resolution_records.rs:719-737), and validate says nothing; the record needs to hold its identity keys and read fields without a fold declaration.",
+  "fold-needs-document-date": "A `latest`/`earliest` or protocol fold over material whose extractor gives no document date: the fold clock is built only from change.document.date (resolution_derived.rs:283-300), so `latest` returns Unordered even on a single reading (resolution_derived.rs:685) and protocol moves stay pending; no fold can order by a statement's own time field. Shown by a failing need only in 05; the 03 and 12 authors gave up folds for it (03 transcript lines 113-123, 12 transcript assumption 1) but their needs still run by other routes."
+ },
+ "summary": {
+  "needs_total": 75,
+  "runs": 53,
+  "inert": 13,
+  "inexpressible": 9,
+  "E1_record_types_run": "8/12",
+  "gaps_by_use_case_count": {
+   "ref-target-unrecorded": 4,
+   "as-of-state": 1,
+   "computed-value": 2,
+   "totals": 4,
+   "value-compare": 2,
+   "linked-count-filter": 1,
+   "subject-field-unheld": 2,
+   "fold-needs-document-date": 1
+  },
+  "E3_seed0": [
+   {
+    "id": "02-contracts",
+    "new_tags": [
+     "as-of-state",
+     "computed-value",
+     "ref-target-unrecorded"
+    ]
+   },
+   {
+    "id": "10-fleet",
+    "new_tags": []
+   },
+   {
+    "id": "09-grants",
+    "new_tags": []
+   },
+   {
+    "id": "06-tasks",
+    "new_tags": []
+   },
+   {
+    "id": "11-expenses",
+    "new_tags": [
+     "totals"
+    ]
+   },
+   {
+    "id": "03-policy-register",
+    "new_tags": [
+     "subject-field-unheld"
+    ]
+   },
+   {
+    "id": "04-procurement",
+    "new_tags": [
+     "linked-count-filter",
+     "value-compare"
+    ]
+   },
+   {
+    "id": "08-leases",
+    "new_tags": []
+   },
+   {
+    "id": "05-incidents",
+    "new_tags": [
+     "fold-needs-document-date"
+    ]
+   },
+   {
+    "id": "01-recruiting",
+    "new_tags": []
+   },
+   {
+    "id": "12-coliving",
+    "new_tags": []
+   },
+   {
+    "id": "07-inventory",
+    "new_tags": []
+   }
+  ],
+  "E3_last_four_add_no_new_tag": false
+ }
+}

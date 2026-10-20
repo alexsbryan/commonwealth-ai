@@ -1116,20 +1116,6 @@ status = "shipped"
 purpose = "Embed model override for notes embeddings — takes a model ID string (corpus-engine-notes). Near-synonym of SOVEREIGN_EMBED_MODEL (a path); same meaning, incompatible values."
 
 [[flag]]
-name = "SOVEREIGN_WAVES_ONE_BY_ONE"
-cluster = "inference"
-default = "off"
-status = "experiment"
-purpose = "A/B valve for forced-choice waves (oicp_types::forced_choice::wave): =1 makes the ontology verbs' daemon client ask each question of a wave as its own request, the request pattern before waves. Same questions, keys and recorded answers either way (asker.rs ask_wave); only the transport differs. Read once per port build (inference_client::into_asked_closures)."
-
-
-[[flag]]
-name = "SOVEREIGN_READER"
-cluster = "inference"
-default = "unset"
-status = "experiment"
-purpose = "=waves reads documents with the compiled reader (document_read/waves.rs): the declaration compiled into levels of closed questions, particulars first, each round one forced-choice wave off one document prefix. =window reads each chapter in one call (document_read/window.rs) and makes `enrich init` cut the corpus into windows in clock order (sovereign-enrichment-build window_manifest.rs); one decider, document_read::window_chosen. Unset, the passes reader. Read per chapter (passes::read) and in the read contract's fingerprint, so cached reads of one reader are never served to another."
-[[flag]]
 name = "SOVEREIGN_RERANK_MODEL_PATH"
 cluster = "inference"
 default = "unset"
@@ -1808,6 +1794,14 @@ purpose = "Enabled question decomposition and sub-query fan-out in retrieval."
 replacement = "retired: the query-decomposition retrieval step was deleted (ac032e5bc)"
 
 [[flag]]
+name = "SOVEREIGN_READER"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Chose which reader read declared documents: window (the default from 2026-10-15) or passes."
+replacement = "retired: the window reader is the one reader; the passes reader was deleted (3058feb36)"
+
+[[flag]]
 name = "SOVEREIGN_SERVER_PATH"
 cluster = "removed"
 default = "no effect"
@@ -1838,3 +1832,11 @@ default = "no effect"
 status = "removed"
 purpose = "Enabled LLM question-to-title expansion in retrieval."
 replacement = "retired: the title-expansion retrieval step was deleted (ac032e5bc)"
+
+[[flag]]
+name = "SOVEREIGN_WAVES_ONE_BY_ONE"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Made the ontology verbs' daemon client ask each question of a forced-choice wave as its own request."
+replacement = "retired: nothing builds a forced-choice wave since the passes reader was deleted (3058feb36), so every question already goes alone"

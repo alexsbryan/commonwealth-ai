@@ -1,0 +1,211 @@
+# Production incidents — on-call program record.
+# Incident chat channels (exported as text), paging notifications, postmortem documents.
+
+[corpus]
+id = "production-incidents"
+name = "Production incidents"
+description = "Incident chat channels, paging notifications and postmortems, read as incidents with their severity calls, milestones, responders and roles, timeline, impact on services, root causes and follow-up actions."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+[acquire]
+type = "local_file"
+path = "SOURCE_PATH"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "production-incidents"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is a software company's on-call record: the chat channel opened for each
+production incident (exported as text), the paging notifications that alerted responders,
+and the postmortem written afterwards. An incident is an outage or degradation of one or
+more services. During it, people take roles (incident commander, communications,
+responder), the severity is declared and often raised or lowered, and the channel records
+what was observed and done, when and by whom. An incident starts (impact begins), is
+detected (an alert fires or someone notices), is mitigated (impact stops) and is resolved
+(the underlying problem is fixed and the incident closed). The postmortem states the root
+cause and lists follow-up actions, each with an owner, a due date and a status. The same
+outage is sometimes reported twice (two pages, two channels, two incident numbers): that
+is one incident. Times in chat are often local or relative ("10 minutes ago"); the
+postmortem's timeline is usually in UTC.
+"""
+must_not = [
+  "assign blame to an individual for an incident; postmortems here are blameless, and a person's action is reported as what was done, not as fault",
+]
+
+[enrichment.ontology.voices]
+not_entities = ["the paging bot", "the incident bot", "the alerting system"]
+
+# ── Things ──────────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "service"
+kind = "entity"
+description = "A production service or system the company runs (an API, a database, a queue, a payments service), or a third-party dependency it relies on."
+attributes = [
+  { name = "name", type = "text" },
+]
+identity_criterion = """
+Two mentions are one service when they name the same deployed system: its full name, a
+shortened name, its repository, or the prefix its alerts and dashboards use ("payments",
+"payments-api", "svc-payments"). A service and the database, queue or third-party
+provider it uses are different services.
+"""
+
+[[enrichment.ontology.types]]
+name = "incident"
+kind = "event"
+description = "One production outage or degradation, from when its impact began until it was resolved."
+attributes = [
+  { name = "incident_id", type = "text", by = "all", description = "Incident number(s) or channel name it was filed under, e.g. INC-1234 or #inc-payments-0512; a duplicate report can carry a second one." },
+  { name = "title", type = "text", by = "most", description = "The short name the incident goes by." },
+]
+identity_criterion = """
+Two mentions are one incident when they are the same outage: the same failure of the same
+or overlapping services over an overlapping period, however many times it was reported. A
+second page, a second channel or a second incident number for an outage already being
+handled is the same incident, and so is one declared a duplicate of another ("dup of
+INC-1234", "moving to #inc-..."). Two failures of the same service at separate times are
+different incidents, and so is a recurrence after the first was resolved.
+"""
+
+[[enrichment.ontology.types]]
+name = "action_item"
+kind = "entity"
+description = "A follow-up action from a postmortem: a piece of work to prevent recurrence or improve response."
+attributes = [
+  { name = "ticket_id", type = "text", description = "The tracker ticket for the action, when one is given." },
+  { name = "incident", type = "ref", of = "incident", by = "agree", description = "The incident whose postmortem raised it." },
+  { name = "owner", type = "ref", of = "person", by = "latest", description = "Who owns the action." },
+  { name = "due", type = "time", by = "latest", description = "The due date." },
+  { name = "status", type = "text", values = ["open", "in_progress", "done", "wont_do"], by = "latest", description = "Whether the action is done." },
+]
+identity_criterion = """
+Two mentions are one action item when they name the same piece of work: the same ticket,
+or the same change to the same system raised by the same postmortem, however it is worded.
+Two similar actions raised by different incidents' postmortems are different items unless
+they share a ticket.
+"""
+
+# ── What the sources say ────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "severity_call"
+kind = "claim"
+force = "declaration"
+subject = "incident"
+description = "Someone declares, raises or lowers the incident's severity."
+attributes = [
+  { name = "severity", type = "text", values = ["sev0", "sev1", "sev2", "sev3", "sev4"] },
+  { name = "set_at", type = "time", description = "When the severity was set." },
+  { name = "set_by", type = "ref", of = "person" },
+  { name = "reason", type = "text" },
+]
+
+[[enrichment.ontology.types]]
+name = "milestone"
+kind = "claim"
+force = "assertive"
+subject = "incident"
+description = "When the incident reached one of its stages: impact started, detected, mitigated, resolved."
+attributes = [
+  { name = "stage", type = "text", values = ["started", "detected", "mitigated", "resolved"] },
+  { name = "at", type = "time" },
+]
+grades = ["postmortem", "channel", "page"]
+
+[[enrichment.ontology.types]]
+name = "role_assignment"
+kind = "claim"
+force = "declaration"
+subject = "incident"
+description = "A person takes or is given a role in the incident response, or hands it over."
+attributes = [
+  { name = "person", type = "ref", of = "person" },
+  { name = "role", type = "text", values = ["incident_commander", "communications", "responder"] },
+  { name = "from", type = "time", description = "When they took the role." },
+]
+
+[[enrichment.ontology.types]]
+name = "timeline_entry"
+kind = "claim"
+force = "assertive"
+subject = "incident"
+description = "Something observed or done during the incident: an alert, a page, a finding, an action taken, an update sent."
+attributes = [
+  { name = "at", type = "time" },
+  { name = "actor", type = "ref", of = "person", description = "Who observed or did it." },
+  { name = "entry_kind", type = "text", values = ["alert", "page", "observation", "action", "decision", "communication", "escalation"] },
+  { name = "service", type = "ref", of = "service" },
+]
+
+[[enrichment.ontology.types]]
+name = "impact"
+kind = "claim"
+force = "assertive"
+subject = "service"
+description = "A service was affected by an incident, and how."
+attributes = [
+  { name = "incident", type = "ref", of = "incident" },
+  { name = "effect", type = "text", values = ["unavailable", "degraded", "errors", "latency", "data_issue"] },
+]
+
+[[enrichment.ontology.types]]
+name = "root_cause"
+kind = "claim"
+force = "assertive"
+subject = "incident"
+description = "What caused the incident, as the postmortem states it (or as responders suspected during it)."
+attributes = [
+  { name = "cause_kind", type = "text", values = ["code_change", "config_change", "infrastructure", "capacity", "dependency", "data", "process", "unknown"] },
+  { name = "contribution", type = "text", values = ["root", "contributing"] },
+  { name = "service", type = "ref", of = "service" },
+]
+grades = ["postmortem", "investigation", "hypothesis"]
+
+[[enrichment.ontology.types]]
+name = "follow_up"
+kind = "claim"
+force = "commissive"
+subject = "action_item"
+description = "A postmortem commits someone to a follow-up action, with an owner and a due date."
+
+[[enrichment.ontology.types]]
+name = "action_progress"
+kind = "claim"
+force = "assertive"
+subject = "action_item"
+description = "A report of where a follow-up action stands: started, done, dropped."
+
+# ── Change and tension ──────────────────────────────────────────────
+
+[enrichment.ontology.change]
+supersedes = { severity_call = "set_at" }
+
+[enrichment.ontology.tension]
+label = "discrepancy"
+between = ["milestone", "root_cause"]
+same = ["subject"]
+not_conflicts = [
+  "Different stages of the same incident (started, detected, mitigated, resolved) at different times.",
+  "The same moment written in two time zones, or as a relative time in chat and an absolute one in the postmortem.",
+  "A root cause and a contributing factor of the same incident.",
+  "A hypothesis in the channel that the responders themselves ruled out before the postmortem.",
+]
