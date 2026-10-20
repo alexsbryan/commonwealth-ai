@@ -49,3 +49,11 @@ JSON is reported as such, and a read that loses one is could-not-judge as before
 Done, so step 1. The prediction failed for `-c` (window 1 at 25/27). Two identical reads differ by 6 updates on
 window 1 and 6 in total, so one read cannot carry a step's verdict. Window 3 (`-c`): every document named, d7-d15
 reasoned over 1-5 times each against DeepSeek's 11-114; the answer is what the reasoning drafted.
+
+## The answer held to a schema (pre-registered 2026-10-19 23:20, before any read)
+
+**Reads.** `local35b-s4-schema-e` and `-f`: world-s4 at dd81fc4da (the window call carries its answer's schema;
+the daemon holds the answer to it after the think block, 2b9c1b527), otherwise as `-c`/`-d`.
+**Bars.** Valid: no window lost, RESOLVE answered. No harm: each read at least 33/55 attached and 4/15 served
+(the `-c`/`-d` floor; their spread is 6). A read under the bar is the schema costing recall: examined before it
+stays, never kept on its structural merit alone. Reported: windows lost, statements, minutes (the mask's cost).
