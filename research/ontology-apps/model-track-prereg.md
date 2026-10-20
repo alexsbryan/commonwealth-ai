@@ -164,3 +164,13 @@ No harm: each read at least 33/55 attached and 4/15 served. Window 1 is reported
 
 **Prediction**, stated so it can be wrong: the second look adds at least 3 written updates on windows 2-3 on each
 read, and neither read reaches 20 attached (RESOLVE loses 2-3 of what is written).
+
+**Step 2 result (2026-10-20 05:30): the second look does not keep** (reverted, ea8c8607c). Both reads valid, paired
+as registered (extract asked only second looks; `-rest-c`'s window 3 second look was the smoke's, recorded).
+Windows 2-3 attached (written): `-rest-c` 15 (17) against `-c`'s 13 (16); `-rest-d` 13 (20) against `-d`'s 14 (18).
+Window 1 25 and 21; 41/55 and 34/55; 5/15 and 3/15 served; 23 and 21 min. The second look added 9 and 6 claims in
+six windows, and 31 rewritten claims were dropped as repeats. The prediction's gain failed (+1, +2 written), and
+its "neither reaches 20" held. The wrong assumption: a second look is a second draw. Shown its own answer, the
+model re-reads every document and repeats its declines (`-rest-c` window 2: d1's forwarded "it's off" judged a
+quote again). The eight reads' spread comes from the first look's reasoning path, not from a look at the same
+frame. Next, per the plan, the pivot: Qwen3.8-27B on windows 2-3.
