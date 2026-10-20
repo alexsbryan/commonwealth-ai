@@ -217,3 +217,13 @@ over 47 calls). The daemon closes the 27B's think block there and it answers, so
 than the 35B was. Nothing else changes: same cut, askers, bars and decisions. Price at 11.9 tok/s: at most about
 35 minutes per window, so a read of 6 windows plus RESOLVE runs to about 4 hours and both to about 8. The smoke is
 repeated on `sec_00003` under the same bar, and a second failed smoke stops the pivot.
+
+**Amendment, minimal (2026-10-20 07:55, before any read).** On the operator's direction, one comparison instead of
+two full reads. The 27B reads windows 2-3 alone (the smoke's `sec_00003`, then `sec_00002`). Its two answers are
+spliced into `-c`'s read (`questions-full-061`, the 35B's other windows untouched), and RESOLVE runs fresh on the 35B,
+so only the reader of windows 2-3 differs from `-c`. Against the 35B's seven scored reads of this cut (attached on
+windows 2-3: 10-17, median 13; written: 10-20, median 17):
+- At least 20 attached, above every 35B read, means the model is the lever, and a full read on the 27B is worth its hours.
+- At most 17, inside the 35B's range, means the model is not the lever on this design, and the stop stands.
+- 18-19 is a lean, not a verdict.
+One read, so this extrapolates and does not judge.
