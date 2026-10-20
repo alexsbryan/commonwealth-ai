@@ -28,7 +28,11 @@ pub const PROBE_TEXT: &str = "sovereign sentence index — embedder identity pro
 pub const PROBE_MIN_COSINE: f32 = 0.98;
 
 /// The splitter whose ranges a file holds; a file cut by another is re-cut.
-const SPLITTER: &str = "sentence_ranges/1";
+/// `/2` leaves out a Project Gutenberg wrapper ([`super::wrapper`], PFM).
+const SPLITTER: &str = "sentence_ranges/2";
+/// Earlier splitters whose files are loaded and re-cut, keeping their
+/// vectors by key, rather than refused and embedded again.
+const RECUT: &[&str] = &["sentence_ranges/1"];
 const MAGIC: &[u8; 8] = b"SVSENT01";
 
 /// One text's rows, contiguous in [`CorpusSentences::rows`].
@@ -66,6 +70,8 @@ pub struct CorpusSentences {
     pub embedded: Vec<bool>,
     /// Rows embedded.
     pub done: usize,
+    /// Loaded from a file an earlier splitter cut: its texts are cut again.
+    pub recut: bool,
 }
 
 pub fn unit(mut v: Vec<f32>) -> Vec<f32> {
@@ -84,21 +90,36 @@ pub fn same_embedder(stamped: &[f32], probe: &[f32]) -> bool {
 }
 
 /// `text`'s sentences, by the rule verify splits claims by
-/// (`sovereign_core::runtime::sentence_ranges`), each with its byte range and key.
+/// (`sovereign_core::runtime::sentence_ranges`), each with its byte range and
+/// key; none from a Project Gutenberg wrapper ([`super::wrapper::body`]).
 pub fn split(text: &str) -> Vec<SentenceRow> {
     let mut byte_at: Vec<u32> = text.char_indices().map(|(b, _)| b as u32).collect();
     byte_at.push(text.len() as u32);
+    let body = super::wrapper::body(text);
+    // A sentence reaching across a marker's line keeps its part in the body
+    // (the splitter does not break at line ends); one wholly outside is none.
+    let cp_at = |b: usize| byte_at.partition_point(|&x| (x as usize) < b);
     sovereign_core::runtime::sentence_ranges(text)
         .into_iter()
-        .map(|r| {
-            let (bs, be) = (byte_at[r.start], byte_at[r.end]);
-            SentenceRow {
-                start: r.start as u32,
-                end: r.end as u32,
-                byte_start: bs,
-                byte_end: be,
-                key: *Sha256Hash::of(&text.as_bytes()[bs as usize..be as usize]).as_bytes(),
-            }
+        .filter_map(|r| {
+            let (os, oe) = (byte_at[r.start] as usize, byte_at[r.end] as usize);
+            let (bs, be) = if body.start <= os && oe <= body.end {
+                (os, oe)
+            } else {
+                let (bs, be) = (os.max(body.start), oe.min(body.end));
+                let cut = text.get(bs..be)?;
+                (
+                    bs + cut.len() - cut.trim_start().len(),
+                    bs + cut.trim_end().len(),
+                )
+            };
+            (bs < be).then(|| SentenceRow {
+                start: cp_at(bs) as u32,
+                end: cp_at(be) as u32,
+                byte_start: bs as u32,
+                byte_end: be as u32,
+                key: *Sha256Hash::of(&text.as_bytes()[bs..be]).as_bytes(),
+            })
         })
         .collect()
 }
@@ -242,6 +263,9 @@ impl CorpusSentences {
 
     /// The rows of an existing text, as this index holds them.
     pub fn rows_of(&self, text: &Sha256Hash) -> Option<Vec<SentenceRow>> {
+        if self.recut {
+            return None;
+        }
         self.text_rows(text).map(|r| self.rows[r].to_vec())
     }
 
@@ -297,7 +321,8 @@ impl CorpusSentences {
         let mut header = vec![0u8; header_len];
         r.read_exact(&mut header).map_err(|e| e.to_string())?;
         let h: serde_json::Value = serde_json::from_slice(&header).map_err(|e| e.to_string())?;
-        if h["splitter"] != SPLITTER {
+        let recut = h["splitter"] != SPLITTER;
+        if recut && !RECUT.iter().any(|&old| h["splitter"] == old) {
             return Err(format!("cut by {}, not {SPLITTER}", h["splitter"]));
         }
         let field = |k: &str| h[k].as_u64().ok_or_else(|| format!("header lacks `{k}`"));
@@ -308,6 +333,7 @@ impl CorpusSentences {
             version: h["version"].as_u64(),
             probe,
             dims,
+            recut,
             ..Default::default()
         };
         for _ in 0..n_texts {

@@ -20,7 +20,7 @@
 //! | row | kind | what a failure means |
 //! |---|---|---|
 //! | probe:`<arm>` | TRACKED | the slot's TTFT / decode / prefill against the bank's pre-registered numbers. Every one is WALL-CLOCK and this host moves 2.8x across its load range, so the row records and does not gate (ARCH §18.2, 2026-09-08). The load it was taken at is on the row in `summary.json` |
-//! | probe:`<arm>` | TRACKED when the bank says `bars_deferred` | recorded; the operator has not set this arm's numbers |
+//! | probe:`<arm>` | TRACKED when the bank says `bars_deferred` | recorded; the operator has not set this arm's numbers. A probe that measured no TTFT and no decode is could-not-judge |
 //! | prompt size:`<arm>` | HARD | the long arm's prompt no longer costs the tokens the bank declared — the tokenizer moved, so the arm is not the arm the baseline was captured against |
 //! | greedy fidelity | TRACKED | temperature-0 decode stopped being reproducible across trials |
 //! | e2e | HARD on catastrophe | a plain turn through the runtime errored or came back empty |
@@ -360,6 +360,13 @@ fn arm_row(report: &mut LaneReport, arm: &ThroughputArm, stem: Option<&str>, p: 
                 "no bars for model stem `{}` in {BANK}, and none deferred — {numbers}",
                 stem.unwrap_or("unresolved")
             ),
+        ),
+        // Deferred bars track a number; a probe that streamed no token has
+        // none to track, and passing it reads as measured (2026-10-16: three
+        // deferred arms passed at all-n/a while the probe counted no tokens).
+        Bars::Deferred if p.ttft_ms.is_none() && p.decode_tps.is_none() => report.cannot_judge(
+            &subject,
+            format!("the probe measured nothing, so there is nothing to track — {numbers}"),
         ),
         Bars::Deferred => report.passed(
             &subject,
@@ -1011,6 +1018,38 @@ mod tests {
         assert_eq!(
             r.rows_for_test()[0].verdict(),
             kernel_types::Verdict::CouldNotJudge
+        );
+    }
+
+    /// A deferred arm tracks its numbers; with none, it measured nothing and
+    /// is could-not-judge, while a deferred arm that did measure still passes.
+    #[test]
+    fn a_deferred_arm_that_measured_nothing_is_could_not_judge() {
+        let b = parse_bank(&bank_text()).unwrap();
+        let fast = b.arms.iter().find(|a| a.id == "fast/short").unwrap();
+        let nothing = ProbeResult {
+            decode_tps: None,
+            ttft_ms: None,
+            prefill_tps: None,
+            itl_p95_ms: None,
+            prompt_tokens: Some(16),
+            greedy_identical: Some(true),
+        };
+        let measured = ProbeResult {
+            decode_tps: Some(41.6),
+            ttft_ms: Some(261.0),
+            ..nothing
+        };
+        let mut r = LaneReport::new(LANE);
+        arm_row(&mut r, fast, Some("any-stem"), &nothing);
+        arm_row(&mut r, fast, Some("any-stem"), &measured);
+        let verdicts: Vec<_> = r.rows_for_test().iter().map(Judgement::verdict).collect();
+        assert_eq!(
+            verdicts,
+            vec![
+                kernel_types::Verdict::CouldNotJudge,
+                kernel_types::Verdict::Passed
+            ]
         );
     }
 

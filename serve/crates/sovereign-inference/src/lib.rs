@@ -24,6 +24,8 @@ pub mod llguidance_constraint;
 // `remote.rs` was extracted wholesale to the `oicp-client` crate (pure-HTTP
 // OICP client, no llama.cpp). Re-exported here so `sovereign_inference::remote::*`
 // (RemoteApiProvider, SplitInferenceProvider, …) is unchanged for all callers.
+/// OICP v0.6 §2.17: a writer's steps of model work go first.
+pub mod priority_gate;
 pub mod remote {
     pub use oicp_client::*;
 }

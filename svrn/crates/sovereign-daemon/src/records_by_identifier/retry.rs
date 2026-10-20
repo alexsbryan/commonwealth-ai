@@ -55,12 +55,7 @@ pub async fn retry_unreachable(
             asked += 1;
             match answers.get(&(l.resolver.clone(), l.value.clone())) {
                 Some(ResolverAnswer::Found(fields)) => {
-                    for (k, v) in fields {
-                        if table.keep.contains(k) && !rec.csl.contains_key(k) {
-                            rec.csl.insert(k.clone(), v.clone());
-                            rec.origins.insert(k.clone(), l.resolver.clone());
-                        }
-                    }
+                    table.take_found(&l.resolver, fields, &mut rec.csl, &mut rec.origins);
                     l.outcome = LookupOutcome::Resolved;
                     tracing::info!(text = %name, resolver = %l.resolver, value = %l.value, "records: retried, now resolved");
                 }

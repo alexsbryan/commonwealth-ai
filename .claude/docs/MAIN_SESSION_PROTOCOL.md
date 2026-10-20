@@ -52,7 +52,7 @@ Every tool declares behavioural properties (Effect · Scope · Latency) and an o
 2. `recent_changes(hours: 24)` — see which subsystems are active
 4. `notes(query: "<task area>")` — surface decisions and invariants from prior sessions
 5. `drift_posture()` — answer "is the latest drift report still current against the narrative docs?" Returns top critical findings + age. If `status=stale`, the architecture docs have been edited since the last drift run; cite findings carefully. If `status=fresh`, the drift findings (and `drift_findings()` queries below) reflect current state.
-6. `work_in_flight(scope="<task area>", match_mode="file")` — **when the task names a file or symbol**, check whether a peer agent or human on the mesh is already there. A non-empty result means another node is active; surface that to the user before proceeding rather than silently colliding. See the "Coordination — work atlas" section below for grades and what to do on overlap.
+6. `commons_work(scope="<task area>")` — **when the task names a file or symbol**, check whether another session holds a claim there (euphemia's brief already shows the ones touching your working set); `work_in_flight(scope, match_mode="file")` adds live edits the daemon observed. A claim on your branch is a collision: surface it to the user before proceeding rather than silently colliding. See AGENTS.md "Coordination — one claim system, euphemia's".
 7. `arch_posture()` — **when the task moves boundaries** (new crate deps, splitting/merging modules, touching a hub crate): the architectural headlines (top god-crate, hubs, layer violations, hidden temporal coupling) + whether the persisted report is stale. Refresh with `sovereign code arch-report`; the layer map itself is `quality/ARCH_LAYERS.toml` (ARCH_PRINCIPLES §8.6).
 
 ### Session splitting — standing protocol (proven 2026-07-23)
@@ -142,16 +142,15 @@ manage. Everything below applies once you are actually past yellow.
   those sections have no other home. This narrows the frame only where a
   campaign already owns the fact.
 
-- **Use the HARNESS session id, not the one `declare_scope` returns.** They are
-  different namespaces. A frame banked under the daemon's session id is an
-  orphan the boot hook can never find (hit live 2026-07-29). Your harness id is
-  in the scratchpad path and the boot banner.
-- **As the successor:** the boot hook injects the frame **index** (one line
-  per live frame), and the first prompt injects the top-ranked frame whole.
-  If that frame is not the work you are continuing, the index is right there
-  — `sovereign session frames` lists them, `sovereign session frames <id>`
-  reads one. Do NOT hunt with `grep`/`ls` over `~/.sovereign/sessions`; that
-  hunt is the 5,872-token failure this surface replaced. Work from the frame
+- **The frame follows the window, so no id needs copying.** euphemia finds
+  the session before a `/clear` through the terminal window both ran in, and
+  the hooks record it at session start, at each edit and at stop.
+- **As the successor:** the session-start brief opens with "── Frame:
+  continuing from <id>", the predecessor's frame and its last message, then
+  the brief. `euphemia frame` (or `commons_frame` with no arguments) reads it
+  again. Do NOT hunt with `grep`/`ls` over `~/.sovereign/sessions` or
+  euphemia's state directory; that hunt is the 5,872-token failure a frame
+  replaces. Work from the frame
   plus `symbols`/`callers`/`facts`/`notes`; do NOT re-read SYSTEM_OVERVIEW or
   specs the frame summarizes. **This rule is about re-acquiring what you
   already hold — it does NOT cover `ARCH_PRINCIPLES.md`.** A frame carries
@@ -240,7 +239,7 @@ need the conclusion:
   your own words, with `file:line` refs. Never say "the agent found…" and stop.
 - Do not fabricate or pre-announce a pending subagent's findings. If asked
   before it returns, say it is still running.
-- Subagents do not `declare_scope`. Coordination is per-session — you hold the
+- Subagents do not `commons_claim`. Coordination is per-session — you hold the
   claim; they inherit your scope. Do not have three agents each claim the same
   symbol.
 - Prefer `Explore` for read-only search (it excerpts rather than dumping whole
@@ -329,7 +328,7 @@ session_reflection(
 
 All fields except `task_summary` are optional. Be specific — vague reflections are not useful.
 
-**Also at task end: release any claims you declared.** If you called `declare_scope` during the work, call `release_scope(claim_id)` now. The TTL would drop it eventually, but peers querying `work_in_flight` in the meantime would still see a stale claim. Use the `claim_id` returned by the original `declare_scope` call (or list them with `sovereign claim list --mine`).
+**Also at task end: release any claims you made.** If you called `commons_claim` during the work, call `commons_release` now. The ttl would drop it eventually, but other sessions' briefs in the meantime would still show a stale claim. `commons_work` lists yours.
 
 **Before using `blast` on a large task**, first check for known limitations:
 ```

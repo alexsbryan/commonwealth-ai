@@ -12,8 +12,10 @@ use std::fmt;
 const SHIPPED: &str = include_str!("../align.toml");
 
 /// Every key the file must carry, once each.
-const KEYS: [&str; 7] = [
+const KEYS: [&str; 9] = [
     "coverage_floor",
+    "specific_floor",
+    "specific_run",
     "candidate_k",
     "seeds",
     "max_anchors",
@@ -27,6 +29,11 @@ const KEYS: [&str; 7] = [
 pub struct AlignConfig {
     /// Least coverage an alignment needs to be kept, in `(0, 1]`.
     pub coverage_floor: f32,
+    /// Least rarity-weighted share of the quotation's words an alignment's
+    /// matched words need, unless they hold a run of `specific_run`.
+    pub specific_floor: f32,
+    /// Matched words in a row that make an alignment specific on their own.
+    pub specific_run: usize,
     /// Candidate chunks the route takes from lexical search.
     pub candidate_k: u32,
     /// Rarest word n-grams (each gap-free run's own length, capped at 3) that
@@ -135,12 +142,13 @@ impl AlignConfig {
                 .filter(|n| *n > 0)
                 .ok_or_else(|| bad(key, v))
         };
-        let floor = get("coverage_floor")?;
-        let coverage_floor = floor
-            .parse::<f32>()
-            .ok()
-            .filter(|f| *f > 0.0 && *f <= 1.0)
-            .ok_or_else(|| bad("coverage_floor", floor))?;
+        let fraction = |key: &'static str| -> Result<f32, AlignConfigError> {
+            let v = get(key)?;
+            v.parse::<f32>()
+                .ok()
+                .filter(|f| *f > 0.0 && *f <= 1.0)
+                .ok_or_else(|| bad(key, v))
+        };
         let k = get("candidate_k")?;
         let candidate_k = k
             .parse::<u32>()
@@ -148,7 +156,9 @@ impl AlignConfig {
             .filter(|n| *n > 0)
             .ok_or_else(|| bad("candidate_k", k))?;
         Ok(AlignConfig {
-            coverage_floor,
+            coverage_floor: fraction("coverage_floor")?,
+            specific_floor: fraction("specific_floor")?,
+            specific_run: count("specific_run")?,
             candidate_k,
             seeds: count("seeds")?,
             max_anchors: count("max_anchors")?,

@@ -139,6 +139,7 @@ impl Retrieval<'_> {
             limit: Some(CANDIDATES_K as u32),
             documents: Vec::new(),
             granularity: Granularity::Sentence,
+            priority: None,
         };
         let reply = crate::routes_knowledge_sentences::sentences(
             self.state.clone(),
@@ -177,13 +178,29 @@ impl Retrieval<'_> {
     }
 }
 
-/// `POST /oicp/v1/verify`.
+/// `POST /oicp/v1/verify`, its model work run under the request's `priority`
+/// (v0.6 §2.17; the engine's `priority_gate` holds it).
 pub async fn verify(
-    State(state): State<AppState>,
+    state: State<AppState>,
     principal: Option<Extension<AttachedPrincipal>>,
     judge: Option<Extension<VerifyJudge>>,
     journal: Option<Extension<VerifyJournal>>,
     Json(req): Json<VerifyRequest>,
+) -> Result<Json<VerifyResponse>, Refusal> {
+    let priority = req.priority;
+    sovereign_contracts::request_priority::asked(
+        priority,
+        judge_unit(state, principal, judge, journal, req),
+    )
+    .await
+}
+
+async fn judge_unit(
+    State(state): State<AppState>,
+    principal: Option<Extension<AttachedPrincipal>>,
+    judge: Option<Extension<VerifyJudge>>,
+    journal: Option<Extension<VerifyJournal>>,
+    req: VerifyRequest,
 ) -> Result<Json<VerifyResponse>, Refusal> {
     let started = std::time::Instant::now();
     if req.unit.trim().is_empty() {

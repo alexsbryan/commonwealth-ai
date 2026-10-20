@@ -29,7 +29,14 @@ pub(super) async fn run(state: AppState, index: SentenceIndex) {
         let outcome = index_corpus(&state, &index, &corpus).await;
         index.finished();
         match outcome {
-            Ok(done) => tracing::info!(
+            Ok(Outcome::Removed { embedded }) => tracing::info!(
+                target: TARGET,
+                corpus = %corpus,
+                embedded_now = embedded,
+                elapsed_ms = at.elapsed().as_millis() as u64,
+                "sentence index: the corpus was removed while it embedded; stopped and forgotten"
+            ),
+            Ok(Outcome::Ready(done)) => tracing::info!(
                 target: TARGET,
                 corpus = %corpus,
                 sentences = done.sentences,
@@ -45,6 +52,15 @@ pub(super) async fn run(state: AppState, index: SentenceIndex) {
             }
         }
     }
+}
+
+/// How a corpus's walk ended without an error.
+enum Outcome {
+    /// Every pending sentence embedded.
+    Ready(Done),
+    /// Its directory went away mid-walk (`svrn corpus remove`), so the walk
+    /// stopped there rather than embed a library nobody can search.
+    Removed { embedded: usize },
 }
 
 struct Done {
@@ -75,7 +91,7 @@ async fn index_corpus(
     state: &AppState,
     index: &SentenceIndex,
     corpus: &str,
-) -> Result<Done, String> {
+) -> Result<Outcome, String> {
     let cfg = index.config()?;
     let engine = state
         .inner
@@ -118,6 +134,12 @@ async fn index_corpus(
     let mut saved = Instant::now();
     let checkpoint = Duration::from_secs(cfg.checkpoint_secs);
     loop {
+        // The corpus's directory is the only record that it is still
+        // installed: removal deletes it and tells no one here.
+        if !sidecar.parent().is_some_and(std::path::Path::is_dir) {
+            index.forget(corpus);
+            return Ok(Outcome::Removed { embedded });
+        }
         let Some((name, rows)) = next_batch(&read(&entry.data), cursor, cfg.embed_batch) else {
             break;
         };
@@ -194,13 +216,13 @@ async fn index_corpus(
     }
     save(&entry, &sidecar, corpus).await;
     let d = read(&entry.data);
-    Ok(Done {
+    Ok(Outcome::Ready(Done {
         sentences: d.rows.len(),
         embedded,
         copied,
         calls,
         resident_bytes: d.resident_bytes(),
-    })
+    }))
 }
 
 /// One batch embedded in the document space, retried; the last vector is the

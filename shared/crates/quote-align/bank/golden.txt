@@ -1,4 +1,4 @@
-aligner: align/3 norm/0
+aligner: align/4 norm/0
 
 === verbatim
 anchors=4 below_floor=0
@@ -38,7 +38,7 @@ alignment text=0 source=[0, 31) coverage=1.0000 "The river keeps its own counsel
 
 === punctuation_added
 anchors=4 below_floor=0
-alignment text=0 source=[0, 70) coverage=0.9375 "We hold these truths to be self-evident that all men are created equal"
+alignment text=0 source=[0, 70) coverage=1.0000 "We hold these truths to be self-evident that all men are created equal"
   added quote=[39, 40) "," source=[39, 39) ""
 
 === elided_interior
@@ -98,9 +98,4 @@ anchors=1 below_floor=1
 anchors=2 below_floor=2
 
 === edge_cut_word_between_gaps
-anchors=1 below_floor=0
-alignment text=0 source=[12, 46) coverage=0.7500 "shop—small, dim… and _quiet_ [sic]"
-  substituted quote=[0, 3) "hop" source=[12, 16) "shop"
-  elided quote=[14, 15) "…" source=[27, 28) "…"
-  bracketed quote=[28, 33) "[sic]" source=[41, 45) "[sic"
-  substituted quote=[36, 40) "stoo" source=[45, 46) "]"
+anchors=1 below_floor=1

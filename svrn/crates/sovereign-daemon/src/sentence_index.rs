@@ -18,6 +18,7 @@ pub mod queue;
 pub mod scan;
 pub mod store;
 mod worker;
+pub mod wrapper;
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -114,6 +115,18 @@ impl SentenceIndex {
             .lock()
             .unwrap_or_else(|p| p.into_inner());
         Arc::clone(map.entry(corpus_id.to_string()).or_default())
+    }
+
+    /// Drop `corpus_id`'s index from memory: its corpus was removed.
+    pub(crate) fn forget(&self, corpus_id: &str) {
+        let held = self
+            .shared
+            .corpora
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .remove(corpus_id)
+            .is_some();
+        tracing::debug!(target: TARGET, corpus = corpus_id, held, "sentence index: forgotten");
     }
 
     /// Queue `corpus_id` for the worker, starting it on first use.
@@ -257,7 +270,7 @@ impl SentenceIndex {
             Err(e) => return Err(format!("its records do not read: {e}")),
         };
         let held = read(&entry.data).version;
-        if held == version && !read(&entry.data).texts.is_empty() {
+        if held == version && !read(&entry.data).texts.is_empty() && !read(&entry.data).recut {
             tracing::debug!(target: TARGET, corpus = corpus_id, ?version, "sentence index: current");
             return Ok(Arc::clone(&entry));
         }

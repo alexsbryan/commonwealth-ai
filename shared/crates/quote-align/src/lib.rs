@@ -17,8 +17,11 @@
 //!    may drift [`AlignConfig::band`] tokens off the seed's diagonal. An
 //!    ellipsis in the quotation is a free gap, reported as `Elided`; square
 //!    brackets are editorial, reported as `Bracketed`.
-//! 4. **Keep** alignments whose coverage reaches
-//!    [`AlignConfig::coverage_floor`].
+//! 4. **Keep** alignments whose coverage (words matched over the quotation's
+//!    words; a mark is not a word) reaches [`AlignConfig::coverage_floor`]
+//!    and whose matched words are specific: their rarity-weighted share
+//!    reaches [`AlignConfig::specific_floor`], or they hold a run of
+//!    [`AlignConfig::specific_run`] words.
 //! 5. **Bind exactly**: every range is into the caller's own string, so the
 //!    caller slices its exact text from it.
 //!
@@ -28,18 +31,21 @@
 
 mod align;
 mod config;
+mod holds;
+mod keep;
 mod norm;
 mod tokens;
 
 pub use align::{align, Aligned, QuoteAlignment, QuoteEdit, QuoteEditKind};
 pub use config::{AlignConfig, AlignConfigError};
+pub use holds::holds_words;
 pub use norm::{norm_v0, NormText};
 
 /// The aligner's identity, as `aligner` on the wire. It names the alignment
 /// algorithm and the normaliser. It changes whenever the same input could
 /// align differently, so a client keys cached alignments on it; the golden
 /// bank (`bank/golden.txt`) fails when the output changes and this does not.
-pub const ALIGNER_ID: &str = "align/3 norm/0";
+pub const ALIGNER_ID: &str = "align/4 norm/0";
 
 /// `s`'s code points `[range.start, range.end)`, or `None` when the range
 /// falls outside `s` or is reversed.

@@ -261,24 +261,17 @@ pub(crate) async fn progress(state: AppState) -> oicp_types::CorpusProgressRespo
     serde_json::from_slice(&bytes).unwrap()
 }
 
-/// OICP v0.6 §2.9: the install is listed on the first poll after its 202,
-/// before the engine has reported any progress, and once it returns its
-/// entry lists each document: the ready ones by their text names, the
-/// unreadable one failed with its reason, none dropped. Red against the
-/// parent, whose progress listed only what the engine's callback had
-/// written and carried no documents.
-#[tokio::test]
-async fn an_install_is_listed_from_its_spawn_and_then_lists_each_document() {
+/// The double's install of a supplied recipe that runs once `gate` is
+/// notified, then reads one document and fails on another; a reinstall
+/// removes the last one's directory.
+fn gated_engine(indexes: std::path::PathBuf, gate: Arc<tokio::sync::Notify>) -> IngestPortDouble {
     use corpus_index::ingest_port::daemon::{DocumentOutcome, DocumentState};
     use kernel_types::Sha256Hash;
-    use oicp_types::{IngestDocumentState, IngestPhase};
 
-    let tmp = tempfile::tempdir().unwrap();
-    let release = Arc::new(tokio::sync::Notify::new());
-    let gate = release.clone();
-    let at = tmp.path().to_path_buf();
-    let engine = IngestPortDouble::new()
-        .with_index_dir(tmp.path().to_path_buf())
+    let at = indexes.clone();
+    let removes = indexes.clone();
+    IngestPortDouble::new()
+        .with_index_dir(indexes)
         .on_prepare_recipe_install(move |id, toml| {
             let (dir, id, toml, gate) =
                 (at.clone(), id.to_string(), toml.to_string(), gate.clone());
@@ -318,7 +311,27 @@ async fn an_install_is_listed_from_its_spawn_and_then_lists_each_document() {
                     })
                 }),
             })
-        });
+        })
+        .on_remove_corpus_everything(move |id| {
+            let _ = std::fs::remove_dir_all(removes.join(id));
+            Ok(())
+        })
+}
+
+/// OICP v0.6 §2.9: the install is listed on the first poll after its 202,
+/// before the engine has reported any progress, and once it returns its
+/// entry lists each document: the ready ones by their text names, the
+/// unreadable one failed with its reason, none dropped. Red against the
+/// parent, whose progress listed only what the engine's callback had
+/// written and carried no documents.
+#[tokio::test]
+async fn an_install_is_listed_from_its_spawn_and_then_lists_each_document() {
+    use kernel_types::Sha256Hash;
+    use oicp_types::{IngestDocumentState, IngestPhase};
+
+    let tmp = tempfile::tempdir().unwrap();
+    let release = Arc::new(tokio::sync::Notify::new());
+    let engine = gated_engine(tmp.path().to_path_buf(), release.clone());
     let state = state(Arc::new(engine));
 
     let (status, body) = install(
@@ -356,6 +369,56 @@ async fn an_install_is_listed_from_its_spawn_and_then_lists_each_document() {
         docs[1]
     );
     assert_eq!(done.progress["notes"].documents_unlisted, None);
+}
+
+/// Platform row PV3g (zoracite 611ef02): a held corpus re-installed under a
+/// new recipe is `pending` on the first poll after its 202, with no
+/// documents, never the last install's `complete` (v0.6 §2.9 "From the
+/// spawn"; the documents reset, "a new attempt starts it again"). Red against
+/// d95ba219e, whose progress kept the last install's terminal entry until the
+/// engine's first callback, so zoracite's Q1 and Q3 live tests read the
+/// library installed with no documents in it.
+#[tokio::test]
+async fn a_reinstall_is_pending_from_its_spawn_not_the_last_install_complete() {
+    use oicp_types::IngestPhase;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let release = Arc::new(tokio::sync::Notify::new());
+    let state = state(Arc::new(gated_engine(
+        tmp.path().to_path_buf(),
+        release.clone(),
+    )));
+    let (status, body) = install(
+        state.clone(),
+        serde_json::json!({"corpus_id": "notes", "recipe_toml": RECIPE_A}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["spawned"], true, "{body}");
+    release.notify_one();
+    settled(&state, "notes").await;
+    assert_eq!(
+        progress(state.clone()).await.progress["notes"].phase,
+        IngestPhase::Complete
+    );
+
+    let (status, body) = install(
+        state.clone(),
+        serde_json::json!({"corpus_id": "notes", "recipe_toml": RECIPE_B}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["spawned"], true, "a new recipe reads again: {body}");
+    let first = progress(state.clone()).await;
+    let entry = &first.progress["notes"];
+    assert_eq!(entry.phase, IngestPhase::Pending, "{first:?}");
+    assert!(entry.documents.is_empty(), "{first:?}");
+
+    release.notify_one();
+    settled(&state, "notes").await;
+    let done = progress(state).await;
+    assert_eq!(done.progress["notes"].phase, IngestPhase::Complete);
+    assert_eq!(done.progress["notes"].documents.len(), 2, "{done:?}");
 }
 
 /// The double's install of a supplied recipe that reads one document and

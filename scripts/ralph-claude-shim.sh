@@ -76,6 +76,20 @@ done
 # the loop's control dir, answered by PERMISSION_ANSWER beside it, denied after
 # RALPH_PERMISSION_WAIT_SECS). RALPH_SESSION_CWD tells it which pool lane asks.
 export RALPH_SESSION_CWD="$PWD"
+# A worker's row is its claim and its record, so euphemia offers it no claim
+# moment and never holds its stop for a frame (euphemia 0.3.7,
+# EUPHEMIA_NUDGE=off): 1 claim came of 125 nudges on the Mac, none of 119
+# lane sessions on the Halo (svrn-docs EUPHEMIA_AFTER_PILOT.md, "Reach").
+# Lessons and other sessions' claims still reach it.
+export EUPHEMIA_NUDGE=off
+# A worker IS asked, once, at its first stop, whether it learned something a
+# later session would rediscover: the 119 silent lane sessions were never
+# asked and could not record, so whether an asked one answers is untested
+# (svrn-docs EUTROPIA_WITH_EUPHEMIA_WEEK1.md, change 2). A probe is not a
+# session: eutropia names the role it starts (EUTROPIA_ROLE), and a probe
+# gets no brief, as ralph's probe_model sets by hand (320a3ea66).
+export EUPHEMIA_CAPTURE=ask
+[ "${EUTROPIA_ROLE:-}" = probe ] && export EUPHEMIA_BRIEF=off
 # RALPH_PERMISSION_BRIDGE=0 falls back to refusing the gray zone outright.
 #
 # MCP is pinned: the WORKDIR's own .mcp.json plus the bridge, and nothing

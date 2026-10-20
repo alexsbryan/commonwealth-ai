@@ -451,3 +451,61 @@ fn a_figure_in_words_pairs_by_value_with_one_in_digits() {
     )
     .is_empty());
 }
+
+fn bound_of(sentence: &str, exact: &str) -> Option<FigureBound> {
+    found(sentence, exact).and_then(|s| s.bound)
+}
+
+#[test]
+fn the_words_before_a_number_bound_it_the_longest_phrase_first() {
+    let s = "It was more than a hundred years, at least 40 ships and up to 6 mines.";
+    assert_eq!(bound_of(s, "a hundred"), Some(FigureBound::Above));
+    assert_eq!(bound_of(s, "40"), Some(FigureBound::AtLeast));
+    assert_eq!(bound_of(s, "6"), Some(FigureBound::AtMost));
+    let s = "No more than 12 ships sailed, fewer than 30 men, upwards of 9,000 pins.";
+    assert_eq!(bound_of(s, "12"), Some(FigureBound::AtMost));
+    assert_eq!(bound_of(s, "30"), Some(FigureBound::Below));
+    assert_eq!(bound_of(s, "9,000"), Some(FigureBound::Above));
+    // A point, an approximation and a date take none.
+    let s = "Over the next 25 years about 300 ships sailed, over 1750 or not.";
+    assert_eq!(bound_of(s, "25"), None);
+    assert_eq!(bound_of(s, "300"), None);
+    assert_eq!(bound_of(s, "1750"), None);
+}
+
+/// The weaker-bound reading (operator, 2026-10-15): a bound the passage's
+/// figure meets is no difference, one it cannot meet is. Live on
+/// fa56bb72d, "more than 50 years" against Smith's "more than a hundred
+/// years" was `contradicted`, differing (50, a hundred).
+#[test]
+fn a_bound_differs_only_from_a_figure_no_value_of_it_meets() {
+    let smith = "It was more than a hundred years after the first settlement of \
+                 the Brazils, before any silver mines were discovered there.";
+    assert!(differ(
+        "Silver mines were found more than 50 years after the settlement.",
+        smith
+    )
+    .is_empty());
+    assert_eq!(
+        differ(
+            "Silver mines were found fewer than 50 years after the settlement.",
+            smith
+        ),
+        vec![("50".to_string(), "a hundred".to_string())]
+    );
+    let pins = "Those ten persons could make among them upwards of forty-eight \
+                thousand pins in a day.";
+    assert!(differ("Ten persons made upwards of 9,000 pins a day.", pins).is_empty());
+    assert_eq!(
+        differ("Ten persons made 4,800 pins a day.", pins),
+        vec![("4,800".to_string(), "forty-eight thousand".to_string())]
+    );
+    // At the edge: "more than 100" leaves out 100, "at least 100" keeps it.
+    let ledger = "The port recorded 100 sailings in 2019.";
+    assert!(differ("The port recorded at least 100 sailings in 2019.", ledger).is_empty());
+    assert!(differ("The port recorded up to 120 sailings in 2019.", ledger).is_empty());
+    assert_eq!(
+        differ("The port recorded under 90 sailings in 2019.", ledger),
+        vec![("90".to_string(), "100".to_string())]
+    );
+}

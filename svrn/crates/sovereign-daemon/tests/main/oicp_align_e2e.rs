@@ -25,7 +25,7 @@ use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::AppState;
 use tower::ServiceExt;
 
-use crate::common::fixture_library::{digest_of, install, library, state_over, DIM};
+use crate::common::fixture_library::{digest_of, install, library, state_over, Doc, DIM};
 
 async fn align(state: &AppState, body: serde_json::Value) -> (StatusCode, serde_json::Value) {
     let mut req = Request::post("/oicp/v1/align")
@@ -238,4 +238,58 @@ async fn the_manifest_advertises_align_with_its_endpoint() {
         .features
         .iter()
         .any(|f| f == oicp_types::features::EVIDENCE_TEXT));
+}
+
+/// A quotation standing word for word in a stored text is aligned there
+/// however the lexical search ranked that text (OICP v0.6 §2.18, PAL1). The
+/// decoy's twelve paragraphs say "sleep", "their" and "in" more often and in
+/// fewer words than Mill's one, so its chunks fill the lexical top
+/// `candidate_k`, and never in that order. Red on d6bf9075c's route: Mill was
+/// no candidate, so the reply held no alignment (the holdout essay's dry run
+/// fixed "in their sleep." to Malthus's "in their population.").
+#[tokio::test]
+async fn a_quotation_standing_verbatim_is_aligned_where_it_stands_behind_the_lexical_top() {
+    let decoy = (0..12)
+        .map(|i| format!("Sleep, sleep in their beds, their sleep; sleep came {i} times in sleep."))
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let mill = "They grow richer, as it were, in their sleep, without working, risking, or economizing. What claim have they, on the general principle of social justice, to this accession of riches?";
+    let docs = vec![
+        Doc {
+            name: "decoy".into(),
+            metadata: None,
+            text: decoy,
+        },
+        Doc {
+            name: "mill1848".into(),
+            metadata: None,
+            text: mill.into(),
+        },
+    ];
+    let tmp = tempfile::tempdir().unwrap();
+    let indexes = tmp.path().join("indexes");
+    std::fs::create_dir_all(&indexes).unwrap();
+    install(&indexes, "pal1-recall", &docs, true).await;
+    let state = state_over(indexes).await;
+
+    let (status, body) = align(&state, serde_json::json!({ "quote": "in their sleep." })).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let resp: AlignResponse = serde_json::from_value(body.clone()).unwrap();
+    let Some(top) = resp.alignments.first() else {
+        panic!("Mill's words must align: {body}");
+    };
+    assert_eq!(top.span.document.source.id, "mill1848", "{body}");
+    assert_eq!(top.span.exact, "in their sleep,");
+    let kinds: Vec<DifferenceKind> = top.differences.iter().map(|d| d.kind).collect();
+    assert_eq!(
+        kinds,
+        [DifferenceKind::Substituted],
+        "the stop for the comma alone: {body}"
+    );
+    assert!(
+        resp.alignments
+            .iter()
+            .all(|a| a.span.document.source.id == "mill1848"),
+        "no decoy span with a word changed: {body}"
+    );
 }

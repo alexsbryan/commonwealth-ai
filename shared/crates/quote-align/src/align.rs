@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::ops::Range;
 
 use crate::config::AlignConfig;
+use crate::keep::{folded_words, rarity, specific, SourceWords};
 use crate::norm::{norm_v0, NormText};
 use crate::tokens::{parse_quote, tokenize, GapKind, Item, Token};
 
@@ -18,8 +19,8 @@ pub struct QuoteAlignment {
     /// Every difference, in quotation order. Empty when the quotation is
     /// verbatim under `norm_v0`.
     pub edits: Vec<QuoteEdit>,
-    /// Quotation tokens matched exactly, or the first word differing only in
-    /// its first letter's case, over quotation tokens.
+    /// Quotation words matched exactly, or the first word differing only in
+    /// its first letter's case, over quotation words. A mark is not a word.
     pub coverage: f32,
 }
 
@@ -73,6 +74,10 @@ const SUB: u32 = 8;
 const SUB_CASE: u32 = 4;
 const ADD: u32 = 8;
 const OMIT: u32 = 8;
+/// A mark for a mark, or a mark added or dropped, costs a quarter of a word:
+/// "in their sleep." over Mill's "in their sleep," costs less than over
+/// Malthus's "in their population." (PAL1, 2026-10-18).
+const MARK: u32 = 2;
 /// A bracket costs this for each of its words the stretch it stands for
 /// lacks, and [`BRACKET_TOKEN`] for each token it consumes: the shortest
 /// stretch holding the words the source has wins.
@@ -83,49 +88,53 @@ const INF: u32 = u32::MAX / 4;
 /// Find where `quote` stands in `texts`, and how it differs (crate docs).
 pub fn align(quote: &str, texts: &[&str], cfg: &AlignConfig) -> Aligned {
     let q = Quote::new(quote);
-    if q.tokens == 0 {
+    if q.words == 0 {
         return Aligned::default();
     }
     let sources: Vec<Source> = texts.iter().map(|t| Source::new(t)).collect();
-    let anchors = seed(&q, &sources, cfg);
-    let mut found: Vec<(QuoteAlignment, u32)> = Vec::new();
+    let source_words = folded_words(&sources);
+    let weights = rarity(&q, &source_words);
+    let anchors = seed(&q, &source_words, cfg);
+    let mut found: Vec<(QuoteAlignment, u32, bool)> = Vec::new();
     for a in &anchors {
         let src = &sources[a.text];
-        if let Some(hit) = align_at(&q, src, a, q.window(a, src, cfg), cfg) {
+        if let Some(hit) = align_at(&q, src, a, q.window(a, src, cfg), &weights, cfg) {
             found.push(hit);
         }
     }
-    found.sort_by(|(a, ac), (b, bc)| {
+    found.sort_by(|(a, ac, _), (b, bc, _)| {
         b.coverage
             .total_cmp(&a.coverage)
             .then(ac.cmp(bc))
             .then(a.text.cmp(&b.text))
             .then(a.source.start.cmp(&b.source.start))
     });
-    let mut kept: Vec<QuoteAlignment> = Vec::new();
-    for (hit, _) in found {
-        let overlaps = kept.iter().any(|k| {
+    let mut kept: Vec<(QuoteAlignment, bool)> = Vec::new();
+    for (hit, _, specific) in found {
+        let overlaps = kept.iter().any(|(k, _)| {
             k.text == hit.text && k.source.start < hit.source.end && hit.source.start < k.source.end
         });
         if !overlaps {
-            kept.push(hit);
+            kept.push((hit, specific));
         }
     }
     let total = kept.len();
-    kept.retain(|h| h.coverage >= cfg.coverage_floor);
+    kept.retain(|(h, specific)| h.coverage >= cfg.coverage_floor && *specific);
     Aligned {
         below_floor: total - kept.len(),
-        alignments: kept,
+        alignments: kept.into_iter().map(|(h, _)| h).collect(),
         anchors: anchors.len(),
     }
 }
 
 /// The quotation, normalised and parsed.
-struct Quote {
+pub(crate) struct Quote {
     norm: NormText,
-    items: Vec<Item>,
+    pub(crate) items: Vec<Item>,
     /// How many items are tokens.
     tokens: usize,
+    /// How many items are words.
+    words: usize,
 }
 
 impl Quote {
@@ -133,14 +142,19 @@ impl Quote {
         let norm = norm_v0(quote);
         let items = parse_quote(&norm);
         let tokens = items.iter().filter(|i| matches!(i, Item::Tok(_))).count();
+        let words = items
+            .iter()
+            .filter(|i| matches!(i, Item::Tok(t) if t.word))
+            .count();
         Quote {
             norm,
             items,
             tokens,
+            words,
         }
     }
 
-    fn chars(&self, t: &Token) -> &[char] {
+    pub(crate) fn chars(&self, t: &Token) -> &[char] {
         &self.norm.chars()[t.norm.clone()]
     }
 
@@ -171,9 +185,9 @@ impl Quote {
 }
 
 /// One candidate text, normalised and tokenised.
-struct Source {
+pub(crate) struct Source {
     norm: NormText,
-    tokens: Vec<Token>,
+    pub(crate) tokens: Vec<Token>,
 }
 
 impl Source {
@@ -183,7 +197,7 @@ impl Source {
         Source { norm, tokens }
     }
 
-    fn chars(&self, t: &Token) -> &[char] {
+    pub(crate) fn chars(&self, t: &Token) -> &[char] {
         &self.norm.chars()[t.norm.clone()]
     }
 }
@@ -208,7 +222,7 @@ struct Anchor {
 /// compare: a quotation whose only words differ from the source's in case
 /// ("Cynics" for "cynics", "Extracts" for "EXTRACTS") still seeds, and the
 /// case difference is reported as a substitution.
-fn seed(q: &Quote, sources: &[Source], cfg: &AlignConfig) -> Vec<Anchor> {
+fn seed(q: &Quote, source_words: &[SourceWords], cfg: &AlignConfig) -> Vec<Anchor> {
     // Words of each gap-free run of the quotation, as (item index, chars).
     let quote_folded: Vec<(usize, Vec<char>)> = q
         .items
@@ -233,26 +247,12 @@ fn seed(q: &Quote, sources: &[Source], cfg: &AlignConfig) -> Vec<Anchor> {
             Item::Gap { .. } => runs.push(Vec::new()),
         }
     }
-    // Source words, case-folded once for every gram length tried.
-    let source_words: Vec<(Vec<usize>, Vec<Vec<char>>)> = sources
-        .iter()
-        .map(|src| {
-            let words: Vec<usize> = (0..src.tokens.len())
-                .filter(|&t| src.tokens[t].word)
-                .collect();
-            let folded = words
-                .iter()
-                .map(|&t| fold(src.chars(&src.tokens[t])))
-                .collect();
-            (words, folded)
-        })
-        .collect();
     // Back off from 3-grams to 2-grams to single words when nothing longer
     // occurs: one changed word in a quotation of five words or fewer sits in
     // every 3-gram ("melody of the slave songs" for "melody of these slave
     // songs"), so without the backoff it never seeds.
     for cap in (1..=3).rev() {
-        let anchors = seed_grams(&runs, &source_words, cap, cfg);
+        let anchors = seed_grams(&runs, source_words, cap, cfg);
         if !anchors.is_empty() {
             return anchors;
         }
@@ -265,7 +265,7 @@ fn seed(q: &Quote, sources: &[Source], cfg: &AlignConfig) -> Vec<Anchor> {
 /// empty, and a word never is), so grams of different lengths never collide.
 fn seed_grams(
     runs: &[Vec<(usize, &[char])>],
-    source_words: &[(Vec<usize>, Vec<Vec<char>>)],
+    source_words: &[SourceWords],
     cap: usize,
     cfg: &AlignConfig,
 ) -> Vec<Anchor> {
@@ -329,7 +329,7 @@ fn first_letter_case_only(a: &[char], b: &[char]) -> bool {
 }
 
 /// A word's characters, lower-cased, as seeding compares them.
-fn fold(word: &[char]) -> Vec<char> {
+pub(crate) fn fold(word: &[char]) -> Vec<char> {
     word.iter().flat_map(|c| c.to_lowercase()).collect()
 }
 
@@ -365,8 +365,9 @@ fn align_at(
     src: &Source,
     a: &Anchor,
     window: Range<usize>,
+    weights: &HashMap<usize, f32>,
     cfg: &AlignConfig,
-) -> Option<(QuoteAlignment, u32)> {
+) -> Option<(QuoteAlignment, u32, bool)> {
     let ahead_items: Vec<usize> = (a.item..q.items.len()).collect();
     let ahead_toks: Vec<usize> = (a.token..window.end).collect();
     let behind_items: Vec<usize> = (0..a.item).rev().collect();
@@ -384,20 +385,27 @@ fn align_at(
         .items
         .iter()
         .position(|i| matches!(i, Item::Tok(t) if t.word));
-    let matched = ops
+    let matched: Vec<usize> = ops
         .iter()
-        .filter(|o| match o {
-            Op::Match { .. } => true,
+        .filter_map(|o| match o {
+            Op::Match { q: qi, .. } => Some(*qi),
             Op::Sub { q: qi, s: si } if Some(*qi) == first_word => match &q.items[*qi] {
-                Item::Tok(t) => first_letter_case_only(q.chars(t), src.chars(&src.tokens[*si])),
-                Item::Gap { .. } => false,
+                Item::Tok(t) if first_letter_case_only(q.chars(t), src.chars(&src.tokens[*si])) => {
+                    Some(*qi)
+                }
+                _ => None,
             },
-            _ => false,
+            _ => None,
         })
-        .count();
-    let coverage = matched as f32 / q.tokens as f32;
+        .filter(|qi| matches!(&q.items[*qi], Item::Tok(t) if t.word))
+        .collect();
+    let coverage = matched.len() as f32 / q.words as f32;
     let hit = Render { q, src }.alignment(a.text, &ops, coverage)?;
-    Some((hit, ahead_cost + behind_cost))
+    Some((
+        hit,
+        ahead_cost + behind_cost,
+        specific(q, &matched, weights, cfg),
+    ))
 }
 
 /// One extension away from an anchor: quotation items `items` against
@@ -425,13 +433,29 @@ fn extend(
     }
     let width = m + 1;
     let mut d = vec![INF; (n + 1) * width];
-    for (j, cell) in d[..width].iter_mut().enumerate() {
-        *cell = j as u32 * OMIT;
+    // What adding item `i` (a token) or omitting token `j` costs: a mark
+    // [`MARK`], a word [`ADD`] or [`OMIT`].
+    let add = |i: usize| match &q.items[items[i]] {
+        Item::Tok(t) if !t.word => MARK,
+        _ => ADD,
+    };
+    let omit = |j: usize| if src.tokens[toks[j]].word { OMIT } else { MARK };
+    for j in 1..width {
+        d[j] = d[j - 1] + omit(j - 1);
     }
     // The cost of aligning item `i` (a token) with token `j`: 0 for the
-    // same characters, SUB_CASE when only case differs, else SUB.
+    // same characters, MARK for a mark for a mark, SUB_CASE when only case
+    // differs, else SUB.
     let cost = |i: usize, j: usize| match &q.items[items[i]] {
-        Item::Tok(t) => token_cost(q.chars(t), src.chars(&src.tokens[toks[j]])),
+        Item::Tok(t) => {
+            let s = &src.tokens[toks[j]];
+            let c = token_cost(q.chars(t), src.chars(s));
+            if c > 0 && !t.word && !s.word {
+                MARK
+            } else {
+                c
+            }
+        }
         Item::Gap { .. } => INF,
     };
     // What a bracket costs standing for travel positions `[k, j)`.
@@ -457,10 +481,10 @@ fn extend(
         let row = &mut row[..width];
         match &q.items[items[i - 1]] {
             Item::Tok(_) => {
-                row[0] = prev[0] + ADD;
+                row[0] = prev[0] + add(i - 1);
                 for j in 1..=m {
                     let diag = prev[j - 1] + cost(i - 1, j - 1);
-                    row[j] = diag.min(prev[j] + ADD).min(row[j - 1] + OMIT);
+                    row[j] = diag.min(prev[j] + add(i - 1)).min(row[j - 1] + omit(j - 1));
                 }
             }
             Item::Gap {
@@ -519,7 +543,7 @@ fn extend(
                         s: toks[j - 1],
                     });
                     j -= 1;
-                } else if j > 0 && here == at(i, j - 1) + OMIT {
+                } else if j > 0 && here == at(i, j - 1) + omit(j - 1) {
                     ops.push(Op::Omit { s: toks[j - 1] });
                     j -= 1;
                     continue;

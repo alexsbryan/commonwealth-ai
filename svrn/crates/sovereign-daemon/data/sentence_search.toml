@@ -36,13 +36,12 @@ passage_hits = 20
 # Verify by meaning (OICP v0.6 §2.15): a claim no sentence scores at least
 # this for, by the scorer above, is about nothing in the library and is
 # answered `unsupported` with no evidence at every tier. On the scorer's
-# scale: a scorer swap revisits it. Uncalibrated; the claims bench's run
-# chooses it. 0.5 from a probe of the live host (Qwen3-Embedding-0.6B-Q8_0,
-# cosine, the query prefixed, 2026-10-15): a claim restating a library
-# sentence scored 0.77-0.87 against it, a figure claim beside it on the same
-# topic 0.44-0.55, a claim about something the library lacks at most 0.32,
-# and the best sentence for an off-library query over 50 corpora 0.45.
-verify_floor = 0.5
+# scale (Qwen3-Embedding-0.6B-Q8_0, cosine, the query prefixed): a scorer
+# swap revisits it. Calibrated on zoracite's K2 (c803f3c, `cargo xtask audit
+# claims floor`): the highest floor at which "nothing on this" is right at
+# least 0.95 of the time and at most 0.03 of the 463 supported claims fall
+# under it. At the earlier 0.5, from a probe, that precision was 0.934.
+verify_floor = 0.475
 
 # Background indexing: sentences per embed call (the embedder's identity probe
 # rides along in each call), and how often a corpus's progress is written to

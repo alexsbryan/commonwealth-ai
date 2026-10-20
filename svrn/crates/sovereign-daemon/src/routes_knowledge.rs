@@ -61,10 +61,22 @@ fn empty_knowledge_response() -> KnowledgeSearchResponse {
     }
 }
 
+/// `POST /v1/knowledge/search`, its model work run under the request's
+/// `priority` (v0.6 §2.17; the engine's `priority_gate` holds it).
 pub async fn knowledge_search(
-    State(state): State<AppState>,
+    state: State<AppState>,
     attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
     Json(request): Json<KnowledgeSearchRequest>,
+) -> Response {
+    let priority = request.priority;
+    sovereign_contracts::request_priority::asked(priority, answer_search(state, attached, request))
+        .await
+}
+
+async fn answer_search(
+    State(state): State<AppState>,
+    attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,
+    request: KnowledgeSearchRequest,
 ) -> Response {
     // v0.6 §2.11: sentences, from this host's sentence index, when its data
     // file reads; a host that cannot offer them answers passages with no
@@ -546,6 +558,7 @@ async fn fanout_one_peer(
         limit: Some(limit),
         documents,
         granularity: oicp_types::Granularity::Passage,
+        priority: None,
     };
     // Hex-encode the requester id for the `X-Node-Id` header.
     // Matches the format `sovereign_contracts::principal::claimed_node_id`

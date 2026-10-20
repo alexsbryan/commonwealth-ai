@@ -94,7 +94,11 @@ def one_trial(url, path, model, prompt, max_tokens, temperature, timeout):
             choices = obj.get("choices") or []
             if not choices:
                 continue
-            piece = (choices[0].get("delta") or {}).get("content")
+            # A thinking model streams its reasoning as `reasoning_content`
+            # before any `content`; both are decoded tokens, and counting only
+            # `content` measured nothing once the server split them.
+            delta = choices[0].get("delta") or {}
+            piece = delta.get("reasoning_content") or delta.get("content")
             if piece:
                 token_times.append(time.perf_counter())
                 text.append(piece)
