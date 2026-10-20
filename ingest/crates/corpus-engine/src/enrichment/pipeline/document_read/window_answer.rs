@@ -12,7 +12,10 @@
 //! - a key a claim writes outside its envelope (the keys `window_prompt.md`
 //!   gives a claim) is a field written beside `fields`, and is read in
 //!   `fields` when `fields` does not hold it: a claim has no other place a
-//!   field can mean anything, so its value is not in doubt.
+//!   field can mean anything, so its value is not in doubt;
+//! - a `grade` written as an object is fields written in it, read in
+//!   `fields` the same way: a grade is one of its kind's grades, never an
+//!   object.
 
 use std::collections::BTreeSet;
 use std::sync::LazyLock;
@@ -30,6 +33,8 @@ pub(super) struct Parsed {
     pub(super) dropped: usize,
     /// Claim fields written beside `fields`, read in it.
     pub(super) beside: usize,
+    /// Claim fields written in a `grade` that is an object, read in `fields`.
+    pub(super) in_grade: usize,
 }
 
 /// `json`, the answer's JSON block (`prepare_phase_json`), parsed. An error
@@ -45,10 +50,12 @@ pub(super) fn parse(json: &str, chapter: &str) -> Result<Parsed, String> {
             repaired,
             dropped: 0,
             beside: 0,
+            in_grade: 0,
         },
         Err(whole) => by_element(&json, chapter, repaired).ok_or_else(|| whole.to_string())?,
     };
     parsed.beside = fields_beside(&mut parsed.value, chapter);
+    parsed.in_grade = fields_in_grade(&mut parsed.value, chapter);
     Ok(parsed)
 }
 
@@ -133,6 +140,49 @@ fn fields_beside(answer: &mut Value, chapter: &str) -> usize {
         warn!(
             chapter,
             moved, "document_read/window: claim fields written beside `fields` read in it"
+        );
+    }
+    moved
+}
+
+/// Every claim's `grade` that is an object read as fields: a grade is one of
+/// its kind's grades, never an object, so the object's keys are fields the
+/// claim states, moved into `fields` when `fields` does not hold them; how
+/// many were moved. A key `fields` already holds is left unread, and traced.
+fn fields_in_grade(answer: &mut Value, chapter: &str) -> usize {
+    let mut moved = 0usize;
+    for claim in answer["claims"]
+        .as_array_mut()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_object_mut)
+    {
+        if !claim.get("grade").is_some_and(Value::is_object) {
+            continue;
+        }
+        let Some(Value::Object(written)) = claim.remove("grade") else {
+            continue;
+        };
+        if claim.get("fields").is_none_or(Value::is_null) {
+            claim.insert("fields".into(), Value::Object(Map::new()));
+        }
+        let Some(Value::Object(fields)) = claim.get_mut("fields") else {
+            debug!(chapter, keys = ?written.keys().collect::<Vec<_>>(), "document_read/window: claim fields in `grade` beside a `fields` that is not an object; not read");
+            continue;
+        };
+        let (held, free): (Vec<(String, Value)>, Vec<(String, Value)>) = written
+            .into_iter()
+            .partition(|(k, _)| fields.contains_key(k));
+        if !held.is_empty() {
+            debug!(chapter, keys = ?held.iter().map(|(k, _)| k).collect::<Vec<_>>(), "document_read/window: claim fields in `grade`, which `fields` already holds; not read");
+        }
+        moved += free.len();
+        fields.extend(free);
+    }
+    if moved > 0 {
+        warn!(
+            chapter,
+            moved, "document_read/window: claim fields written in `grade` read in `fields`"
         );
     }
     moved
@@ -240,6 +290,7 @@ fn by_element(json: &str, chapter: &str, repaired: usize) -> Option<Parsed> {
         repaired,
         dropped,
         beside: 0,
+        in_grade: 0,
     })
 }
 

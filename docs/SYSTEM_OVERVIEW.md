@@ -650,7 +650,8 @@ question the pipeline asks about a type is a method on the resolved
   its leading zero, and if the answer still does not parse each particular and claim is parsed alone, the ones
   that fail (and the claims about a failed particular) dropped and counted as `lost`; a claim key outside the
   claim's envelope (the keys `window_prompt.md` gives a claim, read from it) is a field written beside `fields` and
-  is read in it. A reference value resolves
+  is read in it, and so is each key of a `grade` written as an object (a grade is one of its kind's grades, never
+  an object). A reference value resolves
   in `window_refs.rs` (label name, candidate, words held), by any of a particular's names when the answer lists
   `other_names` for it (a name a document says it also has; typed, never a delimiter, so "Input / Output" is one
   name; `window_particulars.rs::names_for`, also used for a subject's sourced identity and for placing an

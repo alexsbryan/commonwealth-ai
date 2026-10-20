@@ -504,6 +504,52 @@ async fn a_field_written_beside_fields_is_read_in_it() {
     assert_eq!(status, vec![Some(json!("closed")), Some(json!("closed"))]);
 }
 
+/// Failing input, named: local Qwen3.6-35B on world-s4 at 20k
+/// (runs/loop/local35b-s4-base-a) wrote 29 claims' stage as
+/// `"grade": {"stage": "lead"}` beside an empty `"fields"`, a recipe whose
+/// kinds list no grades, and every record lost its stage (0 of 15 served). A
+/// grade is one of its kind's grades, never an object, so an object's keys are
+/// read in `fields`; one `fields` already holds is not, and a grade written as
+/// a grade stays one.
+#[tokio::test]
+async fn a_field_written_in_grade_is_read_in_fields() {
+    let answer = json!({
+        "particulars": [{"ref": "p1", "type": "case", "name": "issue 42", "fields": {}}],
+        "claims": [{"kind": "reported_status", "about": "p1", "document": "d2",
+                    "quote": "Issue 42 is now closed.", "grade": {"status": "Closed"}, "fields": {}},
+                   {"kind": "reported_status", "about": "p1", "document": "d2",
+                    "quote": "Issue 42 is now closed.", "grade": {"status": "Open"},
+                    "fields": {"status": "Closed"}},
+                   {"kind": "reported_status", "about": "p1", "document": "d2",
+                    "quote": "Issue 42 is now closed.", "grade": "firm", "fields": {"status": "Closed"}}]});
+    let parsed = super::answer::parse(&answer.to_string(), "sec_1").unwrap();
+    assert_eq!(parsed.in_grade, 1);
+    assert_eq!(parsed.value["claims"][2]["grade"], json!("firm"));
+    let (policies, chapter) = (policies(), window());
+    let (infer, _) = scripted(vec![answer]);
+    let raw = read(&chapter, &policies, &Default::default(), &infer)
+        .await
+        .unwrap();
+    let mut extraction = parse_response(&raw, &policies)
+        .unwrap()
+        .section_extraction
+        .unwrap();
+    validate_and_stamp(&chapter, &policies, &mut extraction).unwrap();
+    let claims = &extraction.document_read.as_ref().unwrap().documents[1].claims;
+    let status: Vec<_> = claims
+        .iter()
+        .map(|c| value(&c.fields["status"]).cloned())
+        .collect();
+    assert_eq!(
+        status,
+        vec![
+            Some(json!("closed")),
+            Some(json!("closed")),
+            Some(json!("closed"))
+        ]
+    );
+}
+
 /// A claim's envelope is read from the prompt's answer shape, so a key added
 /// there is never mistaken for a field written beside `fields`.
 #[test]
