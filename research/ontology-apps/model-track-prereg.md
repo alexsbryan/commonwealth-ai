@@ -43,3 +43,9 @@ window 1 22/27). `-b` did the same as a string and lost window 1 whole to malfor
 missing a brace), so extract exited 1 and nothing was scored. Fixed: bbcccac14, c5825d1dd. Not fixed: one malformed
 element still loses its window. Reads `-c` and `-d` at c5825d1dd, same daemon, same bars; a window lost to malformed
 JSON is reported as such, and a read that loses one is could-not-judge as before.
+
+**Step 0 result (2026-10-19 22:41).** `-c`: 4/15 served, 39/55 attached (windows 25/27, 11/18, 2/9), 52 statements,
+37 min. `-d`: 4/15, 33/55 (19/27, 9/18, 5/9), 57 statements, 41 min. Every window parsed; RESOLVE answered. Below
+Done, so step 1. The prediction failed for `-c` (window 1 at 25/27). Two identical reads differ by 6 updates on
+window 1 and 6 in total, so one read cannot carry a step's verdict. Window 3 (`-c`): every document named, d7-d15
+reasoned over 1-5 times each against DeepSeek's 11-114; the answer is what the reasoning drafted.
