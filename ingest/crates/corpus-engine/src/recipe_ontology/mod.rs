@@ -18,6 +18,7 @@
 
 pub mod language;
 pub(crate) mod lifecycle;
+pub mod resolve_defaults;
 
 use serde::{Deserialize, Serialize};
 
@@ -67,6 +68,12 @@ impl OntologyBlock {
     /// callers after load may treat `Err` as unreachable but must not hide it.
     pub fn policies(&self) -> Result<understanding_vocab::ontology::OntologyPolicies> {
         self.language()?.parse(&self.body)
+    }
+
+    /// The defaults its language supplied where the block is silent
+    /// ([`resolve_defaults`]), for `recipe validate` to print.
+    pub fn supplied_defaults(&self) -> Result<Vec<resolve_defaults::SuppliedDefault>> {
+        self.language()?.supplied(&self.body)
     }
 }
 

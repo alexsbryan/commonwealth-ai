@@ -25,6 +25,7 @@ use std::sync::LazyLock;
 
 use serde::Serialize;
 
+use super::resolve_defaults::SuppliedDefault;
 use super::OntologyConfig;
 use crate::error::{Error, Result};
 use crate::recipe_parsing::translate_parse_error;
@@ -50,6 +51,12 @@ pub trait OntologyLanguage: Send + Sync {
     /// an unknown enum value) surface here, so `Recipe::from_toml` refuses
     /// them at load rather than at extraction.
     fn parse(&self, body: &toml::Table) -> Result<OntologyPolicies>;
+    /// The defaults `parse` supplied where the body is silent
+    /// (`resolve_defaults`), each for `recipe validate` to print. None unless
+    /// a version supplies some.
+    fn supplied(&self, body: &toml::Table) -> Result<Vec<SuppliedDefault>> {
+        self.parse(body).map(|_| Vec::new())
+    }
     /// The `SCHEMA.md` section for this version, rendered by the
     /// `recipe_schema_is_fresh` gate after the generated type tables.
     fn schema_doc(&self) -> &'static str;
@@ -243,6 +250,22 @@ impl OntologyLanguage for V1 {
     }
 
     fn parse(&self, body: &toml::Table) -> Result<OntologyPolicies> {
+        self.build(body).map(|(policies, _)| policies)
+    }
+
+    fn supplied(&self, body: &toml::Table) -> Result<Vec<SuppliedDefault>> {
+        self.build(body).map(|(_, supplied)| supplied)
+    }
+
+    fn schema_doc(&self) -> &'static str {
+        include_str!("docs/v1.md")
+    }
+}
+
+impl V1 {
+    /// The policies `body` declares, with the method's kinds and defaults
+    /// supplied, and each default supplied.
+    fn build(&self, body: &toml::Table) -> Result<(OntologyPolicies, Vec<SuppliedDefault>)> {
         let mut body = body.clone();
         for (key, instead) in retired_keys(&body) {
             tracing::warn!(key, instead, "ontology: a retired key is ignored");
@@ -324,11 +347,8 @@ impl OntologyLanguage for V1 {
         }
         let mut policies = v1.into_policies();
         super::lifecycle::supply(&mut policies)?;
-        Ok(policies)
-    }
-
-    fn schema_doc(&self) -> &'static str {
-        include_str!("docs/v1.md")
+        let supplied = super::resolve_defaults::supply(&mut policies);
+        Ok((policies, supplied))
     }
 }
 

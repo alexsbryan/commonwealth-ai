@@ -130,9 +130,9 @@ fn a_folded_read_field_is_accepted_and_a_misplaced_by_refuses() {
     let status = r#"derived = "item_status" },"#;
     for (from, to, says) in [
         (
-            r#"{ name = "lot_code", type = "text" },"#,
-            r#"{ name = "lot_code", type = "text", by = "all" },"#,
-            "RESOLVE does not decide `lot`",
+            r#"{ name = "domain", type = "text" },"#,
+            r#"{ name = "domain", type = "text", by = "all" },"#,
+            "RESOLVE does not decide `party`",
         ),
         (
             status,
@@ -202,22 +202,24 @@ fn a_transition_names_its_mover_by_path_and_its_states_from_the_closed_set() {
 }
 
 /// A declaration the document reader reads makes no record of a type no
-/// statement is about and no source supplies: `lot`, which `move` only
-/// references, is named. A state of `item` is read since 2026-10-15 (its
-/// holder is decided), so it is not; nor are `item`, `move` and the sourced
-/// `party`. The general extractor reads every kind, so a template it reads
-/// warns of nothing (`recipe_templates_all_ten_parse`).
+/// statement is about, no reference names and no source supplies: `bin` is
+/// named. `lot`, which `move` references, is decided by name since
+/// 2026-10-20 (`resolve_defaults`), so it is not. A state of `item` is read
+/// since 2026-10-15 (its holder is decided), so it is not; nor are `item`,
+/// `move` and the sourced `party`. The general extractor reads every kind, so
+/// a template it reads warns of nothing (`recipe_templates_all_ten_parse`).
 #[test]
 fn a_type_the_document_reader_makes_no_record_of_is_warned() {
     let v = validated(&fixture().replace(
         "[[enrichment.ontology.types]]\nname = \"move\"",
         "[[enrichment.ontology.types]]\nname = \"mood\"\nkind = \"state\"\nof = \"item\"\n\n\
+         [[enrichment.ontology.types]]\nname = \"bin\"\nkind = \"entity\"\n\n\
          [[enrichment.ontology.types]]\nname = \"move\"",
     ));
     let unread = warned(&v, "makes no record of");
     assert_eq!(unread.len(), 1, "{:#?}", v.warnings);
-    assert!(unread[0].contains("`lot` (entity)"), "{}", unread[0]);
-    for read in ["`mood`", "`item`", "`move`", "`party`"] {
+    assert!(unread[0].contains("`bin` (entity)"), "{}", unread[0]);
+    for read in ["`lot`", "`mood`", "`item`", "`move`", "`party`"] {
         assert!(!unread[0].contains(read), "{read}: {}", unread[0]);
     }
 }

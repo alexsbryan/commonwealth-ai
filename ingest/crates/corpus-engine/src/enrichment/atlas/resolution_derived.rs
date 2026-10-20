@@ -719,3 +719,7 @@ mod tests;
 #[cfg(test)]
 #[path = "resolution_derived/statement_refs_tests.rs"]
 mod statement_refs_tests;
+
+#[cfg(test)]
+#[path = "resolution_derived/ref_targets_tests.rs"]
+mod ref_targets_tests;

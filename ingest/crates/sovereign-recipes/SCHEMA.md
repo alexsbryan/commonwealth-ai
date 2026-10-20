@@ -1352,7 +1352,15 @@ each statement. When no claim type qualifies, sections are
 read by the general extractor. A declaration that mixes the two is refused,
 naming the claim types the plan cannot read. A type RESOLVE decides needs a claim
 kind whose `subject` it is: with none, nothing of it would be read, so `enrich
-extract` refuses the build and `recipe validate` says why. The old `document_reading` and
+extract` refuses the build and `recipe validate` says why. A type a read `ref`
+names that nothing else records (an entity or event with no
+`identity_criterion` and no `source`) is decided by RESOLVE by name: it takes
+the criterion "Two mentions are one {type} when they name the same {type},
+however the name is written.", so the reader names its particulars and the
+reference lands on a record. A base kind a `ref` names and the recipe never
+declares (`of = "person"`) is declared as an entity of that kind with the same
+criterion. `recipe validate` prints each as an `identity: … → RESOLVE by name`
+line. The old `document_reading` and
 `document_reader` keys are ignored, and `recipe validate` names them.
 
 Under that plan an attribute gets a value only these ways: its type's `source`

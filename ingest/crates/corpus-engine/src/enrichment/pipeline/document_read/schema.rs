@@ -134,7 +134,7 @@ fn attrs_value(attrs: Vec<&AttrDecl>) -> Vec<Value> {
 
 /// Fields a read may use for one declared subject: all extracted fields for a
 /// source-free record, only declared identity keys for a metadata projection.
-pub(super) fn subject_read_attributes<'a>(
+pub fn subject_read_attributes<'a>(
     policies: &'a OntologyPolicies,
     index: &TypeIndex<'a>,
     subject_name: &str,
