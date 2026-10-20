@@ -45,7 +45,9 @@ QUERY GRAMMAR (answer with exactly one JSON object):
   earlier/smaller or later/larger than the value. negate=true keeps the targets that do NOT
   meet the condition. A time is a date ("2026-10-20"), a month ("2026-10") or a year as a
   signed number (318 B.C. = -318, A.D. positive); `lt` / `gt` = wholly before / after it,
-  `eq` = within it.
+  `eq` = within it. Instead of a value, `value` may name another attribute of the same kind,
+  compared by `eq` / `lt` / `gt`: {"attribute": "<attr>"} = of the same entity; inside `where`,
+  {"target": "<attr>"} = of the target.
 - relations: the target must (negate=false) or must not (negate=true) be linked by `relation`
   to an entity of `other_type` named `other_name` (null = to any such entity) that also meets
   `where` (null = no further condition). `where` holds that linked entity's own filters and

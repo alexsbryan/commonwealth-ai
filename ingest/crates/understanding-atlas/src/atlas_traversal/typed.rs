@@ -16,7 +16,9 @@
 //! ```
 //!
 //! A filter compares one declared attribute (or `name`) by `eq`, `lt`, `gt` or
-//! `contains`. A relation constraint asks for a far-end atom of `other_type`
+//! `contains` with a literal, or by `eq`, `lt` or `gt` with another attribute
+//! of its kind: `{"attribute": "reorder_level"}`, of the same atom, or, inside
+//! a `where`, `{"target": "invoiced_amount"}`, of the query's target. A relation constraint asks for a far-end atom of `other_type`
 //! joined by a declared relation type or a ref attribute spelled
 //! `<type>.<attribute>`, optionally NAMED and optionally meeting a `where` of
 //! its own filters and one-hop relations — depth 2, by the types: a `where`'s
@@ -80,13 +82,28 @@ pub enum FilterOp {
     Contains,
 }
 
-/// A filter's operand, as JSON spells it. A time is a signed year (B.C.
-/// negative), as a number or as text ("318 B.C.").
+/// A filter's operand, as JSON spells it: a literal, or another attribute.
+/// A time is a signed year (B.C. negative), as a number or as text
+/// ("318 B.C."), or a date.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Scalar {
     Number(serde_json::Number),
     Text(String),
+    Attr(AttrOperand),
+}
+
+/// Another attribute as a filter's operand, compared value with value: an
+/// object with exactly one key, which says whose attribute it is. `attribute`
+/// is the atom the filter is on ("counted below its own reorder_level");
+/// `target` is the query's target, so inside a relation's `where` the far end
+/// is compared with the near one ("an order total unlike the invoice's
+/// amount"). At the top level the two are the same atom.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AttrOperand {
+    Attribute(String),
+    Target(String),
 }
 
 /// A far-end atom the target must (or, negated, must not) be joined to.

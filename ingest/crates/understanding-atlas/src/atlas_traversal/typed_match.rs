@@ -19,6 +19,10 @@
 //!   UNJUDGED, counted per type and attribute, and reported in the answer's
 //!   notes (ARCH §18.3) — under `negate` too, where "no value" would otherwise
 //!   pass as "not before 300 B.C.".
+//! - **Two attributes compare as their values do with a literal**: each side
+//!   reads as its interval, `lt` holds when the filtered side ends before the
+//!   other starts, `gt` the reverse, `eq` when they overlap; either side
+//!   unset or unreadable is unjudged, on the atom and attribute that lacked it.
 
 use std::cell::RefCell;
 use std::cmp::Ordering;
@@ -33,7 +37,8 @@ use crate::enrichment::ontology::{OntologyPolicies, TypeIndex};
 use super::engine::AtlasView;
 use super::typed::FilterOp;
 use super::typed_check::{
-    numbers, time_spans, Checked, CheckedFilter, CheckedRelation, Link, Operand, ValueKind, SUBJECT,
+    numbers, time_spans, Checked, CheckedFilter, CheckedRelation, Link, Operand, Side, ValueKind,
+    SUBJECT,
 };
 
 /// An atom a typed query can return: the two kinds that carry both a declared
@@ -152,6 +157,31 @@ impl Via<'_> {
     }
 }
 
+/// The query's target while its relations are judged: what a `{"target": ..}`
+/// operand inside a `where` reads.
+#[derive(Clone, Copy)]
+pub(super) struct Near<'a, 'q> {
+    atom: Atom<'a>,
+    ty: &'q str,
+}
+
+/// The atom and attribute a filter could not read, and so could not judge.
+struct Unread {
+    ty: String,
+    attr: String,
+    atom: String,
+}
+
+impl Unread {
+    fn of(ty: &str, attr: &str, atom: Atom<'_>) -> Self {
+        Self {
+            ty: ty.to_string(),
+            attr: attr.to_string(),
+            atom: atom.id().to_string(),
+        }
+    }
+}
+
 /// The atlas, indexed for judging, plus the running count of atoms set aside
 /// as unjudged.
 pub(super) struct Judge<'a> {
@@ -249,7 +279,8 @@ impl<'a> Judge<'a> {
     /// what carried each satisfied link; `None` when any fails or cannot be
     /// judged.
     pub(super) fn qualifies(&self, atom: Atom<'a>, c: &Checked<'_>) -> Option<Vec<Via<'a>>> {
-        self.meets(atom, c.target, &c.filters, &c.relations)
+        let near = Near { atom, ty: c.target };
+        self.meets(atom, c.target, &c.filters, &c.relations, near)
     }
 
     fn meets(
@@ -258,11 +289,20 @@ impl<'a> Judge<'a> {
         t: &str,
         filters: &[CheckedFilter<'_>],
         relations: &[CheckedRelation<'_>],
+        near: Near<'a, '_>,
     ) -> Option<Vec<Via<'a>>> {
         for f in filters {
-            match self.filter_holds(atom, t, f) {
-                Some(true) => {}
-                Some(false) => {
+            let judged = match f.operand {
+                Operand::Attr { side, attribute } => {
+                    self.compare_holds(atom, t, f, side, attribute, near)
+                }
+                _ => self
+                    .filter_holds(atom, t, f)
+                    .ok_or_else(|| Unread::of(t, f.attribute, atom)),
+            };
+            match judged {
+                Ok(true) => {}
+                Ok(false) => {
                     tracing::debug!(
                         atom = atom.id(),
                         attribute = f.attribute,
@@ -270,24 +310,25 @@ impl<'a> Judge<'a> {
                     );
                     return None;
                 }
-                None => {
+                Err(u) => {
                     tracing::debug!(
-                        atom = atom.id(),
-                        attribute = f.attribute,
+                        atom = u.atom.as_str(),
+                        attribute = u.attr.as_str(),
+                        filtered = atom.id(),
                         "atlas traversal: typed filter cannot judge an unset or unreadable value"
                     );
                     self.unjudged
                         .borrow_mut()
-                        .entry((t.to_string(), f.attribute.to_string()))
+                        .entry((u.ty, u.attr))
                         .or_default()
-                        .insert(atom.id().to_string());
+                        .insert(u.atom);
                     return None;
                 }
             }
         }
         let mut via = Vec::new();
         for r in relations {
-            let found = self.witnesses(atom, r);
+            let found = self.witnesses(atom, r, near);
             if found.is_empty() != r.negate {
                 tracing::debug!(
                     atom = atom.id(),
@@ -342,6 +383,67 @@ impl<'a> Judge<'a> {
             _ => unreachable!("check pairs each value kind with its operand ({t})"),
         };
         Some(raw != f.negate)
+    }
+
+    /// A filter whose operand is another attribute, after `negate`; `Err`
+    /// names the side that held no readable value, which `negate` does not
+    /// turn into a yes. Text compares folded, by `eq` only (check refuses
+    /// `contains`); times and quantities as intervals, as with a literal.
+    fn compare_holds(
+        &self,
+        atom: Atom<'_>,
+        t: &str,
+        f: &CheckedFilter<'_>,
+        side: Side,
+        other_attr: &str,
+        near: Near<'_, '_>,
+    ) -> Result<bool, Unread> {
+        let (other, other_t) = match side {
+            Side::Same => (atom, t),
+            Side::Target => (near.atom, near.ty),
+        };
+        let mine = || Unread::of(t, f.attribute, atom);
+        let theirs = || Unread::of(other_t, other_attr, other);
+        let raw = match f.kind {
+            ValueKind::Text => {
+                let folded = |a: Atom<'_>, attr: &str| {
+                    let held: Vec<String> = texts(a.attributes().get(attr)?)
+                        .iter()
+                        .map(|h| fold(h))
+                        .collect();
+                    (!held.is_empty()).then_some(held)
+                };
+                let left = folded(atom, f.attribute).ok_or_else(mine)?;
+                let right = folded(other, other_attr).ok_or_else(theirs)?;
+                left.iter().any(|l| right.contains(l))
+            }
+            ValueKind::Time | ValueKind::Quantity => {
+                let (lo, hi) = self.interval(atom, f.attribute, f.kind).ok_or_else(mine)?;
+                let (olo, ohi) = self
+                    .interval(other, other_attr, f.kind)
+                    .ok_or_else(theirs)?;
+                // Half-open time spans touch without overlapping; quantity
+                // intervals are closed.
+                match (f.kind, f.op) {
+                    (ValueKind::Time, FilterOp::Lt) => hi <= olo,
+                    (ValueKind::Time, FilterOp::Gt) => lo >= ohi,
+                    (ValueKind::Time, _) => lo < ohi && olo < hi,
+                    (_, FilterOp::Lt) => hi < olo,
+                    (_, FilterOp::Gt) => lo > ohi,
+                    _ => lo <= ohi && olo <= hi,
+                }
+            }
+            ValueKind::Name => unreachable!("check refuses an attribute operand on `name` ({t})"),
+        };
+        tracing::trace!(
+            atom = atom.id(),
+            attribute = f.attribute,
+            compared_with = other_attr,
+            other = other.id(),
+            holds = raw,
+            "atlas traversal: typed filter compared two attributes"
+        );
+        Ok(raw != f.negate)
     }
 
     fn names_of(&self, atom: Atom<'_>) -> Vec<String> {
@@ -406,7 +508,12 @@ impl<'a> Judge<'a> {
     /// Every far end that satisfies `r` for `atom` (ignoring `negate`), each
     /// with what carried its link — the link itself and, through a `where`,
     /// the links that qualified the far end.
-    fn witnesses(&self, atom: Atom<'a>, r: &CheckedRelation<'_>) -> Vec<Vec<Via<'a>>> {
+    fn witnesses(
+        &self,
+        atom: Atom<'a>,
+        r: &CheckedRelation<'_>,
+        near: Near<'a, '_>,
+    ) -> Vec<Vec<Via<'a>>> {
         let folded = r.other_name.map(fold);
         let mut out = Vec::new();
         for (far, via) in self.reach(atom, r.link) {
@@ -419,7 +526,7 @@ impl<'a> Judge<'a> {
                     }
                     let mut chain = vec![via];
                     if let Some(w) = &r.within {
-                        match self.meets(y, r.other_type, &w.filters, &w.relations) {
+                        match self.meets(y, r.other_type, &w.filters, &w.relations, near) {
                             Some(inner) => chain.extend(inner),
                             None => continue,
                         }
@@ -498,6 +605,7 @@ impl<'a> Judge<'a> {
             .iter()
             .filter(|r| r.other_type == other && r.within.is_some() && !r.negate)
             .collect();
+        let near = Near { atom, ty: c.target };
         let mut out: Vec<(Atom<'a>, Vec<Via<'a>>)> = Vec::new();
         for link in links {
             for (far, via) in self.reach(atom, *link) {
@@ -512,7 +620,7 @@ impl<'a> Judge<'a> {
                     let w = s.within.as_ref().expect("filtered on within");
                     match (
                         named.as_deref().is_none_or(|n| self.named(y, n)),
-                        self.meets(y, other, &w.filters, &w.relations),
+                        self.meets(y, other, &w.filters, &w.relations, near),
                     ) {
                         (true, Some(inner)) => chain.extend(inner),
                         _ => inside = false,

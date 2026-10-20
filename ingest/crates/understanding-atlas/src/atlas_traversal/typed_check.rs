@@ -11,7 +11,7 @@ use regex::Regex;
 use crate::enrichment::atlas::fold;
 use crate::enrichment::ontology::{AttrFamily, TypeIndex, TypeKind};
 
-use super::typed::{AnswerShape, AttrFilter, FilterOp, Scalar, TypedQuery, Where};
+use super::typed::{AnswerShape, AttrFilter, AttrOperand, FilterOp, Scalar, TypedQuery, Where};
 use super::typed_match::Judge;
 
 /// `<claim type>.subject`: a claim's link to the record it is about, which the
@@ -38,12 +38,37 @@ pub(super) enum ValueKind {
     Quantity,
 }
 
-pub(super) enum Operand {
+impl ValueKind {
+    fn word(self) -> &'static str {
+        match self {
+            ValueKind::Name => "name",
+            ValueKind::Text => "text",
+            ValueKind::Time => "time",
+            ValueKind::Quantity => "quantity",
+        }
+    }
+}
+
+/// Whose attribute an attribute operand reads.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Side {
+    /// The atom the filter is on.
+    Same,
+    /// The query's target: inside a `where`, the near end.
+    Target,
+}
+
+pub(super) enum Operand<'q> {
     /// Folded text.
     Text(String),
     Num(f64),
     /// A time bound, `[start, end)` on the signed-year axis (`time_spans`).
     Span(f64, f64),
+    /// Another attribute of the filter's kind, read off `side` at judging.
+    Attr {
+        side: Side,
+        attribute: &'q str,
+    },
 }
 
 pub(super) struct CheckedFilter<'q> {
@@ -51,7 +76,7 @@ pub(super) struct CheckedFilter<'q> {
     pub(super) op: FilterOp,
     pub(super) negate: bool,
     pub(super) kind: ValueKind,
-    pub(super) operand: Operand,
+    pub(super) operand: Operand<'q>,
 }
 
 pub(super) struct CheckedRelation<'q> {
@@ -125,8 +150,9 @@ impl<'q> Checked<'q> {
         })
     }
 
-    /// The target's attributes the query names: its filters' (bar `name`),
-    /// a tally's, an attribute an argmax/argmin ranks by, and a sum's.
+    /// The target's attributes the query names: its filters' (bar `name`)
+    /// and the attributes they compare with, a tally's, an attribute an
+    /// argmax/argmin ranks by, and a sum's.
     pub(super) fn named_attributes(&self) -> Vec<&'q str> {
         let mut out: Vec<&'q str> = Vec::new();
         let over: Vec<&'q str> = match &self.shape {
@@ -144,7 +170,13 @@ impl<'q> Checked<'q> {
             .filters
             .iter()
             .filter(|f| f.kind != ValueKind::Name)
-            .map(|f| f.attribute);
+            .flat_map(|f| {
+                let compared = match f.operand {
+                    Operand::Attr { attribute, .. } => Some(attribute),
+                    _ => None,
+                };
+                std::iter::once(f.attribute).chain(compared)
+            });
         for a in filtered.chain(over) {
             if !out.contains(&a) {
                 out.push(a);
@@ -180,7 +212,7 @@ pub(super) fn check<'q>(q: &'q TypedQuery, judge: &Judge<'q>) -> Result<Checked<
     let filters = q
         .filters
         .iter()
-        .map(|f| check_filter(f, t, index))
+        .map(|f| check_filter(f, t, t, index))
         .collect::<Result<Vec<_>, _>>()?;
     let mut relations = Vec::new();
     for r in &q.relations {
@@ -195,7 +227,7 @@ pub(super) fn check<'q>(q: &'q TypedQuery, judge: &Judge<'q>) -> Result<Checked<
         c.within = r
             .within
             .as_ref()
-            .map(|w| check_where(w, &r.other_type, index))
+            .map(|w| check_where(w, &r.other_type, t, index))
             .transpose()?;
         relations.push(c);
     }
@@ -274,9 +306,12 @@ fn check_summand<'q>(over: &'q str, t: &str, index: &TypeIndex<'_>) -> Result<&'
     }
 }
 
+/// A filter on an attribute of `t`; `near` is the query's target type, whose
+/// attributes a `{"target": ..}` operand names.
 fn check_filter<'q>(
     f: &'q AttrFilter,
     t: &str,
+    near: &str,
     index: &TypeIndex<'_>,
 ) -> Result<CheckedFilter<'q>, String> {
     let a = f.attribute.as_str();
@@ -309,13 +344,22 @@ fn check_filter<'q>(
     let text = match &f.value {
         Scalar::Text(s) => s.clone(),
         Scalar::Number(n) => n.to_string(),
+        Scalar::Attr(o) => {
+            return Ok(CheckedFilter {
+                attribute: a,
+                op: f.op,
+                negate: f.negate,
+                kind,
+                operand: check_operand(a, kind, f.op, o, t, near, index)?,
+            })
+        }
     };
     let operand = match kind {
         ValueKind::Name | ValueKind::Text => Operand::Text(fold(&text)),
         ValueKind::Time => {
             let (start, end) = match &f.value {
                 Scalar::Number(n) => n.as_f64().map(|y| (y, y + 1.0)),
-                Scalar::Text(s) => time_spans(s).first().copied(),
+                _ => time_spans(&text).first().copied(),
             }
             .ok_or_else(|| format!("'{text}' does not read as a date or a year."))?;
             Operand::Span(start, end)
@@ -333,6 +377,63 @@ fn check_filter<'q>(
         negate: f.negate,
         kind,
         operand,
+    })
+}
+
+/// An attribute operand: declared on the side it names, not a ref, of the
+/// filtered attribute's own kind, and compared by `eq`, `lt` or `gt`.
+fn check_operand<'q>(
+    a: &str,
+    kind: ValueKind,
+    op: FilterOp,
+    o: &'q AttrOperand,
+    t: &str,
+    near: &str,
+    index: &TypeIndex<'_>,
+) -> Result<Operand<'q>, String> {
+    let (side, other, owner) = match o {
+        AttrOperand::Attribute(x) => (Side::Same, x.as_str(), t),
+        AttrOperand::Target(x) => (Side::Target, x.as_str(), near),
+    };
+    if op == FilterOp::Contains {
+        return Err(format!(
+            "'{a}' cannot be compared by Contains with an attribute; contains takes a value."
+        ));
+    }
+    let decl = index
+        .effective_attributes(owner)
+        .into_iter()
+        .find(|d| d.name == other)
+        .ok_or_else(|| {
+            format!("'{other}' is not an attribute of {owner}, so a filter cannot compare with it.")
+        })?;
+    let other_kind = match &decl.family {
+        AttrFamily::Text { .. } => ValueKind::Text,
+        AttrFamily::Time { .. } => ValueKind::Time,
+        AttrFamily::Quantity { .. } => ValueKind::Quantity,
+        AttrFamily::Ref { .. } => {
+            return Err(format!(
+                "'{other}' is a ref; a filter compares with a text, time or quantity attribute."
+            ))
+        }
+    };
+    if other_kind != kind {
+        return Err(format!(
+            "'{a}' ({}) cannot be compared with '{other}' ({}).",
+            kind.word(),
+            other_kind.word()
+        ));
+    }
+    tracing::trace!(
+        attribute = a,
+        compared_with = other,
+        owner,
+        ?side,
+        "atlas traversal: typed filter compares two attributes"
+    );
+    Ok(Operand::Attr {
+        side,
+        attribute: other,
     })
 }
 
@@ -392,12 +493,13 @@ fn check_relation<'q>(
 fn check_where<'q>(
     w: &'q Where,
     on: &'q str,
+    near: &str,
     index: &TypeIndex<'_>,
 ) -> Result<CheckedWhere<'q>, String> {
     let filters = w
         .filters
         .iter()
-        .map(|f| check_filter(f, on, index))
+        .map(|f| check_filter(f, on, near, index))
         .collect::<Result<Vec<_>, _>>()?;
     let relations = w
         .relations

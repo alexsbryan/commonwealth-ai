@@ -216,7 +216,9 @@ thing), [`ENRICHMENT_V2.md`](../ingest/crates/corpus-engine/ENRICHMENT_V2.md),
 - `atlas_traversal/` (pure half in `understanding-atlas`) — question →
   `QueryPlan` → `traverse` → brief, no model. Every declared-type question
   runs through ONE executor, `typed::execute`: a `TypedQuery` (target type;
-  filters `eq`/`lt`/`gt`/`contains`, times as signed-year intervals; relation
+  filters `eq`/`lt`/`gt`/`contains` against a literal, or `eq`/`lt`/`gt` against another
+  attribute of the same atom (`{"attribute": ..}`) or, inside a `where`, of the target
+  (`{"target": ..}`), either side unread = unjudged; times as signed-year intervals; relation
   constraints over a declared relation type or a `<type>.<attr>` ref, a named
   far end matched by folded name or alias, never a substring; a depth-2
   `where`; `none`/`count`/`argmax`/`argmin`/`tally`, or `sum` of a quantity attribute per

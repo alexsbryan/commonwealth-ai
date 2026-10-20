@@ -703,6 +703,22 @@ mod tests {
         assert!(err.contains("only sum groups"), "{err}");
     }
 
+    /// An attribute as a filter's operand (07-inventory n6, "parts below
+    /// their reorder level") parses as `--typed` takes it; an operand object
+    /// with an unknown key is refused, not read as a literal.
+    #[test]
+    fn parse_args_takes_an_attribute_operand() {
+        use corpus_engine::atlas_traversal::typed::{AttrOperand, Scalar};
+        let json = r#"{"target_type":"stock_count","filters":[{"attribute":"counted","op":"lt","value":{"attribute":"reorder_level"},"negate":false}]}"#;
+        let p = parse_args(&["c".into(), "--typed".into(), json.into()]).unwrap();
+        assert_eq!(
+            p.typed.expect("typed query parsed").filters[0].value,
+            Scalar::Attr(AttrOperand::Attribute("reorder_level".into()))
+        );
+        let near = r#"{"target_type":"stock_count","filters":[{"attribute":"counted","op":"lt","value":{"near":"reorder_level"}}]}"#;
+        assert!(parse_args(&["c".into(), "--typed".into(), near.into()]).is_err());
+    }
+
     #[test]
     fn call_intent_direction_detection() {
         assert_eq!(
