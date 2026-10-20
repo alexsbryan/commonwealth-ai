@@ -33,7 +33,7 @@ use crate::enrichment::ontology::{OntologyPolicies, TypeIndex};
 use super::engine::AtlasView;
 use super::typed::FilterOp;
 use super::typed_check::{
-    numbers, signed_years, Checked, CheckedFilter, CheckedRelation, Link, Operand, ValueKind,
+    numbers, time_spans, Checked, CheckedFilter, CheckedRelation, Link, Operand, ValueKind, SUBJECT,
 };
 
 /// An atom a typed query can return: the two kinds that carry both a declared
@@ -70,6 +70,18 @@ impl<'a> Atom<'a> {
             Atom::Entity(e) => &e.attributes,
             Atom::Event(e) => &e.attributes,
             Atom::Claim(c) => &c.attributes,
+        }
+    }
+
+    /// The atom ids (or written names) this atom holds under `attr`: its ref
+    /// attribute's values, else a claim's `subject`, the record it is about.
+    fn held(self, attr: &str) -> Vec<&'a str> {
+        if let Some(v) = self.attributes().get(attr) {
+            return strings(v);
+        }
+        match self {
+            Atom::Claim(c) if attr == SUBJECT => c.subject.iter().map(|s| s.as_str()).collect(),
+            _ => Vec::new(),
         }
     }
 
@@ -192,6 +204,11 @@ impl<'a> Judge<'a> {
                     referrers.entry((k.as_str(), held)).or_default().push(*a);
                 }
             }
+            if !a.attributes().contains_key(SUBJECT) {
+                for held in a.held(SUBJECT) {
+                    referrers.entry((SUBJECT, held)).or_default().push(*a);
+                }
+            }
         }
         Self {
             index: TypeIndex::from_policies(policies),
@@ -303,8 +320,17 @@ impl<'a> Judge<'a> {
                     _ => word_start(&fold(h), needle),
                 })
             }
-            (kind @ (ValueKind::Time | ValueKind::Quantity), Operand::Num(v)) => {
-                let (lo, hi) = self.interval(atom, f.attribute, *kind)?;
+            // Spans: `lt` wholly before the bound, `gt` wholly after it, `eq` overlapping it.
+            (ValueKind::Time, Operand::Span(start, end)) => {
+                let (lo, hi) = self.interval(atom, f.attribute, ValueKind::Time)?;
+                match f.op {
+                    FilterOp::Lt => hi <= *start,
+                    FilterOp::Gt => lo >= *end,
+                    _ => lo < *end && *start < hi,
+                }
+            }
+            (ValueKind::Quantity, Operand::Num(v)) => {
+                let (lo, hi) = self.interval(atom, f.attribute, ValueKind::Quantity)?;
                 match f.op {
                     FilterOp::Lt => hi < *v,
                     FilterOp::Gt => lo > *v,
@@ -324,24 +350,24 @@ impl<'a> Judge<'a> {
     }
 
     /// A time or quantity attribute as an interval, or `None` when unset or
-    /// unreadable.
+    /// unreadable: a time's from its earliest span's start to its latest span's
+    /// end (`time_spans`, half-open), a quantity's from its least to its greatest
+    /// number.
     pub(super) fn interval(
         &self,
         atom: Atom<'_>,
         attr: &str,
         kind: ValueKind,
     ) -> Option<(f64, f64)> {
-        let read = |s: &str| match kind {
-            ValueKind::Time => signed_years(s),
-            _ => numbers(s),
-        };
-        let vals: Vec<f64> = match atom.attributes().get(attr)? {
-            Value::Number(n) => n.as_f64().into_iter().collect(),
-            Value::String(s) => read(s),
+        let spans: Vec<(f64, f64)> = match (atom.attributes().get(attr)?, kind) {
+            (Value::Number(n), ValueKind::Time) => n.as_f64().map(|y| (y, y + 1.0)).into_iter().collect(),
+            (Value::Number(n), _) => n.as_f64().map(|x| (x, x)).into_iter().collect(),
+            (Value::String(s), ValueKind::Time) => time_spans(s),
+            (Value::String(s), _) => numbers(s).into_iter().map(|x| (x, x)).collect(),
             _ => Vec::new(),
         };
-        let lo = vals.iter().copied().reduce(f64::min)?;
-        let hi = vals.iter().copied().reduce(f64::max)?;
+        let lo = spans.iter().map(|s| s.0).reduce(f64::min)?;
+        let hi = spans.iter().map(|s| s.1).reduce(f64::max)?;
         Some((lo, hi))
     }
 
@@ -407,10 +433,7 @@ impl<'a> Judge<'a> {
                 })
                 .collect(),
             Link::RefOut(attr) => atom
-                .attributes()
-                .get(attr)
-                .map(strings)
-                .unwrap_or_default()
+                .held(attr)
                 .into_iter()
                 .map(|held| match self.by_id.get(held) {
                     Some(y) => (Far::Atom(*y), Via::Ref(atom)),
