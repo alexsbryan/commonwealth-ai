@@ -30,3 +30,9 @@ written, minutes.
 
 **Prediction**, stated so it can be wrong: window 1 under 20/27 on both reads (12/27 on 2026-10-15, before
 bb16808b5).
+
+**Amended 2026-10-19 20:05, before any valid read.** The first read (`local35b-s4-base-a-deadline300`) lost windows
+1-3 to the daemon's 300s default inference deadline (503 after 7-8k tokens each; phase 1 stops at three in a row), and
+the second was stopped. The 2026-10-15 reads ran the daemon with `SOVEREIGN_INFERENCE_TIMEOUT_SECS=3600`, set by hand
+(5800027c1); the local config swap does not carry it. Reads `-a` and `-b` run again on a daemon started with 3600,
+nothing else changed.
