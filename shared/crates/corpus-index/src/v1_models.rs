@@ -87,10 +87,7 @@ pub async fn probe_daemon(base_url: &str) -> bool {
 /// backends, so we fall back to name-pattern matching: anything containing
 /// `"embedding"` or `"-embed"` is classed as embed; everything else is chat.
 pub async fn resolve_default_models(base_url: &str) -> (Option<String>, Option<String>) {
-    let client = match reqwest::Client::builder()
-        .timeout(V1_MODELS_TIMEOUT)
-        .build()
-    {
+    let client = match models_client() {
         Ok(c) => c,
         Err(_) => return (None, None),
     };
@@ -179,6 +176,14 @@ fn pick_default_models_from_v1(v: &serde_json::Value) -> (Option<String>, Option
     (chat, embed)
 }
 
+/// The client that reads a daemon's model list, under [`V1_MODELS_TIMEOUT`]:
+/// one construction for [`resolve_default_models`] and [`alias_bindings`].
+fn models_client() -> reqwest::Result<reqwest::Client> {
+    reqwest::Client::builder()
+        .timeout(V1_MODELS_TIMEOUT)
+        .build()
+}
+
 /// The model each alias the daemon advertises is bound to on this node
 /// (`/v1/models` rows owned `alias→<model>`), keyed by alias; the error says
 /// why the daemon gave no list. `base_url` may end in `/v1`. The answer store
@@ -188,10 +193,7 @@ pub async fn alias_bindings(
 ) -> Result<std::collections::BTreeMap<String, String>, String> {
     let root = base_url.trim_end_matches('/').trim_end_matches("/v1");
     let url = format!("{root}/v1/models");
-    let client = reqwest::Client::builder()
-        .timeout(V1_MODELS_TIMEOUT)
-        .build()
-        .map_err(|e| format!("no HTTP client for {url}: {e}"))?;
+    let client = models_client().map_err(|e| format!("no HTTP client for {url}: {e}"))?;
     let resp = client
         .get(&url)
         .send()
