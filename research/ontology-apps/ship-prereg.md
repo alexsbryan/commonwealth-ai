@@ -148,8 +148,10 @@ smoke test. The 1,095 chat answers came to about 1.55M output tokens (characters
 - **S3 passes.** uv-third serves 23/44 cases at the right state (bar 15; 27). 12 serve a wrong state, mostly
   reported/resolved/declined swaps, and 9 match no record (5 on the first read).
   A second read at the same code (`ship-noise-uv`, about 242k output tokens) serves 26, so the 27-to-23 drop is
-  inside same-head variance (23 and 26). The merging is not: both reads at this head name 93 and 95 case particulars
-  over the same ten windows where the first read named 110, and leave 9 and 10 cases with no record against 5.
+  inside same-head variance (23 and 26). Both reads at this head name fewer case particulars over the same ten
+  windows (93 and 95, against 110) and leave 9 and 10 cases with no record (against 5). That shift is not
+  established: the two same-head reads differ by up to 8 particulars in one window (about 3 per window), so a
+  read's total varies by about 7, and 110 against 94 is about two of those.
 - **S4 passes.** 19/35 on the amended scorer (bar 17; the one-shot's 19) and 17/35 on the frozen one (15 before).
 
 S1-S4 and S6 pass. S5 fails on E2 (64/75) and E3; under the operator's ruling the claim excludes values derived
