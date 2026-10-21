@@ -2137,6 +2137,7 @@ mod tests {
                 self.extract.to_string()
             };
             Ok(crate::types::CompletionResponse {
+                logprobs: None,
                 text,
                 tokens_used: 0,
                 prompt_tokens: 0,
@@ -2193,6 +2194,7 @@ mod tests {
                 self.extract.to_string()
             };
             Ok(crate::types::CompletionResponse {
+                logprobs: None,
                 text,
                 tokens_used: 0,
                 prompt_tokens: 0,
@@ -2994,6 +2996,7 @@ mod tests {
                 self.extract.to_string()
             };
             Ok(crate::types::CompletionResponse {
+                logprobs: None,
                 text,
                 tokens_used: 0,
                 prompt_tokens: 0,
@@ -3101,6 +3104,7 @@ mod tests {
                 self.extract.to_string()
             };
             Ok(crate::types::CompletionResponse {
+                logprobs: None,
                 text,
                 tokens_used: 0,
                 prompt_tokens: 0,

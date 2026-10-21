@@ -14,7 +14,9 @@
 
 use std::io::Read;
 
-use sovereign_contracts::oicp::verify::{VerifyRequest, VerifyResponse, VerifyTier, VerifyVerdict};
+use sovereign_contracts::oicp::verify::{
+    Checkability, VerifiedClaim, VerifyRequest, VerifyResponse, VerifyTier, VerifyVerdict,
+};
 use sovereign_contracts::oicp::{features, ProviderManifest};
 
 #[derive(clap::Parser, Debug)]
@@ -203,6 +205,15 @@ fn verdict_word(v: &VerifyVerdict) -> String {
     }
 }
 
+/// A claim the host does not check is named by the rung that set it aside
+/// (`class/no-specifics`, `class/opinion`), not as a tier's abstention.
+fn claim_word(c: &VerifiedClaim) -> String {
+    match c.class {
+        Checkability::NotCheckable => format!("not checkable ({})", c.rung),
+        Checkability::Checkable => verdict_word(&c.verdict),
+    }
+}
+
 fn print_unit(line: usize, unit: &str, reply: &VerifyResponse) {
     let lines_before = |cp: u64| {
         unit.chars()
@@ -216,7 +227,7 @@ fn print_unit(line: usize, unit: &str, reply: &VerifyResponse) {
         if c.exact.chars().count() > 72 {
             head.push('…');
         }
-        println!("{at:>5}  {:<28} {head}", verdict_word(&c.verdict));
+        println!("{at:>5}  {:<28} {head}", claim_word(c));
         if !c.specifics_absent.is_empty() {
             println!(
                 "       in no sentence read: {}",
@@ -263,6 +274,7 @@ struct Counts {
     unsupported: usize,
     contradicted: usize,
     abstained: usize,
+    not_checkable: usize,
     could_not: usize,
     verifier: Option<String>,
 }
@@ -272,6 +284,10 @@ impl Counts {
         self.verifier.get_or_insert_with(|| r.verifier.clone());
         for c in &r.claims {
             self.claims += 1;
+            if c.class == Checkability::NotCheckable {
+                self.not_checkable += 1;
+                continue;
+            }
             match c.verdict {
                 VerifyVerdict::Supported => self.supported += 1,
                 VerifyVerdict::Unsupported => self.unsupported += 1,
@@ -284,12 +300,13 @@ impl Counts {
 
     fn line(&self) -> String {
         format!(
-            "{} claim(s): {} supported, {} unsupported, {} contradicted, {} abstained, {} could not judge — {} (uncalibrated)",
+            "{} claim(s): {} supported, {} unsupported, {} contradicted, {} abstained, {} not checkable, {} could not judge — {} (uncalibrated)",
             self.claims,
             self.supported,
             self.unsupported,
             self.contradicted,
             self.abstained,
+            self.not_checkable,
             self.could_not,
             self.verifier.as_deref().unwrap_or("no verifier answered"),
         )
@@ -311,7 +328,9 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
              of your corpora that are about it; a claim nothing in them is about is \
              `unsupported` at either tier. `fast` uses no model: it `abstained`, naming the \
              figures, dates and names no sentence carries. `checker` asks the daemon's \
-             judge, and a sentence stating a figure otherwise is `contradicted`. Every \
+             judge, and a sentence stating a figure otherwise is `contradicted`. A claim \
+             with nothing to look for, or offered as your view (\"I think\", \"overstates\"), \
+             is `not checkable` and is never searched. Every \
              verdict is uncalibrated: read `unsupported` as \"nothing backs this\", not \
              \"this is false\".",
         ),
@@ -320,7 +339,32 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
 
 #[cfg(test)]
 mod tests {
-    use super::paragraphs;
+    use super::{claim_word, paragraphs, Counts};
+    use sovereign_contracts::oicp::verify::VerifyResponse;
+
+    /// A claim set aside at the door reads as such, by its rung, and is
+    /// counted apart from a tier's abstention.
+    #[test]
+    fn a_claim_not_checked_is_named_by_its_rung() {
+        let claim = |class: &str, rung: &str| {
+            serde_json::json!({"start": 0, "end": 1, "exact": "x", "class": class,
+                "verdict": {"kind": "abstained"}, "rung": rung, "operating_point": "uncalibrated"})
+        };
+        let r: VerifyResponse = serde_json::from_value(serde_json::json!({
+            "claims": [claim("not_checkable", "class/opinion"), claim("checkable", "fast/value-presence")],
+            "verifier": "v", "corpora": [],
+        }))
+        .unwrap();
+        assert_eq!(claim_word(&r.claims[0]), "not checkable (class/opinion)");
+        assert_eq!(claim_word(&r.claims[1]), "abstained");
+        let mut n = Counts::default();
+        n.add(&r);
+        assert!(
+            n.line().contains(" 1 abstained, 1 not checkable,"),
+            "{}",
+            n.line()
+        );
+    }
 
     #[test]
     fn paragraphs_carry_the_line_they_start_on() {

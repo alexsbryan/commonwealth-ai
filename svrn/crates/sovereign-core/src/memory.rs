@@ -794,6 +794,7 @@ pub async fn extract_long_term_memories(
 
     let request = CompletionRequest {
         admission: None,
+        logprobs: None,
         prompt,
         system_message: Some(
             "You extract durable user facts from conversations. Respond with a JSON array of strings only."
@@ -2049,6 +2050,7 @@ mod tests {
         async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
             *self.last_prompt.lock().unwrap() = Some(request.prompt.clone());
             Ok(CompletionResponse {
+                logprobs: None,
                 text: self.response_text.clone(),
                 tokens_used: 0,
                 prompt_tokens: 0,

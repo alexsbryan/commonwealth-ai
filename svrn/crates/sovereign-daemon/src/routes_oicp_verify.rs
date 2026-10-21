@@ -5,6 +5,9 @@
 //!
 //! Built from what already runs (CITE_V1 §1.4, P4), never a new verifier.
 //! The rungs, in order, each a tracing event:
+//! - **opinion**: a claim holding a marker of the data file's rule
+//!   (`routes_oicp_verify_opinion`, `data/opinion_markers.toml`) is offered as
+//!   the writer's view, `not_checkable` before any search or model call;
 //! - **class**: claims are the unit's sentences, and a claim is checkable when
 //!   it carries a specific (`sovereign_core::runtime::sentence_specifics`:
 //!   figures, dates, quantities and names, nothing inside a citation or a
@@ -78,6 +81,7 @@ const CANDIDATES_K: usize = 8;
 /// the same day.
 pub const CHECKER_PASSAGES: usize = 3;
 /// The rung names on the wire: a change to what a rung does changes its name.
+const RUNG_OPINION: &str = "class/opinion";
 const RUNG_CLASS: &str = "class/no-specifics";
 const RUNG_SEARCH: &str = "sentences/search";
 const RUNG_FLOOR: &str = "sentences/floor";
@@ -379,12 +383,13 @@ fn verifier_identity(
         || "sentences=none".to_string(),
         |c| format!("scorer={} floor={}", c.scorer.as_str(), c.verify_floor),
     );
+    let door = crate::routes_oicp_verify_opinion::identity();
     match tier {
         VerifyTier::Checker => format!(
-            "verify/2 {reading} {RUNG_CHECKER} tau={SUPPORTED_TAU} passages={CHECKER_PASSAGES} model={}",
+            "verify/3 {reading} {door} {RUNG_CHECKER} tau={SUPPORTED_TAU} passages={CHECKER_PASSAGES} model={}",
             inference.map_or_else(|| "none".to_string(), |i| i.model_id_for(Speed::Slow))
         ),
-        _ => format!("verify/2 {reading} {RUNG_FAST}"),
+        _ => format!("verify/3 {reading} {door} {RUNG_FAST}"),
     }
 }
 
@@ -457,6 +462,14 @@ async fn judge_claim(
     any_corpus: bool,
     inference: Option<&Arc<dyn InferenceProvider>>,
 ) -> Result<Judged, Shed> {
+    // An unreadable rule holds nothing at the door; `verifier` says `opinion=none`.
+    let held =
+        crate::routes_oicp_verify_opinion::rule().map_or(Vec::new(), |r| r.markers_in(claim));
+    if !held.is_empty() {
+        tracing::debug!(%claim, markers = ?held, "oicp verify: offered as the writer's view; not checkable");
+        let (class, verdict) = (Checkability::NotCheckable, VerifyVerdict::Abstained);
+        return Ok(Judged::new(class, verdict, RUNG_OPINION));
+    }
     let specifics = sentence_specifics(claim);
     if specifics.is_empty() {
         tracing::debug!(%claim, "oicp verify: no specifics; not checkable");

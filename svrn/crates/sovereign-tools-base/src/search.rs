@@ -349,6 +349,7 @@ impl SearchTool {
 
         let request = CompletionRequest {
             admission: None,
+            logprobs: None,
             prompt: format!(
                 "Answer this question based on the search results below. \
                  Cite sources by number [1], [2], etc.\n\n\

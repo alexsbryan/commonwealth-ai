@@ -125,6 +125,7 @@ impl<'a> TypedLlmCall<'a> {
             // route via `for_workload`.
             let request = CompletionRequest {
                 admission: None,
+                logprobs: None,
                 prompt: user,
                 system_message: Some(self.system.to_string()),
                 preferred_speed: self.speed,
@@ -279,6 +280,7 @@ mod tests {
             }
             let next = q.remove(0)?;
             Ok(CompletionResponse {
+                logprobs: None,
                 text: next,
                 tokens_used: 1,
                 prompt_tokens: 1,

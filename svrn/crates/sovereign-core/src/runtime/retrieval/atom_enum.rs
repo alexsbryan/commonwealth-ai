@@ -208,6 +208,7 @@ impl Runtime {
 
         let request = CompletionRequest {
             admission: None,
+            logprobs: None,
             prompt,
             system_message: None,
             preferred_speed: Speed::Fast,

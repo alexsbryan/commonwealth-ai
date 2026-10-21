@@ -509,6 +509,7 @@ impl Runtime {
         let system = self.build_system_message(KNOWLEDGE_SYNTHESIS_SYSTEM, context);
         let request = CompletionRequest {
             admission: None,
+            logprobs: None,
             prompt,
             system_message: Some(system),
             preferred_speed: Speed::Fast,
@@ -818,6 +819,7 @@ mod tests {
         async fn complete(&self, r: &CompletionRequest) -> Result<CompletionResponse> {
             self.prompts.lock().unwrap().push(r.prompt.clone());
             Ok(CompletionResponse {
+                logprobs: None,
                 text: "we opened on orbital mechanics.".to_string(),
                 tokens_used: 0,
                 prompt_tokens: 0,

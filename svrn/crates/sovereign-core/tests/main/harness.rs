@@ -155,6 +155,7 @@ impl InferenceProvider for DeterministicInference {
         };
 
         Ok(CompletionResponse {
+            logprobs: None,
             text,
             tokens_used: 10,
             prompt_tokens: 0,
@@ -209,6 +210,7 @@ impl InferenceProvider for AlwaysSearchInference {
             "fallback".to_string()
         };
         Ok(CompletionResponse {
+            logprobs: None,
             text,
             tokens_used: 5,
             prompt_tokens: 0,
@@ -501,6 +503,7 @@ impl InferenceProvider for ScriptableInference {
         if p.contains("naming the missing information") {
             return match &self.phrase {
                 PhraseScript::Text(line) => Ok(CompletionResponse {
+                    logprobs: None,
                     text: line.clone(),
                     tokens_used: 10,
                     prompt_tokens: 0,
@@ -523,6 +526,7 @@ impl InferenceProvider for ScriptableInference {
         if p.contains("Refine the answer to integrate") {
             return match &self.refine {
                 RefineScript::Text(t) => Ok(CompletionResponse {
+                    logprobs: None,
                     text: t.clone(),
                     tokens_used: 15,
                     prompt_tokens: 0,

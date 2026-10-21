@@ -52,5 +52,8 @@ mod serving_lift_harness;
 #[path = "main/sheds_commonwealth.rs"]
 mod sheds_commonwealth;
 
+#[path = "main/third_party_vendor_fields.rs"]
+mod third_party_vendor_fields;
+
 #[path = "main/throughput_ledger_emission.rs"]
 mod throughput_ledger_emission;

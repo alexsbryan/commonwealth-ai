@@ -424,6 +424,7 @@ mod tests {
         ledger.record_completion(
             "You are summarizing a group of related passages",
             &CompletionResponse {
+                logprobs: None,
                 text: "x".into(),
                 tokens_used: 1200,
                 prompt_tokens: 1000,
@@ -453,6 +454,7 @@ mod tests {
 
     fn resp(prompt_tokens: usize, completion: usize) -> CompletionResponse {
         CompletionResponse {
+            logprobs: None,
             text: "x".into(),
             tokens_used: prompt_tokens + completion,
             prompt_tokens,

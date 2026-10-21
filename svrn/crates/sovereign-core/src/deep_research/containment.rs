@@ -796,6 +796,7 @@ mod tests {
             _r: &crate::types::CompletionRequest,
         ) -> crate::error::Result<crate::types::CompletionResponse> {
             Ok(crate::types::CompletionResponse {
+                logprobs: None,
                 text: self.0.to_string(),
                 tokens_used: 0,
                 prompt_tokens: 0,

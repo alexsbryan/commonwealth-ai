@@ -122,6 +122,7 @@ impl Step for ModelStep {
         // don't rely on the provider's `Speed`→`latency_class` rescue.
         let request = CompletionRequest {
             admission: None,
+            logprobs: None,
             prompt,
             system_message,
             preferred_speed: speed_for(self.latency),

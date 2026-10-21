@@ -55,6 +55,7 @@ impl InferenceProvider for DeterministicInference {
             )
         };
         Ok(CompletionResponse {
+            logprobs: None,
             text,
             tokens_used: 10,
             prompt_tokens: 0,

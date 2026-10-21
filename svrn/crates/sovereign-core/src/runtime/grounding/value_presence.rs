@@ -812,6 +812,7 @@ mod tests {
                 return Err(crate::error::Error::Inference("host busy".into()));
             }
             Ok(crate::types::CompletionResponse {
+                logprobs: None,
                 text: "Mrs Neale".into(),
                 tokens_used: 0,
                 prompt_tokens: 0,

@@ -315,6 +315,35 @@ pub(crate) fn write_thinking(
     }
 }
 
+/// Ask the host for token logprobs in the OpenAI spelling: `logprobs: true`,
+/// and `top_logprobs: k` when alternatives are wanted. Nothing when unasked.
+pub(crate) fn write_logprobs(body: &mut Value, request: &CompletionRequest) {
+    if let Some(top) = request.logprobs {
+        body["logprobs"] = json!(true);
+        if top > 0 {
+            body["top_logprobs"] = json!(top);
+        }
+    }
+}
+
+/// The host's `choices[0].logprobs` for a request that asked for them. A host
+/// that reported none is traced, so the absence is visible where it happened.
+pub(crate) fn answered_logprobs(
+    request: &CompletionRequest,
+    reported: Option<&Option<Value>>,
+) -> Option<Value> {
+    let asked = request.logprobs?;
+    let answered = reported.cloned().flatten().filter(|v| !v.is_null());
+    if answered.is_none() {
+        tracing::debug!(
+            target: "oicp_client",
+            top_logprobs = asked,
+            "logprobs asked, the host reported none"
+        );
+    }
+    answered
+}
+
 /// The `enable_thinking` `request` is rendered with, as the engine renders
 /// it. A conversation goes to the model's own template, which decides when
 /// the caller did not (thinking on for a thinking template, on both sides:

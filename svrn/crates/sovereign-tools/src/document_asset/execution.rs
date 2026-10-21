@@ -146,6 +146,7 @@ impl DocumentAssetManager {
             .inference
             .complete(&CompletionRequest {
                 admission: None,
+                logprobs: None,
                 prompt,
                 system_message: None,
                 preferred_speed: Speed::Slow,
@@ -434,6 +435,7 @@ impl DocumentAssetManager {
             .inference
             .complete(&CompletionRequest {
                 admission: None,
+                logprobs: None,
                 prompt,
                 system_message: None,
                 preferred_speed: Speed::Slow,
@@ -507,6 +509,7 @@ impl DocumentAssetManager {
             .inference
             .complete(&CompletionRequest {
                 admission: None,
+                logprobs: None,
                 prompt,
                 system_message: None,
                 preferred_speed: Speed::Slow,

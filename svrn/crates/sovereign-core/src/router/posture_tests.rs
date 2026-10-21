@@ -24,6 +24,7 @@ impl InferenceProvider for CapturingInference {
     ) -> Result<sovereign_contracts::types::CompletionResponse> {
         self.seen.lock().unwrap().push(r.clone());
         Ok(sovereign_contracts::types::CompletionResponse {
+            logprobs: None,
             text: "A".to_string(),
             tokens_used: 1,
             prompt_tokens: 1,

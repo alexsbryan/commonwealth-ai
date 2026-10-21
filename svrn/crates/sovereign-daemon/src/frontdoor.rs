@@ -2775,6 +2775,9 @@ pub(crate) async fn apply_distiller(
         stable_prefix_len: None,
         top_k: None,
         turn_admission: None,
+        thinking: None,
+        logprobs: None,
+        top_logprobs: None,
     };
 
     let response = chat_completions(
@@ -3303,6 +3306,9 @@ async fn summarise_block(
         stable_prefix_len: None,
         top_k: None,
         turn_admission: None,
+        thinking: None,
+        logprobs: None,
+        top_logprobs: None,
     };
     let response = chat_completions(
         State(state.clone()),
@@ -4155,6 +4161,9 @@ mod tests {
             stable_prefix_len: None,
             top_k: None,
             turn_admission: None,
+            thinking: None,
+            logprobs: None,
+            top_logprobs: None,
         }
     }
 
@@ -5637,6 +5646,9 @@ That's my answer."#;
             stable_prefix_len: None,
             top_k: None,
             turn_admission: None,
+            thinking: None,
+            logprobs: None,
+            top_logprobs: None,
         }
     }
 

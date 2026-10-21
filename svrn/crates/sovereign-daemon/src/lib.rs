@@ -229,6 +229,7 @@ pub mod routes_oicp_ingest;
 pub mod routes_oicp_text;
 pub mod routes_oicp_verify;
 pub mod routes_oicp_verify_journal;
+pub mod routes_oicp_verify_opinion;
 pub mod routes_ollama;
 pub mod routes_rail;
 pub mod routes_rail_live;

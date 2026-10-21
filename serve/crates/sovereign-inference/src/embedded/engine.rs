@@ -469,6 +469,7 @@ impl FastShortCoalescer {
                         let finish_reason =
                             finish_reason_from_counts(&job.request, completion_tokens);
                         let resp = CompletionResponse {
+                            logprobs: None,
                             text,
                             tokens_used: prompt_tokens + completion_tokens,
                             prompt_tokens,
@@ -3137,6 +3138,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     };
                     let latency_ms = start.elapsed().as_millis() as u64;
                     Ok(CompletionResponse {
+                        logprobs: None,
                         text: outcome.text,
                         tokens_used: outcome.prompt_tokens + outcome.completion_tokens,
                         prompt_tokens: outcome.prompt_tokens,
@@ -3288,6 +3290,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     };
                     let latency_ms = start.elapsed().as_millis() as u64;
                     Ok(CompletionResponse {
+                        logprobs: None,
                         text: outcome.text,
                         tokens_used: outcome.prompt_tokens + outcome.completion_tokens,
                         prompt_tokens: outcome.prompt_tokens,
@@ -3433,6 +3436,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
                     Ok((
                         CompletionResponse {
+                            logprobs: None,
                             text: outcome.text,
                             tokens_used: outcome.prompt_tokens + outcome.completion_tokens,
                             prompt_tokens: outcome.prompt_tokens,
@@ -3521,6 +3525,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     let latency_ms = start.elapsed().as_millis() as u64;
 
                     Ok(CompletionResponse {
+                        logprobs: None,
                         text: outcome.text,
                         tokens_used: outcome.prompt_tokens + outcome.completion_tokens,
                         prompt_tokens: outcome.prompt_tokens,

@@ -122,6 +122,7 @@ impl HybridProvider {
 
             let probe = CompletionRequest {
                 admission: None,
+                logprobs: None,
                 prompt: "ping".to_string(),
                 system_message: None,
                 preferred_speed: Speed::Fast,
@@ -361,6 +362,7 @@ mod tests {
                 return Err(Error::Inference("mock failure".to_string()));
             }
             Ok(CompletionResponse {
+                logprobs: None,
                 text: self.response.clone(),
                 tokens_used: 5,
                 prompt_tokens: 0,

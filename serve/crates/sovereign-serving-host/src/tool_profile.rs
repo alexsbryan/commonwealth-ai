@@ -388,6 +388,9 @@ mod tests {
             stable_prefix_len: None,
             top_k: None,
             turn_admission: None,
+            thinking: None,
+            logprobs: None,
+            top_logprobs: None,
         }
     }
 
@@ -575,6 +578,9 @@ allow_tools = ["write"]
             stable_prefix_len: None,
             top_k: None,
             turn_admission: None,
+            thinking: None,
+            logprobs: None,
+            top_logprobs: None,
         };
         apply(&r, &mut req);
         assert!(req.tools.is_none());
