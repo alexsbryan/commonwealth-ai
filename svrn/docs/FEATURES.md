@@ -22,6 +22,10 @@ Within a conversation it keeps track of what's been said without letting the con
 
 Every reply carries a record of how it was made: how the request was read, which knowledge bases were searched and how many passages matched, which model wrote the answer, and how long it took. In the desktop app that's a strip under the message you can open. It's there so that when an answer is thin you can see why — a search that turned up nothing in a corpus tells you more than a confident-sounding guess would.
 
+## Records from your documents
+
+Most of what a CRM, an issue tracker or a register holds is already written down in mail, comments and minutes. You describe the records you keep in a recipe: what a record is, how to tell two mentions of one apart, which statements change it and how its fields settle. Sovereign reads the documents and gives you those records, with every value tied to the words that state it, and you query them by type, field and relation. There is no training step and no code. [RECORDS_FROM_DOCUMENTS.md](RECORDS_FROM_DOCUMENTS.md) walks through it and says plainly what it does not do yet.
+
 ## Skills
 
 A skill is a plain text file that shapes how Sovereign works for a kind of task: how it plans, what it searches first, how it writes, what it keeps in memory. A few come built in — research and analysis with citations, code review, a personal assistant, and a reflective one called inner work. You can change any of them or write your own, since it's a file rather than code. Some are marked local-only, which means their data never leaves your machine even if you've set up a remote model; inner work is one of those. When more than one model is available, a skill can also state what it needs from one, and Sovereign routes to the closest fit.
