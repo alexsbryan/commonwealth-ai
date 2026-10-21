@@ -108,3 +108,46 @@ false no-records. With the name first, only those four system rows move and the 
   ref-target-unrecorded 8 (4 use cases), totals 5 (4), computed-value 2, value-compare 2, subject-field-unheld 2.
   Built, they hold 19 needs: a ceiling of 72/75 against the bar of 68. Single-use-case limits: as-of-state (02),
   linked-count-filter (04), fold-needs-document-date (05).
+
+## S5 re-judge (2026-10-20, `census/judgments-2.json`, at a4fc792e8)
+
+Built since the first pass: unrecorded reference targets RESOLVE by name (d3afbd8b7), fields without `by` fold
+by agree (9dc2e9649), a reference finds a sourced record by its exact identity value (033295962), a sum per group
+(4004ef278) and a filter that compares two attributes (a4fc792e8). Two blind judges under the first pass's method
+count 69/75 (`rejudge-a.json`, `rejudge-b.json`). Five of those gains rest only on reading the owner's words more
+generously (01 n6, 02 n5, 02 n6, 04 n2, 12 n5), so the first pass's reading holds there. Two needs the first pass
+counted as running do not: 05 n1, because a reference to the decided event type `incident` never lands
+(`record_named` searches entities only), and 11 n5, because the category limit is only guidance prose.
+- **E1 passes, 12/12** (8/12 on the first pass): both judges find every type a need requires gets records, the
+  four `ref-target-unrecorded` use cases through RESOLVE by name.
+- **E3 still fails**, as it was judged: on the first-pass recipes, before any fix.
+- **E2 fails, 64/75 (85%)** against 68. Computed-value (01 n6, 02 n6, 07 n2) is the one gap that two or more use
+  cases still show; built, it would reach at most 67. Operator ruling: report the fail and go on, and the claim
+  excludes values derived by arithmetic.
+- Single-use-case limits: a set selected by its state at a date (02 n5), a count of linked records (04 n2), two
+  claims joined only through a shared subject (04 n4), the stamped document date as a filter (04 n6), a
+  reference to an event record (05 n1), `latest` with no document clock (05 n5), a limit held only in prose
+  (11 n5), and a later settlement netting an earlier debt (12 n5).
+- The judges and the first pass disagree on 7 needs whose code did not change. That is more than E2's margin in
+  either direction, so the adjudication rule above decides the number, not a judge.
+
+## S6 result (2026-10-20, head 081765d20, `runs/loop/ship/journeys-7`)
+
+**S6 passes** on the restarted daemon. issues and news pass `journeys/score_baseline.py` against their
+`expected.toml` (record ids, values, evidence). mailraw has no `expected.toml`; it holds all 10 expects of the
+`layer-default-path` journey. Every chat answer is stamped `deepseek-flash`, the model the alias is bound to.
+
+## Final read (2026-10-20, head 081765d20, one read each, DeepSeek Flash)
+
+Arms `ship-final`, `ship-final-uv` and `ship-final-reg` (`runs/loop/ship/final-*.sh`), run after S6 passed as the
+smoke test. The 1,095 chat answers came to about 1.55M output tokens (characters over four), every one stamped
+`deepseek-flash`.
+- **S1 passes.** The worlds serve 80/93 (bar 68; first read 73) and attach 306/328 (bar 237; 301). ward-story
+  serves 6/14 (bar 6; 7), one deal down, inside its single-read noise of about three. RESOLVE decided 119/124 right.
+- **S2 passes.** saltgrass-ledger 34/42 (bar 23.5; 30).
+- **S3 passes.** uv-third serves 23/44 cases at the right state (bar 15; 27). 12 serve a wrong state, mostly
+  reported/resolved/declined swaps, and 9 match no record (5 on the first read).
+- **S4 passes.** 19/35 on the amended scorer (bar 17; the one-shot's 19) and 17/35 on the frozen one (15 before).
+
+S1-S4 and S6 pass. S5 fails on E2 (64/75) and E3; under the operator's ruling the claim excludes values derived
+by arithmetic, and each single-use-case limit above is stated rather than blocking.
