@@ -133,6 +133,7 @@ async fn main() {
 
     let request = CompletionRequest {
         admission: None,
+        logprobs: None,
         prompt: args.prompt.clone(),
         system_message: None,
         preferred_speed: sovereign_contracts::types::Speed::Slow,

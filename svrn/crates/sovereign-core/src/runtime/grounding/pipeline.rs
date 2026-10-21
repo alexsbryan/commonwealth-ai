@@ -198,6 +198,7 @@ mod tests {
     impl InferenceProvider for NoProvider {
         async fn complete(&self, _r: &CompletionRequest) -> Result<CompletionResponse> {
             Ok(CompletionResponse {
+                logprobs: None,
                 text: "no".into(),
                 tokens_used: 0,
                 prompt_tokens: 0,

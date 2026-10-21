@@ -36,6 +36,7 @@ impl MockInference {
 impl InferenceProvider for MockInference {
     async fn complete(&self, _request: &CompletionRequest) -> Result<CompletionResponse> {
         Ok(CompletionResponse {
+            logprobs: None,
             text: self.response_text.clone(),
             tokens_used: 10,
             prompt_tokens: 0,
@@ -953,6 +954,7 @@ impl InferenceProvider for SequencedMockInference {
             queue.remove(0)
         };
         Ok(CompletionResponse {
+            logprobs: None,
             text,
             tokens_used: 10,
             prompt_tokens: 0,
@@ -1893,6 +1895,7 @@ struct TruncatingMockInference {
 impl InferenceProvider for TruncatingMockInference {
     async fn complete(&self, _request: &CompletionRequest) -> Result<CompletionResponse> {
         Ok(CompletionResponse {
+            logprobs: None,
             text: self.response_text.clone(),
             tokens_used: self.completion_tokens.map(|c| c as usize).unwrap_or(10),
             prompt_tokens: 0,
@@ -2263,6 +2266,7 @@ impl InferenceProvider for RecordingInference {
             .unwrap()
             .push((request.system_message.clone(), request.prompt.clone()));
         Ok(CompletionResponse {
+            logprobs: None,
             text: self.response_text.clone(),
             tokens_used: 10,
             prompt_tokens: 0,

@@ -235,6 +235,7 @@ fn completion_request_builders() {
 #[test]
 fn completion_response_as_bool() {
     let yes = CompletionResponse {
+        logprobs: None,
         text: "yes".to_string(),
         tokens_used: 1,
         prompt_tokens: 0,
@@ -247,6 +248,7 @@ fn completion_response_as_bool() {
     assert!(yes.as_bool());
 
     let no = CompletionResponse {
+        logprobs: None,
         text: "no".to_string(),
         tokens_used: 1,
         prompt_tokens: 0,

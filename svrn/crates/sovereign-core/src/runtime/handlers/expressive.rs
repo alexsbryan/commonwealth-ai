@@ -205,6 +205,7 @@ impl Runtime {
         };
         let request = CompletionRequest {
             admission: None,
+            logprobs: None,
             prompt: message.to_string(),
             system_message: Some(system),
             preferred_speed,
@@ -677,6 +678,7 @@ impl Runtime {
         };
         let request = CompletionRequest {
             admission: None,
+            logprobs: None,
             prompt: message.to_string(),
             system_message: Some(system),
             preferred_speed,

@@ -24,6 +24,7 @@ impl crate::traits::InferenceProvider for ContinuationMock {
     ) -> Result<crate::types::CompletionResponse> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         Ok(crate::types::CompletionResponse {
+            logprobs: None,
             text: self.reply.clone(),
             tokens_used: 0,
             prompt_tokens: 0,

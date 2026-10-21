@@ -171,6 +171,7 @@ impl InferenceProvider for SummaryMockInference {
             )
         };
         Ok(CompletionResponse {
+            logprobs: None,
             text,
             tokens_used: 20,
             prompt_tokens: 0,

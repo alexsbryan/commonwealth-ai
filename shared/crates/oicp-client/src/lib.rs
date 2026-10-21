@@ -794,6 +794,7 @@ impl RemoteApiProvider {
         if let Some(k) = request.top_k {
             body["top_k"] = serde_json::json!(k);
         }
+        chat_wire::write_logprobs(&mut body, request);
         self.write_turn_admission(&mut body, request);
         if let Some(mode) = request.sampling_mode {
             body["sampling_mode"] = serde_json::json!(mode);
@@ -907,6 +908,9 @@ struct ChatChoice {
     /// behave identically across local and remote providers.
     #[serde(default)]
     finish_reason: Option<String>,
+    /// The host's token logprobs, carried to the caller verbatim.
+    #[serde(default)]
+    logprobs: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize)]
@@ -1064,6 +1068,7 @@ impl InferenceProvider for RemoteApiProvider {
         let finish_reason = first_choice
             .and_then(|c| c.finish_reason.as_deref())
             .and_then(response_wire::provider_finish);
+        let logprobs = chat_wire::answered_logprobs(request, first_choice.map(|c| &c.logprobs));
 
         let (tokens_used, prompt_tokens, completion_tokens) = chat_response
             .usage
@@ -1082,6 +1087,7 @@ impl InferenceProvider for RemoteApiProvider {
         }
 
         Ok(CompletionResponse {
+            logprobs,
             text,
             tokens_used,
             prompt_tokens,
@@ -2323,6 +2329,7 @@ mod tests {
 
         let request = CompletionRequest {
             admission: None,
+            logprobs: None,
             prompt: "Hi".to_string(),
             system_message: Some("You are helpful.".to_string()),
             preferred_speed: Speed::Fast,
@@ -2364,6 +2371,7 @@ mod tests {
 
         let request = CompletionRequest {
             admission: None,
+            logprobs: None,
             prompt: "Review this code".to_string(),
             system_message: None,
             preferred_speed: Speed::Slow,

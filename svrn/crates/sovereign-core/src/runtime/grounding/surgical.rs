@@ -480,6 +480,7 @@ mod tests {
     impl InferenceProvider for FixProvider {
         async fn complete(&self, _r: &CompletionRequest) -> Result<CompletionResponse> {
             Ok(CompletionResponse {
+                logprobs: None,
                 text: "Smerdyakov worked as a cook in the household.".to_string(),
                 tokens_used: 0,
                 prompt_tokens: 0,
@@ -620,6 +621,7 @@ mod tests {
                 });
             match reply {
                 Some(text) => Ok(CompletionResponse {
+                    logprobs: None,
                     text: (*text).to_string(),
                     tokens_used: 0,
                     prompt_tokens: 0,

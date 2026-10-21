@@ -1254,6 +1254,14 @@ finish reads as `stop`, since the adapter derives `tool_calls` from the text
 for every engine. A streamed request asks for usage (`stream_options`), and a
 stream that fails, by an error chunk or the transport, ends in
 `Finish{Error}`.
+A client's vendor fields on `/v1/chat/completions` reach a third-party engine
+(`sovereign-serving-host/src/inference_adapter/vendor_fields.rs`): thinking off in any
+spelling (`thinking: {type: disabled}`, `enable_thinking: false`,
+`think_budget: 0`) becomes a zero budget, which `chat_wire::write_thinking`
+writes in every spelling, and `logprobs`/`top_logprobs` are asked of the host,
+whose `choices[0].logprobs` come back verbatim on a non-streamed reply. An
+engine on this machine reads no `thinking`, as llama-server does not, and
+answers without logprobs.
 The request is written in the spelling `[engine] grammar` names
 (`oicp-client/src/chat_wire.rs`). To a llama-server (`llguidance`) an
 `assistant_prefix` goes as a trailing assistant message the server

@@ -835,6 +835,7 @@ mod tests {
         async fn complete(&self, r: &CompletionRequest) -> Result<CompletionResponse> {
             self.completions.lock().unwrap().push(r.prompt.clone());
             Ok(CompletionResponse {
+                logprobs: None,
                 text: r#"{"topics": "several numbered topics", "entities": "topic 0, topic 1"}"#
                     .to_string(),
                 tokens_used: 0,

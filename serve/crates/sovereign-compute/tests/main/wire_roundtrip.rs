@@ -38,6 +38,7 @@ impl InferenceProvider for EchoProvider {
         }
         *self.seen.lock().unwrap() = Some(request.clone());
         Ok(CompletionResponse {
+            logprobs: None,
             text: "ok".into(),
             tokens_used: 1,
             prompt_tokens: 0,

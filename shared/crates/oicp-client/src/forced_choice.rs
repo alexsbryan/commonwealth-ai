@@ -170,6 +170,7 @@ impl RemoteApiProvider {
         };
         let prompt_tokens = prompt_tokens.unwrap_or(0);
         Ok(Some(CompletionResponse {
+            logprobs: None,
             text,
             tokens_used: prompt_tokens,
             prompt_tokens,

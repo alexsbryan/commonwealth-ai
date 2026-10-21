@@ -31,6 +31,7 @@ struct OneChunk(&'static str);
 impl InferenceProvider for OneChunk {
     async fn complete(&self, _r: &CompletionRequest) -> Result<CompletionResponse> {
         Ok(CompletionResponse {
+            logprobs: None,
             text: self.0.to_string(),
             tokens_used: 10,
             prompt_tokens: 0,

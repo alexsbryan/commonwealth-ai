@@ -277,6 +277,7 @@ impl InferenceProvider for WeakLocal {
         _req: &CompletionRequest,
     ) -> sovereign_contracts::Result<CompletionResponse> {
         Ok(CompletionResponse {
+            logprobs: None,
             text: "served locally".into(),
             tokens_used: 2,
             prompt_tokens: 1,

@@ -36,6 +36,7 @@ impl InferenceProvider for Fixed {
         _req: &CompletionRequest,
     ) -> sovereign_contracts::Result<CompletionResponse> {
         Ok(CompletionResponse {
+            logprobs: None,
             text: "hello".into(),
             tokens_used: 24,
             prompt_tokens: 0,

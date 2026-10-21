@@ -50,6 +50,7 @@ impl InferenceProvider for StubInference {
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
         *self.last_prompt.lock().unwrap() = Some(request.prompt.clone());
         Ok(CompletionResponse {
+            logprobs: None,
             text: self.response.clone(),
             tokens_used: 0,
             prompt_tokens: 0,

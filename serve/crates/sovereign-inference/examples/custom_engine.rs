@@ -79,6 +79,7 @@ impl InferenceProvider for HypertunedEngine {
             request.prompt.len()
         );
         Ok(CompletionResponse {
+            logprobs: None,
             tokens_used: 8,
             prompt_tokens: 4,
             model_id: self.model_id_for(request.preferred_speed),

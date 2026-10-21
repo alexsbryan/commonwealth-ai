@@ -183,6 +183,7 @@ impl InferenceProvider for TestProvider {
         self.fire_on_complete(req);
         match self.complete_text.as_ref() {
             Some(t) => Ok(CompletionResponse {
+                logprobs: None,
                 text: t.clone(),
                 tokens_used: 1,
                 prompt_tokens: 1,

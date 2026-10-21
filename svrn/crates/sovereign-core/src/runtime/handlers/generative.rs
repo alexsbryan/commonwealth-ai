@@ -108,6 +108,7 @@ impl Runtime {
     )> {
         let request = CompletionRequest {
             admission: None,
+            logprobs: None,
             prompt: message.to_string(),
             system_message: Some(GENERATIVE_SYSTEM_PROMPT.to_string()),
             // Primary slot for creative quality (the witness path's rationale

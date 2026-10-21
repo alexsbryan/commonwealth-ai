@@ -44,6 +44,7 @@ impl InferenceProvider for GarbageJudge {
         _r: &CompletionRequest,
     ) -> sovereign_core::error::Result<CompletionResponse> {
         Ok(CompletionResponse {
+            logprobs: None,
             text: "no".into(),
             tokens_used: 0,
             prompt_tokens: 0,

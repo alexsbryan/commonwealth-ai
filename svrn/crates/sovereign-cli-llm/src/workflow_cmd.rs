@@ -1494,6 +1494,7 @@ structured_output = { type = "object", properties = { questions = { type = "arra
     impl InferenceProvider for DeterministicAtoms {
         async fn complete(&self, _req: &CompletionRequest) -> CoreResult<CompletionResponse> {
             Ok(CompletionResponse {
+                logprobs: None,
                 text: r#"{"questions":["What does this passage reveal?"]}"#.to_string(),
                 tokens_used: 0,
                 prompt_tokens: 0,

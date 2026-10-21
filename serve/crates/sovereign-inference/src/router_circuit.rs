@@ -66,6 +66,7 @@ impl HealthCheckable for RouterCircuitChecker {
                     // Send a minimal probe to see if the backend has recovered.
                     let probe = CompletionRequest {
                         admission: None,
+                        logprobs: None,
                         prompt: "ping".into(),
                         system_message: None,
                         preferred_speed: Speed::Fast,

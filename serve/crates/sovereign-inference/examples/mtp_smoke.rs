@@ -59,6 +59,7 @@ const PROMPTS: &[&str] = &[
 fn request_for(prompt: &str) -> CompletionRequest {
     CompletionRequest {
         admission: None,
+        logprobs: None,
         prompt: prompt.to_string(),
         system_message: None,
         preferred_speed: sovereign_contracts::types::Speed::Slow,

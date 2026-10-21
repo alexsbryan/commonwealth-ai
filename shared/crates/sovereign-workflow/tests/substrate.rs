@@ -346,6 +346,7 @@ struct CannedModel(&'static str);
 impl InferenceProvider for CannedModel {
     async fn complete(&self, _req: &CompletionRequest) -> CoreResult<CompletionResponse> {
         Ok(CompletionResponse {
+            logprobs: None,
             text: self.0.to_string(),
             tokens_used: 0,
             prompt_tokens: 0,
@@ -1044,6 +1045,7 @@ struct EchoSystemProvider;
 impl InferenceProvider for EchoSystemProvider {
     async fn complete(&self, req: &CompletionRequest) -> CoreResult<CompletionResponse> {
         Ok(CompletionResponse {
+            logprobs: None,
             text: req.system_message.clone().unwrap_or_default(),
             tokens_used: 0,
             prompt_tokens: 0,
