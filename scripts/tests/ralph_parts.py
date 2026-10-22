@@ -2248,6 +2248,17 @@ class RalphCheckTests(unittest.TestCase):
             self.assertEqual((root / "ralph/next/b/ctl/log/hello.log").read_text(), "from-b\n")
             self.assertFalse((root / "target/ralph/a").exists())
 
+    def test_a_workdir_without_the_loop_finds_it_through_ralph_py(self):
+        # corpus-engine-core carries this script but not ralph.py; its sessions
+        # get RALPH_PY, and before 2026-10-22 the script ignored it.
+        with tempfile.TemporaryDirectory() as tmp:
+            self.fixture(tmp)
+            (pathlib.Path(tmp) / "scripts/ralph.py").unlink()
+            with mock.patch.dict(os.environ, {"RALPH_PY": str(SCRIPTS / "ralph.py")}):
+                r = self.check(tmp, "a", "hello")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("exit=0\nfrom-a\n", r.stdout)
+
     def test_the_loops_log_dir_wins(self):
         # A lane's RALPH_LOG_DIR is relative: the log lands in the tree the script runs in.
         with tempfile.TemporaryDirectory() as tmp:
