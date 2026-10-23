@@ -9,3 +9,4 @@ es-t2-executor-native es-t3-recipe-author-native            # sovereign-core's t
 es-t5-delete-hermes es-r3-fim                  # serving-host inference_adapter (Hermes path, FIM routing)
 # No row runs alone: the battery judges conformance, not timing, and an alone row
 # starves while the pool keeps its lanes full (simulated: day 11 against day 6).
+es-f1-rpc-peer-child es-r5-router-owns-model-processes        # the supervisor: a new rpc-server child beside the retiring generate/embed roles
