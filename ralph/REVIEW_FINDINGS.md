@@ -4811,6 +4811,69 @@ Instruments, as run:
   es-m1 (b3edacd4b); the streaming paths sending `required` unchecked
   (oicp-client `complete_stream_with_finish`) is es-t1's; gpu_probe ignoring
   `[engine] server_binary` is es-m2's. Left to the director, as filed there.
+## REVIEW-audit-es-auto-2 (2026-10-23, range dbe35b3ca..d97136cb3, on the Mac)
+
+The range is 470 commits; 39 are the queue's own (`git log --no-merges
+dbe35b3ca..HEAD ^95beb0084 ^b62cc4211 ^dd2319515 ^b72728322`, the second
+parents of the four merges of main: 6ebc2dc22, a9d82e04c, 79006cc28,
+c2ddab5fd). The other 431 are other queues' work, audited there. The four
+merges' hand resolutions (registry.rs, registry_tail.rs, embedded/mod.rs,
+REVIEW_FINDINGS.md, two baselines) add no line that neither parent had,
+except 79006cc28's comment in registry_tail.rs joining both sides' notes on
+llama_router/live.rs (count kept at audit-1's 3); the seat's merges of es-p3
+(288f4e2a1) and es-m4 (242f3c386) and es-r2's two merges carry none.
+
+| # | principle | path:line | fixed in | finding |
+|---|---|---|---|---|
+| 1 | 5 | scripts/ralph.py:948; ralph/next/engine-swap/queue.toml:29 | a7d442938 | since 5cb0fc33a added `lane_prepare`, every `RALPH_QUEUE=engine-swap scripts/ralph-check.sh <check>` the addendum names refused with exit 2 (es-r2 filed it, a744afc1c, and ran the argv by hand). ralph now knows eutropia's four keys by name (ralph.py:893); a typo still refuses, test watched red |
+| 2 | 5 | ralph/next/engine-swap/queue.toml:57; distributions/crates/sovereign-stock/tests/llama_server_router_e2e.rs:29 | e7563c6d0 | the e2e is `cfg(target_os = "linux")`, so on the Mac ROUTER-E2E ran 0 tests and exited 0 (es-portable filed it, 2c48a509c). A run with no passed test now exits 4; watched on stand-ins (0 passed: 4, 1 passed: 0, cargo 101: 101), not on the real e2e |
+| 3 | 8 | scripts/build-desktop-macos.sh:193; scripts/stage-daemon-sidecar.sh:171 | b8a382f56 | es-p3's universal lipo spelled the server pair by hand, the one copy of PIN.toml's `binaries` no test pins; it now reads PIN.toml as the stage script does |
+| 4 | 3 | serve/crates/sovereign-serve/src/remote_gguf.rs:13; serve/crates/sovereign-inference/src/rpc_warm_cache/ggml_type.rs:50 | 04a4d5e06 | the module doc named `ggml_row_size` after es-m4 (6e4842ec2) replaced it with the Rust table |
+| 5 | 8 | serve/crates/sovereign-compute/src/llama_router.rs:342, :176; serve/crates/sovereign-inference/src/capacity.rs:402 | not fixed | es-r2's `models_that_fit` hand-spells the role order "the embedded preflight sizes its slots" in, and `from_models` enumerates the roles again; `build_slots_from_config` already says it mirrors `register_local_model_slots` by hand. That makes three enumerations of one role set held together by convention. One ordered role list in sovereign-inference that all three iterate is a cross-crate change |
+| 6 | 8 | scripts/stage-daemon-sidecar.sh:158; scripts/release-cli-local.sh:168; serve/crates/sovereign-compute/llama-server/build.sh:144 | not fixed | the llama-server backend for a target is decided three times: build.sh by host (Darwin/arm64 metal, x86_64 cpu, else vulkan), and es-p2/es-p3 again per triple with their own `CMAKE_OSX_ARCHITECTURES`. A `build.sh --target <triple>` that owns the triple-to-backend map would leave one decider; it changes build.sh's interface |
+| 7 | 8 | quality/xtask/tests/release_bins.rs:115; clients/desktop/src-tauri/src/daemon_binary.rs:579 | not fixed | two tests find `build_pin::MANIFEST` by text-searching build_pin.rs for its declaration (neither crate links sovereign-compute). Low value; it breaks loudly if the declaration's form changes |
+
+Audit-1's open findings: #10 closed on main (6b4bc1312, the chat round trip
+equates an unset `enable_thinking` with false); #11 closed (bench's two
+`engine_conformance` clients registered as LocalDaemon in registry.rs, and
+reading.rs now registered at 2); #3, #4, #5, #6 stand as filed; #12 stands
+(`docs/internal/FIVE_PROGRAMS.md` is still absent from this worktree).
+
+Gates: LINT exit=0 (`sovereign-lint.sh --human && cargo xtask arch-gate`
+run directly while ralph-check refused the manifest; scope sovereign-serve,
+sovereign-onprem, sovereign-stock; arch-gate clean). BOUNDARY through
+ralph-check after #1: boundary-gate clean; clone-gate 14014 lines / 405
+families against its 13776 baseline (audit-1 read 13815 / 399).
+scripts/tests/ralph.py 85 tests OK.
+
+Instruments, as run:
+
+- **per-unit net lines** (the 39 commits, `--no-merges --numstat`; src = non-test
+  `.rs`/`.sh`/`.py`, inline `#[cfg(test)]` counted as src):
+  es-m4-planner-out-of-embedded src -613 test +749, which is a move:
+  rpc_warm_cache.rs 1955 lines out, 594 + plan.rs 651 + tests.rs 715 in, its
+  inline tests becoming a tests.rs; without the move (3fc651fcb), src +96 test +34
+  (ggml_type.rs table +55, split.rs +146 against rpc_distribution.rs -112) ·
+  es-r2-router-parity src +148 test +228 · es-p3-ship-desktop src +173 (of it
+  daemon_binary.rs +128, 84 of them tests) · es-p2-ship-dev-and-cli src +26
+  test +43 · es-portable src 0 test +33 · engine-swap (queue tooling:
+  headroom.py, no_orphans.py, land.sh) src +104 · eutropia, ralph 0. Queue total
+  src -162, test +1053; with the move netted out, src +547, test +338.
+- **dry-report: could-not-judge**, as at audit-1. Every crate dir refuses
+  ("43 indexed code corpora, none of them was built from this repo"), and
+  `--corpus-id commonwealth-ai` finds no `chunks.lance`. Substitution, named:
+  clone-gate's new-or-grown families at HEAD. None of the 12 listed has a member
+  in a file the queue's 39 commits touched; the +199 lines since audit-1 are
+  main's (bench eval_cmd, sovereign-core handlers, desktop commands).
+- **converge noun** answers with `--corpus-id commonwealth-ai`, from a
+  SCIP graph that predates es-m4's move (it cites `embedded/rpc_warm_cache.rs`).
+  The eight types es-m4 moved (WarmCacheStats, TensorInfo, Fnv1a,
+  TensorManifestEntry, NodeShard, ModelMass, ShardFit, PlanOverheads) have
+  one definition each there and under `git grep`. The one new type,
+  es-portable's test-local `Model` (llama_server_router_e2e.rs:84), shares its
+  name with `commonwealth_rails::ledger::Model` (ledger.rs:175), a different
+  concept in a test binary; converge excludes tests, so it reports 1.
+
 ## REVIEW-audit-ek-verify (2026-10-15, range 60eeeb73c..b4a033039, the every-kind-finish queue)
 
 Three units (ek-waves-reasoned, ek-window-refs, ek-reader-voices), 13 commits,

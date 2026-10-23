@@ -4,7 +4,8 @@
 //! build, serves a completion and an embedding through the router, names it
 //! in `/status`, reports the router's facts as its own (context size against
 //! the server's slot, the code model, embed among the resident, an exact token
-//! count from `/tokenize`), and when the daemon is SIGKILLed no llama-server
+//! count from `/tokenize`), lets the embedder sleep on its idle window and
+//! wakes it with a request, and when the daemon is SIGKILLed no llama-server
 //! outlives it.
 //!
 //! Boots `sovereign-stock` with the argv the sovereign-daemon binary takes
@@ -21,6 +22,9 @@
 //!   SOVEREIGN_MODELS_DIR=$PWD/sovereign/models cargo test -p sovereign-stock \
 //!     --test llama_server_router_e2e -- --ignored --nocapture
 //!
+//! `SOVEREIGN_E2E_CHAT_MODEL` and `SOVEREIGN_E2E_EMBED_MODEL` pick the two
+//! models by role where the defaults are not on the host (`ROLES`).
+//!
 //! Linux only: the process census reads `/proc`.
 #![cfg(target_os = "linux")]
 
@@ -34,10 +38,24 @@ use serde_json::Value;
 
 const BIN: &str = env!("CARGO_BIN_EXE_sovereign-stock");
 
-/// The smallest chat and embedding models in `sovereign/models/`: the test
-/// is about the router's lifecycle, not about what the model says.
-const CHAT_MODEL: &str = "Qwen3.5-0.8B-UD-Q6_K_XL.gguf";
-const EMBED_MODEL: &str = "Qwen3-Embedding-0.6B-Q8_0.gguf";
+/// The chat and embedding models, by ROLE: any small GGUF that serves it
+/// (quality/env-flags.toml `SOVEREIGN_E2E_CHAT_MODEL`,
+/// `SOVEREIGN_E2E_EMBED_MODEL`), never a file name or digest the test
+/// insists on, because the test is about the router's lifecycle, not about
+/// what the model says. Unset, each is the smallest of its role in the
+/// Halo's `sovereign/models/`.
+const ROLES: [(&str, &str); 2] = [
+    ("SOVEREIGN_E2E_CHAT_MODEL", "Qwen3.5-0.8B-UD-Q6_K_XL.gguf"),
+    (
+        "SOVEREIGN_E2E_EMBED_MODEL",
+        "Qwen3-Embedding-0.6B-Q8_0.gguf",
+    ),
+];
+
+/// `[daemon] embed_idle_secs`: short enough to watch the embedder sleep,
+/// long enough that it does not between the embedding and the residency
+/// check that follows it.
+const EMBED_IDLE_SECS: u64 = 20;
 
 /// Kills and reaps the daemon on every exit path, panics included.
 struct Killed(Child);
@@ -61,16 +79,39 @@ fn reserved_port() -> u16 {
     addr.port()
 }
 
-/// The GGUF directory, from `SOVEREIGN_MODELS_DIR` (quality/env-flags.toml):
-/// never from the crate's own path, which escapes the package root.
-fn models_dir() -> PathBuf {
+/// A GGUF the test loads, and the id the router serves it under (its file
+/// stem).
+struct Model {
+    path: PathBuf,
+    id: String,
+}
+
+/// The chat and embedding models (`ROLES`), each an absolute path or a file
+/// in `SOVEREIGN_MODELS_DIR` (quality/env-flags.toml): never resolved from
+/// the crate's own path, which escapes the package root.
+fn models() -> (Model, Model) {
     let dir = std::env::var_os("SOVEREIGN_MODELS_DIR")
         .map(PathBuf::from)
         .expect("SOVEREIGN_MODELS_DIR names the GGUF directory, absolute");
-    for m in [CHAT_MODEL, EMBED_MODEL] {
-        assert!(dir.join(m).is_file(), "{} is not in {}", m, dir.display());
-    }
-    dir
+    let [chat, embed] = ROLES.map(|(var, default)| {
+        let named = std::env::var_os(var);
+        let path = dir.join(named.as_deref().unwrap_or(default.as_ref()));
+        let source = named.as_ref().map_or("its default", |_| var);
+        assert!(
+            path.is_file(),
+            "{} (from {source}) is not a file in {}",
+            path.display(),
+            dir.display()
+        );
+        let id = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .expect("a GGUF file name")
+            .to_owned();
+        eprintln!("router e2e: {var} = {} (from {source})", path.display());
+        Model { path, id }
+    });
+    (chat, embed)
 }
 
 fn client() -> reqwest::blocking::Client {
@@ -181,7 +222,7 @@ fn still_running(procs: &BTreeMap<u32, u64>) -> BTreeSet<u32> {
 #[test]
 #[ignore = "loads real GGUFs and needs the shipped llama-server: see the module doc"]
 fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
-    let models = models_dir();
+    let (chat, embed) = models();
     let shipped = Path::new(BIN).with_file_name("llama-server");
     assert!(
         shipped.is_file(),
@@ -191,12 +232,13 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
     );
 
     let root = tempfile::tempdir().expect("tempdir");
-    let (home, rails_dir, data) = (
+    let (home, rails_dir, data, mesh) = (
         root.path().join("home"),
         root.path().join("rails"),
         root.path().join("data"),
+        root.path().join("svrnmesh"),
     );
-    for d in [&home, &rails_dir, &data] {
+    for d in [&home, &rails_dir, &data, &mesh] {
         std::fs::create_dir_all(d).expect("dir");
     }
     let (svrn, internal, serve, dead_rails) = (
@@ -205,15 +247,21 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
         reserved_port(),
         reserved_port(),
     );
-    let config = root.path().join("config.toml");
+    // At the default path as well as `--config`: the notes rail builds its
+    // KV from `SetupConfig::load()` (sovereign-code face/atlas.rs
+    // `atlas_kv`), which without this file falls back to the host's
+    // cw-rails on :9747 and embeds every note the mesh holds, keeping the
+    // embedder awake through the idle check.
+    let config = mesh.join("config.toml");
     std::fs::write(
         &config,
         format!(
-            "[engine]\nkind = \"llama-server\"\n\n[models]\nprimary = \"{m}/{CHAT_MODEL}\"\n\
-             code = \"{m}/{CHAT_MODEL}\"\nembed = \"{m}/{EMBED_MODEL}\"\ncontext_size = 4096\n\n[daemon]\n\
-             client_port = {svrn}\ninternal_port = {internal}\n\
+            "[engine]\nkind = \"llama-server\"\n\n[models]\nprimary = \"{c}\"\n\
+             code = \"{c}\"\nembed = \"{e}\"\ncontext_size = 4096\n\n[daemon]\n\
+             client_port = {svrn}\ninternal_port = {internal}\nembed_idle_secs = {EMBED_IDLE_SECS}\n\
              rails_base = \"http://127.0.0.1:{dead_rails}\"\n\n[data]\ndir = \"{d}\"\n",
-            m = models.display(),
+            c = chat.path.display(),
+            e = embed.path.display(),
             d = data.display()
         ),
     )
@@ -224,11 +272,13 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
             .args(["run", "--config"])
             .arg(&config)
             .env("HOME", &home)
-            .env("SVRNMESH_DATA_DIR", root.path().join("svrnmesh"))
+            .env("SVRNMESH_DATA_DIR", &mesh)
             .env("CW_RAILS_DIR", &rails_dir)
             .env("CW_RAILS_BIN", root.path().join("no-cw-rails"))
             .env("SOVEREIGN_SERVE_PORT", serve.to_string())
-            .env_remove("RUST_LOG")
+            // Added to the daemon's allowlist (process.rs `compose_filter`),
+            // which does not name the target of atlas_kv's fallback warn.
+            .env("RUST_LOG", "sovereign_code=warn")
             .stdout(Stdio::null())
             .stderr(Stdio::from(std::fs::File::create(&log).expect("log")))
             .spawn()
@@ -236,10 +286,11 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
     );
     let daemon = stock.0.id();
 
-    // Boot: the router and both models report through /status.
+    // Boot: the router and both models report through /status. The embedder
+    // may already have slept on its short window.
     let mut children = Vec::new();
     wait_until(
-        "/status listing the router and both models loaded",
+        "/status listing the router and both models loaded (or the embedder asleep)",
         Duration::from_secs(300),
         &log,
         || {
@@ -262,7 +313,10 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
                 .unwrap_or_default();
             let loaded = children
                 .iter()
-                .filter(|c| c["role"] == "router-model" && c["lifecycle"] == "loaded")
+                .filter(|c| {
+                    c["role"] == "router-model"
+                        && (c["lifecycle"] == "loaded" || c["lifecycle"] == "sleeping")
+                })
                 .count();
             loaded == 2
         },
@@ -293,7 +347,7 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
     let embedded = post_json(
         &format!("http://127.0.0.1:{serve}/v1/embeddings"),
         serde_json::json!({
-            "model": EMBED_MODEL.trim_end_matches(".gguf"),
+            "model": embed.id,
             "input": "hello router"
         }),
     )
@@ -315,10 +369,7 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
         assert_eq!(r["outcome"]["kind"], "ok", "{method}: {r}");
         r["answer"].clone()
     };
-    let (chat, embed) = (
-        CHAT_MODEL.trim_end_matches(".gguf"),
-        EMBED_MODEL.trim_end_matches(".gguf"),
-    );
+    let (chat, embed) = (chat.id.as_str(), embed.id.as_str());
     let router_port = router["port"].as_u64().expect("the router's port");
     let host = replay("host", serde_json::json!({}));
     let props: Value = client()
@@ -340,15 +391,26 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
         host["code_model"], chat,
         "the configured code model: {host}"
     );
-    let resident: Vec<&str> = host["resident_models"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .collect();
-    assert!(
-        resident.contains(&chat) && resident.contains(&embed),
-        "residency does not list both loaded models: {host}"
+    // The embedding woke the embedder if it had slept; residency is the
+    // router's `/models`, which the daemon re-reads every 5s.
+    let resident_of = |host: &Value| -> Vec<String> {
+        host["resident_models"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect()
+    };
+    let mut resident = resident_of(&host);
+    wait_until(
+        "residency listing both loaded models",
+        Duration::from_secs(10),
+        &log,
+        || {
+            resident = resident_of(&replay("host", serde_json::json!({})));
+            resident.iter().any(|m| m == chat) && resident.iter().any(|m| m == embed)
+        },
     );
     // A text whose chars/4 estimate is not its count, so an estimate passed
     // off as exact fails here.
@@ -372,6 +434,63 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
         "the text no longer tells the estimate apart"
     );
 
+    // No reader of the config fell back to the host's cw-rails.
+    let boot_log = std::fs::read_to_string(&log).expect("the daemon's log");
+    assert!(
+        !boot_log.contains("the rails base is the default"),
+        "a component read no setup config and reached the host's cw-rails:\n{}",
+        log_tail(&log)
+    );
+
+    // Idle (ENGINE_SWAP_PLAN A2): left past `embed_idle_secs`, the embedder
+    // sleeps and /status says so; the next embedding wakes it.
+    let lifecycle_of = |model: &str| -> String {
+        client()
+            .get(format!("http://127.0.0.1:{svrn}/status"))
+            .send()
+            .and_then(|r| r.json::<Value>())
+            .ok()
+            .and_then(|s| {
+                s["inference"]["compute_children"]
+                    .as_array()?
+                    .iter()
+                    .find(|c| c["role"] == "router-model" && c["name"] == model)
+                    .map(|c| c["lifecycle"].as_str().unwrap_or_default().to_string())
+            })
+            .unwrap_or_default()
+    };
+    let idle_from = Instant::now();
+    // The router logs every request it proxies to a model, so on a timeout
+    // its log names what kept the embedder awake.
+    wait_until(
+        "/status reporting the idle embedder asleep",
+        Duration::from_secs(EMBED_IDLE_SECS * 3 + 10),
+        &data.join("llama-server/router.log"),
+        || lifecycle_of(embed) == "sleeping",
+    );
+    let slept_after = idle_from.elapsed().as_secs();
+    let woken = post_json(
+        &format!("http://127.0.0.1:{serve}/v1/embeddings"),
+        serde_json::json!({ "model": embed, "input": "wake up" }),
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "the sleeping embedder did not answer: {e}\n{}",
+            log_tail(&log)
+        )
+    });
+    assert_eq!(
+        woken["data"][0]["embedding"].as_array().map_or(0, Vec::len),
+        dims,
+        "the woken embedder's embedding: {woken}"
+    );
+    wait_until(
+        "/status reporting the woken embedder loaded",
+        Duration::from_secs(15),
+        &log,
+        || lifecycle_of(embed) == "loaded",
+    );
+
     // The processes: the router and one child per loaded model, all under
     // the daemon.
     let servers = llama_servers_under(daemon);
@@ -383,7 +502,8 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
     eprintln!(
         "booted: {generated} tokens generated, {dims}-dim embedding, ctx {slot_ctx} of \
          n_ctx_train {trained}, code {chat}, resident {resident:?}, {truth} tokens exact \
-         (estimate {estimate}), llama-servers {:?}",
+         (estimate {estimate}), embedder slept within {slept_after}s of {EMBED_IDLE_SECS}s idle \
+         and answered again, llama-servers {:?}",
         servers.keys()
     );
 

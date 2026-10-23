@@ -53,11 +53,17 @@ registry are the surfaces; a second implementation of any of them stops (§6, `{
   after it. Never a model over 12 GB beside the deployed daemon.
 - The shipped server is `target/debug/llama-server` with
   `llama-server.manifest.toml` beside it, which a lane's cloned target
-  carries. A row that changes **BS** rebuilds it with `**BS**build.sh`
-  (about 3 minutes cold) before any live run.
+  carries. A row that changes `serve/crates/sovereign-compute/llama-server/PIN.toml`
+  rebuilds it with `serve/crates/sovereign-compute/llama-server/build.sh
+  --backend <B>` (about 3 minutes cold) before any live run, B the host's
+  backend: `metal` on the Mac, `vulkan` or `rocm` on the Halo.
+- ROUTER-E2E takes its models by role: `SOVEREIGN_E2E_CHAT_MODEL` and
+  `SOVEREIGN_E2E_EMBED_MODEL` (an absolute path or a file in
+  `$SOVEREIGN_MODELS_DIR`) name any small chat and embedding GGUF where the
+  defaults (Qwen3.5-0.8B, Qwen3-Embedding-0.6B) are not on the host.
 - If ROUTER-E2E refuses on a manifest mismatch (the daemon names both
   builds), the pin changed after your lane's target was cloned: run
-  **BS**`build.sh` in your lane and rerun. That refusal is the check working,
+  `build.sh --backend <B>` in your lane and rerun. That refusal is the check working,
   never a reason to set `[engine] server_binary`.
 - The plan's decisions are settled: 2026-10-11 (keep FIM, rerank, the
   distributed path and GLiNER; sampler measure-then-delete; ship

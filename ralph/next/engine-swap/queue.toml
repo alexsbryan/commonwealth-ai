@@ -40,7 +40,10 @@ worker_bin = "scripts/ralph-claude-shim.sh"
 settings = "ralph/claude-settings.json"
 
 [models]
-worker = "claude-opus-5-5"
+# Rows run on DeepSeek V4.1 Flash (the 1017 snapshot) through DeepInfra
+# (opencode, operator 2026-10-23); a machine whose harness lacks the DeepInfra
+# key fails that probe and runs Opus. Review and resolve stay on Opus.
+worker = "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash-1017,claude-opus-5-5"
 review = "claude-opus-5-5"
 resolve = "claude-opus-5-5"
 variant = "medium"
@@ -51,8 +54,10 @@ land = ["bash", "ralph/next/engine-swap/land.sh"]
 # lane's reflink-cloned target carries). Models from SOVEREIGN_MODELS_DIR when
 # the host sets it, else the main checkout's sovereign/models under $HOME: the
 # same tree on the Mac (/Users/...) and the Halo, where the sovereign-vulkan
-# toolbox shares the host's $HOME. No host path is written here.
-router-e2e = ["bash", "-c", "SOVEREIGN_MODELS_DIR=\"${SOVEREIGN_MODELS_DIR:-$HOME/dev/commonwealth-ai/sovereign/models}\" ./scripts/with-cargo-lock.sh cargo test -p sovereign-stock --test llama_server_router_e2e -- --ignored --nocapture"]
+# toolbox shares the host's $HOME. No host path is written here. The test is
+# cfg(target_os = "linux"), so elsewhere cargo runs 0 tests and exits 0: a run
+# with no passed test exits 4, never-ran rather than passed.
+router-e2e = ["bash", "-c", "set -o pipefail; log=$(mktemp); SOVEREIGN_MODELS_DIR=\"${SOVEREIGN_MODELS_DIR:-$HOME/dev/commonwealth-ai/sovereign/models}\" ./scripts/with-cargo-lock.sh cargo test -p sovereign-stock --test llama_server_router_e2e -- --ignored --nocapture 2>&1 | tee \"$log\" || exit $?; grep -q '^test result: ok\\. [1-9]' \"$log\" || { echo 'router-e2e: no test ran (llama_server_router_e2e is cfg(target_os = linux)): never-ran, not passed' >&2; exit 4; }"]
 # Memory available for the run's own need (headroom.py: 16 GB, one live-run
 # model of at most 12 GB plus its working set; a row that loads more passes
 # its GB as an argument). Linux reads MemAvailable, macOS vm_stat; memory a
