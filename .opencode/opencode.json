@@ -21,7 +21,13 @@
       "/Users/alexsbryan/.svrnmesh/*": "allow",
       "/Users/alexsbryan/.sovereign/*": "allow",
       "/Users/alexsbryan/Library/LaunchAgents/*": "allow",
-      "/opt/homebrew/*": "allow"
+      "/opt/homebrew/*": "allow",
+      "/home/alexbryan/dev/*": "allow",
+      "/home/alexbryan/.cargo/*": "allow",
+      "/home/alexbryan/.rustup/*": "allow",
+      "/home/alexbryan/.cache/*": "allow",
+      "/home/alexbryan/.svrnmesh/*": "allow",
+      "/home/alexbryan/.sovereign/*": "allow"
     }
   },
   "plugin": [
