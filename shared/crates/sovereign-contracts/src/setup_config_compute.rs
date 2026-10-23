@@ -45,6 +45,15 @@ pub struct ComputeSection {
     /// discovery at runtime.
     #[serde(default)]
     pub distributed_primary: bool,
+    /// `ip:port` at which this node lends its GPU to another node's
+    /// llama-server: the shipped `ggml-rpc-server -c`, run as a supervised
+    /// child (`sovereign_compute::rpc_peer`). A static endpoint the head names
+    /// in its own config; no discovery. It must be this host's LAN or tunnel
+    /// address: rpc-server authenticates nothing, so a loopback or unspecified
+    /// bind is refused at startup. Independent of `enabled`; unset lends
+    /// nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rpc_peer: Option<String>,
     /// `[compute.work_offer]` as a config written before pb-work-donor holds
     /// it: the donor and its section moved to cw-rails (`rails.toml`
     /// `[work_offer]`), and `svrn mesh up` hands this table over before it
@@ -87,4 +96,3 @@ pub struct ComputeSlotConfig {
 fn default_true() -> bool {
     true
 }
-
