@@ -13,6 +13,8 @@
       "/home/alexbryan/.svrnmesh/ralph/*": "allow",
       "/home/alexbryan/dev/commonwealth-ai/ralph/*": "allow",
       "/home/alexbryan/dev/commonwealth-ai/.git/info/*": "allow",
+      "/Users/alexsbryan/.local/share/eutropia/lanes/*": "allow",
+      "/home/alexbryan/.local/share/eutropia/lanes/*": "allow",
       "/var/folders/*": "allow",
       "/Users/alexsbryan/dev/*": "allow",
       "/Users/alexsbryan/.cargo/*": "allow",
