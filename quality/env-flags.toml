@@ -1333,6 +1333,20 @@ status = "guard"
 purpose = "Caps the cargo job fan for scripts/sovereign-test.sh — build+link+run, the heaviest fan in the repo. Twin of SOVEREIGN_LINT_JOBS on the same lib/cargo-jobs.sh budget; --jobs overrides it per run. The resolved value is what the banner's `jobs:` line reports, so a run that self-throttled on low free memory says so instead of just being slow."
 
 [[flag]]
+name = "SOVEREIGN_E2E_CHAT_MODEL"
+cluster = "dev-gates"
+default = "Qwen3.5-0.8B-UD-Q6_K_XL.gguf"
+status = "guard"
+purpose = "The chat GGUF the ignored router e2e (distributions/crates/sovereign-stock/tests/llama_server_router_e2e.rs) loads, by role: any small chat model, an absolute path or a file in SOVEREIGN_MODELS_DIR. Its file stem is the id the router serves it under. Read only by that test, so a host without the default file can still run it."
+
+[[flag]]
+name = "SOVEREIGN_E2E_EMBED_MODEL"
+cluster = "dev-gates"
+default = "Qwen3-Embedding-0.6B-Q8_0.gguf"
+status = "guard"
+purpose = "The embedding GGUF the ignored router e2e (distributions/crates/sovereign-stock/tests/llama_server_router_e2e.rs) loads, by role: any small embedding model, an absolute path or a file in SOVEREIGN_MODELS_DIR. Its file stem is the id the router serves it under. Read only by that test."
+
+[[flag]]
 name = "SOVEREIGN_TOOL_STOP_TEST_GGUF"
 cluster = "dev-gates"
 default = "unset (the test prints SKIP and returns)"

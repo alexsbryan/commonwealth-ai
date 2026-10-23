@@ -22,6 +22,9 @@
 //!   SOVEREIGN_MODELS_DIR=$PWD/sovereign/models cargo test -p sovereign-stock \
 //!     --test llama_server_router_e2e -- --ignored --nocapture
 //!
+//! `SOVEREIGN_E2E_CHAT_MODEL` and `SOVEREIGN_E2E_EMBED_MODEL` pick the two
+//! models by role where the defaults are not on the host (`ROLES`).
+//!
 //! Linux only: the process census reads `/proc`.
 #![cfg(target_os = "linux")]
 
@@ -35,10 +38,19 @@ use serde_json::Value;
 
 const BIN: &str = env!("CARGO_BIN_EXE_sovereign-stock");
 
-/// The smallest chat and embedding models in `sovereign/models/`: the test
-/// is about the router's lifecycle, not about what the model says.
-const CHAT_MODEL: &str = "Qwen3.5-0.8B-UD-Q6_K_XL.gguf";
-const EMBED_MODEL: &str = "Qwen3-Embedding-0.6B-Q8_0.gguf";
+/// The chat and embedding models, by ROLE: any small GGUF that serves it
+/// (quality/env-flags.toml `SOVEREIGN_E2E_CHAT_MODEL`,
+/// `SOVEREIGN_E2E_EMBED_MODEL`), never a file name or digest the test
+/// insists on, because the test is about the router's lifecycle, not about
+/// what the model says. Unset, each is the smallest of its role in the
+/// Halo's `sovereign/models/`.
+const ROLES: [(&str, &str); 2] = [
+    ("SOVEREIGN_E2E_CHAT_MODEL", "Qwen3.5-0.8B-UD-Q6_K_XL.gguf"),
+    (
+        "SOVEREIGN_E2E_EMBED_MODEL",
+        "Qwen3-Embedding-0.6B-Q8_0.gguf",
+    ),
+];
 
 /// `[daemon] embed_idle_secs`: short enough to watch the embedder sleep,
 /// long enough that it does not between the embedding and the residency
@@ -67,16 +79,39 @@ fn reserved_port() -> u16 {
     addr.port()
 }
 
-/// The GGUF directory, from `SOVEREIGN_MODELS_DIR` (quality/env-flags.toml):
-/// never from the crate's own path, which escapes the package root.
-fn models_dir() -> PathBuf {
+/// A GGUF the test loads, and the id the router serves it under (its file
+/// stem).
+struct Model {
+    path: PathBuf,
+    id: String,
+}
+
+/// The chat and embedding models (`ROLES`), each an absolute path or a file
+/// in `SOVEREIGN_MODELS_DIR` (quality/env-flags.toml): never resolved from
+/// the crate's own path, which escapes the package root.
+fn models() -> (Model, Model) {
     let dir = std::env::var_os("SOVEREIGN_MODELS_DIR")
         .map(PathBuf::from)
         .expect("SOVEREIGN_MODELS_DIR names the GGUF directory, absolute");
-    for m in [CHAT_MODEL, EMBED_MODEL] {
-        assert!(dir.join(m).is_file(), "{} is not in {}", m, dir.display());
-    }
-    dir
+    let [chat, embed] = ROLES.map(|(var, default)| {
+        let named = std::env::var_os(var);
+        let path = dir.join(named.as_deref().unwrap_or(default.as_ref()));
+        let source = named.as_ref().map_or("its default", |_| var);
+        assert!(
+            path.is_file(),
+            "{} (from {source}) is not a file in {}",
+            path.display(),
+            dir.display()
+        );
+        let id = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .expect("a GGUF file name")
+            .to_owned();
+        eprintln!("router e2e: {var} = {} (from {source})", path.display());
+        Model { path, id }
+    });
+    (chat, embed)
 }
 
 fn client() -> reqwest::blocking::Client {
@@ -187,7 +222,7 @@ fn still_running(procs: &BTreeMap<u32, u64>) -> BTreeSet<u32> {
 #[test]
 #[ignore = "loads real GGUFs and needs the shipped llama-server: see the module doc"]
 fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
-    let models = models_dir();
+    let (chat, embed) = models();
     let shipped = Path::new(BIN).with_file_name("llama-server");
     assert!(
         shipped.is_file(),
@@ -221,11 +256,12 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
     std::fs::write(
         &config,
         format!(
-            "[engine]\nkind = \"llama-server\"\n\n[models]\nprimary = \"{m}/{CHAT_MODEL}\"\n\
-             code = \"{m}/{CHAT_MODEL}\"\nembed = \"{m}/{EMBED_MODEL}\"\ncontext_size = 4096\n\n[daemon]\n\
+            "[engine]\nkind = \"llama-server\"\n\n[models]\nprimary = \"{c}\"\n\
+             code = \"{c}\"\nembed = \"{e}\"\ncontext_size = 4096\n\n[daemon]\n\
              client_port = {svrn}\ninternal_port = {internal}\nembed_idle_secs = {EMBED_IDLE_SECS}\n\
              rails_base = \"http://127.0.0.1:{dead_rails}\"\n\n[data]\ndir = \"{d}\"\n",
-            m = models.display(),
+            c = chat.path.display(),
+            e = embed.path.display(),
             d = data.display()
         ),
     )
@@ -311,7 +347,7 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
     let embedded = post_json(
         &format!("http://127.0.0.1:{serve}/v1/embeddings"),
         serde_json::json!({
-            "model": EMBED_MODEL.trim_end_matches(".gguf"),
+            "model": embed.id,
             "input": "hello router"
         }),
     )
@@ -333,10 +369,7 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
         assert_eq!(r["outcome"]["kind"], "ok", "{method}: {r}");
         r["answer"].clone()
     };
-    let (chat, embed) = (
-        CHAT_MODEL.trim_end_matches(".gguf"),
-        EMBED_MODEL.trim_end_matches(".gguf"),
-    );
+    let (chat, embed) = (chat.id.as_str(), embed.id.as_str());
     let router_port = router["port"].as_u64().expect("the router's port");
     let host = replay("host", serde_json::json!({}));
     let props: Value = client()
