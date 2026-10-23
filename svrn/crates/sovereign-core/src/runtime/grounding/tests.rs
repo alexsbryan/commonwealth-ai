@@ -288,6 +288,7 @@ impl crate::traits::InferenceProvider for GateMock {
             "unexpected synthesis call".to_string()
         };
         Ok(CompletionResponse {
+            logprobs: None,
             text,
             tokens_used: 0,
             prompt_tokens: 0,
@@ -352,6 +353,7 @@ impl crate::traits::InferenceProvider for RetryDeclineMock {
             "I don't have reliable information on this.".to_string()
         };
         Ok(CompletionResponse {
+            logprobs: None,
             text,
             tokens_used: 0,
             prompt_tokens: 0,
@@ -403,6 +405,7 @@ impl crate::traits::InferenceProvider for NoClaimGateMock {
             request.model_id
         );
         Ok(CompletionResponse {
+            logprobs: None,
             text: "NO_CLAIM".to_string(),
             tokens_used: 0,
             prompt_tokens: 0,
@@ -1478,6 +1481,7 @@ impl crate::traits::InferenceProvider for IncrementalMock {
             "unexpected synthesis call".to_string()
         };
         Ok(CompletionResponse {
+            logprobs: None,
             text,
             tokens_used: 0,
             prompt_tokens: 0,
@@ -1661,6 +1665,7 @@ impl crate::traits::InferenceProvider for AsymmetricBatchMock {
             "unexpected synthesis call".to_string()
         };
         Ok(CompletionResponse {
+            logprobs: None,
             text,
             tokens_used: 0,
             prompt_tokens: 0,
@@ -1865,6 +1870,7 @@ impl crate::traits::InferenceProvider for LadderMock {
             "unexpected synthesis call".to_string()
         };
         Ok(CompletionResponse {
+            logprobs: None,
             text,
             tokens_used: 0,
             prompt_tokens: 0,
@@ -2630,6 +2636,7 @@ impl crate::traits::InferenceProvider for CitationExitMock {
             .await;
         };
         Ok(CompletionResponse {
+            logprobs: None,
             text,
             tokens_used: 0,
             prompt_tokens: 0,
@@ -2853,6 +2860,7 @@ impl crate::traits::InferenceProvider for CliffMock {
             "unexpected synthesis call".to_string()
         };
         Ok(CompletionResponse {
+            logprobs: None,
             text,
             tokens_used: 0,
             prompt_tokens: 0,

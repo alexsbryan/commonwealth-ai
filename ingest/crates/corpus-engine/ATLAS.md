@@ -407,7 +407,7 @@ embeds ~50 entries in ~5 seconds.
         ├── cache/                          # seed.json, atlas-clusters.json
         ├── exemplars/                      # few-shot exemplars for prompts
         └── runs/
-            ├── _phase1_checkpoint.jsonl    # per-chapter success/failure log
+            ├── _phase1_checkpoint.jsonl    # this run's per-chapter success/failure log (`--full` without `--resume` starts it fresh)
             └── questions-subset-001.json   # canonical run-file
 ```
 
@@ -473,4 +473,4 @@ to 79% / 83% after a Tier-2 pass on 52 high-value articles.
 
 When something breaks in production, the most useful starting point is
 usually `_phase1_checkpoint.jsonl` for the relevant workspace — every
-chapter outcome (success or failure with reason) is one JSON line.
+chapter outcome of the latest run (success or failure with reason) is one JSON line.

@@ -33,15 +33,18 @@ use crate::enrichment::ontology::{
 };
 use crate::enrichment::pipeline::pipelines::literary::prepare_phase_json;
 use crate::enrichment::pipeline::types::{ChapterInput, ChatPrompt};
-use crate::enrichment::reconciliation::identity_signals::fold_identity_value;
 use crate::error::{Error, Result};
 use crate::InferenceFn;
 
 pub(super) const WINDOW_PHASE: &str = "document_window";
 const PROMPT: &str = include_str!("window_prompt.md");
+/// A claim's `grade` in the answer shape (`{grade}` in `PROMPT`), shown only
+/// when a kind the window reads lists grades: offered to a recipe with none,
+/// the reader wrote the stage there (`the_grade_slot_is_shown_only_when_a_kind_lists_grades`).
+pub(super) const GRADE_SLOT: &str = "\"grade\": <one of its kind's grades, when it lists them>, ";
 const SYSTEM: &str = "You read documents and write what an ontology describes, as JSON.";
 /// The answer a window's call is given, its reasoning included: the engine
-/// counts both against it. A window holds about 10k tokens
+/// counts both against it. A window holds about 5k tokens
 /// (`window_manifest::WINDOW_CHARS`), so prompt and answer fit 128k, the
 /// context the system is held to (a 64GB machine on a capable local model,
 /// operator 2026-10-14). The longest reasoning and answer on the worlds'
@@ -49,17 +52,13 @@ const SYSTEM: &str = "You read documents and write what an ontology describes, a
 /// these two values are that arm's, so its reads are the default's.
 const MAX_ANSWER_TOKENS: u32 = 64_000;
 /// The reader reasons before it answers. Set on the prompt, so the answer
-/// store keys a read by it (`asker::chat_key`). It leaves 16k of the answer
-/// for the JSON on an engine that honours it; one that does not (DeepSeek)
-/// is still held by `MAX_ANSWER_TOKENS`.
-const THINKING_TOKENS: u32 = 48_000;
-
-/// Whether declared documents are read in windows: `SOVEREIGN_READER=window`.
-/// The one decider, read by `enrich init` (the window manifest), the reader
-/// and the read contract's fingerprint.
-pub fn chosen() -> bool {
-    std::env::var("SOVEREIGN_READER").is_ok_and(|v| v == "window")
-}
+/// store keys a read by it (`asker::chat_key`). An engine that honours it
+/// closes the reasoning here and answers; one that does not (DeepSeek) is
+/// still held by `MAX_ANSWER_TOKENS`. Just above the 35B-A3B's longest
+/// reasoning on world-s4's windows (21,241 tokens over 47 calls,
+/// runs/loop/local35b-s4-*): at 48,000 the dense 27B, decoding at 11.9 tok/s,
+/// was still reasoning at the daemon's 3600s deadline (model-track-prereg.md).
+const THINKING_TOKENS: u32 = 22_000;
 
 /// What the window reader reads from a declaration: the claim kinds it reads,
 /// each with its subject type, and the types it names particulars of, each
@@ -165,20 +164,44 @@ fn attr_line(attr: &AttrDecl) -> String {
     line
 }
 
+/// `PROMPT` with the grade slot the declaration calls for, and the names a
+/// particular's `type` and a claim's `kind` take, each set listed apart.
+fn answer_shape(contract: &Contract<'_>) -> String {
+    let graded = contract.kinds.iter().any(|(k, _)| !k.grades.is_empty());
+    let names = |it: &mut dyn Iterator<Item = &str>| it.collect::<Vec<_>>().join(" | ");
+    PROMPT
+        .replace("{grade}", if graded { GRADE_SLOT } else { "" })
+        .replace(
+            "{types}",
+            &names(&mut contract.subjects.iter().map(|t| t.name.as_str())),
+        )
+        .replace(
+            "{kinds}",
+            &names(&mut contract.kinds.iter().map(|(k, _)| k.name.as_str())),
+        )
+}
+
 /// The ontology as the prompt shows it, generated from the declaration alone.
 fn ontology_text(
     contract: &Contract<'_>,
     policies: &OntologyPolicies,
     index: &TypeIndex<'_>,
 ) -> String {
-    let mut out = Vec::new();
+    let mut out = vec!["Statement kinds, written in `claims`:".to_string()];
     for (kind, subject) in &contract.kinds {
         out.push(format!(
             "- {} (a statement about one {}): {}",
             kind.name, subject.name, kind.description
         ));
         out.extend(read_attrs(index, kind).iter().map(|a| attr_line(a)));
+        if !kind.grades.is_empty() {
+            out.push(format!(
+                "  Grade, its evidence, strongest first: {}.",
+                kind.grades.join(" | ")
+            ));
+        }
     }
+    out.push("Types, written in `particulars`:".to_string());
     for subject in &contract.subjects {
         out.push(format!("- {}: {}", subject.name, subject.description));
         if let Some(same) = &subject.identity_criterion {
@@ -225,34 +248,6 @@ fn shown_fields(policies: &OntologyPolicies) -> Vec<String> {
     fields
 }
 
-/// A document's own lines, as the passes reader asks them: no line it carries
-/// from a document dated earlier, no header line, no line of a message it
-/// embeds (`line_classes.rs`). A reply's quoted history is the earlier
-/// message's, which the window holds under its own date or another window
-/// does; read here, it states the earlier stage under the later date.
-fn own_text(doc: &SourceDocument, classes: &LineClasses) -> String {
-    let raw = doc.raw_body();
-    let lines = super::passes::lines(&raw);
-    let mut held = 0usize;
-    let own: Vec<&str> = lines
-        .iter()
-        .zip(classes.classes(doc.key(), &raw, &lines))
-        .filter_map(|(line, carried)| match carried {
-            Some(_) => {
-                held += 1;
-                None
-            }
-            None => Some(&raw[line.start..line.end]),
-        })
-        .collect();
-    debug!(document = %doc.key(), lines = lines.len(), held, "document_read/window: carried, header and embedded lines not shown");
-    if own.is_empty() {
-        "(no line of its own: every line is carried, a header or an embedded message)".to_string()
-    } else {
-        own.join("\n")
-    }
-}
-
 fn compose(
     chapter: &ChapterInput,
     policies: &OntologyPolicies,
@@ -263,6 +258,7 @@ fn compose(
 ) -> ChatPrompt {
     let fields = shown_fields(policies);
     let named = contract.named(policies, index);
+    let by_key = shown::labels(&chapter.source_documents, labels);
     let documents: String = chapter
         .source_documents
         .iter()
@@ -280,7 +276,7 @@ fn compose(
             let listed: Vec<String> = named
                 .iter()
                 .flat_map(|t| {
-                    candidates(doc, policies, t, &[])
+                    candidates(doc, policies, t)
                         .shown
                         .into_iter()
                         .map(|c| c.shown(&t.name))
@@ -289,11 +285,12 @@ fn compose(
             if !listed.is_empty() {
                 head.push(format!("Named here: {}", listed.join("; ")));
             }
-            format!("{}\n\n{}\n", head.join("\n"), own_text(doc, classes))
+            let body = shown::shown_text(doc, classes, &by_key);
+            format!("{}\n\n{body}\n", head.join("\n"))
         })
         .collect::<Vec<_>>()
         .join("\n");
-    let user = PROMPT
+    let user = answer_shape(contract)
         .replace("{ontology}", &ontology_text(contract, policies, index))
         .replace("{documents}", &documents);
     let mut prompt = ChatPrompt::new(SYSTEM, user)
@@ -310,7 +307,7 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
     let contract = Contract::of(policies);
     json!({
         "reader": "window",
-        "prompt": PROMPT,
+        "prompt": answer_shape(&contract),
         "ontology": ontology_text(&contract, policies, &index),
         "shown_fields": shown_fields(policies),
         "max_answer_tokens": MAX_ANSWER_TOKENS,
@@ -319,7 +316,7 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
 }
 
 /// Read `chapter` in one call and return the envelope `parse_response` reads.
-pub(super) async fn read(
+pub async fn read(
     chapter: &ChapterInput,
     policies: &OntologyPolicies,
     classes: &LineClasses,
@@ -364,16 +361,30 @@ pub(super) async fn read(
             raw.len()
         ))
     };
-    let answer: Value = prepare_phase_json(&raw, "phase 1 (window read)")
+    let parsed = prepare_phase_json(&raw, "phase 1 (window read)")
         .map_err(|e| failed(e.to_string()))
-        .and_then(|json| serde_json::from_str(&json).map_err(|e| failed(e.to_string())))?;
+        .and_then(|json| answer::parse(&json, &chapter.chapter_id).map_err(failed))?;
+    debug!(chapter = %chapter.chapter_id, repaired = parsed.repaired, dropped = parsed.dropped, beside = parsed.beside, in_grade = parsed.in_grade, "document_read/window: answer parsed");
     let owns: Vec<String> = chapter
         .source_documents
         .iter()
-        .map(|doc| own_text(doc, classes))
+        .map(|doc| shown::own_text(doc, classes))
+        .collect();
+    let quoted: Vec<String> = chapter
+        .source_documents
+        .iter()
+        .map(|doc| shown::quoted_text(doc, classes))
         .collect();
     let documents = envelope(
-        chapter, policies, &index, &contract, &labels, &owns, &answer,
+        chapter,
+        policies,
+        &index,
+        &contract,
+        &labels,
+        &owns,
+        &quoted,
+        &parsed.value,
+        parsed.dropped,
     );
     serde_json::to_string(&json!({ "documents": documents, "subjects": SubjectScope::Chapter }))
         .map_err(|e| Error::Serialization(format!("window reader envelope: {e}")))
@@ -414,13 +425,16 @@ fn unknown(reason: impl Into<String>) -> DocumentReadField {
 
 /// One field's reading in `document`: `value` as the model wrote it, cited by
 /// `evidence` when that is in the document. A reference is a candidate the
-/// document's fields name, or words it holds; nothing else is supported.
+/// document's fields name, words it holds, or a `particulars` label read as
+/// its name, cited by `evidence` (`label_name`); nothing else is supported.
 fn reading(
     attr: &AttrDecl,
     value: Option<&Value>,
     evidence: Option<&str>,
     document: &SourceDocument,
     named: &[(String, Vec<Candidate>)],
+    particulars: &[Value],
+    index: &TypeIndex<'_>,
 ) -> DocumentReadField {
     let Some(value) = value.filter(|v| !v.is_null() && !text(v).is_empty()) else {
         return unknown("the window read states no value");
@@ -429,32 +443,7 @@ fn reading(
     let cited = evidence.filter(|e| field_evidence_exists(document, e));
     match &attr.family {
         AttrFamily::Ref { of } => {
-            let wanted = fold_identity_value(&words);
-            let candidate = named
-                .iter()
-                .filter(|(t, _)| t == of)
-                .flat_map(|(_, cs)| cs)
-                .find(|c| match c {
-                    Candidate::Record {
-                        identity, names, ..
-                    } => names
-                        .iter()
-                        .chain([identity.join(" ")].iter())
-                        .any(|n| fold_identity_value(n) == wanted),
-                    Candidate::Mention { text, .. } => fold_identity_value(text) == wanted,
-                });
-            match candidate {
-                Some(c) => {
-                    let (value, scalar) = c.answer();
-                    supported(Value::String(value), &scalar)
-                }
-                None if field_evidence_exists(document, &words) => {
-                    supported(Value::String(words.clone()), &words)
-                }
-                None => unknown(format!(
-                    "{words:?} is neither a {of} this document's fields name nor words it holds"
-                )),
-            }
+            refs::reference(of, &words, cited, document, named, particulars, index)
         }
         _ if cited.is_none() && !field_evidence_exists(document, &words) => unknown(format!(
             "{words:?} was read from a passage that is not in this document"
@@ -483,45 +472,6 @@ fn reading(
             supported(Value::String(words.clone()), cited.unwrap_or(&words))
         }
     }
-}
-
-/// An identity field of a subject its metadata source names, read from the
-/// record this document's fields name by the particular's `name`: the model
-/// names a person, the source holds their address.
-fn sourced_identity(
-    subject: &OntologyTypeDecl,
-    attr: &AttrDecl,
-    name: &Value,
-    index: &TypeIndex<'_>,
-    named: &[(String, Vec<Candidate>)],
-) -> Option<DocumentReadField> {
-    if !matches!(subject.source, Some(SourceDecl::Metadata(_))) {
-        return None;
-    }
-    let at = index
-        .effective_identity(&subject.name)
-        .iter()
-        .position(|k| *k == attr.name)?;
-    let wanted = fold_identity_value(&text(name))?;
-    named
-        .iter()
-        .filter(|(t, _)| *t == subject.name)
-        .flat_map(|(_, cs)| cs)
-        .find_map(|c| match c {
-            Candidate::Record {
-                identity,
-                names,
-                scalar,
-                ..
-            } if names
-                .iter()
-                .chain(identity.iter())
-                .any(|n| fold_identity_value(n).as_ref() == Some(&wanted)) =>
-            {
-                Some(supported(Value::String(identity.get(at)?.clone()), scalar))
-            }
-            _ => None,
-        })
 }
 
 /// The sentence a quote stands in, from a document's own lines: the quote's
@@ -584,40 +534,14 @@ pub(super) fn sentence_of(text: &str, quote: &str) -> Option<String> {
     Some(span.split_whitespace().collect::<Vec<_>>().join(" "))
 }
 
-/// A particular's declared fields as the window read them, each supported only
-/// by what `document` holds; an identity its metadata source names fills an
-/// unknown one. One reading for a claim's subject and a particular of its own.
-fn particular_fields(
-    policies: &OntologyPolicies,
-    index: &TypeIndex<'_>,
-    subject: &OntologyTypeDecl,
-    particular: &Value,
-    document: &SourceDocument,
-    named: &[(String, Vec<Candidate>)],
-) -> std::collections::BTreeMap<String, DocumentReadField> {
-    subject_attrs(policies, index, &subject.name)
-        .into_iter()
-        .map(|a| {
-            let entry = &particular["fields"][&a.name];
-            let (value, evidence) = match entry {
-                Value::Object(o) if o.contains_key("value") => {
-                    (o.get("value"), o.get("quote").map(text))
-                }
-                Value::Null => (None, None),
-                other => (Some(other), None),
-            };
-            let mut r = reading(a, value, evidence.as_deref(), document, named);
-            if matches!(r, DocumentReadField::Unknown { .. }) {
-                r = sourced_identity(subject, a, &particular["name"], index, named).unwrap_or(r);
-            }
-            (a.name.clone(), r)
-        })
-        .collect()
-}
-
 /// One outcome per supplied document, in order, from the window's answer.
 /// `owns` are the documents' own lines (`own_text`), each claim's quote
-/// widened to its sentence in them (`sentence_of`).
+/// widened to its sentence in them (`sentence_of`); a claim whose quote is
+/// instead in the lines its document quotes or embeds (`quoted`,
+/// `quoted_text`) is refused, so only a document's own lines are cited;
+/// `dropped` elements of the answer did not parse (`answer::parse`) and count
+/// as lost.
+#[allow(clippy::too_many_arguments)]
 fn envelope(
     chapter: &ChapterInput,
     policies: &OntologyPolicies,
@@ -625,7 +549,9 @@ fn envelope(
     contract: &Contract<'_>,
     labels: &[String],
     owns: &[String],
+    quoted: &[String],
     answer: &Value,
+    dropped: usize,
 ) -> Vec<DocumentReadOutcome> {
     let empty = Vec::new();
     let particulars = answer["particulars"].as_array().unwrap_or(&empty);
@@ -637,7 +563,7 @@ fn envelope(
         .map(|doc| {
             let named = named_types
                 .iter()
-                .map(|t| (t.name.clone(), candidates(doc, policies, t, &[]).shown))
+                .map(|t| (t.name.clone(), candidates(doc, policies, t).shown))
                 .collect();
             (
                 DocumentReadOutcome {
@@ -652,7 +578,9 @@ fn envelope(
             )
         })
         .collect();
-    let mut lost = 0usize;
+    let mut lost = dropped;
+    let mut carried = 0usize;
+    let mut voices: std::collections::BTreeMap<voice::Voice, usize> = Default::default();
     for claim in claims {
         let kind = text(&claim["kind"]);
         let Some(k) = labels.iter().position(|l| *l == text(&claim["document"])) else {
@@ -703,8 +631,20 @@ fn envelope(
                 }
                 sentence
             }
+            None if sentence_of(&quoted[k], &quote).is_some() => {
+                carried += 1;
+                refuse(
+                    outcome,
+                    format!(
+                        "its quote is in lines this document quotes or embeds from another, not its own: {quote:?}"
+                    ),
+                );
+                continue;
+            }
             None => quote,
         };
+        let (speaker, voiced) = voice::said_by(&claim["said_by"], document, particulars);
+        *voices.entry(voiced).or_default() += 1;
         let fields = read_attrs(index, decl)
             .iter()
             .map(|a| {
@@ -714,25 +654,53 @@ fn envelope(
                     Some(&quote),
                     document,
                     named,
+                    particulars,
+                    index,
                 );
                 (a.name.clone(), r)
             })
             .collect();
-        let subject_fields =
-            particular_fields(policies, index, subject, particular, document, named);
+        let subject_fields = particulars::particular_fields(
+            policies,
+            index,
+            subject,
+            particular,
+            document,
+            named,
+            particulars,
+        );
         let name = Some(text(&particular["name"]))
             .filter(|n| !n.is_empty())
             .unwrap_or_else(|| about.clone());
+        let mut things = vec![(name.clone(), subject.name.clone())];
+        things.extend(particulars::ref_values(
+            read_attrs(index, decl).iter().map(|a| &**a),
+            &fields,
+        ));
+        things.extend(particulars::ref_values(
+            subject_attrs(policies, index, &subject.name),
+            &subject_fields,
+        ));
+        let other_names = particulars::other_names_for(
+            particulars,
+            index,
+            things.iter().map(|(n, t)| (n.as_str(), t.as_str())),
+        );
+        if !other_names.is_empty() {
+            trace!(document = %outcome.document_id, names = other_names.len(), "document_read/window: a statement carries the other names of what it names");
+        }
         outcome.claims.push(DocumentReadClaim {
             kind: kind.clone(),
             content: quote.clone(),
             subject_type: subject.name.clone(),
             subject_local_ref: format!("{}/{about}", chapter.chapter_id),
             subject_name: name,
-            speaker: None,
+            speaker,
+            grade: voice::grade(claim, decl),
             evidence: quote,
             fields,
             subject_fields,
+            other_names,
         });
     }
     particulars::unstated(
@@ -747,7 +715,7 @@ fn envelope(
     );
     let read: usize = outcomes.iter().map(|(o, _)| o.claims.len()).sum();
     let refused: usize = outcomes.iter().map(|(o, _)| o.refused.len()).sum();
-    info!(chapter = %chapter.chapter_id, documents = outcomes.len(), particulars = particulars.len(), claims = claims.len(), read, refused, lost, "document_read/window: chapter read");
+    info!(chapter = %chapter.chapter_id, documents = outcomes.len(), particulars = particulars.len(), claims = claims.len(), read, refused, carried, lost, ?voices, "document_read/window: chapter read");
     outcomes
         .into_iter()
         .map(|(mut o, _)| {
@@ -778,5 +746,37 @@ fn envelope(
 #[path = "window_tests.rs"]
 mod tests;
 
+#[cfg(test)]
+#[path = "window_widen_tests.rs"]
+mod widen_tests;
+
+#[cfg(test)]
+#[path = "window_names_tests.rs"]
+mod names_tests;
+
+#[cfg(test)]
+#[path = "window_lifecycle_tests.rs"]
+mod lifecycle_tests;
+
+#[cfg(test)]
+#[path = "window_grade_tests.rs"]
+mod grade_tests;
+
+#[cfg(test)]
+#[path = "window_ref_targets_tests.rs"]
+mod ref_targets_tests;
+
 #[path = "window_particulars.rs"]
 mod particulars;
+
+#[path = "window_text.rs"]
+mod shown;
+
+#[path = "window_answer.rs"]
+mod answer;
+
+#[path = "window_refs.rs"]
+mod refs;
+
+#[path = "window_voice.rs"]
+mod voice;

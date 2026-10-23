@@ -345,6 +345,7 @@ mod tests {
                 return Err(crate::error::Error::Inference("nope".into()));
             }
             Ok(CompletionResponse {
+                logprobs: None,
                 text: format!("<{}>", r.prompt.len()),
                 tokens_used: 0,
                 prompt_tokens: 0,
@@ -631,6 +632,7 @@ mod tests {
             async fn complete(&self, r: &CompletionRequest) -> Result<CompletionResponse> {
                 *self.0.lock().unwrap() = Some(r.admission.clone());
                 Ok(CompletionResponse {
+                    logprobs: None,
                     text: "ok".into(),
                     tokens_used: 0,
                     prompt_tokens: 0,

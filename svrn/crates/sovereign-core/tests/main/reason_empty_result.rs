@@ -36,6 +36,7 @@ impl sovereign_core::traits::InferenceProvider for AlwaysSearch {
             "The knowledge base does not hold a retry policy.".to_string()
         };
         Ok(CompletionResponse {
+            logprobs: None,
             text,
             tokens_used: 5,
             prompt_tokens: 0,

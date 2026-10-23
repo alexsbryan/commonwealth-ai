@@ -20,7 +20,7 @@ fn classes_of(
     document: &str,
     body: &str,
 ) -> Vec<Option<(LineClass, String)>> {
-    let lines = super::super::passes::lines(body);
+    let lines = lines(body);
     classes
         .classes(document, body, &lines)
         .into_iter()
@@ -263,4 +263,154 @@ fn an_undated_document_quotes_nothing_and_is_quoted_by_nothing() {
         classed(&classes, "d", "> Only u says this.\n> And this."),
         [false, false]
     );
+}
+
+#[test]
+fn lines_are_the_non_empty_lines_with_their_trimmed_spans() {
+    let body = "  a b \n\n c\r\nlast";
+    let got: Vec<(usize, &str)> = lines(body)
+        .iter()
+        .map(|l| (l.n, &body[l.start..l.end]))
+        .collect();
+    assert_eq!(got, [(1, "a b"), (2, "c"), (3, "last")]);
+}
+
+/// Every line of a mail corpus has one owner, and its owner's header dates
+/// it (ward-rootcause-prereg.md step 2). Through the mail extractor: a
+/// message embedded in two replies, Notes-style, is one document of its own
+/// that owns its lines, dated by its own header, and both replies point to
+/// it; a message a reply embeds that the corpus also stores keeps its lines,
+/// and the embedded copy owns none. Failing input, named: ward-story tep/10.,
+/// whose embedded "The cp is looking for a power swap this summer." no
+/// document owned, so no window showed it.
+#[test]
+fn every_line_of_a_mail_corpus_has_one_owner() {
+    use crate::extractors::Extractor as _;
+    let dir = tempfile::tempdir().unwrap();
+    let mail = |name: &str, id: &str, date: &str, body: &str| {
+        std::fs::write(
+            dir.path().join(name),
+            format!("Message-ID: <{id}>\nDate: {date}\nFrom: a@x.example\nSubject: TEP\n\n{body}"),
+        )
+        .unwrap();
+    };
+    let tracy = "Tracy Ngo\n12/19/2000 02:13 PM\nTo: Ed Sacks/HOU/ECT@ECT\ncc:\nSubject: TEP\n\n\
+                 The cp is looking for a power swap this summer.\nPlease call them back.\n";
+    mail(
+        "1.",
+        "one@x",
+        "Tue, 2 Jan 2001 17:01:00 -0800",
+        &format!(
+            "Ed, see below.\n\nKim Ward\n01/02/2001 08:13 AM\nTo: Tracy Ngo/PDX/ECT@ECT\ncc:\n\
+             Subject: Re: TEP\n\nPushing on Tucson today.\n\n{tracy}"
+        ),
+    );
+    mail(
+        "2.",
+        "two@x",
+        "Wed, 3 Jan 2001 09:00:00 -0800",
+        &format!("Noted, thanks.\n\n{tracy}"),
+    );
+    mail(
+        "3.",
+        "three@x",
+        "Mon, 18 Dec 2000 10:00:00 -0800",
+        "The ISDA draft went out by Fed Ex.\nNo comments back yet.\n",
+    );
+    mail(
+        "4.",
+        "four@x",
+        "Thu, 21 Dec 2000 10:00:00 -0800",
+        "Forwarding Susan's note.\n\nSusan Bailey\n12/18/2000 10:00 AM\nTo: Kim Ward/HOU/ECT@ECT\n\
+         cc:\nSubject: ISDA\n\nThe ISDA draft went out by Fed Ex.\nNo comments back yet.\n",
+    );
+    let docs: Vec<crate::extractors::ExtractedDoc> =
+        crate::extractors::email_rfc5322::EmailExtractor::new(Default::default())
+            .extract(dir.path())
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+    let embedded: Vec<&crate::extractors::ExtractedDoc> = docs
+        .iter()
+        .filter(|d| d.source_id.starts_with("embedded-"))
+        .collect();
+    assert_eq!(
+        (docs.len(), embedded.len()),
+        (7, 3),
+        "four stored, three embedded (Tracy's once): {:?}",
+        docs.iter().map(|d| &d.source_id).collect::<Vec<_>>()
+    );
+    let rows: Vec<corpus_index::index::EnrichmentChunkRow> = docs
+        .iter()
+        .enumerate()
+        .map(|(i, d)| corpus_index::index::EnrichmentChunkRow {
+            id: i as u64,
+            content: d.content.clone(),
+            title: d.title.clone(),
+            url: None,
+            metadata_raw: d.metadata.as_ref().map(|m| m.to_string()),
+            source_doc_id: Some(d.source_id.clone()),
+        })
+        .collect();
+    let ids: Vec<u64> = rows.iter().map(|r| r.id).collect();
+    let texts: crate::enrichment::atlas::DocumentTexts = docs
+        .iter()
+        .map(|d| (d.source_id.clone(), d.content.clone()))
+        .collect();
+    let section =
+        crate::enrichment::atlas::SectionDocuments::from_chunk_rows([("w", ids.as_slice())], &rows)
+            .with_texts(&texts);
+    let corpus = section.documents_for_section("w");
+    let classes = LineClasses::of(corpus, &declared(None));
+
+    // Each line's text, by the documents owning it (none of the fixture's
+    // lines repeats as a separate act).
+    let mut owners: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for d in corpus {
+        let raw = d.raw_body();
+        let ls = lines(&raw);
+        for (line, carried) in ls.iter().zip(classes.classes(d.key(), &raw, &ls)) {
+            let text = &raw[line.start..line.end];
+            match (carried, line_key(text)) {
+                (None, Some(k)) => owners.entry(k).or_default().push(d.key().to_string()),
+                (Some(c), Some(k)) if c.class != LineClass::Field => {
+                    owners.entry(k).or_default();
+                }
+                _ => {}
+            }
+        }
+    }
+    let unowned_or_twice: Vec<(&String, &Vec<String>)> =
+        owners.iter().filter(|(_, o)| o.len() != 1).collect();
+    assert!(unowned_or_twice.is_empty(), "{unowned_or_twice:#?}");
+    let owner = |line: &str| owners[line][0].clone();
+    let swap = owner("The cp is looking for a power swap this summer");
+    assert!(swap.starts_with("embedded-"), "{swap}");
+    assert_eq!(
+        owner("No comments back yet"),
+        "three-x",
+        "the stored message keeps its lines"
+    );
+
+    // Both replies point to Tracy's message where they embed it.
+    for reply in ["one-x", "two-x"] {
+        let d = corpus.iter().find(|d| d.key() == reply).unwrap();
+        let raw = d.raw_body();
+        let ls = lines(&raw);
+        let at = ls
+            .iter()
+            .position(|l| raw[l.start..l.end].starts_with("The cp is looking"))
+            .unwrap();
+        assert_eq!(
+            classes.sources(reply, &raw, &ls)[at],
+            Some(swap.as_str()),
+            "{reply}"
+        );
+    }
+    // Its own header dates it.
+    let tracy_doc = embedded.iter().find(|d| d.source_id == swap).unwrap();
+    let meta = tracy_doc.metadata.as_ref().unwrap();
+    assert_eq!(meta["date"], "Tue, 19 Dec 2000 14:13:00 -0800");
+    assert_eq!(meta["date_basis"], "header");
+    assert_eq!(meta["from"], "Tracy Ngo");
 }

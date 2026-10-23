@@ -469,6 +469,7 @@ impl FastShortCoalescer {
                         let finish_reason =
                             finish_reason_from_counts(&job.request, completion_tokens);
                         let resp = CompletionResponse {
+                            logprobs: None,
                             text,
                             tokens_used: prompt_tokens + completion_tokens,
                             prompt_tokens,
@@ -1224,7 +1225,13 @@ impl EmbeddedLlamaCpp {
                 // Silicon Metal (33 vs 2.8 seq/sec, 12×). The Metal
                 // GGML_ASSERT(buf_src) crash referenced in the old
                 // comment was fixed in llama-cpp-2 0.1.141.
-                match EmbedSlot::load(&backend, path, n_gpu_layers, embed_quirks.clone()) {
+                match EmbedSlot::load(
+                    &backend,
+                    path,
+                    n_gpu_layers,
+                    embed_quirks.clone(),
+                    Writer::OnCpu,
+                ) {
                     Ok(slot) => {
                         // Priced from the gguf on disk: `EmbedSlot` has no
                         // `size()` accounting of its own, and an honest
@@ -2503,7 +2510,13 @@ impl EmbeddedLlamaCpp {
         let backend = Arc::clone(&self.backend);
         let recipe = recipe.clone();
         cell.acquire(why, move || {
-            let slot = EmbedSlot::load(&backend, &recipe.path, recipe.gpu_layers, recipe.quirks)?;
+            let slot = EmbedSlot::load(
+                &backend,
+                &recipe.path,
+                recipe.gpu_layers,
+                recipe.quirks,
+                Writer::OnCpu,
+            )?;
             let size_bytes = super::model_slot::total_model_bytes(&recipe.path);
             Ok((slot, size_bytes))
         })
@@ -3085,8 +3098,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     .await?;
             let request = request.clone();
             let slot_label_owned = slot_name.clone();
-            let result: Result<CompletionResponse> = tokio::task::spawn_blocking(
-                sovereign_contracts::engine_observe::carry(move || {
+            let result: Result<CompletionResponse> =
+                tokio::task::spawn_blocking(sovereign_contracts::call_scope::carry(move || {
                     let start = Instant::now();
                     // Stamp last_used at dispatch start. Using start
                     // (rather than completion) makes the LRU eviction
@@ -3125,6 +3138,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     };
                     let latency_ms = start.elapsed().as_millis() as u64;
                     Ok(CompletionResponse {
+                        logprobs: None,
                         text: outcome.text,
                         tokens_used: outcome.prompt_tokens + outcome.completion_tokens,
                         prompt_tokens: outcome.prompt_tokens,
@@ -3134,10 +3148,9 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         finish_reason: Some(outcome.finish_reason),
                         completion_tokens: Some(outcome.completion_tokens as u32),
                     })
-                }),
-            )
-            .await
-            .map_err(|e| Error::Inference(format!("Inference task failed: {e}")))?;
+                }))
+                .await
+                .map_err(|e| Error::Inference(format!("Inference task failed: {e}")))?;
             if let Ok(ref resp) = result {
                 tracing::info!(
                     slot = %slot_name,
@@ -3236,7 +3249,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 )
                 .await?;
                 let request = request.clone();
-                let result: Result<CompletionResponse> = tokio::task::spawn_blocking(sovereign_contracts::engine_observe::carry(move || {
+                let result: Result<CompletionResponse> = tokio::task::spawn_blocking(sovereign_contracts::call_scope::carry(move || {
                     let _permit = _permit;
                     let start = Instant::now();
                     slot.last_used
@@ -3277,6 +3290,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     };
                     let latency_ms = start.elapsed().as_millis() as u64;
                     Ok(CompletionResponse {
+                        logprobs: None,
                         text: outcome.text,
                         tokens_used: outcome.prompt_tokens + outcome.completion_tokens,
                         prompt_tokens: outcome.prompt_tokens,
@@ -3345,8 +3359,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             let loaded_path = Arc::clone(&self.primary_loaded_path);
             let request = request.clone();
 
-            let result: Result<(CompletionResponse, &'static str)> = tokio::task::spawn_blocking(
-                sovereign_contracts::engine_observe::carry(move || {
+            let result: Result<(CompletionResponse, &'static str)> =
+                tokio::task::spawn_blocking(sovereign_contracts::call_scope::carry(move || {
                     let start = Instant::now();
 
                     // Hot-swap check: if the lazy slot is holding a
@@ -3422,6 +3436,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
                     Ok((
                         CompletionResponse {
+                            logprobs: None,
                             text: outcome.text,
                             tokens_used: outcome.prompt_tokens + outcome.completion_tokens,
                             prompt_tokens: outcome.prompt_tokens,
@@ -3436,10 +3451,9 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         },
                         slot_label,
                     ))
-                }),
-            )
-            .await
-            .map_err(|e| Error::Inference(format!("Inference task failed: {e}")))?;
+                }))
+                .await
+                .map_err(|e| Error::Inference(format!("Inference task failed: {e}")))?;
 
             match result {
                 Ok((resp, slot_label)) => {
@@ -3474,8 +3488,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             let request = request.clone();
             let quirks = self.fast_quirks.clone();
 
-            let result: Result<CompletionResponse> = tokio::task::spawn_blocking(
-                sovereign_contracts::engine_observe::carry(move || {
+            let result: Result<CompletionResponse> =
+                tokio::task::spawn_blocking(sovereign_contracts::call_scope::carry(move || {
                     let start = Instant::now();
                     let mut ctx_lock = slot.context.blocking_lock();
 
@@ -3511,6 +3525,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     let latency_ms = start.elapsed().as_millis() as u64;
 
                     Ok(CompletionResponse {
+                        logprobs: None,
                         text: outcome.text,
                         tokens_used: outcome.prompt_tokens + outcome.completion_tokens,
                         prompt_tokens: outcome.prompt_tokens,
@@ -3520,10 +3535,9 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         finish_reason: Some(outcome.finish_reason),
                         completion_tokens: Some(outcome.completion_tokens as u32),
                     })
-                }),
-            )
-            .await
-            .map_err(|e| Error::Inference(format!("Inference task failed: {e}")))?;
+                }))
+                .await
+                .map_err(|e| Error::Inference(format!("Inference task failed: {e}")))?;
 
             if let Ok(ref resp) = result {
                 tracing::info!(
@@ -3624,7 +3638,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             )
             .await?;
             let slot_label_owned = slot_name.clone();
-            tokio::task::spawn_blocking(sovereign_contracts::engine_observe::carry(move || {
+            tokio::task::spawn_blocking(sovereign_contracts::call_scope::carry(move || {
                 let _permit = _permit;
                 let start = Instant::now();
                 slot.last_used
@@ -3713,43 +3727,41 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 )
                 .await?;
                 let quirks = self.primary_quirks.clone();
-                tokio::task::spawn_blocking(sovereign_contracts::engine_observe::carry(
-                    move || {
-                        // Hold the permit for the streaming task's lifetime.
-                        let _permit = _permit;
-                        let start = Instant::now();
-                        slot.last_used
-                            .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
-                        let mut ctx_lock = slot.context.blocking_lock();
-                        // No Raw/FIM fork here: FIM rides the fast/alias slot
-                        // (INLINE_COMPLETION.md §4/D8), mirroring the lazy
-                        // primary branch below which also dispatches
-                        // unconditionally.
-                        if let Err(e) = ModelSlot::generate_stream_dispatch(
-                            &slot.model,
-                            &slot.model_id,
-                            &mut ctx_lock,
-                            &request,
-                            &tx,
-                            &quirks,
-                            None,
-                        ) {
-                            tracing::warn!(slot = "primary", sibling_idx, error = %e, "stream error");
-                            let _ = tx.blocking_send(StreamFrame::Finish {
-                                reason: FinishReason::Error(format!("{e}")),
-                                usage: None,
-                            });
-                        } else {
-                            tracing::info!(
-                                slot = "primary",
-                                sibling_idx,
-                                pool_size,
-                                latency_ms = start.elapsed().as_millis() as u64,
-                                "inference.complete_stream_with_finish: done"
-                            );
-                        }
-                    },
-                ));
+                tokio::task::spawn_blocking(sovereign_contracts::call_scope::carry(move || {
+                    // Hold the permit for the streaming task's lifetime.
+                    let _permit = _permit;
+                    let start = Instant::now();
+                    slot.last_used
+                        .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
+                    let mut ctx_lock = slot.context.blocking_lock();
+                    // No Raw/FIM fork here: FIM rides the fast/alias slot
+                    // (INLINE_COMPLETION.md §4/D8), mirroring the lazy
+                    // primary branch below which also dispatches
+                    // unconditionally.
+                    if let Err(e) = ModelSlot::generate_stream_dispatch(
+                        &slot.model,
+                        &slot.model_id,
+                        &mut ctx_lock,
+                        &request,
+                        &tx,
+                        &quirks,
+                        None,
+                    ) {
+                        tracing::warn!(slot = "primary", sibling_idx, error = %e, "stream error");
+                        let _ = tx.blocking_send(StreamFrame::Finish {
+                            reason: FinishReason::Error(format!("{e}")),
+                            usage: None,
+                        });
+                    } else {
+                        tracing::info!(
+                            slot = "primary",
+                            sibling_idx,
+                            pool_size,
+                            latency_ms = start.elapsed().as_millis() as u64,
+                            "inference.complete_stream_with_finish: done"
+                        );
+                    }
+                }));
                 return Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)));
             }
         }
@@ -3790,7 +3802,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             let last_use = Arc::clone(&self.last_primary_use);
             let loaded_path = Arc::clone(&self.primary_loaded_path);
 
-            tokio::task::spawn_blocking(sovereign_contracts::engine_observe::carry(move || {
+            tokio::task::spawn_blocking(sovereign_contracts::call_scope::carry(move || {
                 let _permit = _permit;
                 let start = Instant::now();
 
@@ -3873,7 +3885,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             )
             .await?;
             let quirks = self.fast_quirks.clone();
-            tokio::task::spawn_blocking(sovereign_contracts::engine_observe::carry(move || {
+            tokio::task::spawn_blocking(sovereign_contracts::call_scope::carry(move || {
                 let _permit = _permit;
                 let start = Instant::now();
                 let mut ctx_lock = slot.context.blocking_lock();
@@ -3923,6 +3935,9 @@ impl InferenceProvider for EmbeddedLlamaCpp {
     async fn embed(&self, text: &str) -> Result<Vec<f32>> {
         let asked = Instant::now();
         let slot = self.embed_handle("embed").await?;
+        let step = crate::priority_gate::PriorityGate::process()
+            .step("embed", "embed")
+            .await;
         let text_len = text.len();
         let text = text.to_string();
 
@@ -3930,10 +3945,12 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
         // `done` under the caller's span; `slot_wait`: the slot's load or hand-over, then its context.
         let span = tracing::Span::current();
-        tokio::task::spawn_blocking(sovereign_contracts::engine_observe::carry(move || {
+        tokio::task::spawn_blocking(sovereign_contracts::call_scope::carry(move || {
+            let mut step = step;
             let _in_caller = span.enter();
             let start = Instant::now();
-            let mut ctx_lock = slot.contexts[0].blocking_lock();
+            let mut ctx_lock = slot.context_for_request().0.blocking_lock();
+            step.entered();
             let slot_wait = asked.elapsed();
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 EmbedSlot::embed_sync(
@@ -3975,10 +3992,15 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
     async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
         let slot = self.embed_handle("embed_query").await?;
+        let step = crate::priority_gate::PriorityGate::process()
+            .step("embed", "embed_query")
+            .await;
         let query = query.to_string();
 
-        tokio::task::spawn_blocking(sovereign_contracts::engine_observe::carry(move || {
-            let mut ctx_lock = slot.contexts[0].blocking_lock();
+        tokio::task::spawn_blocking(sovereign_contracts::call_scope::carry(move || {
+            let mut step = step;
+            let mut ctx_lock = slot.context_for_request().0.blocking_lock();
+            step.entered();
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 EmbedSlot::embed_query_sync(
                     &slot.model,
@@ -4005,11 +4027,15 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
     async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let slot = self.embed_handle("embed_batch").await?;
+        let step = crate::priority_gate::PriorityGate::process()
+            .step("embed", "embed_batch")
+            .await;
         let texts = texts.to_vec();
 
-        tokio::task::spawn_blocking(sovereign_contracts::engine_observe::carry(move || {
+        tokio::task::spawn_blocking(sovereign_contracts::call_scope::carry(move || {
+            let mut step = step;
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                EmbedSlot::run_embed_batch_sync(&slot, &texts)
+                EmbedSlot::run_embed_batch_sync(&slot, &texts, &mut step)
             }));
             match result {
                 Ok(Ok(v)) => Ok(v),
@@ -4214,7 +4240,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         // Load on a blocking thread — `ModelSlot::load` is
         // synchronous llama.cpp work and can take 10–90s on a 35B.
         // Mirrors the dispatch path's blocking section.
-        tokio::task::spawn_blocking(sovereign_contracts::engine_observe::carry(
+        tokio::task::spawn_blocking(sovereign_contracts::call_scope::carry(
             move || -> Result<()> {
                 let mut primary = primary_lock.blocking_lock();
                 let mut loaded = loaded_path.blocking_lock();
@@ -4264,7 +4290,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         &self,
         probe: &sovereign_contracts::engine_observe::ProbeRequest,
     ) -> Result<sovereign_contracts::engine_observe::ProbeAnswer> {
-        use sovereign_contracts::engine_observe::carry;
+        use sovereign_contracts::call_scope::carry;
         let probe = probe.clone();
         let joined = |e| Error::Inference(format!("probe join failed: {e}"));
         if !matches!(probe.speed, Speed::Slow | Speed::Medium) {
@@ -4295,113 +4321,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 }
 
 #[cfg(test)]
-mod fast_short_queue_bound_tests {
-    use super::*;
-
-    /// A coalescer whose receiver is held and never read — the only way
-    /// to genuinely FILL the queue without a resident model. Returned
-    /// alongside the receiver so the channel stays open (dropping it
-    /// would turn every `try_send` into `Closed`, which is a different
-    /// error and would let this test pass for the wrong reason).
-    fn full_coalescer(
-        cap: usize,
-        n_seq_max: usize,
-    ) -> (
-        FastShortCoalescer,
-        tokio::sync::mpsc::Receiver<CoalescerJob>,
-    ) {
-        let (tx, rx) = tokio::sync::mpsc::channel::<CoalescerJob>(cap);
-        (FastShortCoalescer::with_sender(tx, cap, n_seq_max, 120), rx)
-    }
-
-    /// RED-FIRST (order mesh-scale-t0, item 4): "fill the coalescer,
-    /// assert a shed". On the pre-fix `unbounded_channel` there was no
-    /// cap to reach and `send` never refused, so no shed could EVER
-    /// fire on this path — the assertion at the end had nothing that
-    /// could produce it.
-    #[test]
-    fn a_full_coalescer_sheds_instead_of_growing() {
-        let cap = 4;
-        let (coalescer, _rx_held_open) = full_coalescer(cap, 2);
-
-        // Fill it exactly to the bound. Every one of these is admitted;
-        // `enqueue_job` hands back a receiver we deliberately keep so
-        // the jobs stay queued.
-        let mut admitted = Vec::new();
-        for i in 0..cap {
-            admitted.push(
-                coalescer
-                    .enqueue_job(CompletionRequest::default())
-                    .unwrap_or_else(|e| panic!("request {i} should be admitted under cap: {e}")),
-            );
-        }
-        assert_eq!(admitted.len(), cap);
-
-        // One more. This is the request that used to disappear into an
-        // unbounded queue.
-        let err = coalescer
-            .enqueue_job(CompletionRequest::default())
-            .expect_err("a queue at its bound must shed, not grow");
-
-        match err {
-            Error::QueueShed {
-                position,
-                predicted_wait_ms,
-                retry_after_secs,
-            } => {
-                assert_eq!(
-                    position,
-                    cap as u32 + 1,
-                    "the shed must report the caller's real place in line"
-                );
-                // 5 in line at n_seq_max=2 → 3 batches ahead × 120ms.
-                assert_eq!(predicted_wait_ms, 360);
-                assert!(
-                    retry_after_secs >= 1,
-                    "Retry-After: 0 invites a hot loop against the host that just refused"
-                );
-            }
-            other => panic!("expected the existing QueueShed shape, got: {other:?}"),
-        }
-    }
-
-    /// Draining one job must make room again — a shed that latched would
-    /// be worse than the leak it replaced.
-    #[test]
-    fn the_queue_reopens_once_the_drainer_takes_one() {
-        let cap = 2;
-        let (coalescer, mut rx) = full_coalescer(cap, 8);
-        let _a = coalescer.enqueue_job(CompletionRequest::default()).unwrap();
-        let _b = coalescer.enqueue_job(CompletionRequest::default()).unwrap();
-        assert!(coalescer.enqueue_job(CompletionRequest::default()).is_err());
-
-        let taken = rx.try_recv().expect("drainer takes one");
-        drop(taken);
-        assert!(
-            coalescer.enqueue_job(CompletionRequest::default()).is_ok(),
-            "the bound must be a moving window, not a latch"
-        );
-    }
-
-    /// The cap is an operator dial, and a nonsense value must not
-    /// silently produce a zero-capacity channel (which would shed
-    /// every request forever).
-    #[test]
-    fn a_bad_cap_env_falls_back_to_the_default() {
-        // Not touching the process env — the parse/filter policy is the
-        // thing under test and it is expressed here exactly as
-        // `fast_short_queue_cap` expresses it.
-        let parse = |s: &str| {
-            s.parse::<usize>()
-                .ok()
-                .filter(|n| *n > 0)
-                .unwrap_or(FAST_SHORT_QUEUE_CAP_DEFAULT)
-        };
-        assert_eq!(parse("0"), FAST_SHORT_QUEUE_CAP_DEFAULT);
-        assert_eq!(parse("banana"), FAST_SHORT_QUEUE_CAP_DEFAULT);
-        assert_eq!(parse("128"), 128);
-    }
-}
+#[path = "engine_fast_short_queue_bound_tests.rs"]
+mod fast_short_queue_bound_tests;
 
 /// Warn when the configured edit model's FILENAME names a next-edit
 /// specialist whose prompt contract is not the dialect being served,

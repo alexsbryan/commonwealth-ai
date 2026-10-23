@@ -70,8 +70,13 @@ pub fn v05_feature_failures(m: &ProviderManifest) -> Vec<String> {
     if m.has_feature(features::INGEST_DOCUMENTS) && !m.has_feature(features::INGEST_V1) {
         f.push("ingest:documents requires ingest:v1".into());
     }
-    if m.has_feature(features::KNOWLEDGE_DOCUMENT) && m.knowledge.is_none() {
-        f.push("knowledge:document requires a knowledge plane".into());
+    for (feat, name) in [
+        (features::KNOWLEDGE_DOCUMENT, "knowledge:document"),
+        (features::KNOWLEDGE_PRIORITY, "knowledge:priority"),
+    ] {
+        if m.has_feature(feat) && m.knowledge.is_none() {
+            f.push(format!("{name} requires a knowledge plane"));
+        }
     }
     // v0.6 §2.8: a scope names texts and a range points into one, so both
     // need hits that name their text; a range is only checkable read back.

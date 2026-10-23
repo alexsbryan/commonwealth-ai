@@ -44,6 +44,7 @@ impl InferenceProvider for ScriptedInference {
         let i = self.idx.fetch_add(1, Ordering::SeqCst);
         let text = self.responses.get(i).cloned().unwrap_or_default();
         Ok(CompletionResponse {
+            logprobs: None,
             text,
             tokens_used: 0,
             prompt_tokens: 0,

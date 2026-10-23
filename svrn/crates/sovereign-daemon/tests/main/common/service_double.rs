@@ -146,6 +146,7 @@ impl LocalInferenceService for ProviderService {
             model: resp.model_id,
             choices: vec![ChatChoice {
                 index: 0,
+                logprobs: None,
                 message: ChatMessage {
                     role: "assistant".into(),
                     content: resp.text,

@@ -50,10 +50,12 @@ pub(crate) use corpus_index::v1_models::{probe_daemon_status, DaemonProbe, V1_MO
 /// 168s; full sections take far longer). When reqwest's timeout
 /// fires the daemon keeps the inference slot, so subsequent
 /// requests pile up against a held lock — a cascading failure
-/// that looks like the daemon itself is wedged. 1800s leaves
-/// generous headroom; if the request really is stuck, the user
-/// will notice on a 30-minute hang.
-const CHAT_TIMEOUT: Duration = Duration::from_secs(1800);
+/// that looks like the daemon itself is wedged. So this must outlast
+/// the daemon's own limit (`SOVEREIGN_INFERENCE_TIMEOUT_SECS`), which
+/// frees the slot: a window read reasoning to its 48k budget on a local
+/// model runs ~36 min at 30 tok/s, so long runs set 3600s there and
+/// this sits 5 min past it (1800s here cut those reads first).
+const CHAT_TIMEOUT: Duration = Duration::from_secs(3900);
 
 /// Default embed request timeout. Embeddings are fast; we keep this
 /// tight so a hung embed surface doesn't freeze a whole run.
@@ -508,29 +510,57 @@ impl DaemonInferenceClient {
     /// `daemon`, or answered from a store with this client never called under
     /// `replay` and `gold`. The ontology layer's verbs (extract, resolve, delta)
     /// build their ports here and nowhere else.
-    pub fn into_asked_closures(
+    pub async fn into_asked_closures(
         self,
         asker: corpus_engine::enrichment::asker::Asker,
         enrichment_dir: &std::path::Path,
     ) -> std::result::Result<(EmbedFn, InferenceFn), String> {
-        // The model each question is routed to, stamped on its answer.
+        // The model each question's alias is bound to on the daemon, stamped on
+        // its answer: stamped with the alias, a recorded run reused answers of
+        // whatever model served it before (note 10d774a9).
+        let bound = if asker.needs_daemon() {
+            corpus_index::v1_models::alias_bindings(&self.chat_base)
+                .await
+                .map_err(|e| {
+                    format!(
+                        "the {} asker stamps answers with the model each alias is bound to, \
+                         and {e}",
+                        asker.label()
+                    )
+                })?
+        } else {
+            Default::default()
+        };
+        // A name the daemon binds to nothing is stamped as asked: right for a
+        // model id, the old defect for an alias the daemon does not advertise,
+        // so the names in that case are said once here.
+        let unbound: Vec<&str> = std::iter::once(self.chat_model.as_str())
+            .chain(self.chat_models_by_phase.values().map(String::as_str))
+            .chain(std::iter::once(self.embed_model.as_str()))
+            .filter(|m| !m.is_empty() && !bound.contains_key(*m))
+            .collect();
+        tracing::info!(
+            asker = asker.label(),
+            ?bound,
+            ?unbound,
+            "asker: answers stamped with the models the aliases are bound to; unbound names stamped as asked"
+        );
         let by: corpus_engine::enrichment::asker::AnsweredBy = {
             let (chat_model, by_phase) =
                 (self.chat_model.clone(), self.chat_models_by_phase.clone());
             let embed_model = self.embed_model.clone();
-            Arc::new(move |port: &str, phase: Option<&str>| match port {
-                "embed" => embed_model.clone(),
-                _ => model_for_phase(&chat_model, &by_phase, phase).to_string(),
+            Arc::new(move |port: &str, phase: Option<&str>| {
+                let asked = match port {
+                    "embed" => embed_model.as_str(),
+                    _ => model_for_phase(&chat_model, &by_phase, phase),
+                };
+                bound
+                    .get(asked)
+                    .cloned()
+                    .unwrap_or_else(|| asked.to_string())
             })
         };
-        let (embed, mut chat) = self.into_closures();
-        // A/B valve and rollback hatch for forced-choice waves: the daemon is
-        // asked each question of a wave alone, the request pattern before
-        // waves, with the same questions, keys and answers.
-        if std::env::var("SOVEREIGN_WAVES_ONE_BY_ONE").is_ok_and(|v| v == "1") {
-            tracing::info!("inference_client: SOVEREIGN_WAVES_ONE_BY_ONE=1 — each wave's questions go to the daemon one by one");
-            chat = corpus_engine::enrichment::atlas::resolve_records::one_by_one(chat);
-        }
+        let (embed, chat) = self.into_closures();
         corpus_engine::enrichment::asker::answering(asker, enrichment_dir, by, embed, chat)
             .map_err(|e| format!("the {} asker: {e}", asker.label()))
     }

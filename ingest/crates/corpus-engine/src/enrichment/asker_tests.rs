@@ -98,101 +98,6 @@ fn the_asker_flag_is_a_closed_set() {
     assert!(Asker::parse("cache").is_err());
 }
 
-/// A forced-choice daemon that answers a wave natively and counts requests
-/// and questions: every single question gets a distribution whose top label
-/// is the last character of its user turn.
-fn wave_daemon() -> (EmbedFn, InferenceFn, Arc<AtomicUsize>, Arc<AtomicUsize>) {
-    let requests = Arc::new(AtomicUsize::new(0));
-    let questions = Arc::new(AtomicUsize::new(0));
-    let (r, q) = (Arc::clone(&requests), Arc::clone(&questions));
-    let answer = move |p: &ChatPrompt| {
-        q.fetch_add(1, Ordering::SeqCst);
-        let top = p.user.chars().last().unwrap().to_string();
-        let mut d = std::collections::BTreeMap::new();
-        d.insert("A".to_string(), 0.1f32);
-        d.insert("B".to_string(), 0.1f32);
-        d.insert("0".to_string(), 0.1f32);
-        d.insert(top, 0.8f32);
-        oicp_types::forced_choice::answer(&d)
-    };
-    let chat: InferenceFn = Arc::new(move |p: &ChatPrompt, _| {
-        r.fetch_add(1, Ordering::SeqCst);
-        let text = match crate::enrichment::atlas::resolve_records::wave_singles(p) {
-            Some(singles) => {
-                let texts: Vec<std::result::Result<String, String>> =
-                    singles.unwrap().iter().map(|s| Ok(answer(s))).collect();
-                crate::enrichment::atlas::resolve_records::wave_text(&texts)
-            }
-            None => answer(p),
-        };
-        Box::pin(async move { Ok(text) })
-    });
-    let embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(vec![0.0]) }));
-    (embed, chat, requests, questions)
-}
-
-fn line_question(line: &str) -> ChatPrompt {
-    ChatPrompt::new("sys", format!("doc\nLine {line}"))
-        .with_response_schema("read", oicp_types::forced_choice::schema(&["A", "B", "0"]))
-        .with_phase_id("document_passes_locate")
-        .with_temperature(0.0)
-}
-
-#[tokio::test]
-async fn a_wave_records_each_question_under_its_own_key_and_replays_either_way() {
-    use crate::enrichment::atlas::resolve_records::{decision_call, decision_wave};
-    let labels = vec!["A", "B", "0"];
-    let ask_wave = |c: InferenceFn, lines: Vec<&'static str>| {
-        let labels = labels.clone();
-        async move {
-            let qs: Vec<ChatPrompt> = lines.iter().map(|l| line_question(l)).collect();
-            let ls = vec![labels; qs.len()];
-            let items: Vec<String> = lines.iter().map(|l| l.to_string()).collect();
-            decision_wave(&c, &qs, &ls, "doc", &items).await
-        }
-    };
-    let dir = tempfile::tempdir().unwrap();
-    let (embed, chat, requests, questions) = wave_daemon();
-    let (_, c) = answering(Asker::Daemon, dir.path(), by("m"), embed, chat).unwrap();
-    // One question asked alone first; the wave then asks only the other two,
-    // as one request.
-    let alone = decision_call(&c, &line_question("1 A"), &labels, "doc", "1")
-        .await
-        .unwrap();
-    let waved = ask_wave(Arc::clone(&c), vec!["1 A", "2 B", "3 0"]).await;
-    assert_eq!(requests.load(Ordering::SeqCst), 2);
-    assert_eq!(questions.load(Ordering::SeqCst), 3);
-    assert_eq!(waved[0].as_ref().unwrap(), &alone);
-    // Each answer is on file under its single question's key, in the bytes a
-    // single request is answered with.
-    let store = std::fs::read_to_string(dir.path().join(ANSWERS_FILE)).unwrap();
-    for line in ["2 B", "3 0"] {
-        assert!(
-            store.contains(&chat_key(&line_question(line), None)),
-            "{line}"
-        );
-    }
-
-    // Replayed with no daemon: each question alone, and the wave again, give
-    // the recorded answers.
-    let (embed, chat) = refusing_daemon();
-    let (_, c) = answering(Asker::Replay, dir.path(), by("m"), embed, chat).unwrap();
-    for (i, line) in ["1 A", "2 B", "3 0"].iter().enumerate() {
-        let single = decision_call(&c, &line_question(line), &labels, "doc", line).await;
-        assert_eq!(single.as_ref().unwrap(), waved[i].as_ref().unwrap());
-    }
-    assert_eq!(
-        ask_wave(Arc::clone(&c), vec!["1 A", "2 B", "3 0"]).await,
-        waved
-    );
-    // A wave holding one question the run never asked refuses that one alone.
-    let partly = ask_wave(Arc::clone(&c), vec!["2 B", "4 A"]).await;
-    assert_eq!(partly[0], waved[1]);
-    assert!(
-        matches!(&partly[1], Err(crate::enrichment::atlas::resolve_records::Refusal::NoAnswer { reason }) if reason.contains("no answer recorded"))
-    );
-}
-
 /// `recorded` asks the model only what no earlier run of that model asked:
 /// a question a run of model m answered is answered from the store, a new
 /// one goes to the daemon and is recorded, stamped; under another model every
@@ -245,4 +150,45 @@ async fn recorded_reuses_only_what_the_same_model_answered_and_asks_the_rest() {
     let (_, c) = answering(Asker::Replay, dir.path(), by("m"), embed, chat).unwrap();
     assert_eq!(c(&q, None).await.unwrap(), by_n);
     assert_eq!(c(&new, None).await.unwrap(), fresh);
+}
+
+/// Failing input, named: replaying runs/loop/local35b-s4-base-a on world-s4
+/// gave read b's answers, which asked the same questions after it
+/// (2026-10-19). A question recorded twice answers with its latest line, so
+/// appending an earlier run's lines makes a replay give that run's answers
+/// (`loop.sh` RESTORE).
+#[tokio::test]
+async fn a_replay_gives_the_latest_recording_of_a_question() {
+    use std::io::Write;
+    let dir = tempfile::tempdir().unwrap();
+    let q = ChatPrompt::new("sys", "which deal?");
+    let (embed, chat, _) = counting_daemon();
+    let ask = |embed, chat| {
+        answering(Asker::Daemon, dir.path(), by("m"), embed, chat)
+            .unwrap()
+            .1
+    };
+    let first = ask(embed.clone(), chat.clone())(&q, None).await.unwrap();
+    let second = ask(embed, chat)(&q, None).await.unwrap();
+    assert_ne!(first, second);
+    let replay = || {
+        let (embed, chat) = refusing_daemon();
+        answering(Asker::Replay, dir.path(), by("m"), embed, chat)
+            .unwrap()
+            .1
+    };
+    assert_eq!(replay()(&q, None).await.unwrap(), second);
+    let store = dir.path().join(ANSWERS_FILE);
+    let earliest = std::fs::read_to_string(&store)
+        .unwrap()
+        .lines()
+        .next()
+        .unwrap()
+        .to_string();
+    let mut file = std::fs::OpenOptions::new()
+        .append(true)
+        .open(&store)
+        .unwrap();
+    writeln!(file, "{earliest}").unwrap();
+    assert_eq!(replay()(&q, None).await.unwrap(), first);
 }

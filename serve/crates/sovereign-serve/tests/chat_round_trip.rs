@@ -42,6 +42,7 @@ impl InferenceProvider for Recorder {
     ) -> sovereign_contracts::Result<CompletionResponse> {
         *self.seen.lock().unwrap() = Some(req.clone());
         Ok(CompletionResponse {
+            logprobs: None,
             text: "ok".into(),
             tokens_used: 1,
             prompt_tokens: 0,

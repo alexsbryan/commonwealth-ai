@@ -148,8 +148,7 @@ pub(super) async fn read(
 
 /// The one-attribute question: the type and the attribute, each with its
 /// declared description, the attribute's values, and the statement at `span`
-/// of `body` marked in its passage. RESOLVE asks it as `resolve_read`; the
-/// passes reader asks the same question of claim fields under its own phase.
+/// of `body` marked in its passage. RESOLVE asks it as `resolve_read`.
 pub(crate) fn choice_question(
     type_name: &str,
     type_description: &str,

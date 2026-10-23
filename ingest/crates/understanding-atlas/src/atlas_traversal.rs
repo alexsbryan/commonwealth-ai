@@ -17,6 +17,7 @@ pub mod engine;
 pub mod spans;
 pub mod typed;
 mod typed_check;
+mod typed_group;
 mod typed_match;
 pub mod typed_prompt;
 

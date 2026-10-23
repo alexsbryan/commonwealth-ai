@@ -240,3 +240,43 @@ async fn knowledge_sentence_queue_is_red_against_a_queued_corpus_answered_embedd
     let skipped = check_knowledge_sentence_queue(&b.host, &m).await;
     assert_eq!(skipped.status, crate::report::CheckStatus::Skip);
 }
+
+/// v0.6 §2.17's two failing inputs: a host that answers a background search
+/// differently from the same search without a priority, and one that reads a
+/// priority outside the set as absent.
+#[tokio::test]
+async fn knowledge_priority_is_red_against_a_changed_answer_and_an_unknown_value_read_as_absent() {
+    use crate::priority_checks::check_knowledge_priority;
+    let b = bench(Breaks::default()).await;
+    green(&check_knowledge_priority(&b.host, &b.manifest, &b.lib, &b.fixture).await);
+    for (breaks, says) in [
+        (
+            Breaks {
+                priority_changes_answer: true,
+                ..Breaks::default()
+            },
+            "with priority background than with none",
+        ),
+        (
+            Breaks {
+                priority_unknown_absent: true,
+                ..Breaks::default()
+            },
+            "a priority outside the set must be 400 or 422",
+        ),
+    ] {
+        let b = bench(breaks).await;
+        red(
+            &check_knowledge_priority(&b.host, &b.manifest, &b.lib, &b.fixture).await,
+            says,
+        );
+    }
+    let mut m = b.manifest.clone();
+    m.knowledge = None;
+    let f = v05_feature_failures(&m);
+    assert!(
+        f.iter()
+            .any(|x| x == "knowledge:priority requires a knowledge plane"),
+        "{f:?}"
+    );
+}

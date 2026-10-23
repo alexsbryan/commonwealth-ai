@@ -22,7 +22,7 @@ use crate::ingest_checks::FixtureState;
 use crate::report::{Check, Level};
 
 /// The v0.6 search checks over the fixture library, in order: `knowledge.range`,
-/// `knowledge.scoped`, `knowledge.sentences`.
+/// `knowledge.scoped`, `knowledge.sentences`, `knowledge.priority`.
 pub async fn search_checks(
     host: &Host,
     m: &ProviderManifest,
@@ -33,6 +33,7 @@ pub async fn search_checks(
         check_knowledge_range(host, m, lib, state).await,
         check_knowledge_scoped(host, m, lib, state).await,
         check_knowledge_sentences(host, m, lib, state).await,
+        crate::priority_checks::check_knowledge_priority(host, m, lib, state).await,
     ]
 }
 
@@ -73,7 +74,7 @@ pub fn range_failures_if_advertised(m: &ProviderManifest, hits: &[Value]) -> Vec
     }
 }
 
-async fn search_body(
+pub(crate) async fn search_body(
     host: &Host,
     m: &ProviderManifest,
     body: &Value,
@@ -82,7 +83,7 @@ async fn search_body(
     host.post(&k.search_endpoint, body).await
 }
 
-async fn hits(
+pub(crate) async fn hits(
     host: &Host,
     m: &ProviderManifest,
     body: &Value,

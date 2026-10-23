@@ -2,11 +2,10 @@
 //! The customer journey's fixture in process (`tests/fixtures/layer/mailraw/`,
 //! whose recipe tells the story): six RFC 5322 messages through the engine's
 //! own ingest (`Fixture::ingest`), then the default path. What a correct read
-//! of a mailbox must never do is asserted on every question asked, and the
+//! of a mailbox must never do is asserted on every window read, and the
 //! records a right model makes are asserted with the oracle answering RESOLVE
-//! and Mention right for the parties the fixture names.
+//! right for the parties the fixture names.
 
-use super::reader::{asked_line, line_questions};
 use super::*;
 
 const SHAPE: &str = "mailraw";
@@ -23,12 +22,6 @@ const PARTIES: &[(&str, &str, &str)] = &[
     ("order", "oak chairs", "oak chairs"),
 ];
 
-/// Whether `prompt` is about the message whose Message-ID is `id`: its
-/// declared facts name the field the recipe stamps a document's id from.
-fn in_message(prompt: &ChatPrompt, id: &str) -> bool {
-    prompt.user.contains(&format!("\nmessage_id: {id}\n"))
-}
-
 /// A line a header block states: the fixture writes every header line, of a
 /// message and of a message embedded in one, as `Field: value`, and no body
 /// line opens that way.
@@ -38,123 +31,63 @@ fn is_header_line(text: &str) -> bool {
         .any(|field| text.trim_start().starts_with(field))
 }
 
-/// C1 on a raw mailbox: the header facts open every question as declared
-/// facts, so no header line is ever asked, neither the message's own (the
-/// extractor writes them into the stored text) nor an embedded message's.
+/// C1 on a raw mailbox: a message's header facts are shown beside it as
+/// declared facts, so no header line is shown as a message's own text,
+/// neither the message's own (the extractor writes them into the stored text)
+/// nor an embedded message's.
 #[tokio::test]
-async fn no_question_asks_a_header_line() {
+async fn no_window_shows_a_header_line_as_its_own() {
     let run = run(&Fixture::ingest(SHAPE).await).await;
-    let asked: Vec<&str> = line_questions(&run).into_iter().map(asked_line).collect();
-    assert!(!asked.is_empty(), "no line was asked");
-    let headers: Vec<&&str> = asked.iter().filter(|l| is_header_line(l)).collect();
-    assert!(headers.is_empty(), "header lines were asked: {headers:?}");
-    // Nor is one offered as where a particular is first named (About).
-    let offered: Vec<&str> = run
-        .prompts
-        .iter()
-        .filter(|p| p.user.contains("first named or described?"))
-        .flat_map(|p| p.user.lines())
-        .filter_map(|l| l.split_once(" line ").and_then(|(_, r)| r.split_once(": ")))
-        .map(|(_, text)| text)
-        .filter(|text| is_header_line(text))
-        .collect();
-    assert!(
-        offered.is_empty(),
-        "About offered header lines: {offered:?}"
-    );
+    let shown = own_lines(&run, None);
+    assert!(!shown.is_empty(), "no line was shown");
+    let headers: Vec<&&str> = shown.iter().filter(|l| is_header_line(l)).collect();
+    assert!(headers.is_empty(), "header lines were shown: {headers:?}");
 }
 
-/// A forwarded message that is not in the corpus is no statement of the
-/// message carrying it: none of its lines is asked, so nothing it says is
-/// dated or authored by the forward, and no claim cites it.
+/// A forwarded message that is not in the corpus is a message of its own,
+/// never a statement of the message carrying it: none of its lines is shown
+/// as the forward's own, and every claim citing it is the embedded
+/// message's, dated and authored by its own header (Sam Reed, 3 March), not
+/// by the forward (Mia Holt, 4 March). Until 2026-10-17 such a message was
+/// read nowhere (ward-story tep/10., note f9142d79).
 #[tokio::test]
-async fn no_line_of_an_embedded_message_is_asked_or_cited() {
+async fn an_embedded_message_is_read_as_its_own_and_never_as_the_forwards() {
     let run = run(&Fixture::ingest(SHAPE).await).await;
-    let asked: Vec<&str> = line_questions(&run)
-        .into_iter()
-        .filter(|p| in_message(p, "<n2@alderpine.example>"))
-        .map(asked_line)
-        .collect();
+    let shown = own_lines(&run, Some("message_id: <n2@alderpine.example>"));
     assert!(
-        asked
+        shown
             .iter()
             .any(|l| l.starts_with("The timber merchant answered")),
-        "the forward's own line is asked: {asked:?}"
+        "the forward's own line is shown: {shown:?}"
     );
     assert!(
-        !asked.iter().any(|l| l.contains(FORWARDED)),
-        "a line of the embedded message was asked: {asked:?}"
+        !shown.iter().any(|l| l.contains(FORWARDED)),
+        "a line of the embedded message was shown as the forward's: {shown:?}"
     );
-    let citing: Vec<String> = run
-        .atoms()
+    assert!(
+        own_lines(&run, None).iter().any(|l| l.contains(FORWARDED)),
+        "the embedded message is shown as a message of its own"
+    );
+    let atoms = run.atoms();
+    let citing: Vec<&serde_json::Value> = atoms
         .iter()
         .filter(|a| a["atom_type"] == "Claim")
         .filter(|a| a.to_string().contains(FORWARDED))
-        .map(|a| a["data"]["id"].to_string())
+        .map(|a| &a["data"]["attributes"])
         .collect();
-    assert!(
-        citing.is_empty(),
-        "claims cite the embedded message: {citing:?}"
-    );
-}
-
-/// A company named in prose before any message from it arrives is the record
-/// a later header seeds, and no record is named with trailing punctuation or
-/// an address: the note names "Birch Hall Trust," and the oracle points at
-/// the words as a span model would, punctuation included.
-#[tokio::test]
-async fn a_company_named_before_its_mail_is_its_seeded_record_and_named_cleanly() {
-    let run = run_knowing(&Fixture::ingest(SHAPE).await, PARTIES).await;
-    let atoms = run.atoms();
-    let companies: Vec<&Value> = atoms
-        .iter()
-        .filter(|a| a["data"]["entity_type"] == "company")
-        .collect();
-    let birch = companies
-        .iter()
-        .find(|a| a["data"]["attributes"]["web_domain"] == "birchhall.example")
-        .and_then(|a| a["data"]["id"].as_str())
-        .expect("a header seeds birchhall.example");
-    for c in &companies {
-        let name = c["data"]["canonical_name"].as_str().unwrap_or("");
+    assert!(!citing.is_empty(), "no claim cites the embedded message");
+    for attributes in citing {
+        let id = attributes["document_id"].as_str().unwrap_or_default();
+        let date = attributes["document_date"].as_str().unwrap_or_default();
         assert!(
-            !name.contains('@') && name.ends_with(|ch: char| ch.is_alphanumeric()),
-            "a company is named {name:?}"
+            id.starts_with("embedded-"),
+            "cited as the forward's: {attributes}"
+        );
+        assert!(
+            date.starts_with("2026-03-04T00:20"),
+            "not its own header's date: {attributes}"
         );
     }
-    let in_note: Vec<&Value> = atoms
-        .iter()
-        .filter(|a| a["data"]["attributes"]["document_id"] == "<n1@alderpine.example>")
-        .filter(|a| {
-            a["data"]["attributes"]["__document_read_words"]
-                .as_str()
-                .is_some_and(|w| w.contains("Birch Hall"))
-        })
-        .collect();
-    assert_eq!(
-        in_note.len(),
-        1,
-        "the note names Birch Hall once: {in_note:?}"
-    );
-    assert_eq!(
-        in_note[0]["data"]["attributes"]["__document_read_words"], "Birch Hall Trust",
-        "the mention's words are trimmed of punctuation"
-    );
-    let decisions: Vec<Value> = run
-        .lines(DECISIONS_FILE)
-        .into_iter()
-        .filter(|d| d["type"] == "company" && d["document"] == "<n1@alderpine.example>")
-        .collect();
-    assert_eq!(
-        in_note[0]["data"]["subject"].as_str(),
-        Some(birch),
-        "the note's Birch Hall Trust is not birchhall.example's record; RESOLVE: {decisions:?}"
-    );
-    let opened: Vec<&&Value> = companies
-        .iter()
-        .filter(|a| a["data"]["attributes"]["web_domain"].is_null())
-        .collect();
-    assert!(opened.is_empty(), "a mention opened a company: {opened:?}");
 }
 
 /// What RESOLVE shows of a record is what a reader would recognise it by: an

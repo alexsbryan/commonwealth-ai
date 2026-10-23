@@ -9,9 +9,14 @@
 //! document names in its fields (`Participants`) whose identity values,
 //! joined as Pick shows them, it folds equal to, and is dropped when that
 //! record is in an exclusion set over the type (`exclusions_of`). A reading
-//! that names no such record is a mention's words: it counts as the record
-//! RESOLVE put the same document's mention of those words on
-//! (`decides_mentions`). One that names neither is never held and never
+//! that names no such record is a window read's name for a subject: it
+//! counts as the record RESOLVE put the same document's statements read
+//! under that name on (`SUBJECT_NAME_ATTRIBUTE`). Failing both, a reading of
+//! a metadata-sourced type counts as the one record of it any document's
+//! metadata projected whose identity value it folds equal to. A reading
+//! of a thing the window read gave other names (`OTHER_NAMES_ATTRIBUTE`) lands
+//! by its value, then by each other name. One that
+//! names none of these is never held and never
 //! minted into a record: it stays on the derivation line, cited
 //! (`UnresolvedReading`).
 
@@ -29,9 +34,9 @@ use crate::enrichment::atlas::precision::{Precision, SourcePrecision};
 use crate::enrichment::atlas::resolution_records::{decides, BuildAtoms};
 use crate::enrichment::atlas::resolution_sources::key_name;
 use crate::enrichment::ontology::derived::{FoldBy, SetDecl};
-use crate::enrichment::ontology::{AttrDecl, AttrFamily, OntologyPolicies, TypeIndex};
+use crate::enrichment::ontology::{AttrDecl, AttrFamily, OntologyPolicies, SourceDecl, TypeIndex};
 use crate::enrichment::pipeline::document_read::{
-    field_readings, mention_words, DocumentReadField, SUBJECT_FIELDS_ATTRIBUTE,
+    field_readings, other_names, window_subject_name, DocumentReadField, SUBJECT_FIELDS_ATTRIBUTE,
 };
 
 /// Every `(type, attribute, by)` a declaration folds onto its records.
@@ -73,19 +78,53 @@ struct Folded {
 /// The one record of type `of` that document `doc`'s fields name and whose
 /// identity values, joined by a space as a Pick of it gives them, fold equal
 /// to `value`, by its place among the entities; failing that, the one record
-/// `doc`'s mention whose words fold equal to `value` is on; or why there is
-/// none. Keyed by the document, never by words across documents.
+/// `doc`'s statements whose window-read subject name folds equal to `value`
+/// are on; or why there is none. Keyed by the document, never by words
+/// across documents.
+/// A reading of a thing the window read gave other names (`also`, from the
+/// statement's `OTHER_NAMES_ATTRIBUTE`) lands by its value, then by each other
+/// name in order: the first that names a record holds it, and one that names
+/// several records is the error it is for the value.
 fn record_read(
     graph: &Graph<'_>,
     doc: Option<&str>,
     of: &str,
     value: &Value,
+    also: &[&str],
 ) -> Result<usize, String> {
     let doc = doc.ok_or("the statement is in no one document")?;
-    let want = value
-        .as_str()
-        .and_then(fold_identity_value)
-        .ok_or("the reading is no name")?;
+    let words = value.as_str().ok_or("the reading is no name")?;
+    let whole = fold_identity_value(words).ok_or("the reading is no name")?;
+    for name in std::iter::once(words).chain(also.iter().copied()) {
+        let Some(want) = fold_identity_value(name) else {
+            continue;
+        };
+        if let Some(record) = record_named(graph, doc, of, &want)? {
+            if want != whole {
+                debug!(
+                    document = doc,
+                    words,
+                    name,
+                    "atlas/derived: a reading lands on a record by another name its thing has"
+                );
+            }
+            return Ok(record);
+        }
+    }
+    Err(format!(
+        "no `{of}` the document's fields name or its text mentions is {whole:?}"
+    ))
+}
+
+/// The one record of type `of` that `doc` names `want` by (its fields, or a
+/// window subject name, in that order; failing both, for a metadata-sourced
+/// `of`, [`sourced_anywhere`]), `None` when none does, or why several do.
+fn record_named(
+    graph: &Graph<'_>,
+    doc: &str,
+    of: &str,
+    want: &str,
+) -> Result<Option<usize>, String> {
     let keys = graph.index.effective_identity(of);
     let named: BTreeSet<usize> = graph
         .participants
@@ -102,7 +141,7 @@ fn record_read(
         })
         .collect();
     match named.len() {
-        1 => return Ok(*named.first().unwrap()),
+        1 => return Ok(Some(*named.first().unwrap())),
         0 => {}
         n => {
             return Err(format!(
@@ -110,15 +149,16 @@ fn record_read(
             ))
         }
     }
-    // A reading that names no listed record is a mention's words: it holds
-    // the record RESOLVE put that document's mention of them on.
-    let mentioned: BTreeSet<usize> = graph
+    // A reading that names no listed record is a window read's name for a
+    // subject: it holds the record RESOLVE put that document's statements
+    // about it on.
+    let subjects: BTreeSet<usize> = graph
         .claims
         .iter()
         .zip(&graph.claim_doc)
-        .filter(|(c, d)| c.claim_kind.is_none() && **d == Some(doc))
+        .filter(|(_, d)| **d == Some(doc))
         .filter(|(c, _)| {
-            mention_words(&c.attributes)
+            window_subject_name(&c.attributes)
                 .and_then(fold_identity_value)
                 .is_some_and(|w| w == want)
         })
@@ -128,13 +168,62 @@ fn record_read(
             t == of || graph.index.is_a(t, of)
         })
         .collect();
-    match mentioned.len() {
-        1 => Ok(*mentioned.first().unwrap()),
-        0 => Err(format!(
-            "no `{of}` the document's fields name or its text mentions is {want:?}"
-        )),
+    match subjects.len() {
+        1 => Ok(Some(*subjects.first().unwrap())),
+        0 => sourced_anywhere(graph, doc, of, want),
         n => Err(format!(
-            "the document's mentions of {want:?} are on {n} `{of}` records"
+            "the document's statements about {want:?} are on {n} `{of}` records"
+        )),
+    }
+}
+
+/// The one record of a metadata-sourced `of` with identity keys, projected
+/// from any document's metadata, whose joined identity value folds equal to
+/// `want`: a member a message names in its text who wrote another message.
+/// Failing input, named: 06-tasks n1/n5, a new owner named by someone other
+/// than the message's author held nothing (2026-10-20). Exact identity value
+/// only: a display name ("Priya Shah" for handle "priya") does not land.
+/// Several such records refuse, with the count; none is `None`; nothing is
+/// minted.
+fn sourced_anywhere(
+    graph: &Graph<'_>,
+    doc: &str,
+    of: &str,
+    want: &str,
+) -> Result<Option<usize>, String> {
+    let keys = graph.index.effective_identity(of);
+    let sourced = graph
+        .index
+        .get(of)
+        .is_some_and(|t| matches!(t.source, Some(SourceDecl::Metadata(_))));
+    if !sourced || keys.is_empty() {
+        return Ok(None);
+    }
+    let found: BTreeSet<usize> = graph
+        .participants
+        .values()
+        .flatten()
+        .filter_map(|(_, id)| graph.entity_at.get(id.as_str()).copied())
+        .filter(|&i| {
+            let e = &graph.entities[i];
+            let t = e.entity_type.as_str_repr();
+            (t == of || graph.index.is_a(t, of))
+                && fold_identity_value(&key_name(&e.attributes, keys.iter().map(String::as_str)))
+                    .is_some_and(|k| k == want)
+        })
+        .collect();
+    debug!(
+        document = doc,
+        of,
+        want,
+        found = found.len(),
+        "atlas/derived: a reading names a sourced record another document's metadata projected"
+    );
+    match found.len() {
+        0 => Ok(None),
+        1 => Ok(found.first().copied()),
+        n => Err(format!(
+            "{n} `{of}` records other documents' metadata name are {want:?}"
         )),
     }
 }
@@ -162,8 +251,9 @@ pub(super) fn held(
     doc: Option<&str>,
     of: &str,
     value: &Value,
+    also: &[&str],
 ) -> Held {
-    let i = match record_read(graph, doc, of, value) {
+    let i = match record_read(graph, doc, of, value, also) {
         Ok(i) => i,
         Err(why) => return Held::Unresolved(why),
     };
@@ -246,7 +336,12 @@ pub(super) fn derive(
                     };
                     let doc = graph.claim_doc[j];
                     let cited = evidence.clone();
-                    let (key, value) = match of.map(|of| held(&graph, &exclusions, doc, of, &value))
+                    let also = value
+                        .as_str()
+                        .map(|w| other_names(&claim.attributes, w))
+                        .unwrap_or_default();
+                    let (key, value) = match of
+                        .map(|of| held(&graph, &exclusions, doc, of, &value, &also))
                     {
                         None => (words(&value), value),
                         Some(Held::Excluded { id, set }) => {

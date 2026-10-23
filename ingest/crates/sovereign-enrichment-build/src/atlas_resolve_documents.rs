@@ -14,10 +14,13 @@ use corpus_engine::enrichment::atlas::resolution_derived::membership::place_thre
 use corpus_engine::enrichment::atlas::resolution_derived::{
     derive_attributes, derives, DeriveStage, DerivedReport,
 };
-use corpus_engine::enrichment::atlas::resolution_records::{resolve_declared_types, BuildAtoms};
+use corpus_engine::enrichment::atlas::resolution_records::{
+    resolve_declared_types, statement_atoms, BuildAtoms,
+};
 use corpus_engine::enrichment::atlas::resolve_records::{Answerer, DocumentResolution};
 use corpus_engine::enrichment::atlas::{
-    project_source_atoms, stamp_claim_documents, Participants, SectionDocuments, SourceProjection,
+    place_index_chunks, project_source_atoms, stamp_claim_documents, Participants,
+    SectionDocuments, SourceProjection,
 };
 use corpus_engine::enrichment::ontology::{OntologyPolicies, SourceDecl};
 use corpus_engine::enrichment::pipeline::document_read::DocumentReadStatus;
@@ -46,8 +49,9 @@ pub(crate) struct DocumentInputs {
 }
 
 /// Load the section documents when a type declares a metadata `source`, or
-/// when `stamps` asks and `change.document` or an identity criterion is
-/// declared; project the sourced types from them. A declaration that cannot
+/// when `stamps` asks and the recipe declares any type: every evidence is
+/// then placed in its installed chunk (`place_index_chunks`), with or without
+/// `change.document`. Project the sourced types from them. A declaration that cannot
 /// project refuses the step.
 pub(crate) fn load(
     cfg: &EnrichConfig,
@@ -79,13 +83,10 @@ pub(crate) fn from_documents(
         .types
         .iter()
         .any(|t| matches!(t.source, Some(SourceDecl::Metadata(_))));
-    let read = policies.change.document.is_some()
-        || derives(policies)
-        || policies
-            .shape
-            .types
-            .iter()
-            .any(|t| t.identity_criterion.is_some());
+    // A recipe's atlas places its evidence in installed chunks, which reads
+    // the documents even when nothing else declared does.
+    let read =
+        policies.change.document.is_some() || derives(policies) || !policies.shape.types.is_empty();
     if !sourced && !(stamps && read) {
         return Ok(DocumentInputs {
             documents: None,
@@ -190,6 +191,11 @@ pub(crate) async fn apply(
         failures.extend(refused);
     }
     derive(&mut atoms, DeriveStage::AfterResolve)?;
+    // After the reference derive, so a read relation's `to` is a record.
+    let projected = statement_atoms::project(&mut atoms, policies, sections, corpus_id);
+    if projected.states + projected.relations + projected.skipped.values().sum::<usize>() > 0 {
+        println!("  ✓ {}", projected.summary());
+    }
     if let Some(out) = derived.as_mut() {
         let read = read_documents(sections, documents);
         let report =
@@ -199,6 +205,10 @@ pub(crate) async fn apply(
     if let Some(out) = derived {
         println!("  ✓ derived values → {}", out.finish()?.display());
     }
+    // Last, over the atoms as they will be written: every evidence names the
+    // installed chunk holding its quote, whatever the recipe stamps.
+    let placed = place_index_chunks(&mut atoms, documents);
+    println!("  ✓ {}", placed.summary());
     Ok(failures)
 }
 

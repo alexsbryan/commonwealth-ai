@@ -1,0 +1,166 @@
+[corpus]
+id = "ward-story"
+name = "CRM from a mailbox: Kim Ward's Tucson Electric Power and City of Pasadena accounts"
+description = "The ontology-apps CRM sketch over research/ontology-apps/ward/prepare.py's sample of Ward's CMU maildir; people and companies are also read from the headers, with Contact -> Account linked by domain."
+license = "personal-data"
+schema_version = 1
+mesh_sharing = false
+size_compressed_gb = 0.0
+size_indexed_gb = 0.3
+
+[acquire]
+type = "local_file"
+path = "~/.svrnmesh/bench-corpora/enron-ward/story"
+
+[extract]
+type = "email"
+max_body_bytes = 4194304
+max_attachment_bytes = 0
+
+[[filter]]
+type = "boilerplate"
+strip_signatures = true
+strip_quoted_replies = true
+strip_disclaimers = true
+min_body_chars_after_strip = 20
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+
+[enrichment.ontology]
+version = 1
+
+[[enrichment.ontology.types]]
+name = "person"
+kind = "entity"
+attributes = [
+  { name = "email", type = "text" },
+  { name = "employer", type = "ref", of = "company" },
+  { name = "name", type = "text", description = "The display name a header pairs with the address." },
+]
+identity = ["email"]
+source = { metadata = ["from", "to", "cc"], attributes = { email = "address", name = "display_name" }, refs = { employer = { of = "company", reader = "domain" } } }
+
+[[enrichment.ontology.types]]
+name = "company"
+kind = "entity"
+identity_criterion = "Two mentions are one company when they name the same organisation, however it is written: its full name, a short name or initialism, or its web domain. A division, desk or trading arm of a company is that company."
+attributes = [{ name = "domain", type = "text" }]
+identity = ["domain"]
+source = { metadata = ["from", "to", "cc"], attributes = { domain = "domain" } }
+
+[[enrichment.ontology.types]]
+name = "deal"
+kind = "entity"
+description = "one prospective or actual sale, purchase, supply arrangement or trade, with one counterparty"
+identity_criterion = "Two mentions are one deal when they are about the same transaction with the same counterparty: the same product, delivery point and term being asked about, offered, negotiated, agreed, confirmed or delivered, however differently it is worded and whoever writes. Two transactions with one counterparty (two terms, two delivery points, two separate purchases) are different deals, and a master or enabling agreement with no specific trade (ISDA, GISB, EEI) is a deal of its own, apart from the trades done under it."
+identity_bar = 0.5
+identity_necessary = ["term"]
+attributes = [
+  { name = "counterparty", type = "ref", of = "company", description = "the outside company the deal is with", by = "most" },
+  { name = "amount", type = "quantity", unit = "USD", by = "latest" },
+  { name = "product", type = "text", description = "what is traded: the commodity or service", by = "most" },
+  { name = "delivery_point", type = "text", description = "where it is delivered: a hub, pipeline point or place", by = "most" },
+  { name = "term", type = "text", values = [
+    "month to month, daily or spot, with no fixed term",
+    "a fixed term shorter than a year (a month, a season, some months)",
+    "a fixed term of a year or more",
+    "a master, credit or enabling agreement with no term of its own",
+  ], by = "agree" },
+  { name = "stage", type = "text", values = ["lead", "proposal", "negotiating", "won", "lost"], derived = "deal_stage" },
+]
+
+[[enrichment.ontology.types]]
+name = "stage_update"
+kind = "claim"
+description = "a statement of where a deal stands: an inquiry, RFP or interest received; an indication, price or offer sent; terms, credit or contract drafts exchanged; a deal confirmed, executed or awarded; or one declined, awarded elsewhere or withdrawn"
+force = "assertive"
+subject = "deal"
+attributes = [
+  { name = "stage", type = "text", values = ["lead", "proposal", "negotiating", "won", "lost"], description = "lead: inquiry, RFP or interest received; proposal: indication, price or offer sent; negotiating: terms, credit or contract drafts exchanged; won: confirmed, executed or awarded to Enron; lost: declined, awarded elsewhere or withdrawn" },
+  { name = "party", type = "ref", of = "company", derived = "party_of_message" },
+]
+
+[[enrichment.ontology.types]]
+name = "commitment"
+kind = "claim"
+description = "someone promises to do something, such as sending a document or calling back, possibly by a stated time"
+force = "commissive"
+subject = "person"
+attributes = [{ name = "due", type = "time" }]
+
+[enrichment.ontology.change]
+supersedes = { stage_update = "document_date" }
+document = { date = "date", thread = "base_subject", id = "message_id" }
+
+[enrichment.ontology.tension]
+between = ["stage_update"]
+
+# Derived attributes (ONTOLOGY_PRIMITIVES.md §8): the other side of a message is who took part in it, read from
+# its address fields, never from a mention. A deal's counterparty is read from each statement about it (Pick, among
+# the companies the message's headers name and the ones its text names, never our own) and the deal holds the one
+# its statements pick most, as it holds the latest amount and the term they agree on.
+[[enrichment.ontology.sets]]
+id = "ours"
+type = "company"
+where = { domain = { suffix = "enron.com" } }
+
+[[enrichment.ontology.paths]]
+id = "outside_parties"
+path = "document / (from | to | cc) / employer [!ours]"
+
+[[enrichment.ontology.folds]]
+id = "party_of_message"
+by = "first"
+from = ["outside_parties"]
+
+# A deal's current stage is its latest report by document date, projected by the protocol fold: only a stage the
+# reader supported with field evidence counts, and a deal with any unqualified report stays pending. A transition is
+# identified by the stage it enters; Ward declares no corrections.
+[[enrichment.ontology.folds]]
+id = "deal_stage"
+by = "protocol"
+from = ["^subject"]
+
+[enrichment.ontology.folds.protocol]
+identity = "stage"
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "lead"
+claim_kind = "stage_update"
+state = "lead"
+when = { stage = "lead" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "proposal"
+claim_kind = "stage_update"
+state = "proposal"
+when = { stage = "proposal" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "negotiating"
+claim_kind = "stage_update"
+state = "negotiating"
+when = { stage = "negotiating" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "won"
+claim_kind = "stage_update"
+state = "won"
+when = { stage = "won" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "lost"
+claim_kind = "stage_update"
+state = "lost"
+when = { stage = "lost" }

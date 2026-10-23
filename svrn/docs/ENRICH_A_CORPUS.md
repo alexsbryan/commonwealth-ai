@@ -149,6 +149,10 @@ and events alone. Every model answer the two commands get is recorded in
 they answer from that file without the daemon and write the same records. This sequence is the `layer-default-path` journey
 (`svrn contract map`).
 
+[Typed records from your documents](./RECORDS_FROM_DOCUMENTS.md) is the full journey: designing a
+declaration for your own problem, asking for the records, what a read costs, and what the layer does not
+do yet.
+
 ## Where it lives
 
 Phase caches and run outputs under `~/.svrnmesh/enrichment/<corpus>/`;
@@ -158,6 +162,8 @@ enrichment; the corpus itself is untouched.
 
 ## What's built on top of it
 
+- [Typed records](./RECORDS_FROM_DOCUMENTS.md) turn a declaration into the records a CRM, a tracker or
+  a register keeps, read from your documents with every value cited.
 - [Governance](./GOVERN_A_CORPUS.md) turns the atlas's claims and
   tensions into an adjudicable rule set — surface conflicts, resolve
   them, ask what current law says.

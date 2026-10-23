@@ -1,0 +1,447 @@
+# Recruiting inbox — hiring at a 60-person company.
+#
+# The recruiter's inbox (candidates, agencies, hiring managers) plus the interview
+# notes interviewers paste into email after each interview. Built to replace the
+# hand-kept spreadsheet (one row per candidate per opening): which candidates are in
+# play for each opening and at what stage, who sourced them, who interviewed them and
+# what each interviewer recommended, what was offered and how the offer ended, when
+# and on whose say-so a candidate moved stage, and which agencies are owed a fee.
+
+[corpus]
+id = "recruiting-inbox"
+name = "Recruiting inbox"
+description = "A recruiter's inbox and pasted interview notes, read as candidates, openings, applications (one per candidate per opening), stage moves, interview feedback, offers and agency fees."
+license = "private"
+mesh_sharing = false
+scope = "local"
+schema_version = 1
+
+# The inbox exported as a maildir or a folder of .eml files.
+[acquire]
+type = "local_file"
+path = "SOURCE_PATH"
+
+[extract]
+type = "email"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "recruiting"
+
+[enrichment.ontology]
+version = 1
+must_not = [
+  "infer or record a candidate's age, ethnicity, religion, health, disability, pregnancy or family status",
+  "present one interviewer's recommendation as the hiring decision",
+]
+guidance = """
+This corpus is a recruiter's inbox at a 60-person company: emails with candidates,
+recruiting agencies and hiring managers, and the interview notes interviewers paste
+into email after each interview. A candidate is one person however many openings they
+apply to; an application is one candidate's candidacy for one opening, and it moves
+through stages: applied, screen, onsite, offer, hired, rejected, withdrew. A candidate
+comes in directly, through an employee's referral, through an agency, or because we
+sourced them; the first introduction decides who sourced them and whether an agency is
+owed a fee. Each interviewer writes their own recommendation; a recruiter relaying it
+is weaker than the interviewer's own note. An offer names a base salary, a currency and
+a start date; a revised offer replaces the earlier terms. Rejected is our decision to
+stop; withdrew is the candidate's.
+"""
+
+# ── Who and what the headers name (no model call) ────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "organization"
+kind = "entity"
+description = "A firm we exchange email with, known by its email domain: recruiting agencies above all, also our own company and candidates' employers."
+attributes = [{ name = "domain", type = "text" }]
+identity = ["domain"]
+source = { metadata = ["from", "to", "cc"], attributes = { domain = "domain" }, exclude = ["@bundled:mailbox_providers"] }
+
+[[enrichment.ontology.types]]
+name = "correspondent"
+kind = "entity"
+description = "Someone who sends or receives mail in this inbox: hiring managers, interviewers, referrers, agency recruiters, candidates, the recruiter."
+attributes = [
+  { name = "email", type = "text" },
+  { name = "organization", type = "ref", of = "organization" },
+]
+identity = ["email"]
+source = { metadata = ["from", "to", "cc"], attributes = { email = "address" }, refs = { organization = { of = "organization", reader = "domain" } } }
+
+# ── What RESOLVE decides from the statements about it ────────────────────────
+
+[[enrichment.ontology.types]]
+name = "candidate"
+kind = "entity"
+role_of = "person"
+description = "A person being considered for one or more openings."
+identity = ["email"]
+identity_criterion = "The same person: the same email address; without one, the same full name together with the same phone number, current employer or CV. A person who applies to two openings is one candidate."
+attributes = [
+  { name = "email", type = "text", by = "all", description = "The candidate's own email address." },
+  { name = "phone", type = "text", by = "all" },
+]
+
+[[enrichment.ontology.types]]
+name = "opening"
+kind = "entity"
+description = "A role we are hiring for: its title, team and hiring manager."
+identity_criterion = "The same role: the same title for the same team, however the title is abbreviated (\"Sr. Backend Eng\" and \"Senior Backend Engineer\" on the platform team are one opening). A second hire into the same role, opened separately, is a different opening."
+attributes = [
+  { name = "title", type = "text", by = "most" },
+  { name = "team", type = "text", by = "most" },
+  { name = "hiring_manager", type = "ref", of = "correspondent", by = "latest" },
+  { name = "status", type = "text", values = ["open", "on_hold", "filled", "closed"], by = "latest" },
+]
+
+[[enrichment.ontology.types]]
+name = "application"
+kind = "entity"
+description = "One candidate's candidacy for one opening: the spreadsheet row."
+identity_criterion = "One candidate for one opening. The same person for the same opening is one application however many emails mention it; the same person for a different opening is a different application."
+attributes = [
+  { name = "candidate", type = "ref", of = "candidate", by = "agree" },
+  { name = "opening", type = "ref", of = "opening", by = "agree" },
+  { name = "channel", type = "text", values = ["direct", "employee_referral", "agency", "sourced"], by = "earliest", description = "How the candidate first came to this opening." },
+  { name = "referrer", type = "ref", of = "correspondent", by = "earliest", description = "The employee who referred the candidate, when referred." },
+  { name = "agency", type = "ref", of = "organization", by = "earliest", description = "The agency that submitted the candidate, when submitted by one." },
+  { name = "stage", type = "text", values = ["applied", "screen", "onsite", "offer", "hired", "rejected", "withdrew"], derived = "application_stage" },
+  { name = "offer_status", type = "text", values = ["extended", "revised", "accepted", "declined"], derived = "offer_status" },
+]
+
+# ── What the emails say ───────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "candidate_profile"
+kind = "claim"
+force = "assertive"
+subject = "candidate"
+description = "What an email says about who the candidate is, apart from any one opening: an introduction, a CV summary, contact details, current role, location, salary expectation, notice period."
+attributes = [
+  { name = "current_title", type = "text" },
+  { name = "current_employer", type = "text" },
+  { name = "location", type = "text" },
+  { name = "salary_expectation", type = "quantity", description = "Expected annual base, the number as written." },
+  { name = "currency", type = "text" },
+  { name = "notice_period", type = "text" },
+]
+
+[[enrichment.ontology.types]]
+name = "opening_update"
+kind = "claim"
+force = "declaration"
+subject = "opening"
+description = "A statement about an opening itself: opening a role, describing it, putting it on hold, filling or closing it."
+
+[[enrichment.ontology.types]]
+name = "submission"
+kind = "claim"
+force = "declaration"
+subject = "application"
+description = "A candidate put forward for an opening: an agency submitting a CV, an employee referring someone, a candidate applying, or our own outreach."
+
+[[enrichment.ontology.types]]
+name = "stage_move"
+kind = "claim"
+force = "declaration"
+subject = "application"
+description = "A statement that moves an application to a stage: application received, invite to screen, invite to onsite, decision to make an offer, hire, rejection, withdrawal."
+attributes = [
+  { name = "move", type = "text", values = ["applied", "screen", "onsite", "offer", "hired", "rejected", "withdrew"], description = "The stage the application moves to." },
+  { name = "move_kind", type = "text", values = ["advance", "reopen", "correction"], description = "An ordinary move, a reopening of a rejected or withdrawn application, or a correction of a move made by mistake." },
+  { name = "undoes", type = "text", values = ["applied", "screen", "onsite", "offer", "hired", "rejected", "withdrew"], description = "For a correction: the stage that was entered by mistake." },
+  { name = "decider_role", type = "text", values = ["recruiter", "hiring_manager", "executive", "interviewer", "candidate"], description = "Whose say-so the move is on (an agency relaying a withdrawal relays the candidate's)." },
+  { name = "decided_by", type = "ref", of = "correspondent", description = "The person whose decision it was." },
+  { name = "effective_on", type = "time", description = "When the move took effect, if the email names a time other than its own date." },
+]
+
+[[enrichment.ontology.types]]
+name = "interview_feedback"
+kind = "claim"
+force = "assertive"
+subject = "application"
+grades = ["first-hand", "relayed"]
+description = "One interviewer's assessment after an interview, and what they recommend."
+attributes = [
+  { name = "interviewer", type = "ref", of = "correspondent" },
+  { name = "interview_date", type = "time" },
+  { name = "round", type = "text", values = ["phone_screen", "technical", "onsite", "hiring_manager", "culture", "reference"] },
+  { name = "recommendation", type = "text", values = ["strong_hire", "hire", "no_hire", "strong_no_hire"] },
+]
+
+[[enrichment.ontology.types]]
+name = "offer_terms"
+kind = "claim"
+force = "commissive"
+subject = "application"
+description = "The terms we offer a candidate: base salary, currency, start date. A revised offer replaces the earlier terms."
+attributes = [
+  { name = "move", type = "text", values = ["extended", "revised"], description = "A first offer, or a revision of an earlier one." },
+  { name = "base_salary", type = "quantity", description = "Annual base salary, the number as written." },
+  { name = "currency", type = "text", description = "The salary's currency, as an ISO code when one is written." },
+  { name = "start_date", type = "time" },
+  { name = "effective_on", type = "time", description = "The date the offer was made, if the email names one other than its own date." },
+]
+
+[[enrichment.ontology.types]]
+name = "offer_response"
+kind = "claim"
+force = "declaration"
+subject = "application"
+description = "The candidate's answer to an offer: accepting, declining, or countering it."
+attributes = [
+  { name = "move", type = "text", values = ["accepted", "declined", "countered"] },
+  { name = "effective_on", type = "time", description = "When the candidate answered, if the email names a time other than its own date." },
+]
+
+[[enrichment.ontology.types]]
+name = "agency_fee"
+kind = "claim"
+force = "directive"
+deontic = ["request"]
+subject = "application"
+description = "An agency asking to be paid for placing a candidate: a fee notice or an invoice."
+attributes = [
+  { name = "amount", type = "quantity" },
+  { name = "currency", type = "text" },
+  { name = "fee_percent", type = "quantity", unit = "%" },
+]
+
+[[enrichment.ontology.types]]
+name = "fee_terms"
+kind = "claim"
+force = "commissive"
+subject = "organization"
+description = "The fee agreed with an agency for a placement: a percentage of first-year base or a flat fee, and its guarantee period."
+attributes = [
+  { name = "fee_percent", type = "quantity", unit = "%" },
+  { name = "flat_fee", type = "quantity" },
+  { name = "currency", type = "text" },
+  { name = "guarantee_days", type = "quantity", unit = "days" },
+]
+
+# ── When things hold ──────────────────────────────────────────────────────────
+
+[enrichment.ontology.change]
+document = { date = "date", thread = "thread_id", id = "message_id", author = "from" }
+supersedes = { offer_terms = "document_date", fee_terms = "document_date" }
+
+# ── Where the stage comes from ────────────────────────────────────────────────
+
+[[enrichment.ontology.folds]]
+id = "application_stage"
+by = "protocol"
+from = ["^subject"]
+
+[enrichment.ontology.folds.protocol]
+identity = "move"
+effective_time = "effective_on"
+initial = "applied"
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "applied"
+claim_kind = "stage_move"
+state = "applied"
+when = { move = "applied" }
+from = ["applied"]
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "to_screen"
+claim_kind = "stage_move"
+state = "screen"
+when = { move = "screen" }
+from = ["applied", "screen", "onsite", "offer"]
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "to_onsite"
+claim_kind = "stage_move"
+state = "onsite"
+when = { move = "onsite" }
+from = ["applied", "screen", "onsite", "offer"]
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "to_offer"
+claim_kind = "stage_move"
+state = "offer"
+when = { move = "offer" }
+from = ["applied", "screen", "onsite", "offer"]
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "to_hired"
+claim_kind = "stage_move"
+state = "hired"
+when = { move = "hired" }
+from = ["applied", "screen", "onsite", "offer"]
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "to_rejected"
+claim_kind = "stage_move"
+state = "rejected"
+when = { move = "rejected" }
+from = ["applied", "screen", "onsite", "offer"]
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "to_withdrew"
+claim_kind = "stage_move"
+state = "withdrew"
+when = { move = "withdrew", decider_role = "candidate" }
+from = ["applied", "screen", "onsite", "offer", "hired"]
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "reopen_applied"
+claim_kind = "stage_move"
+state = "applied"
+when = { move = "applied", move_kind = "reopen" }
+from = ["rejected", "withdrew"]
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "reopen_screen"
+claim_kind = "stage_move"
+state = "screen"
+when = { move = "screen", move_kind = "reopen" }
+from = ["rejected", "withdrew"]
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "reopen_onsite"
+claim_kind = "stage_move"
+state = "onsite"
+when = { move = "onsite", move_kind = "reopen" }
+from = ["rejected", "withdrew"]
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "offer_extended"
+claim_kind = "offer_terms"
+state = "offer"
+when = { move = "extended" }
+from = ["applied", "screen", "onsite", "offer"]
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "offer_revised"
+claim_kind = "offer_terms"
+state = "offer"
+when = { move = "revised" }
+from = ["offer", "withdrew"]
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "offer_accepted"
+claim_kind = "offer_response"
+state = "hired"
+when = { move = "accepted" }
+from = ["offer"]
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "offer_declined"
+claim_kind = "offer_response"
+state = "withdrew"
+when = { move = "declined" }
+from = ["offer"]
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "correct_to_applied"
+claim_kind = "stage_move"
+state = "applied"
+when = { move = "applied", move_kind = "correction" }
+corrects = "undoes"
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "correct_to_screen"
+claim_kind = "stage_move"
+state = "screen"
+when = { move = "screen", move_kind = "correction" }
+corrects = "undoes"
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "correct_to_onsite"
+claim_kind = "stage_move"
+state = "onsite"
+when = { move = "onsite", move_kind = "correction" }
+corrects = "undoes"
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "correct_to_offer"
+claim_kind = "stage_move"
+state = "offer"
+when = { move = "offer", move_kind = "correction" }
+corrects = "undoes"
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "correct_to_hired"
+claim_kind = "stage_move"
+state = "hired"
+when = { move = "hired", move_kind = "correction" }
+corrects = "undoes"
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "correct_to_rejected"
+claim_kind = "stage_move"
+state = "rejected"
+when = { move = "rejected", move_kind = "correction" }
+corrects = "undoes"
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "correct_to_withdrew"
+claim_kind = "stage_move"
+state = "withdrew"
+when = { move = "withdrew", move_kind = "correction" }
+corrects = "undoes"
+
+[[enrichment.ontology.folds]]
+id = "offer_status"
+by = "protocol"
+from = ["^subject"]
+
+[enrichment.ontology.folds.protocol]
+identity = "move"
+effective_time = "effective_on"
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "extended"
+claim_kind = "offer_terms"
+state = "extended"
+when = { move = "extended" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "revised"
+claim_kind = "offer_terms"
+state = "revised"
+when = { move = "revised" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "accepted"
+claim_kind = "offer_response"
+state = "accepted"
+when = { move = "accepted" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "declined"
+claim_kind = "offer_response"
+state = "declined"
+when = { move = "declined" }
+
+# ── What no single email says ─────────────────────────────────────────────────
+
+# A fee is owed on an application whose stage is `hired` and whose `channel` is
+# `agency`, to its `agency`. Not declared as a set: a set needs a derived
+# attribute to feed, the organization is sourced before RESOLVE and so cannot
+# read applications, and a path cannot filter the application itself.
+
+[enrichment.ontology.tension]
+label = "ownership dispute"
+between = ["submission", "agency_fee"]
+same = ["subject"]
+not_conflicts = [
+  "the same agency following up on, or resubmitting, a candidate it already submitted",
+  "an employee's referral and the referred candidate's own application through the careers page",
+  "an agency's invoice for a candidate that agency submitted first",
+]

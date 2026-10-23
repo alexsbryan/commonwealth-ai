@@ -85,7 +85,7 @@ const CONSTRUCTOR: &str = "forced_choice::schema(";
 const WAVE_CONSTRUCTOR: &str = "forced_choice::wave(";
 
 /// The census funnels a caller's file must issue its calls through.
-const FUNNELS: &[&str] = &["gate_call(", "decision_call(", "decision_wave("];
+const FUNNELS: &[&str] = &["gate_call(", "decision_call("];
 
 #[derive(Debug, PartialEq, Eq)]
 struct Site {

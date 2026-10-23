@@ -24,6 +24,7 @@ use crate::enrichment::atlas::analysis::{TensionStrategy, SAME_FIELD_CLOCK, SAME
 use crate::enrichment::atlas::resolution_records::decides;
 use crate::enrichment::pipeline::atlas::EntityType;
 use crate::recipe::OntologyBlock;
+use crate::recipe_ontology::resolve_defaults::SuppliedDefault;
 
 /// Most declared types per atom kind. Bounds the extraction-schema enum the
 /// P2 composer generates; the number is the prompt budget, not a taste.
@@ -114,9 +115,12 @@ pub fn validate_block(block: &OntologyBlock) -> OntologyValidation {
         check_declarations(&policies, &mut out.errors);
         check_sources(&policies, &mut out.errors);
         check_evidential(&policies, &mut out.errors);
-        derived_facets(&policies, &mut out.notes);
+        let supplied = block.supplied_defaults().unwrap_or_else(|e| {
+            out.errors.push(e.to_string());
+            Vec::new()
+        });
+        derived_facets(&policies, &supplied, &mut out.notes);
         super::validate_derived::check(&policies, &mut out.errors, &mut out.notes);
-        super::validate_layer::fill_warnings(&policies, &mut out.warnings, &mut out.notes);
     }
     out.notes.extend(document_note);
     out
@@ -636,7 +640,33 @@ fn resolve_identity<'a>(
     (&[], &[], None)
 }
 
-fn derived_facets(p: &OntologyPolicies, notes: &mut Vec<String>) {
+fn derived_facets(p: &OntologyPolicies, supplied: &[SuppliedDefault], notes: &mut Vec<String>) {
+    for fold in &p.derivation.derived.folds {
+        let (Some(protocol), Some([replaced, act])) = (
+            &fold.protocol,
+            crate::recipe_ontology::lifecycle::names(p, fold),
+        ) else {
+            continue;
+        };
+        if !crate::recipe_ontology::lifecycle::opted_in(protocol) {
+            notes.push(format!(
+                "lifecycle: off on fold `{}`; `lifecycle = true`, `replaced` or `acts_under` \
+                 supply `{replaced}` and `{act}`",
+                fold.id
+            ));
+            continue;
+        }
+        let moves = |state: &Option<String>, default: &str| match state {
+            Some(state) => format!("moves it to {state}"),
+            None => default.to_string(),
+        };
+        notes.push(format!(
+            "lifecycle: `{replaced}` {}, `{act}` {} — the method's kinds, opted into on fold `{}`",
+            moves(&protocol.replaced, "takes the state your rules give it"),
+            moves(&protocol.acts_under, "moves nothing"),
+            fold.id
+        ));
+    }
     notes.push(match p.change.clock {
         SupersessionClock::DocumentDate => "clock: document_date — supersession folds on document \
              dates (the default; set `change.clock = \"narrative\"` for order within a work)"
@@ -670,6 +700,11 @@ fn derived_facets(p: &OntologyPolicies, notes: &mut Vec<String>) {
         .types
         .iter()
         .filter(|t| t.kind == TypeKind::Entity || decided(&t.name))
+        .filter(|t| {
+            !supplied.iter().any(
+                |s| matches!(s, SuppliedDefault::ByName { type_name, .. } if *type_name == t.name),
+            )
+        })
     {
         if let Some(SourceDecl::Metadata(s)) = &t.source {
             let read: Vec<String> = s
@@ -719,9 +754,9 @@ fn derived_facets(p: &OntologyPolicies, notes: &mut Vec<String>) {
         if let Some(from) = inherited {
             line.push_str(&format!(" — inherited from `{from}`"));
         }
-        line.extend(super::validate_layer::mentions_note(p, &t.name));
         notes.push(line);
     }
+    notes.extend(supplied.iter().map(SuppliedDefault::note));
     let by_kind = |k: TypeKind| {
         join_or_none(
             p.shape

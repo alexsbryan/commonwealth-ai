@@ -13,14 +13,14 @@
 //! — "what does the recipe demand" and "how is one response read" — and P3's
 //! resolution policy will read the first without touching the second.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use tracing::debug;
 
 use super::super::atlas::{normalise_enum_tag, ClaimScope, DiscourseAct};
 use crate::enrichment::ontology::{
     AttrDecl, AttrFamily, ClaimScopeDecl, Deontic, Force, OntologyPolicies, OntologyTypeDecl,
-    TypeIndex, TypeKind,
+    TypeIndex, TypeKind, VoicesDecl,
 };
 
 // ── Declared-ontology parse policy ──────────────────────────────────────────
@@ -51,9 +51,9 @@ pub struct ParsePolicy {
     /// Declared `state` types whose `of` names a relation — the vocabulary
     /// for `relations_developed`.
     pub(super) relation_state_types: BTreeMap<String, Vec<AttrDecl>>,
-    /// Folded speaker roles that must never become entity atoms
+    /// Speaker roles that must never become entity atoms
     /// (`voices.not_entities`). Enforced here, not asked of the model (§7.6).
-    not_entities: BTreeSet<String>,
+    voices: VoicesDecl,
     /// The claim kind to assume when a corpus declares exactly one, so a
     /// model that omits `claim_kind` still lands in the declared type rather
     /// than falling back to the generic claim.
@@ -193,8 +193,9 @@ pub(super) fn state_is_of_relation(policies: &OntologyPolicies, t: &OntologyType
 /// Defined beside its reader, `governance_view::project_claim`, in the
 /// atlas-reader leaf since fp-60; one spelling is the point (§10.6).
 pub(crate) use corpus_engine_atlas_reader::governance_view::ATTR_DEONTIC;
-/// Reserved attribute key carrying a claim's evidence grade.
-pub(super) const ATTR_GRADE: &str = "grade";
+/// Reserved attribute key carrying a claim's evidence grade, owned by the
+/// atlas-reader leaf beside the row that shows it.
+pub(crate) use corpus_engine_atlas_reader::records::ATTR_GRADE;
 
 impl ParsePolicy {
     /// Derive the reader's policy from a corpus's declared ontology.
@@ -261,14 +262,7 @@ impl ParsePolicy {
                 }
             }
         }
-        out.not_entities = policies
-            .assertion
-            .voices
-            .not_entities
-            .iter()
-            .map(|v| fold_voice(v))
-            .filter(|v| !v.is_empty())
-            .collect();
+        out.voices = policies.assertion.voices.clone();
         let mut claim_names = out.claim_types.keys();
         out.default_claim_kind = match (claim_names.next(), claim_names.next()) {
             (Some(only), None) => Some(only.clone()),
@@ -285,12 +279,16 @@ impl ParsePolicy {
             && self.claim_types.is_empty()
             && self.entity_state_types.is_empty()
             && self.relation_state_types.is_empty()
-            && self.not_entities.is_empty()
+            && !self
+                .voices
+                .not_entities
+                .iter()
+                .any(|v| self.voices.is_voice(v))
     }
 
     /// Is `name` a speaker role the corpus declared as not-subject-matter?
     pub(super) fn is_voice(&self, name: &str) -> bool {
-        !self.not_entities.is_empty() && self.not_entities.contains(&fold_voice(name))
+        self.voices.is_voice(name)
     }
 }
 
@@ -327,18 +325,6 @@ pub(crate) fn claim_scope_for(scope: ClaimScopeDecl) -> ClaimScope {
         ClaimScopeDecl::InWork => ClaimScope::Fictional,
         ClaimScopeDecl::AboutWork => ClaimScope::Contextual,
     }
-}
-
-/// Fold a speaker role for comparison: lowercased, trimmed, leading `the`
-/// dropped. `"The Cataloguer"`, `"the cataloguer"` and `"cataloguer"` are one
-/// voice; an author should not have to spell all three.
-fn fold_voice(s: &str) -> String {
-    let lower = s.trim().to_lowercase();
-    lower
-        .strip_prefix("the ")
-        .unwrap_or(lower.as_str())
-        .trim()
-        .to_string()
 }
 
 /// Normalise one attribute value against its declared family, or `None` when
@@ -496,7 +482,7 @@ pub(super) fn validated_attributes(
 /// Keep a reserved claim attribute (`deontic`, `grade`) only when it names one
 /// of the values the claim type declared. Validated, never synthesised: an
 /// undeclared mode is a drop, not a guess.
-pub(super) fn validated_choice(
+pub(crate) fn validated_choice(
     raw: &mut serde_json::Map<String, serde_json::Value>,
     out: &mut serde_json::Map<String, serde_json::Value>,
     key: &str,
@@ -604,12 +590,6 @@ mod tests {
         assert_eq!(leading_number("-3"), Some(-3.0));
         assert_eq!(leading_number("heavy"), None);
         assert_eq!(leading_number(""), None);
-    }
-    #[test]
-    fn voice_folding_is_case_and_article_insensitive() {
-        assert_eq!(fold_voice("  The Cataloguer "), "cataloguer");
-        assert_eq!(fold_voice("cataloguer"), "cataloguer");
-        assert_eq!(fold_voice("the narrator"), "narrator");
     }
 }
 

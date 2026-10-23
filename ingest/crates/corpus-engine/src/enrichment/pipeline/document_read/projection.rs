@@ -8,6 +8,7 @@ use crate::enrichment::pipeline::atlas::{
     ClaimScope, ClaimSketch, EnrichmentDepth, EpistemicStatus, SectionExtraction,
 };
 use crate::enrichment::pipeline::pipelines::literary::prepare_phase_json;
+use crate::enrichment::pipeline::pipelines::parse_policy::ATTR_GRADE;
 use crate::enrichment::pipeline::types::Phase1ChapterResult;
 use crate::error::{Error, Result};
 
@@ -16,7 +17,8 @@ use super::validation;
 use super::{
     supported_values, DocumentRead, DocumentReadOutcome, DocumentReadParticular, SubjectScope,
     ABOUT_ATTRIBUTE, CHAPTER_SUBJECT_ATTRIBUTE, CLAIM_FIELDS_ATTRIBUTE, LOCAL_REF_ATTRIBUTE,
-    SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE, WORDS_ATTRIBUTE,
+    OTHER_NAMES_ATTRIBUTE, SAID_BY_ATTRIBUTE, SOURCE_DOCUMENT_ATTRIBUTE, SUBJECT_FIELDS_ATTRIBUTE,
+    SUBJECT_NAME_ATTRIBUTE,
 };
 
 #[derive(Debug, Deserialize)]
@@ -125,6 +127,13 @@ pub(super) fn project_compatibility_sketches(
                     CHAPTER_SUBJECT_ATTRIBUTE.into(),
                     Value::String(claim.subject_local_ref.clone()),
                 );
+                attributes.insert(
+                    SUBJECT_NAME_ATTRIBUTE.into(),
+                    Value::String(claim.subject_name.clone()),
+                );
+                if let Some(others) = other_names_value(&claim.other_names) {
+                    attributes.insert(OTHER_NAMES_ATTRIBUTE.into(), others);
+                }
             }
             attributes.insert(
                 SOURCE_DOCUMENT_ATTRIBUTE.into(),
@@ -141,6 +150,12 @@ pub(super) fn project_compatibility_sketches(
                     ))
                 })?,
             );
+            if let Some(speaker) = &claim.speaker {
+                attributes.insert(SAID_BY_ATTRIBUTE.into(), Value::String(speaker.clone()));
+            }
+            if let Some(grade) = &claim.grade {
+                attributes.insert(ATTR_GRADE.into(), Value::String(grade.clone()));
+            }
             // A state or relation statement asserts what it reads; only a
             // claim kind declares a force.
             let force = match decl.kind {
@@ -178,21 +193,34 @@ pub(super) fn project_compatibility_sketches(
             });
         }
         for particular in &outcome.particulars {
-            sketches.push(particular_sketch(particular, &outcome.document_id)?);
+            sketches.push(particular_sketch(
+                particular,
+                &outcome.document_id,
+                read.subjects,
+            )?);
         }
     }
     extraction.claims.extend(sketches);
     Ok(())
 }
 
+/// A window read's other names for what a statement names, as the claim's
+/// [`OTHER_NAMES_ATTRIBUTE`]; none when it names nothing with another name.
+fn other_names_value(
+    other_names: &std::collections::BTreeMap<String, Vec<String>>,
+) -> Option<Value> {
+    (!other_names.is_empty()).then(|| serde_json::json!(other_names))
+}
+
 /// A particular no claim is about, as the claim RESOLVE reads: the document
 /// asserts it is about the particular, at the words that first name it. It
 /// declares no claim kind; its type rides on [`ABOUT_ATTRIBUTE`], and its
-/// reference, document and identifying readings as a claim's do. A mention's
-/// words ride on [`WORDS_ATTRIBUTE`].
+/// reference, document and identifying readings as a claim's do. A window
+/// read's name for it rides on [`SUBJECT_NAME_ATTRIBUTE`].
 fn particular_sketch(
     particular: &DocumentReadParticular,
     document_id: &str,
+    subjects: SubjectScope,
 ) -> Result<ClaimSketch> {
     let mut attributes = serde_json::Map::new();
     attributes.insert(
@@ -207,8 +235,14 @@ fn particular_sketch(
         SOURCE_DOCUMENT_ATTRIBUTE.into(),
         Value::String(document_id.to_string()),
     );
-    if let Some(words) = &particular.words {
-        attributes.insert(WORDS_ATTRIBUTE.into(), Value::String(words.clone()));
+    if subjects == SubjectScope::Chapter {
+        attributes.insert(
+            SUBJECT_NAME_ATTRIBUTE.into(),
+            Value::String(particular.subject_name.clone()),
+        );
+        if let Some(others) = other_names_value(&particular.other_names) {
+            attributes.insert(OTHER_NAMES_ATTRIBUTE.into(), others);
+        }
     }
     attributes.insert(
         SUBJECT_FIELDS_ATTRIBUTE.into(),

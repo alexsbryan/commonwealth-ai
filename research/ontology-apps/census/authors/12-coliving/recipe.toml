@@ -1,0 +1,217 @@
+# A 20-person coliving house: the house group chat, exported as text.
+# Rules proposed, objected to, agreed, amended and dropped; the weekly chore
+# rota and whether each turn got done; shared purchases, who paid, and who
+# owes whom. The interview that produced this declaration is transcript.md.
+
+[corpus]
+id = "coliving-house-chat"
+name = "Coliving house group chat"
+description = "The group chat of a twenty-person coliving house with a big shared kitchen: house rules proposed, agreed, amended and dropped; the weekly chore rota; shared purchases and who owes whom."
+license = "private"
+mesh_sharing = false
+
+# The chat export is a plain text file (one line per message: timestamp,
+# sender, text). SOURCE_PATH is a placeholder for where it sits.
+[acquire]
+type = "local_file"
+path = "SOURCE_PATH"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "coliving-house"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is the group chat of a twenty-person coliving house with a big shared
+kitchen, exported as text: each line is one housemate's dated message. Housemates
+propose house rules, support or object to them, and the house agrees them (by a poll,
+at a house meeting, or when nobody objects), amends them and drops them. A rule mentioned many times, by a
+nickname, a reminder or a complaint that it was broken, is one rule, and an amendment
+changes its terms without making it a new rule. A proposal is not a rule until the
+house agrees it. The rota puts a housemate on a chore for a week, a swap moves it, and
+housemates say whether it got done. Housemates buy things for the house, say what they
+paid and in what currency and how it is split, and say who owes whom until it is paid
+back. Most messages are chatter, jokes and logistics that state none of these.
+"""
+must_not = [
+  "present a proposed or disputed rule as agreed",
+  "say a housemate owes money the chat does not show them owing",
+]
+max_entities_per_section = 40
+
+# ── Things ──────────────────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "housemate"
+kind = "entity"
+role_of = "person"
+description = "One of the twenty people living in the house, known by the name they post under or by a first name or nickname."
+identity_criterion = "Two mentions are the same housemate when they name the same person living in the house: the name they post under in the chat, their first name, a nickname or an @-mention. Two housemates who share a first name are told apart by surname, initial or the name they post under; a guest, a landlord or a tradesperson is not a housemate."
+
+[[enrichment.ontology.types]]
+name = "house_rule"
+kind = "entity"
+description = "A standing arrangement the house governs itself by: quiet hours, labelling food in the fridge, washing up within a day, overnight guests."
+identity_criterion = "Two mentions are the same house rule when they are about the same standing arrangement for the same matter: 'the dishes rule', 'wash up within 24h' and 'no pans left overnight' can all name one rule. Its proposal, the objections to it, its agreement, each amendment, reminders of it and the decision to drop it are all about that one rule; an amendment changes its terms and does not make a new rule. A rule on another matter, or a new rule added beside an existing one (an exception, a rule for guests beside one for housemates), is a different rule."
+
+[[enrichment.ontology.types]]
+name = "chore"
+kind = "entity"
+description = "A recurring household task on the rota: bins and recycling, the kitchen deep clean, mopping, the bathrooms, restocking supplies."
+identity_criterion = "Two mentions are the same chore when they name the same recurring task, however it is called: 'bins', 'rubbish' and 'taking the trash out' are one chore. The same kind of task for a different area (the kitchen floor, the bathroom floor) is a different chore. One week's turn on a chore is not a separate chore."
+
+[[enrichment.ontology.types]]
+name = "purchase"
+kind = "event"
+description = "One buying of things for shared use by one housemate: cleaning supplies, kitchen staples, an appliance."
+identity_criterion = "Two mentions are the same purchase when they are about one buying of things by the same housemate on one occasion: the message announcing it, the receipt, the request to be paid back and later reminders about who still owes are all one purchase. Two shopping trips are two purchases, even for the same items or the same amount."
+attributes = [
+  { name = "items", type = "text", description = "What was bought." },
+  { name = "payer", type = "ref", of = "housemate", by = "agree", description = "The housemate who paid for it." },
+  { name = "bought_on", type = "time", description = "When it was bought; when the message does not say, the date the message was posted." },
+]
+
+# ── What the chat says about rules ──────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "proposal"
+kind = "claim"
+force = "directive"
+deontic = ["require", "forbid", "permit"]
+subject = "house_rule"
+description = "A housemate puts a rule to the house: a new rule, a change to one, or dropping one."
+attributes = [
+  { name = "proposer", type = "ref", of = "housemate", description = "Who proposed it." },
+  { name = "wording", type = "text", description = "The rule as proposed." },
+  { name = "aim", type = "text", values = ["new_rule", "amend", "drop"], description = "Whether it proposes a new rule, a change to an existing one, or dropping one." },
+  { name = "proposed_on", type = "time", description = "The date of the message that proposes it." },
+]
+
+# One housemate's own response ("+1", "I'm against this"), kept apart from
+# the house's decision so a vote is never read as the house deciding.
+[[enrichment.ontology.types]]
+name = "stance"
+kind = "claim"
+force = "assertive"
+subject = "house_rule"
+description = "One housemate's own response to a proposed rule, a change to one, or a rule in force: for it, against it, or for it only if changed."
+attributes = [
+  { name = "respondent", type = "ref", of = "housemate", description = "Who responded." },
+  { name = "position", type = "text", values = ["supports", "objects", "wants_changes"], description = "For it, against it, or for it only if changed." },
+  { name = "reason", type = "text", description = "Why, when they say." },
+  { name = "said_on", type = "time", description = "The date of the message." },
+]
+
+[[enrichment.ontology.types]]
+name = "decision"
+kind = "claim"
+force = "declaration"
+subject = "house_rule"
+description = "The house as a whole settles a rule (a poll result, a house-meeting outcome, an announcement that it now applies): agrees it, rejects it, amends it, drops it, or the proposal is withdrawn or put off. One housemate's vote is a stance, not a decision."
+attributes = [
+  { name = "outcome", type = "text", values = ["agreed", "rejected", "amended", "dropped", "withdrawn", "deferred"], description = "What was decided." },
+  { name = "wording", type = "text", description = "The rule as agreed or amended." },
+  { name = "matter", type = "text", values = ["kitchen", "fridge_and_food", "cleaning", "bins_and_recycling", "noise", "guests", "bathrooms", "laundry", "common_spaces", "shared_money", "safety_and_access", "other"], description = "What the rule governs." },
+  { name = "decided_on", type = "time", description = "When the house decided it, else the date of the message that reports it." },
+  { name = "takes_effect", type = "time", description = "When the decision says it starts to apply, if it names a later date." },
+  { name = "how", type = "text", values = ["poll", "house_meeting", "chat_consensus", "no_objection", "announcement"], description = "How the house reached it." },
+]
+
+[[enrichment.ontology.types]]
+name = "reminder"
+kind = "claim"
+force = "directive"
+deontic = ["require", "forbid", "permit"]
+subject = "house_rule"
+description = "A housemate restates a rule as already in force: a reminder, or a complaint that it was broken."
+attributes = [
+  { name = "reminded_by", type = "ref", of = "housemate", description = "Who restated it." },
+  { name = "wording", type = "text", description = "The rule as restated." },
+  { name = "reminded_on", type = "time", description = "The date of the message." },
+]
+
+# ── What the chat says about chores ─────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "assignment"
+kind = "claim"
+force = "declaration"
+subject = "chore"
+description = "A housemate is put on a chore for a week: the posted rota, an agreed swap, someone volunteering or covering."
+attributes = [
+  { name = "assignee", type = "ref", of = "housemate", description = "Who has the chore that week." },
+  { name = "week", type = "time", range = true, description = "The rota week as the message names it ('week of 4 March'); when it names none, the date the message was posted." },
+  { name = "basis", type = "text", values = ["rota", "swap", "volunteered", "cover"], description = "How they came to have it." },
+]
+
+[[enrichment.ontology.types]]
+name = "completion"
+kind = "claim"
+force = "assertive"
+subject = "chore"
+description = "A housemate says whether a week's turn on a chore got done."
+attributes = [
+  { name = "week", type = "time", range = true, description = "The rota week the turn belongs to as the message names it; when it names none, the date the message was posted." },
+  { name = "outcome", type = "text", values = ["done", "not_done", "partly_done", "done_late"], description = "Whether it got done." },
+  { name = "done_by", type = "ref", of = "housemate", description = "Who did it, when the message says." },
+  { name = "reported_by", type = "ref", of = "housemate", description = "Who said so." },
+]
+
+# ── What the chat says about money ──────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "expense"
+kind = "claim"
+force = "assertive"
+subject = "purchase"
+description = "A housemate says what a shared purchase cost and how it is split."
+attributes = [
+  { name = "amount", type = "quantity", description = "What it cost in total." },
+  { name = "currency", type = "text", values = ["EUR", "GBP", "USD", "CHF", "CAD", "AUD", "NZD", "SEK", "DKK", "NOK", "PLN", "other"], description = "The currency the amount is in." },
+  { name = "split", type = "text", values = ["whole_house", "some_housemates", "unequal"], description = "Who shares the cost: everyone equally, some named housemates equally, or in unequal parts." },
+  { name = "share", type = "quantity", description = "Each sharer's part, when the message gives it." },
+]
+
+# A debt is about the housemate who owes: "Ben owes me 4.70 for the bin bags".
+[[enrichment.ontology.types]]
+name = "debt"
+kind = "claim"
+force = "assertive"
+subject = "housemate"
+description = "What a housemate owes another for a shared purchase, and whether it has been paid back."
+attributes = [
+  { name = "creditor", type = "ref", of = "housemate", description = "Who is owed." },
+  { name = "for_purchase", type = "ref", of = "purchase", description = "The purchase the money is owed for." },
+  { name = "amount", type = "quantity", description = "How much is owed or was paid back." },
+  { name = "currency", type = "text", values = ["EUR", "GBP", "USD", "CHF", "CAD", "AUD", "NZD", "SEK", "DKK", "NOK", "PLN", "other"], description = "The currency of the amount." },
+  { name = "status", type = "text", values = ["owed", "settled", "waived"], description = "Still owed, paid back, or let go." },
+]
+
+# ── Change and derivation ───────────────────────────────────────────────────
+
+# A later decision on a rule retires the earlier one: the rule's latest
+# decision is its current standing (agreed, amended, dropped, ...).
+[enrichment.ontology.change]
+supersedes = { decision = "decided_on" }
+
+[enrichment.ontology.tension]
+label = "conflict"
+between = ["decision"]
+same = ["matter"]
+not_conflicts = [
+  "an amendment and the version of the rule it replaced",
+  "a one-off exception agreed for a date or an event, beside the standing rule",
+  "a rule for guests beside a rule for housemates",
+  "rules for different rooms, shelves or appliances",
+  "a rule layered on another that it adds to",
+]

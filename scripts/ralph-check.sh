@@ -54,7 +54,7 @@ run() {   # run <log-name> <tail-lines> <command...>
     exit "$rc"
 }
 if [ -n "${RALPH_QUEUE:-}" ] && [ -n "$check" ]; then
-    declared=$(python3 scripts/ralph.py check-argv --queue "$RALPH_QUEUE" "$check"); rc=$?
+    declared=$(python3 "${RALPH_PY:-scripts/ralph.py}" check-argv --queue "$RALPH_QUEUE" "$check"); rc=$?
     case "$rc" in
         0) argv=(); while IFS= read -r a; do argv+=("$a"); done <<< "$declared"
            run "$check" 12 "${argv[@]}" "$@" ;;

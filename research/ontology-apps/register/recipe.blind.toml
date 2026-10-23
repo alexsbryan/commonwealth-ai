@@ -1,0 +1,172 @@
+[corpus]
+id = "rule-ledgers"
+name = "Rule ledgers of five software projects"
+description = "Commit messages recording each change to the rule ledgers of canon, zoracite, ersilia, eutropia and commonwealth-ai: rules proposed, approved, superseded, retracted, reverted or adopted from another project."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# JSON lines, one commit message per line: id, thread (the project),
+# created_at, author, title, body (the message).
+[acquire]
+type = "local_file"
+path = "SOURCE_PATH"
+
+[extract]
+type = "jsonl"
+content_field = "body"
+title_field = "title"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "rule-ledgers"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is the rule ledgers of five software projects (canon, zoracite, ersilia,
+eutropia, commonwealth-ai). Each document is one commit message that recorded a change
+to a project's ledger. Every rule has an id of the form <prefix>-<12 hex digits>, such as
+can-0123456789ab; the id is how a rule is known, and two mentions with the same id are
+the same rule.
+
+Each message records one or more ledger entries, each about one rule: the rule was
+proposed, approved (it is then in force), superseded by a newer rule, retracted, reverted
+(an earlier ledger entry undone), or adopted from another project. A message that approves
+a new rule which supersedes an older one records two entries: the approval of the new
+rule, and the supersession of the old rule naming the new one as its successor. A
+retraction usually gives a reason; record it. A revert names the earlier message it undoes.
+
+Record what each rule says, in the wording of the message that proposed it.
+"""
+
+[[enrichment.ontology.types]]
+name = "project"
+kind = "entity"
+description = "One of the five software projects whose rule ledger the messages record (canon, zoracite, ersilia, eutropia, commonwealth-ai)."
+attributes = [{ name = "name", type = "text" }]
+identity = ["name"]
+source = { metadata = ["thread"], attributes = { name = "value" } }
+
+[[enrichment.ontology.types]]
+name = "maintainer"
+kind = "entity"
+description = "Someone who writes ledger messages: proposes, approves, supersedes, retracts or reverts rules."
+attributes = [{ name = "handle", type = "text" }]
+identity = ["handle"]
+source = { metadata = ["author"], attributes = { handle = "value" } }
+
+[[enrichment.ontology.types]]
+name = "rule"
+kind = "entity"
+description = "A rule governing how a project is built, known by its id (e.g. can-0123456789ab)."
+attributes = [
+  { name = "rule_id", type = "text", description = "The rule's id as written, <prefix>-<12 hex digits>." },
+  { name = "project", type = "ref", of = "project", by = "agree", description = "The project whose ledger holds the rule." },
+  { name = "statement", type = "text", by = "earliest", description = "What the rule says." },
+  { name = "standing", type = "text", values = ["proposed", "in_force", "superseded", "retracted"], derived = "rule_standing", description = "The rule's standing now." },
+]
+identity = ["rule_id"]
+identity_criterion = "Two mentions are one rule when they carry the same rule id (<prefix>-<12 hex digits>). Different ids are different rules, even when the wording is the same: a rule adopted from another project or a superseding rule has its own id."
+
+[[enrichment.ontology.types]]
+name = "ledger_entry"
+kind = "claim"
+label = "ledger entry"
+force = "declaration"
+subject = "rule"
+description = "One change a message records to one rule's standing in a ledger."
+attributes = [
+  { name = "action", type = "text", values = ["proposed", "approved", "superseded", "retracted", "reverted", "adopted"], description = "What the entry does to the rule." },
+  { name = "actor", type = "ref", of = "maintainer", description = "Who made the change: who proposed, approved, retracted or reverted it." },
+  { name = "successor", type = "ref", of = "rule", description = "For a supersession: the newer rule that supersedes this one." },
+  { name = "adopted_from", type = "ref", of = "rule", description = "For an adoption: the other project's rule this one was adopted from." },
+  { name = "reason", type = "text", description = "Why the change was made, above all why a rule was retracted." },
+  { name = "reverts", type = "text", description = "For a revert: the id of the earlier ledger message this one undoes." },
+  { name = "message_id", type = "text", description = "The id of the ledger message that records this entry." },
+]
+
+[enrichment.ontology.change]
+document = { date = "created_at", thread = "thread", id = "id", author = "author" }
+
+[enrichment.ontology.tension]
+label = "conflict"
+between = ["ledger_entry"]
+not_conflicts = [
+  "a rule's proposal followed by its approval",
+  "a rule being superseded while its successor is approved in the same message",
+  "a revert undoing an earlier entry",
+  "the same rule adopted into another project under a new id",
+]
+
+[[enrichment.ontology.folds]]
+id = "rule_standing"
+by = "protocol"
+from = ["^subject"]
+
+[enrichment.ontology.folds.protocol]
+identity = "message_id"
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "proposal"
+claim_kind = "ledger_entry"
+state = "proposed"
+when = { action = "proposed" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "approval"
+claim_kind = "ledger_entry"
+state = "in_force"
+when = { action = "approved" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "adoption"
+claim_kind = "ledger_entry"
+state = "in_force"
+when = { action = "adopted" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "supersession"
+claim_kind = "ledger_entry"
+state = "superseded"
+when = { action = "superseded" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "retraction"
+claim_kind = "ledger_entry"
+state = "retracted"
+when = { action = "retracted" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "revert_approval"
+claim_kind = "ledger_entry"
+state = "proposed"
+when = { action = "reverted" }
+corrects = "reverts"
+from = ["in_force"]
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "revert_retraction_or_supersession"
+claim_kind = "ledger_entry"
+state = "in_force"
+when = { action = "reverted" }
+corrects = "reverts"
+from = ["retracted", "superseded"]
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "revert_proposal"
+claim_kind = "ledger_entry"
+state = "retracted"
+when = { action = "reverted" }
+corrects = "reverts"
+from = ["proposed"]

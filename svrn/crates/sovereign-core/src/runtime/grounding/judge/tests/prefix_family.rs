@@ -24,6 +24,7 @@ impl InferenceProvider for CaptureProvider {
     async fn complete(&self, r: &CompletionRequest) -> Result<CompletionResponse> {
         self.0.lock().unwrap().push(r.clone());
         Ok(CompletionResponse {
+            logprobs: None,
             // Parses as NONE for the scan and as an unusable forced-choice
             // reply for the judges, which is fine: these tests read the
             // REQUESTS, never the verdicts.

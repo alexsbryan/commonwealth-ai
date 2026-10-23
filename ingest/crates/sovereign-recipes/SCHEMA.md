@@ -795,6 +795,7 @@ Allowed values:
 | `must_not` | `Vec<String>` | no | type default | Things the corpus must never be used for ("give dosing advice"). Read by the extraction prompt and the answer gate. Block-level. |
 | `types` | `Vec<OntologyTypeDecl>` | no | type default | The declared types (`[[enrichment.ontology.types]]`), each specializing one atom kind. |
 | `max_entities_per_section` | `Option<usize>` | no | type default | How many entities one section may introduce in Phase 1. Absent takes the shipped schema's cap of 15 — raise it for a corpus whose sections enumerate (a data table, a list of recipients). Outside `MIN_ENTITIES_PER_SECTION`..=`MAX_ENTITIES_PER_SECTION` (5..=60) the recipe refuses at load rather than clamping. |
+| `window_chars` | `Option<usize>` | no | type default | The most characters one window holds (`window_manifest`). Absent takes the shipped size; outside `MIN_WINDOW_CHARS`..=`MAX_WINDOW_CHARS` the recipe refuses at load. |
 | `voices` | `VoicesDecl` | no | type default | Who speaks in the corpus, and which speakers are not subject matter. |
 | `change` | `ChangeDecl` | no | type default | What holds when: the clock and which claim types supersede. |
 | `tension` | `TensionDecl` | no | type default | Which claim types can be in tension, and what makes two comparable. |
@@ -857,7 +858,7 @@ One typed attribute on a declared type. `name` and `type` are required; the rema
 | `(inline: AttrFamily)` | `AttrFamily` | **yes** | — | The value family, selected with `type = "…"`, plus its family keys. |
 | `description` | `String` | no | type default | What the attribute holds, for the extraction prompt. |
 | `derived` | `Option<String>` | no | type default | The declared path or fold that fills it, instead of the extractor (`derived.rs`). |
-| `by` | `Option<FoldBy>` | no | type default | How a record holds what its statements read of this field: `agree`, `all`, `most`, `earliest` or `latest`, decided as a fold's `by` is over each statement's reading. Absent, each statement keeps its own reading and the record holds none. |
+| `by` | `Option<FoldBy>` | no | type default | How a record holds what its statements read of this field: `agree`, `all`, `most`, `earliest` or `latest`, decided as a fold's `by` is over each statement's reading. Absent on a field of a type RESOLVE decides, the declaration language supplies `agree` when the document reader reads the declaration (`recipe_ontology::resolve_defaults` in corpus-engine); elsewhere each statement keeps its own reading and the record holds none. |
 
 ## `AttrFamily` (select with `type = "…"`)
 
@@ -1047,6 +1048,9 @@ Data for a qualified scalar fold over already-assigned, cited claims.
 | `effective_time` | `Option<String>` | no | type default | A source-supported transition effective time; never used as report order. |
 | `rules` | `Vec<ProtocolRuleDecl>` | no | type default | Explicit claim qualifications map to application state values. |
 | `initial` | `Option<String>` | no | type default | The state a record holds before any move, for the rules' `from` alone: a record no cited move reaches still holds nothing. |
+| `replaced` | `Option<String>` | no | type default | Where a statement that the record is replaced, rolled into or superseded by another moves it; setting it opts into the lifecycle kinds. Absent, opted in: the replaced statement is a kind of the rules' claim kind and the rules give it its state, read from their values (ONTOLOGY_METHOD §Lifecycle). |
+| `acts_under` | `Option<String>` | no | type default | Where something done under the record as it stands moves it; setting it opts in. Absent, opted in: nowhere, it is not a move. |
+| `lifecycle` | `Option<bool>` | no | type default | `true`: the method supplies both lifecycle kinds; `false`: neither, whatever else is set. Absent: only when `replaced` or `acts_under` is. |
 
 ## `ProtocolRuleDecl`
 
@@ -1319,7 +1323,7 @@ is refused at load, naming the line to add — never dropped.
 
 ## `version = 1`
 
-Keys: `guidance`, `vocabulary`, `must_not`, `types`, `max_entities_per_section`, `voices`, `change`, `tension`, `derive`, `patterns`, `navigation`, `paths`, `sets`, `folds`
+Keys: `guidance`, `vocabulary`, `must_not`, `types`, `max_entities_per_section`, `window_chars`, `voices`, `change`, `tension`, `derive`, `patterns`, `navigation`, `paths`, `sets`, `folds`
 
 Version 1 declares your own types. `version = 1` under `[enrichment.ontology]`
 selects it; the tables above (`OntologyV1`, `OntologyTypeDecl`, `AttrDecl`,
@@ -1348,7 +1352,15 @@ each statement. When no claim type qualifies, sections are
 read by the general extractor. A declaration that mixes the two is refused,
 naming the claim types the plan cannot read. A type RESOLVE decides needs a claim
 kind whose `subject` it is: with none, nothing of it would be read, so `enrich
-extract` refuses the build and `recipe validate` says why. The old `document_reading` and
+extract` refuses the build and `recipe validate` says why. A type a read `ref`
+names that nothing else records (an entity or event with no
+`identity_criterion` and no `source`) is decided by RESOLVE by name: it takes
+the criterion "Two mentions are one {type} when they name the same {type},
+however the name is written.", so the reader names its particulars and the
+reference lands on a record. A base kind a `ref` names and the recipe never
+declares (`of = "person"`) is declared as an entity of that kind with the same
+criterion. `recipe validate` prints each as an `identity: … → RESOLVE by name`
+line. The old `document_reading` and
 `document_reader` keys are ignored, and `recipe validate` names them.
 
 Under that plan an attribute gets a value only these ways: its type's `source`
@@ -1356,13 +1368,13 @@ reads it, a declared path or fold derives it (`derived = "<id>"`), the reader
 asks it of each statement of a claim kind that declares it, or of the kind's
 subject (a metadata-sourced subject is asked its identity keys only), or, for a
 claim's `subject`, RESOLVE decides it. A subject's field read this way stays on
-each statement that read it, cited, as the claim's own fields do: RESOLVE keys
-on it and writes none of those values onto the record, so statements that read
-it differently each keep their own. Give the field `by` and the record holds
-their readings folded as a fold's `by` decides (`agree`, `all`, `most`,
-`earliest` or `latest`): `{ name = "kind", type = "text", values = [...], by =
-"agree" }` holds the kind its statements agree on, and no value, said as a
-conflict, when they differ. The reader asks by the attribute's
+each statement that read it, cited, as the claim's own fields do, and RESOLVE
+keys on it. The record holds their readings folded as the field's `by` decides
+(`agree`, `all`, `most`, `earliest` or `latest`); a field of a type RESOLVE
+decides that declares no `by` folds by `agree`, which `recipe validate` prints
+(`derived: part.part_number ← fold by agree (default: no `by` declared)`): the
+record holds the value its statements agree on, and no value, said as a
+conflict with each reading cited, when they differ. The reader asks by the attribute's
 type: Choose a closed `values` set; Point at the words of open text, a
 `quantity` (the one number they write in digits) or a `time` (ISO 8601 when it
 reads as a date, the words as written otherwise); Pick a `ref` among the
@@ -1512,6 +1524,21 @@ The derived `coin.status` attribute must be a closed text enum containing
 `effective_at`. `recipe validate` rejects unknown fields, claim types, state
 values, invalid paths, or a target not decided by RESOLVE.
 
+A protocol fold whose rules name one claim kind can opt into two statement
+kinds the method writes for its record, shown to the reader beside yours:
+`<type>_replaced` (the record is replaced by, rolled into or superseded by
+another, so it has ended) and `<type>_act_under` (something done under it as it
+stands: carrying it out, scheduling or reporting on it). Set `lifecycle = true`
+on `[enrichment.ontology.folds.protocol]` to take them with their defaults: the
+replaced kind is a kind of your claim kind, so your rules give it its state
+from your values, and an act under the record moves nothing. `replaced =
+"<state>"` moves every replaced record to that state without asking the
+reader, `acts_under = "<state>"` makes an act a move into it; either one opts
+in, and `lifecycle = false` keeps both off whatever else is set. A state either
+names must be one of the derived attribute's values; a type you declare under
+either name is yours and is left alone. They are off by default: supplied to
+every recipe they cost as many deals as they won (`DEFAULTS_LEDGER.md`).
+
 An entity type's `source` can name the documents' own metadata fields instead
 of a table (`MetadataSourceDecl`): one atom per distinct value of the type's
 `identity` attribute seen in those fields, no model call. Each source
@@ -1561,6 +1588,12 @@ one section (5–60; omit it to take the shipped cap of 15). Raise it for a
 corpus whose sections enumerate — a data table, a list of recipients — where
 the shipped cap stops the extraction mid-table; a number outside the range
 refuses at load rather than clamping.
+
+`window_chars` sets how many characters of documents the window reader reads
+in one call (2,000–40,000; omit it to take the shipped 20,000). A call writes
+about as many statements whatever it is shown, so smaller windows write more of
+each document and larger ones keep more of a thread in view; a number outside
+the range refuses at load rather than clamping.
 
 `[enrichment.ontology.navigation]` is the map's third role: how a reader walks
 the atlas for each question kind — `thematic`, `trajectory`, `tension`,

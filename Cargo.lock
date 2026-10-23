@@ -1962,6 +1962,7 @@ dependencies = [
  "mesh-join-vocab",
  "serde",
  "serde_json",
+ "socket2 0.5.10",
  "sysinfo 0.35.2",
  "tokio",
  "tracing",

@@ -13,9 +13,9 @@ use super::inference_client::{
 };
 use super::paths;
 use corpus_engine::enrichment::pipeline::{
-    collapse_phase1_checkpoint, read_phase1_checkpoint, ChapterManifest, ChapterManifestWrite,
-    ChapterSelection, Phase1Output, Phase1Progress, PhaseFailureKind, PhaseRunner,
-    PipelineRegistry, RetryMode, RunOutputWriter,
+    begin_phase1_checkpoint, collapse_phase1_checkpoint, read_phase1_checkpoint, ChapterManifest,
+    ChapterManifestWrite, ChapterSelection, Phase1Output, Phase1Progress, PhaseFailureKind,
+    PhaseRunner, PipelineRegistry, RetryMode, RunOutputWriter,
 };
 use std::sync::Arc;
 
@@ -249,14 +249,16 @@ pub async fn run_extract(args: &[String]) -> i32 {
     // with the closures, so each chat call bumps it and the flusher
     // task below sees the running totals.
     let usage_ledger = client.usage_ledger();
-    let (embed, chat) =
-        match client.into_asked_closures(parsed.asker, &paths::enrichment_root(&cfg.corpus_id)) {
-            Ok(ports) => ports,
-            Err(e) => {
-                eprintln!("error: {e}");
-                return 1;
-            }
-        };
+    let (embed, chat) = match client
+        .into_asked_closures(parsed.asker, &paths::enrichment_root(&cfg.corpus_id))
+        .await
+    {
+        Ok(ports) => ports,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 1;
+        }
+    };
 
     let cache = cfg.phase_cache();
     let runs = RunOutputWriter::new(paths::runs_dir(&cfg.corpus_id));
@@ -492,6 +494,20 @@ pub async fn run_extract(args: &[String]) -> i32 {
     } else {
         selection
     };
+    // A `--full` without `--resume` is a new run: its journal starts empty.
+    if matches!(selection, ChapterSelection::Full) && !parsed.resume && !parsed.dry_run {
+        match begin_phase1_checkpoint(&checkpoint_path) {
+            Ok(dropped) => tracing::info!(
+                path = %checkpoint_path.display(),
+                dropped,
+                "extract: a full run starts a fresh checkpoint, the previous run's entries dropped"
+            ),
+            Err(e) => {
+                eprintln!("error: {e}");
+                return 1;
+            }
+        }
+    }
 
     // Build the retry mode passed to the runner. The terse variant
     // bumps the output cap to double the config's default so a

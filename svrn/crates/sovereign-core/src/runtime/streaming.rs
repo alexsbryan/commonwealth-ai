@@ -2918,6 +2918,7 @@ impl Runtime {
         let synth_max = kc.output_budget.hard_ceiling;
         let mut request = CompletionRequest {
             admission: None,
+            logprobs: None,
             prompt: kc.prompt,
             system_message: Some(kc.system),
             preferred_speed: kc.speed,

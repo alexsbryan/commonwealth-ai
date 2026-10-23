@@ -103,8 +103,9 @@ pub async fn run(parsed: &ParsedResolve) -> Result<ResolveReport, String> {
     // used by `extract`.
     let client = DaemonInferenceClient::from_enrich_config(&cfg)
         .map_err(|e| format!("building daemon client: {e}"))?;
-    let (embed, chat) =
-        client.into_asked_closures(parsed.asker, &paths::enrichment_root(&cfg.corpus_id))?;
+    let (embed, chat) = client
+        .into_asked_closures(parsed.asker, &paths::enrichment_root(&cfg.corpus_id))
+        .await?;
 
     // Resolve into the live atlas dir. The `enrich delta` command
     // calls `resolve_into_dir` directly with a staging tempdir; this

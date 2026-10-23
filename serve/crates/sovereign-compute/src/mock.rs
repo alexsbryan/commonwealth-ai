@@ -54,6 +54,7 @@ pub struct MockProvider {
 impl InferenceProvider for MockProvider {
     async fn complete(&self, _request: &CompletionRequest) -> Result<CompletionResponse> {
         Ok(CompletionResponse {
+            logprobs: None,
             text: "mock response".to_string(),
             tokens_used: self.tokens,
             prompt_tokens: 0,

@@ -532,6 +532,7 @@ impl Runtime {
             };
             let request = CompletionRequest {
                 admission: None,
+                logprobs: None,
                 prompt,
                 system_message: None,
                 // Intentional pin (not a routing decision): empty
@@ -819,6 +820,7 @@ impl Runtime {
             );
             let request = CompletionRequest {
                 admission: None,
+                logprobs: None,
                 prompt,
                 system_message: None,
                 // Same rationale as the zero-chunk pin: no usable evidence
@@ -1339,6 +1341,7 @@ impl Runtime {
                 let system = self.build_system_message(&base, context);
                 CompletionRequest {
                     admission: None,
+                    logprobs: None,
                     prompt,
                     system_message: Some(system),
                     preferred_speed: route_speed,
@@ -1394,6 +1397,7 @@ impl Runtime {
                 let system = self.build_primary_system_message(&base, context);
                 CompletionRequest {
                     admission: None,
+                    logprobs: None,
                     prompt,
                     system_message: Some(system),
                     preferred_speed: route_speed,

@@ -85,7 +85,8 @@ fn atoms() -> Vec<AtomEnvelope> {
             "discourse_act": "assert", "epistemic_status": "attributed", "scope": "universal",
             "evidence": [{"chunk_id": "sec_00003"}], "subject": "entity-order",
             "claim_kind": "order_update", "enrichment_depth": "extracted",
-            "attributes": {"document_date": "2026-03-06T18:20:00Z"}}},
+            "attributes": {"document_date": "2026-03-06T18:20:00Z",
+                "__document_read_said_by": "the workshop", "grade": "quoted"}}},
     ]))
     .unwrap()
 }
@@ -154,4 +155,56 @@ fn a_statement_row_carries_its_link_and_a_record_its_inbound_refs() {
         "{company}"
     );
     assert!(company.get("folds").is_none(), "{company}");
+}
+
+/// Who asserts a statement and its grade belong to no declared attribute, so
+/// a statement's row shows them beside its attributes, and only when read.
+#[test]
+fn a_statement_row_shows_who_says_it_and_its_grade_when_read() {
+    let atoms = atoms();
+    let p = policies();
+    let view = RecordView::new(&atoms, Some(&p));
+    let said = view.row(view.atom("claim-2").unwrap());
+    assert_eq!(said["said_by"], "the workshop", "{said}");
+    assert_eq!(said["grade"], "quoted", "{said}");
+    let unsaid = view.row(view.atom("claim-1").unwrap());
+    assert!(
+        unsaid.get("said_by").is_none() && unsaid.get("grade").is_none(),
+        "{unsaid}"
+    );
+}
+
+/// The layer journeys' rows cited `sec_00001`, which the daemon's chunk
+/// endpoint refuses ("Cannot parse value `sec_00001` to a `u64`",
+/// 2026-10-20). A placed evidence is listed by its installed chunk (`7`); an
+/// unplaced one, as in every atlas built before placement, by its section.
+/// On the old code the placed row listed `sec_00001`.
+#[test]
+fn evidence_chunks_list_the_installed_chunk_when_placed_else_the_section() {
+    let claim = |id: &str, evidence: Value| {
+        json!({"atom_type": "Claim", "data": {
+            "id": id, "content": "the fix landed in release 2.4",
+            "discourse_act": "assert", "epistemic_status": "confident", "scope": "universal",
+            "evidence": [evidence], "claim_kind": "observation", "enrichment_depth": "extracted"}})
+    };
+    let atoms: Vec<AtomEnvelope> = serde_json::from_value(json!([
+        claim(
+            "claim-placed",
+            json!({"chunk_id": "sec_00001", "passage_preview": "the fix landed", "index_chunk": 7})
+        ),
+        claim(
+            "claim-unplaced",
+            json!({"chunk_id": "sec_00001", "passage_preview": "across a boundary"})
+        ),
+    ]))
+    .unwrap();
+    let view = RecordView::new(&atoms, None);
+    let placed = view.row(view.atom("claim-placed").unwrap());
+    let unplaced = view.row(view.atom("claim-unplaced").unwrap());
+    assert_eq!(placed["evidence_chunks"], json!(["7"]), "{placed}");
+    assert_eq!(
+        unplaced["evidence_chunks"],
+        json!(["sec_00001"]),
+        "{unplaced}"
+    );
 }

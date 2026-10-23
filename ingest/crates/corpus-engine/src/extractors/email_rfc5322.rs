@@ -25,7 +25,7 @@
 //! the same body can produce the same atom id and have the Attaches
 //! edge resolve cleanly.
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::fs;
 use std::io::{BufRead as _, BufReader, BufWriter, Read as _, Write as _};
 use std::path::{Path, PathBuf};
@@ -122,6 +122,8 @@ impl Extractor for EmailExtractor {
             mbox: None,
             config: self.config.clone(),
             dispatch: self.asset_dispatch.clone(),
+            embedded: VecDeque::new(),
+            read: HashSet::new(),
         }))
     }
 }
@@ -133,6 +135,12 @@ struct EmailIterator {
     mbox: Option<MboxStream>,
     config: EmailExtractorConfig,
     dispatch: Option<EmailAssetDispatch>,
+    /// The messages the last message embeds, each a document of its own
+    /// (`email_embedded`), yielded after it.
+    embedded: VecDeque<ExtractedDoc>,
+    /// The embedded messages already yielded: one carried by several
+    /// messages is one document.
+    read: HashSet<String>,
 }
 
 impl Iterator for EmailIterator {
@@ -140,12 +148,18 @@ impl Iterator for EmailIterator {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
+            if let Some(doc) = self.embedded.pop_front() {
+                return Some(Ok(doc));
+            }
             if let Some(stream) = self.mbox.as_mut() {
                 match stream.next_message() {
                     // An mbox member is one record among many in its file.
                     Ok(Some((bytes, origin))) => {
                         match self.parse_message(&bytes, &origin, super::DocSource::Record) {
-                            Ok(Some(doc)) => return Some(Ok(doc)),
+                            Ok(Some((doc, embedded))) => {
+                                self.hold(embedded);
+                                return Some(Ok(doc));
+                            }
                             Ok(None) => continue,
                             Err(e) => return Some(Err(e)),
                         }
@@ -171,7 +185,10 @@ impl Iterator for EmailIterator {
                 }
             }
             match self.parse_one(&path) {
-                Ok(Some(doc)) => return Some(Ok(doc)),
+                Ok(Some((doc, embedded))) => {
+                    self.hold(embedded);
+                    return Some(Ok(doc));
+                }
                 Ok(None) => continue,
                 Err(e) => return Some(Err(e)),
             }
@@ -180,7 +197,18 @@ impl Iterator for EmailIterator {
 }
 
 impl EmailIterator {
-    fn parse_one(&self, path: &Path) -> Result<Option<ExtractedDoc>> {
+    /// Queue the embedded messages not yet yielded.
+    fn hold(&mut self, embedded: Vec<ExtractedDoc>) {
+        for doc in embedded {
+            if self.read.insert(doc.source_id.clone()) {
+                self.embedded.push_back(doc);
+            } else {
+                tracing::debug!(message = %doc.source_id, "email_embedded: already read from another message carrying it");
+            }
+        }
+    }
+
+    fn parse_one(&self, path: &Path) -> Result<Option<(ExtractedDoc, Vec<ExtractedDoc>)>> {
         let bytes = fs::read(path)
             .map_err(|e| Error::Extraction(format!("email: read {}: {e}", path.display())))?;
         self.parse_message(&bytes, path, super::DocSource::File(path.to_path_buf()))
@@ -194,7 +222,7 @@ impl EmailIterator {
         bytes: &[u8],
         path: &Path,
         source: super::DocSource,
-    ) -> Result<Option<ExtractedDoc>> {
+    ) -> Result<Option<(ExtractedDoc, Vec<ExtractedDoc>)>> {
         if bytes.is_empty() {
             return Ok(None);
         }
@@ -295,24 +323,22 @@ impl EmailIterator {
         // Where the author's own text begins in the stored text, and the
         // messages the body embeds, in the same offsets: the reader never
         // asks the preamble (its facts are declared) nor an embedded message
-        // as this one's (`email_segments`).
+        // as this one's (`email_segments`). Each embedded message is a
+        // document of its own, which its segment names (`email_embedded`).
         let body_start = preamble.len();
-        let segments: Vec<serde_json::Value> = super::email_segments::embedded_segments(&body)
-            .into_iter()
-            .map(|s| {
-                serde_json::json!({
-                    "start": s.start + body_start,
-                    "end": s.end + body_start,
-                    "header_end": s.header_end + body_start,
-                    "kind": s.kind,
-                })
-            })
-            .collect();
-        tracing::debug!(message_id = %message_id, body_start, segments = segments.len(), "email_rfc5322: body located");
+        let carrier = super::email_embedded::Carrier {
+            key: &source_id,
+            thread_id: &thread_id,
+            base_subject: base_subject.as_deref(),
+            path,
+        };
+        let (segments, embedded) =
+            super::email_embedded::layout(&body, body_start, date.as_deref(), &carrier);
+        tracing::debug!(message_id = %message_id, body_start, segments = segments.len(), embedded = embedded.len(), "email_rfc5322: body located");
         metadata["body_start"] = serde_json::json!(body_start);
         metadata["segments"] = serde_json::Value::Array(segments);
         let content_with_headers = preamble + &body;
-        Ok(Some(ExtractedDoc {
+        let doc = ExtractedDoc {
             title,
             content: content_with_headers,
             url: None,
@@ -323,8 +349,9 @@ impl EmailIterator {
                 .and_then(|s| s.to_str())
                 .map(|s| s.to_string()),
             embed_text: None,
-            source: source,
-        }))
+            source,
+        };
+        Ok(Some((doc, embedded)))
     }
 
     fn handle_attachments(
@@ -615,7 +642,7 @@ fn collect_body(parsed: &ParsedMail, max_bytes: usize) -> Result<(String, bool)>
 /// prefixed onto every email's chunk content. Empty headers are
 /// omitted so the block stays short on terse messages. Trailing blank
 /// line separates the preamble from the body.
-fn build_header_preamble(
+pub(super) fn build_header_preamble(
     from: Option<&str>,
     to: Option<&str>,
     cc: Option<&str>,

@@ -1,0 +1,2540 @@
+{
+ "judged": "2026-10-20",
+ "method": "Two blind judges (rejudge-a.json 01-06, rejudge-b.json 07-12) under judgments.json's method sentence at HEAD a4fc792e8. Adjudication: a rejudge verdict stands where code changed since the first pass or the judge cites code; where a verdict moved only on how the owner's words were read, the first pass's reading holds (5 needs, each named).",
+ "use_cases": [
+  {
+   "id": "01-recruiting",
+   "record_types_run": true,
+   "record_types_note": "Legend: TQ=ingest/crates/understanding-atlas/src/atlas_traversal; EA=ingest/crates/corpus-engine/src/enrichment/atlas; PR=ingest/crates/corpus-engine/src/enrichment/pipeline/document_read; R=research/ontology-apps/census/authors/<id>/recipe.toml. The sovereign MCP tools were unreachable (ECONNREFUSED), so everything here is from rg/sed reads. organization and correspondent come from metadata sources (R:64-78, validate 'identity: ... external key'; refs linked at EA/resolution_sources.rs:199-233). candidate, opening and application are made by RESOLVE under identity_criterion (R:85-120, validate 'identity: ... RESOLVE'; EA/resolution_records.rs:81). stage and offer_status are protocol folds after RESOLVE (R:242-249, 399-432; EA/resolution_derived.rs:64). Validate printed no warnings. Hazard: both folds declare effective_time=effective_on, and the fold goes Pending with the attribute unset if any reached move lacks a supported effective_on (EA/resolution_derived/protocol.rs:318,337,623-635).",
+   "validate_exit": 0,
+   "needs": [
+    {
+     "n": 1,
+     "need": "For each opening, which candidates are in play and at what stage (applied, screen, onsite, offer, hired, rejected, withdrew)?",
+     "verdict": "runs",
+     "declared_by": "R:109-120 application{candidate/opening refs by agree; stage derived=application_stage}; R:242-397 fold application_stage; R:237 change.document.date (clock).",
+     "executed_by": "EA/resolution_derived/read_fields.rs:278 writes application.candidate/opening (held :248, record_named :122 lands the reading on the record RESOLVE put the same document's statements under). EA/resolution_derived/protocol.rs:31 plus EA/resolution_derived.rs:128-146 write stage when the outcome is Decided. TQ/typed_check.rs:440 (application.opening is a RefOut), TQ/typed_match.rs:286,350 (negated eq filters), TQ/typed.rs:554 (row carries candidate, opening, stage).",
+     "query": {
+      "target_type": "application",
+      "filters": [
+       {
+        "attribute": "stage",
+        "op": "eq",
+        "value": "hired",
+        "negate": true
+       },
+       {
+        "attribute": "stage",
+        "op": "eq",
+        "value": "rejected",
+        "negate": true
+       },
+       {
+        "attribute": "stage",
+        "op": "eq",
+        "value": "withdrew",
+        "negate": true
+       }
+      ],
+      "relations": [
+       {
+        "relation": "application.opening",
+        "other_type": "opening",
+        "other_name": "Senior Backend Engineer",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "One query per named opening. Each row is an application whose own attributes hold candidate (record id), opening and stage. An application with no decided stage is set aside as unjudged (TQ/typed_match.rs:286-330). Weakest part is stage. The fold writes it only when every reached move has a supported effective_on, which the recipe describes as 'if the email names a time other than its own date'. I judged runs because the writer does write it when those readings exist."
+    },
+    {
+     "n": 2,
+     "need": "Who referred or sourced each candidate (an employee, an agency, or the candidate applied directly)?",
+     "verdict": "runs",
+     "declared_by": "R:116-118 application.channel (direct/employee_referral/agency/sourced), referrer (ref correspondent), agency (ref organization), all by earliest; R:237 change.document.date.",
+     "executed_by": "PR/pick.rs:76 offers referrer/agency candidates from the email's from/to/cc. EA/resolution_derived/read_fields.rs:278 folds them onto the application. 'earliest' orders on the document clock (EA/resolution_derived.rs:283-296, :667-691). TQ/typed_check.rs:440, TQ/typed.rs:554.",
+     "query": {
+      "target_type": "application",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "application.candidate",
+        "other_type": "candidate",
+        "other_name": "Jane Doe",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Per named candidate, the application rows state channel, referrer (correspondent id) and agency (organization id). To list by source, add filter channel eq 'agency' or relation application.agency."
+    },
+    {
+     "n": 3,
+     "need": "Who interviewed a candidate, for which opening, on what date, and what each interviewer recommended?",
+     "verdict": "runs",
+     "declared_by": "R:170-181 interview_feedback{interviewer ref correspondent, interview_date time, round, recommendation}, subject application.",
+     "executed_by": "Claim fields are projected at PR/projection.rs:112. EA/resolution_derived/statement_refs.rs:57 writes the interviewer ref after RESOLVE. TQ/typed_check.rs:440,493 (interview_feedback.subject to application, where-hops application.candidate and application.opening), TQ/typed_match.rs:511.",
+     "query": {
+      "target_type": "interview_feedback",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "interview_feedback.subject",
+        "other_type": "application",
+        "other_name": null,
+        "negate": false,
+        "where": {
+         "filters": [],
+         "relations": [
+          {
+           "relation": "application.candidate",
+           "other_type": "candidate",
+           "other_name": "Jane Doe",
+           "negate": false
+          },
+          {
+           "relation": "application.opening",
+           "other_type": "opening",
+           "other_name": "Senior Backend Engineer",
+           "negate": false
+          }
+         ]
+        }
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Rows are the interview_feedback claims, one per interviewer. Their attributes state interviewer, interview_date, round and recommendation. The opening is the named hop of this per-opening query, not a row attribute."
+    },
+    {
+     "n": 4,
+     "need": "What we offered (base salary, currency, start date) and whether the offer was accepted, declined or revised.",
+     "verdict": "runs",
+     "declared_by": "R:184-206 offer_terms{move extended/revised, base_salary, currency, start_date}, offer_response{move accepted/declined/countered}; R:399-432 offer_status fold.",
+     "executed_by": "PR/projection.rs:112 writes claim attributes. TQ/typed_check.rs:440,493 and TQ/typed_match.rs:511 for the two claim queries. The application.offer_status fold (EA/resolution_derived/protocol.rs:31) is a second route.",
+     "query": [
+      {
+       "target_type": "offer_terms",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "offer_terms.subject",
+         "other_type": "application",
+         "other_name": null,
+         "negate": false,
+         "where": {
+          "filters": [],
+          "relations": [
+           {
+            "relation": "application.candidate",
+            "other_type": "candidate",
+            "other_name": "Jane Doe",
+            "negate": false
+           }
+          ]
+         }
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "offer_response",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "offer_response.subject",
+         "other_type": "application",
+         "other_name": null,
+         "negate": false,
+         "where": {
+          "filters": [],
+          "relations": [
+           {
+            "relation": "application.candidate",
+            "other_type": "candidate",
+            "other_name": "Jane Doe",
+            "negate": false
+           }
+          ]
+         }
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Two queries per candidate. Terms rows state base_salary, currency, start_date and move (extended or revised). Response rows state move accepted, declined or countered. This route does not pass through the effective_on-gated offer_status fold."
+    },
+    {
+     "n": 5,
+     "need": "When a candidate moved stage, and on whose say-so.",
+     "verdict": "runs",
+     "declared_by": "R:155-167 stage_move{move, move_kind, decider_role, decided_by ref correspondent, effective_on}; R:237 change.document.date stamps document_date on every claim.",
+     "executed_by": "EA/resolution_documents.rs:419-459 stamps document_date into claim attributes (row-visible). EA/resolution_derived/statement_refs.rs:57 writes decided_by. TQ/typed.rs:554 row shows all attributes. TQ/typed_check.rs:440,493.",
+     "query": {
+      "target_type": "stage_move",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "stage_move.subject",
+        "other_type": "application",
+        "other_name": null,
+        "negate": false,
+        "where": {
+         "filters": [],
+         "relations": [
+          {
+           "relation": "application.candidate",
+           "other_type": "candidate",
+           "other_name": "Jane Doe",
+           "negate": false
+          }
+         ]
+        }
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Rows are the candidate's stage_move claims. They state move, effective_on (only when the email names a time), document_date (stamped; shown but not filterable), decided_by and decider_role. The date is displayed, not filtered or ranked."
+    },
+    {
+     "n": 6,
+     "need": "Which agencies are owed a fee for a hire, and how much.",
+     "verdict": "inexpressible",
+     "declared_by": "agency_fee (claim, subject application): amount, currency, fee_percent; fee_terms (claim, subject organization): fee_percent, flat_fee",
+     "executed_by": null,
+     "query": null,
+     "gap": "computed-value",
+     "why": "Hires by agency and any fee an agency's own invoice states are held, but the fee owed before an invoice is fee_percent x the offer's base_salary, which no fold or query computes; it is not declared anywhere.",
+     "adjudication": "first-pass reading holds: the fee owed before an agency invoices is fee_percent x base_salary; agency_fee holds only a stated amount",
+     "rejudge_verdict": "runs"
+    },
+    {
+     "n": 7,
+     "need": "A candidate who applies to two openings is one person with two applications.",
+     "verdict": "runs",
+     "declared_by": "R:85-95 candidate identity_criterion; R:109-114 application identity_criterion and application.candidate ref.",
+     "executed_by": "EA/resolution_records.rs:81 (decides) with validate lines 'identity: candidate/application \u2192 RESOLVE'. EA/resolution_derived/read_fields.rs:278 writes application.candidate and opening. TQ/typed_check.rs:440.",
+     "query": {
+      "target_type": "application",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "application.candidate",
+        "other_type": "candidate",
+        "other_name": "Jane Doe",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "The candidate is one record (RESOLVE under identity_criterion) and the query returns its applications, two rows with different opening refs. Identity merging itself is a model decision I could not verify statically."
+    }
+   ]
+  },
+  {
+   "id": "02-contracts",
+   "record_types_run": true,
+   "record_types_note": "organization and contract are made by RESOLVE (R:55-77, validate 'identity: ... RESOLVE'). person is made implicitly by RESOLVE-by-name because contract.owner refers to it (validate line; ingest/crates/corpus-engine/src/recipe_ontology/resolve_defaults.rs:110-160). Every read field declares by (R:59-76). No change.document, so there is no document_date stamp and no latest/earliest fold. Validate printed no warnings.",
+   "validate_exit": 0,
+   "needs": [
+    {
+     "n": 1,
+     "need": "Every contract with its counterparty, type (master agreement, statement of work, NDA, lease), and owner on our side.",
+     "verdict": "runs",
+     "declared_by": "R:67-77 contract{contract_type, counterparty ref organization, owner ref person, title, master}.",
+     "executed_by": "EA/resolution_derived/read_fields.rs:278 folds the fields (agree/most), with refs landed through held :248 and record_named :122. recipe_ontology/resolve_defaults.rs:110 makes person records. TQ/typed.rs:554 row.",
+     "query": {
+      "target_type": "contract",
+      "filters": [],
+      "relations": [],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Rows are contract records stating contract_type, counterparty (organization id), owner (person id) and title. Filter by relation contract.counterparty or contract_type eq. Caveat: a 'most' tie leaves owner unset (read_fields.rs decide at EA/resolution_derived.rs:652-665).",
+     "adjudication": "rejudge stands (code changed or cited); first pass inert (ref-target-unrecorded)"
+    },
+    {
+     "n": 2,
+     "need": "Each contract's effective date, end date, and notice period for renewal or termination.",
+     "verdict": "runs",
+     "declared_by": "R:96-107 term_dates{effective, ends, as_of}; R:110-124 renewal_term{renewal_notice, termination_notice in days, as_of}.",
+     "executed_by": "PR/projection.rs:112 writes claim attributes. TQ/typed_check.rs:540 (argmax over a time attribute), TQ/typed.rs:487 (best). TQ/typed_check.rs:440 for term_dates.subject.",
+     "query": [
+      {
+       "target_type": "term_dates",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "term_dates.subject",
+         "other_type": "contract",
+         "other_name": "Master Services Agreement - Acme",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "argmax",
+       "aggregate_over": "as_of"
+      },
+      {
+       "target_type": "renewal_term",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "renewal_term.subject",
+         "other_type": "contract",
+         "other_name": "Master Services Agreement - Acme",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "argmax",
+       "aggregate_over": "as_of"
+      }
+     ],
+     "gap": null,
+     "why": "The dates and notice periods are claim attributes, not contract attributes, so each named contract takes two queries. Argmax over as_of returns the current statement after amendments. Rows state effective, ends, renewal_notice and termination_notice."
+    },
+    {
+     "n": 3,
+     "need": "The contract's value and currency, and how an amendment changed it.",
+     "verdict": "runs",
+     "declared_by": "R:127-139 price_term{value, currency, basis, as_of, instrument}; R:142-153 amendment{changes, summary, effective}.",
+     "executed_by": "PR/projection.rs:112. TQ/typed_check.rs:440,311 and TQ/typed_match.rs:350 (changes eq value).",
+     "query": [
+      {
+       "target_type": "price_term",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "price_term.subject",
+         "other_type": "contract",
+         "other_name": "Master Services Agreement - Acme",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "amendment",
+       "filters": [
+        {
+         "attribute": "changes",
+         "op": "eq",
+         "value": "value",
+         "negate": false
+        }
+       ],
+       "relations": [
+        {
+         "relation": "amendment.subject",
+         "other_type": "contract",
+         "other_name": "Master Services Agreement - Acme",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "price_term rows state value, currency and basis per instrument (original, then each amendment) with as_of. Amendment rows with changes=value carry the summary. The change is read across the rows; no delta is computed. I counted that as answering 'how an amendment changed it'."
+    },
+    {
+     "n": 4,
+     "need": "Which amendments apply to which contract, in order, and what each changed.",
+     "verdict": "runs",
+     "declared_by": "R:142-153 amendment{amendment_no, signed_on, effective, changes, summary}, subject contract.",
+     "executed_by": "TQ/typed_check.rs:440 (amendment.subject), TQ/typed_match.rs:511, TQ/typed.rs:554.",
+     "query": {
+      "target_type": "amendment",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "amendment.subject",
+        "other_type": "contract",
+        "other_name": "Master Services Agreement - Acme",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Rows state amendment_no, signed_on, effective, changes and summary. Order is stated by the date attributes."
+    },
+    {
+     "n": 5,
+     "need": "Which contracts are in force today, and which were in force on a given past date.",
+     "verdict": "inert",
+     "declared_by": "change.supersedes = { term_dates = as_of, renewal_term = as_of, price_term = as_of }; notice (claim)",
+     "executed_by": null,
+     "query": null,
+     "gap": "as-of-state",
+     "why": "change.supersedes is read only by the tension comparability pass (analysis/tension_fields.rs:93-102), so a superseded term still matches a date filter, and an auto-renewed term past its written end date has no statement covering the date; selecting the set of contracts whose current term covers a date needs each contract's state at that date.",
+     "adjudication": "first-pass reading holds: 'which contracts are in force' selects a set by current term; per-named-record argmax answers one contract at a time",
+     "rejudge_verdict": "runs"
+    },
+    {
+     "n": 6,
+     "need": "Which contracts renew automatically and the date by which notice must be given.",
+     "verdict": "inexpressible",
+     "declared_by": "renewal_term.auto_renews (closed), renewal_term.notice_deadline (time, only where the document states it)",
+     "executed_by": null,
+     "query": null,
+     "gap": "computed-value",
+     "why": "Auto-renewal runs, but the notice date is usually end date minus the notice period, and nothing derives a date by arithmetic (FoldBy is first/agree/most/all/earliest/latest/protocol, shared/crates/understanding-vocab/src/ontology/derived.rs:143-158).",
+     "adjudication": "first-pass reading holds: a notice deadline is usually end date minus a notice period; notice_deadline holds only a stated date",
+     "rejudge_verdict": "runs"
+    },
+    {
+     "n": 7,
+     "need": "A statement of work belongs to its master agreement.",
+     "verdict": "runs",
+     "declared_by": "R:73,76 contract.contract_type and contract.master (ref of contract, by agree).",
+     "executed_by": "EA/resolution_derived/read_fields.rs:278 writes master (landing at :122); TQ/typed_check.rs:440 (contract.master is a RefOut); TQ/typed_match.rs:557.",
+     "query": {
+      "target_type": "contract",
+      "filters": [
+       {
+        "attribute": "contract_type",
+        "op": "eq",
+        "value": "statement_of_work",
+        "negate": false
+       }
+      ],
+      "relations": [
+       {
+        "relation": "contract.master",
+        "other_type": "contract",
+        "other_name": "Master Services Agreement - Acme",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Returns the SOWs whose master ref is the named agreement. In the other direction, the SOW row's master attribute holds the master's record id."
+    }
+   ]
+  },
+  {
+   "id": "03-policy-register",
+   "record_types_run": true,
+   "record_types_note": "policy and clause are made by RESOLVE (R:60-83, validate 'identity: ... RESOLVE'). Read fields without by get the default agree fold (validate 'derived: policy.title ... default'; recipe_ontology/resolve_defaults.rs:171-196). There is no change.document, so there is no document_date stamp. Validate printed no warnings.",
+   "validate_exit": 0,
+   "needs": [
+    {
+     "n": 1,
+     "need": "Every policy, with its owner and the area it governs.",
+     "verdict": "runs",
+     "declared_by": "R:60-69 policy{owner by most, area by most}.",
+     "executed_by": "EA/resolution_derived/read_fields.rs:278 (most fold at EA/resolution_derived.rs:652-665), TQ/typed.rs:554.",
+     "query": {
+      "target_type": "policy",
+      "filters": [],
+      "relations": [],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Rows state owner and area (text). A 'most' tie leaves the attribute unset."
+    },
+    {
+     "n": 2,
+     "need": "Which version of each policy is in force now, and which was in force on a given past date.",
+     "verdict": "runs",
+     "declared_by": "R:107-121 policy_decision{action, decided_on, effective, version}; R:142-143 supersedes on effective.",
+     "executed_by": "TQ/typed_check.rs:311,540 and TQ/typed.rs:487 (argmax over effective with a negated-gt date bound). Supersession is not a typed-query surface (governance_change.rs).",
+     "query": {
+      "target_type": "policy_decision",
+      "filters": [
+       {
+        "attribute": "effective",
+        "op": "gt",
+        "value": "2026-10-20",
+        "negate": true
+       }
+      ],
+      "relations": [
+       {
+        "relation": "policy_decision.subject",
+        "other_type": "policy",
+        "other_name": "Travel Policy",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "argmax",
+      "aggregate_over": "effective"
+     },
+     "gap": null,
+     "why": "Per named policy, the latest decision effective at or before D is returned, and its version and action state what was in force (action=retired means none). No in-force state is derived, so I relied on the accepted per-record argmax with a date bound. Decisions with effective unstated drop out of the bound as unjudged (typed_match.rs:286-330)."
+    },
+    {
+     "n": 3,
+     "need": "When and by whom each policy was approved, amended or retired.",
+     "verdict": "runs",
+     "declared_by": "R:107-121 policy_decision{action, decided_by, decided_on, effective}.",
+     "executed_by": "TQ/typed_check.rs:440 (policy_decision.subject), TQ/typed.rs:554.",
+     "query": {
+      "target_type": "policy_decision",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "policy_decision.subject",
+        "other_type": "policy",
+        "other_name": "Travel Policy",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Rows state action, decided_by and decided_on."
+    },
+    {
+     "n": 4,
+     "need": "What each amendment changed (the clause before and after).",
+     "verdict": "runs",
+     "declared_by": "R:125-137 clause_change{change, before, after, effective}, subject clause; R:75-83 clause.policy ref.",
+     "executed_by": "EA/resolution_derived/read_fields.rs:278 writes clause.policy by the supplied default fold agree (resolve_defaults.rs:171-196). TQ/typed_check.rs:440,493 (clause_change.subject to clause, hop clause.policy).",
+     "query": {
+      "target_type": "clause_change",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "clause_change.subject",
+        "other_type": "clause",
+        "other_name": null,
+        "negate": false,
+        "where": {
+         "filters": [],
+         "relations": [
+          {
+           "relation": "clause.policy",
+           "other_type": "policy",
+           "other_name": "Travel Policy",
+           "negate": false
+          }
+         ]
+        }
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Rows state change, before, after, effective and version. Add a where-filter on clause.number to name one clause.",
+     "adjudication": "rejudge stands (code changed or cited); first pass inert (subject-field-unheld)"
+    },
+    {
+     "n": 5,
+     "need": "Which policy replaced a retired one.",
+     "verdict": "runs",
+     "declared_by": "R:119 policy_decision.replaced_by (ref of policy); R:114 action values include retired.",
+     "executed_by": "EA/resolution_derived/statement_refs.rs:57 writes replaced_by as a policy record id. TQ/typed_check.rs:440,493 (policy is the RefIn side of policy_decision.replaced_by, hop policy_decision.subject), TQ/typed_match.rs:557.",
+     "query": {
+      "target_type": "policy",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "policy_decision.replaced_by",
+        "other_type": "policy_decision",
+        "other_name": null,
+        "negate": false,
+        "where": {
+         "filters": [
+          {
+           "attribute": "action",
+           "op": "eq",
+           "value": "retired",
+           "negate": false
+          }
+         ],
+         "relations": [
+          {
+           "relation": "policy_decision.subject",
+           "other_type": "policy",
+           "other_name": "Old Travel Policy",
+           "negate": false
+          }
+         ]
+        }
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Returns the policy records that a named retired policy's retirement decision points at. The reading lands only if the replacement is named in the same document (EA/resolution_derived/read_fields.rs:122-185)."
+    },
+    {
+     "n": 6,
+     "need": "Every rule a policy imposes (who must or must not do what) with the clause it comes from.",
+     "verdict": "runs",
+     "declared_by": "R:90-103 rule{bearer, conditions, exceptions, effective, version}, subject clause, force directive.",
+     "executed_by": "TQ/typed_check.rs:440,493 (rule.subject to clause, where number filter and hop clause.policy), TQ/typed.rs:554 (row name is the claim content).",
+     "query": {
+      "target_type": "rule",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "rule.subject",
+        "other_type": "clause",
+        "other_name": null,
+        "negate": false,
+        "where": {
+         "filters": [
+          {
+           "attribute": "number",
+           "op": "eq",
+           "value": "4.2",
+           "negate": false
+          }
+         ],
+         "relations": [
+          {
+           "relation": "clause.policy",
+           "other_type": "policy",
+           "other_name": "Travel Policy",
+           "negate": false
+          }
+         ]
+        }
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Per named clause, rows are the rules, with the rule text as the row name plus bearer, conditions and exceptions. Rows do not carry their clause, so the clause comes from the query constraint. Dropping the number filter lists a policy's rules without clause identity."
+    }
+   ]
+  },
+  {
+   "id": "04-procurement",
+   "record_types_run": true,
+   "record_types_note": "supplier and contact come from metadata sources (R:59-79, validate 'identity: ... external key'; contact.organization linked at EA/resolution_sources.rs:199-233). purchase is made by RESOLVE (R:83-93). status is a protocol fold after RESOLVE (R:208-275). change.document.date is declared (R:190), so claims get a document_date stamp. Validate printed no warnings. Hazards the validator does not flag: the fold needs the 'reference' identity field supported on every reached claim (EA/resolution_derived/protocol.rs:276,295). Same-reference moves into different states Conflict (:580). Different-state moves on the same report date Conflict (EA/resolution_derived/protocol_moves.rs replay, :636 branch).",
+   "validate_exit": 0,
+   "needs": [
+    {
+     "n": 1,
+     "need": "Every purchase request: who asked, for what, how many, estimated cost and currency.",
+     "verdict": "runs",
+     "declared_by": "R:96-111 purchase_request{requester ref contact, item, quantity, quantity_unit, estimated_cost, currency, action}.",
+     "executed_by": "PR/pick.rs:76 offers requester candidates from the email's from/to/cc. EA/resolution_derived/statement_refs.rs:57 writes requester. PR/projection.rs:112 for the other fields. TQ/typed.rs:554.",
+     "query": {
+      "target_type": "purchase_request",
+      "filters": [],
+      "relations": [],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Rows state requester (contact id), item, quantity, quantity_unit, estimated_cost and currency."
+    },
+    {
+     "n": 2,
+     "need": "Who approved or rejected each request, and when; requests above 10,000 need two approvals.",
+     "verdict": "inexpressible",
+     "declared_by": "approval (claim): approver (ref contact), decision; the two-approval rule only in guidance prose",
+     "executed_by": null,
+     "query": null,
+     "gap": "linked-count-filter",
+     "why": "Who and when run, but the two-approval rule is held only as guidance text: the status fold moves to approved on one approval, and the query can rank by how many approvals a purchase has (argmax/argmin) but not keep those with fewer than two (typed_query_grammar.md:14-18).",
+     "adjudication": "first-pass reading holds: 'requests above 10,000 need two approvals' asks which requests meet the rule; nothing counts approvals per request",
+     "rejudge_verdict": "runs"
+    },
+    {
+     "n": 3,
+     "need": "The purchase order a request became, its supplier and its total.",
+     "verdict": "runs",
+     "declared_by": "R:83-93 purchase identity_criterion (request and PO are one purchase); R:127-139 purchase_order{supplier ref, order_total, currency, reference}.",
+     "executed_by": "EA/resolution_records.rs:81 (purchase decided by RESOLVE). EA/resolution_derived/statement_refs.rs:57 writes supplier (picked among from/to/cc domains). TQ/typed_check.rs:440,493 (hop purchase_request.subject, a RefIn).",
+     "query": {
+      "target_type": "purchase_order",
+      "filters": [
+       {
+        "attribute": "action",
+        "op": "eq",
+        "value": "issued",
+        "negate": false
+       }
+      ],
+      "relations": [
+       {
+        "relation": "purchase_order.subject",
+        "other_type": "purchase",
+        "other_name": null,
+        "negate": false,
+        "where": {
+         "filters": [],
+         "relations": [
+          {
+           "relation": "purchase_request.subject",
+           "other_type": "purchase_request",
+           "other_name": null,
+           "negate": false
+          }
+         ]
+        }
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Rows are issued PO claims on purchases that also carry a request. They state supplier (supplier id), order_total, currency and reference."
+    },
+    {
+     "n": 4,
+     "need": "The invoices against each purchase order and whether the invoiced amount matches the order.",
+     "verdict": "inert",
+     "declared_by": "R:157-171 invoice{invoiced_amount}; R:127-139 purchase_order{order_total}; R:195-205 tension 'mismatch' between purchase_order and invoice.",
+     "executed_by": null,
+     "query": null,
+     "gap": "value-compare",
+     "why": "Invoices per purchase can be listed (invoice.subject), but 'matches' is not an attribute of any row. The {target} operand (TQ/typed_check.rs:385-438, typed_match.rs:392) compares a far end with the target only when one declared relation joins them. Here invoice and purchase_order are joined only through the purchase entity, and no ref joins them directly (R:157-171). A Hop inside where has no filters (TQ/typed.rs:140), so the comparison would need a third level. The tension 'mismatch' is not a typed-query surface."
+    },
+    {
+     "n": 5,
+     "need": "Each order's status (requested, approved, ordered, delivered, invoiced, paid, cancelled).",
+     "verdict": "runs",
+     "declared_by": "R:83-93 purchase.status derived=purchase_status; R:208-275 protocol fold; R:190 change.document.date.",
+     "executed_by": "EA/resolution_derived/protocol.rs:31 and EA/resolution_derived.rs:128-146 write status when Decided. TQ/typed_group.rs:100 (tally headline by status), TQ/typed.rs:554.",
+     "query": {
+      "target_type": "purchase",
+      "filters": [],
+      "relations": [],
+      "aggregate": "tally",
+      "aggregate_over": "status"
+     },
+     "gap": null,
+     "why": "Rows are purchases each stating status; the headline groups them. Purchases whose fold is Pending or Conflict (see note) carry no status."
+    },
+    {
+     "n": 6,
+     "need": "Our suppliers, with their contacts, and how much we have ordered from each this year.",
+     "verdict": "inert",
+     "declared_by": "R:59-79 supplier/contact metadata sources; R:127-139 purchase_order{supplier, order_total, delivery_date}; R:190 document_date stamp.",
+     "executed_by": "Suppliers and contacts work (query contact by relation contact.organization). The per-supplier total works too ({target_type:purchase_order, aggregate:sum, aggregate_over:order_total, group_by:supplier}: TQ/typed_check.rs:264-309, typed_group.rs:122). Only the year bound is unreachable.",
+     "query": null,
+     "gap": "document-date-unqueryable",
+     "why": "'This year' needs a date filter on when the order was placed. purchase_order's only time attribute is delivery_date, the requested delivery (R:137). The order's own date is the stamped document_date (EA/resolution_documents.rs:459), but it is not a declared attribute, so TQ/typed_check.rs:322-325 refuses it in a filter. A delivery_date proxy would answer a different question.",
+     "adjudication": "rejudge stands (code changed or cited); first pass inexpressible (totals)"
+    }
+   ]
+  },
+  {
+   "id": "05-incidents",
+   "record_types_run": true,
+   "record_types_note": "service, action_item and person (implicit, by name) are made by RESOLVE. incident is a RESOLVE event: EA/resolution_records.rs:708-725 pushes Event atoms, and read_fields.rs:307,416 writes their by-fields (incident_id, title). Validate printed no warnings. The validator does not flag two breaks. (1) action_item.owner/due/status declare by=latest (R:96-98) but R has no change.document, so Graph.clock is empty (EA/resolution_derived.rs:283-296) and decide returns Unordered (:685); the attributes are never written. (2) Refs whose target is the event type incident (impact.incident R:166, action_item.incident R:95) cannot land: record_named looks only through Graph.entities and entity_at (EA/resolution_derived.rs:203,304; EA/resolution_derived/read_fields.rs:122-185), never events.",
+   "validate_exit": 0,
+   "needs": [
+    {
+     "n": 1,
+     "need": "Every incident with its severity, the services it affected, when it started, was detected, was mitigated and was resolved.",
+     "verdict": "inert",
+     "declared_by": "R:73-79 incident; R:110-120 severity_call; R:123-131 milestone{stage, at}; R:160-168 impact{subject service, incident ref, effect}.",
+     "executed_by": "Severity (severity_call rows) and the four milestone times (milestone rows) run through TQ/typed_check.rs:440 and TQ/typed.rs:554. The services-affected link does not: EA/resolution_derived/statement_refs.rs:57 calls held (read_fields.rs:248), which calls record_named (:122), which cannot find an event record, so impact.incident is left unwritten (removed from the claim at statement_refs.rs:~140).",
+     "query": null,
+     "gap": "ref-target-unrecorded",
+     "why": "impact is the only declared link from an incident to the services it affected. Its subject is the service, and its incident ref targets an event type, which the ref-landing step never searches. The claim therefore carries no incident, and no query can join it to one. timeline_entry.service and root_cause.service are not 'affected'.",
+     "adjudication": "rejudge stands (code changed or cited); first pass runs (None)"
+    },
+    {
+     "n": 2,
+     "need": "Who responded to each incident and in what role (incident commander, communications, responder).",
+     "verdict": "runs",
+     "declared_by": "R:135-144 role_assignment{person ref person, role, from}, subject incident; R:77 incident.incident_id (by all).",
+     "executed_by": "EA/resolution_derived/read_fields.rs:307,416 write incident_id on the event. EA/resolution_derived/statement_refs.rs:57 writes person (implicit person records). TQ/typed_check.rs:440,493 and TQ/typed_match.rs:511 (the Event atom is reached through by_id).",
+     "query": {
+      "target_type": "role_assignment",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "role_assignment.subject",
+        "other_type": "incident",
+        "other_name": null,
+        "negate": false,
+        "where": {
+         "filters": [
+          {
+           "attribute": "incident_id",
+           "op": "contains",
+           "value": "INC-1234",
+           "negate": false
+          }
+         ],
+         "relations": []
+        }
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Incidents are named by an incident_id filter because an event's name is its opening passage text (TQ/typed_match.rs:65-72, :271). Rows state person, role and from.",
+     "adjudication": "rejudge stands (code changed or cited); first pass inert (ref-target-unrecorded)"
+    },
+    {
+     "n": 3,
+     "need": "The timeline of each incident: what was observed or done, when, by whom.",
+     "verdict": "runs",
+     "declared_by": "R:147-157 timeline_entry{at, actor ref person, entry_kind, service ref service}, subject incident.",
+     "executed_by": "EA/resolution_derived/statement_refs.rs:57 writes actor and service. TQ/typed_check.rs:440,493. TQ/typed.rs:554 (row name is the claim content).",
+     "query": {
+      "target_type": "timeline_entry",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "timeline_entry.subject",
+        "other_type": "incident",
+        "other_name": null,
+        "negate": false,
+        "where": {
+         "filters": [
+          {
+           "attribute": "incident_id",
+           "op": "contains",
+           "value": "INC-1234",
+           "negate": false
+          }
+         ],
+         "relations": []
+        }
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Rows state the entry text (name), at, actor, entry_kind and service.",
+     "adjudication": "rejudge stands (code changed or cited); first pass inert (ref-target-unrecorded)"
+    },
+    {
+     "n": 4,
+     "need": "The root cause stated in the postmortem.",
+     "verdict": "runs",
+     "declared_by": "R:171-182 root_cause{cause_kind, contribution, service}, grades postmortem/investigation/hypothesis.",
+     "executed_by": "PR/projection.rs:156 writes the grade into claim attributes (row-visible, not a declared attribute). TQ/typed_match.rs:350 (contribution eq), TQ/typed_check.rs:440,493.",
+     "query": {
+      "target_type": "root_cause",
+      "filters": [
+       {
+        "attribute": "contribution",
+        "op": "eq",
+        "value": "root",
+        "negate": false
+       }
+      ],
+      "relations": [
+       {
+        "relation": "root_cause.subject",
+        "other_type": "incident",
+        "other_name": null,
+        "negate": false,
+        "where": {
+         "filters": [
+          {
+           "attribute": "incident_id",
+           "op": "contains",
+           "value": "INC-1234",
+           "negate": false
+          }
+         ],
+         "relations": []
+        }
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Rows state the cause text (name), cause_kind, contribution, service and grade. Postmortem versus hypothesis is read from the grade on the row, since it is not filterable."
+    },
+    {
+     "n": 5,
+     "need": "The follow-up actions from each postmortem, with an owner, a due date and whether each is done.",
+     "verdict": "inert",
+     "declared_by": "R:90-100 action_item{incident ref, owner ref, due, status, each by latest}; R:184-197 follow_up and action_progress (no attributes of their own).",
+     "executed_by": "EA/resolution_derived/read_fields.rs:278 reaches decide (EA/resolution_derived.rs:667-691) with an empty Graph.clock (:283-296), so the outcome is Unordered and nothing is written (write_fold keeps the attribute unset, EA/resolution_derived/outcome.rs:25-47).",
+     "query": null,
+     "gap": "fold-needs-document-date",
+     "why": "owner, due and status exist only as record attributes folded by latest, and R has no change.document.date, so latest has no clock and writes nothing, even for a single reading. The claims that carry them declare no attributes. action_item.incident is also an unlandable event ref (note), so the link to the postmortem's incident is missing too."
+    },
+    {
+     "n": 6,
+     "need": "Incidents that are the same outage reported twice are one incident.",
+     "verdict": "runs",
+     "declared_by": "R:73-88 incident identity_criterion (duplicates are one) and incident_id by all.",
+     "executed_by": "EA/resolution_records.rs:708-725 (one Event atom per RESOLVE record). EA/resolution_derived/read_fields.rs:307,416 write incident_id as the array of all ids. TQ/typed_match.rs:350 (contains over an array via texts :723).",
+     "query": {
+      "target_type": "incident",
+      "filters": [
+       {
+        "attribute": "incident_id",
+        "op": "contains",
+        "value": "INC-1234",
+        "negate": false
+       }
+      ],
+      "relations": [],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "One incident row whose incident_id lists both numbers. The merge itself is a model decision I could not verify statically."
+    },
+    {
+     "n": 7,
+     "need": "How severity changed during an incident.",
+     "verdict": "runs",
+     "declared_by": "R:110-120 severity_call{severity, set_at, set_by ref person, reason}, subject incident.",
+     "executed_by": "TQ/typed_check.rs:440,493. TQ/typed.rs:554. Supersession on set_at (R:199-200) is a separate view and does not hide rows from a typed query.",
+     "query": {
+      "target_type": "severity_call",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "severity_call.subject",
+        "other_type": "incident",
+        "other_name": null,
+        "negate": false,
+        "where": {
+         "filters": [
+          {
+           "attribute": "incident_id",
+           "op": "contains",
+           "value": "INC-1234",
+           "negate": false
+          }
+         ],
+         "relations": []
+        }
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Every call is a row stating severity, set_at, set_by and reason, so the sequence is stated."
+    }
+   ]
+  },
+  {
+   "id": "06-tasks",
+   "record_types_run": true,
+   "record_types_note": "member comes from a metadata source on author (R:60-66, validate 'identity: member \u2192 handle (external key)'). project, milestone and task are made by RESOLVE (R:69-98). person is implicit by-name (validate). change.document is declared (R:212), so claims are stamped and by=latest has a clock. task.status is a protocol fold after RESOLVE (R:172-209). Validate printed no warnings. Hazard: the fold declares effective_time=changed_at (R:179), which the recipe says is stated only 'when the message names a time other than its own', so the fold goes Pending where it is not (EA/resolution_derived/protocol.rs:318,337,623-635). A member ref lands on a handle only by exact identity value (EA/resolution_derived/read_fields.rs:188-228).",
+   "validate_exit": 0,
+   "needs": [
+    {
+     "n": 1,
+     "need": "Every task we agreed to do, with its owner and due date.",
+     "verdict": "runs",
+     "declared_by": "R:85-95 task{owner ref member by latest, due by latest}.",
+     "executed_by": "EA/resolution_derived/read_fields.rs:278 writes owner and due (latest on the document clock, EA/resolution_derived.rs:283-296, :667-691). Owner lands via held (:248) and sourced_anywhere (:188). TQ/typed.rs:554.",
+     "query": {
+      "target_type": "task",
+      "filters": [],
+      "relations": [],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Rows are task records stating owner (member id) and due.",
+     "adjudication": "rejudge stands (code changed or cited); first pass inert (ref-target-unrecorded)"
+    },
+    {
+     "n": 2,
+     "need": "Each task's status (open, in progress, blocked, done, dropped) and when it last changed.",
+     "verdict": "runs",
+     "declared_by": "R:119-128 status_update{status, changed_at}; R:94 task.status derived=task_status; R:172-209 fold.",
+     "executed_by": "TQ/typed_check.rs:540 and TQ/typed.rs:487 (argmax over changed_at, one winner per named task). EA/resolution_derived/protocol.rs:31 is the fold route for task.status.",
+     "query": {
+      "target_type": "status_update",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "status_update.subject",
+        "other_type": "task",
+        "other_name": "Export CSV",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "argmax",
+      "aggregate_over": "changed_at"
+     },
+     "gap": null,
+     "why": "Per named task, the latest status_update row states status and changed_at, the per-record argmax form the method accepts. A report whose message names no time has changed_at unset and is set aside as unscored (typed.rs:~436 note). task.status via the fold has the Pending hazard in the note."
+    },
+    {
+     "n": 3,
+     "need": "Which tasks block which other tasks.",
+     "verdict": "runs",
+     "declared_by": "R:131-140 dependency{blocked_by ref task, blocking blocks/no_longer_blocks}, subject task.",
+     "executed_by": "EA/resolution_derived/statement_refs.rs:57 writes blocked_by. TQ/typed_check.rs:440,493 (task is the RefIn side of dependency.subject, hop dependency.blocked_by).",
+     "query": {
+      "target_type": "task",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "dependency.subject",
+        "other_type": "dependency",
+        "other_name": null,
+        "negate": false,
+        "where": {
+         "filters": [
+          {
+           "attribute": "blocking",
+           "op": "eq",
+           "value": "blocks",
+           "negate": false
+          }
+         ],
+         "relations": [
+          {
+           "relation": "dependency.blocked_by",
+           "other_type": "task",
+           "other_name": "Export CSV",
+           "negate": false
+          }
+         ]
+        }
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "One query per blocker task returns the tasks it blocks. A later no_longer_blocks statement is not netted out by the query."
+    },
+    {
+     "n": 4,
+     "need": "Who asked for each task and why.",
+     "verdict": "runs",
+     "declared_by": "R:107-117 request{requester ref person, reason}, subject task.",
+     "executed_by": "EA/resolution_derived/statement_refs.rs:57 writes requester (implicit person records, recipe_ontology/resolve_defaults.rs:110). TQ/typed_check.rs:440.",
+     "query": {
+      "target_type": "request",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "request.subject",
+        "other_type": "task",
+        "other_name": "Export CSV",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Rows state requester (person id), reason, and the request text as the name.",
+     "adjudication": "rejudge stands (code changed or cited); first pass inert (ref-target-unrecorded)"
+    },
+    {
+     "n": 5,
+     "need": "Tasks that were reassigned, and to whom.",
+     "verdict": "runs",
+     "declared_by": "R:142-152 reassignment{from_owner, to_owner refs member, reason}, subject task.",
+     "executed_by": "EA/resolution_derived/statement_refs.rs:57 writes from_owner/to_owner (exact handle landing via read_fields.rs:188). TQ/typed_check.rs:440, TQ/typed_match.rs:557.",
+     "query": [
+      {
+       "target_type": "task",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "reassignment.subject",
+         "other_type": "reassignment",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "reassignment",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "reassignment.subject",
+         "other_type": "task",
+         "other_name": "Export CSV",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "The first query lists the reassigned tasks. The second, per task, returns reassignment rows stating from_owner, to_owner and reason.",
+     "adjudication": "rejudge stands (code changed or cited); first pass inert (ref-target-unrecorded)"
+    },
+    {
+     "n": 6,
+     "need": "Which tasks belong to which project or milestone.",
+     "verdict": "runs",
+     "declared_by": "R:85-95 task.project and task.milestone (refs by latest); R:75-83 milestone.project.",
+     "executed_by": "EA/resolution_derived/read_fields.rs:278 writes both refs (landing via window subject names, :122). TQ/typed_check.rs:440.",
+     "query": [
+      {
+       "target_type": "task",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "task.project",
+         "other_type": "project",
+         "other_name": "Onboarding revamp",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "task",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "task.milestone",
+         "other_type": "milestone",
+         "other_name": "Beta",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "One query per named project or milestone returns its tasks. Task rows also state the project and milestone refs."
+    }
+   ]
+  },
+  {
+   "id": "07-inventory",
+   "record_types_run": true,
+   "record_types_note": "part is RESOLVE-decided (resolution_records.rs:81 decides; recipe.toml:68 identity_criterion). warehouse, technician, supplier declare no criterion, but validate prints 'identity: <type> -> RESOLVE by name' (recipe_ontology/resolve_defaults.rs:110-168). Contract::of (pipeline/document_read/window.rs:72-93) and unstated (window_particulars.rs:38,56) send them to RESOLVE, and the 07 shape is the test fixture at resolution_derived/ref_targets_tests.rs:44-60. Every claim has force and subject=part, so the document reader reads them (decl.rs:462,544). Validate printed no warnings. sovereign MCP tools were unreachable (ECONNREFUSED); I used grep and sed.",
+   "validate_exit": 0,
+   "needs": [
+    {
+     "n": 1,
+     "need": "Every part, with its part number, description and unit of measure.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:62-73 (part_number; description by=most; unit_of_measure by=most)",
+     "executed_by": "typed.rs:321 execute -> typed_check.rs:191 check -> typed_match.rs:281 qualifies; row attributes typed_match.rs:73. Writers: RESOLVE resolution_records.rs:231,726 makes the part records. Folds are read_fields.rs:43,278,423 (by most, resolution_derived.rs:652). part_number gets the default fold agree (resolve_defaults.rs:171; validate prints 'derived: part.part_number <- fold by agree').",
+     "query": {
+      "target_type": "part",
+      "filters": [],
+      "relations": [],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Part records come from RESOLVE and hold all three attributes as folded record fields, so each row states the answer. A part whose statements tie on description or unit gets no value, because read_fields.rs:423 writes only a Decided fold.",
+     "adjudication": "rejudge stands (code changed or cited); first pass inert (subject-field-unheld)"
+    },
+    {
+     "n": 2,
+     "need": "How many of each part each warehouse holds, as of the last stock-take and as of the latest movement.",
+     "verdict": "inexpressible",
+     "declared_by": "recipe.toml:151-165 stock_count (counted, warehouse, counted_on); movement quantities at :93-149; no balance attribute is declared anywhere",
+     "executed_by": null,
+     "query": null,
+     "gap": "computed-value",
+     "why": "The last-stock-take half is expressible: per warehouse, stock_count argmax counted_on (typed.rs:487 best). 'As of the latest movement' is a running balance (count plus receipts, transfers in, returns, minus transfers out and issues since). No record carries it. sum (typed.rs:166; typed_check.rs:294 check_summand; typed_group.rs:122) totals one quantity attribute of one claim type per group, so it cannot combine four claim types or subtract. The author's transcript says the balance is 'assembled at answer time', and recipe.toml:54-56 forbids presenting it as counted."
+    },
+    {
+     "n": 3,
+     "need": "Every movement: a receipt from a supplier, a transfer between warehouses, an issue to a technician, with quantity and date.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:93-105 receipt, :107-120 transfer, :122-134 issue (quantity, date, warehouse/supplier/technician refs)",
+     "executed_by": "typed.rs:321 execute, once per kind; rows are claim.attributes (typed_match.rs:73). Fields written at projection.rs:112. Refs written at resolution_derived/statement_refs.rs:57-142 onto the RESOLVE-by-name warehouse/supplier/technician records (resolve_defaults.rs:110).",
+     "query": [
+      {
+       "target_type": "receipt",
+       "filters": [],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "transfer",
+       "filters": [],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "issue",
+       "filters": [],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "One listing per movement kind the owner names; each row holds quantity and date as claim fields the reader writes. A transfer is one row per leg (recipe.toml:117). Display is capped at 64 rows with a note while matched keeps the count (typed.rs:459).",
+     "adjudication": "rejudge stands (code changed or cited); first pass inert (ref-target-unrecorded)"
+    },
+    {
+     "n": 4,
+     "need": "Where a stock-take count disagreed with what the movements imply.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:151-165 stock_count.counted and .expected ('the quantity the records said should be there, when the sheet prints one')",
+     "executed_by": "typed_check.rs:385 check_operand + typed_match.rs:392 compare_holds (quantity eq between two attributes of one claim, negated = differs); typed.rs:321 execute. expected is a claim field the reader writes (projection.rs:112).",
+     "query": {
+      "target_type": "stock_count",
+      "filters": [
+       {
+        "attribute": "counted",
+        "op": "eq",
+        "value": {
+         "attribute": "expected"
+        },
+        "negate": true
+       }
+      ],
+      "relations": [],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Rows whose counted and expected differ state the disagreement. A count with no printed expected is set aside and noted as unjudged, not treated as agreeing. The stand-in for 'what the movements imply' is the sheet's printed book figure, not a movement sum. The declared tension (recipe.toml:184-191) compares two counts of one date, not counts against movements, and is not a typed-query row.",
+     "adjudication": "rejudge stands (code changed or cited); first pass inexpressible (totals)"
+    },
+    {
+     "n": 5,
+     "need": "Which technician holds which issued parts.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:122-134 issue (technician ref, quantity, subject part), :87-91 technician",
+     "executed_by": "typed.rs:321 execute; typed_check.rs:440 check_relation resolves issue.technician (RefOut) and issue.subject (RefOut via the declared claim subject, ref_target :525); typed_match.rs:557 reach. issue.subject is set at resolution_records.rs:755; technician at statement_refs.rs:57-142.",
+     "query": {
+      "target_type": "issue",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "issue.technician",
+        "other_type": "technician",
+        "other_name": null,
+        "negate": false,
+        "where": null
+       },
+       {
+        "relation": "issue.subject",
+        "other_type": "part",
+        "other_name": null,
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Each issue row carries the technician and quantity as attributes, and the part is the claim's subject (the row is named by the claim content). 'Holds' is read as issued-to. The declared return claim (recipe.toml:136-149) would need issues-minus-returns arithmetic (computed-value), but returns are not in the owner's words.",
+     "adjudication": "rejudge stands (code changed or cited); first pass inert (ref-target-unrecorded)"
+    },
+    {
+     "n": 6,
+     "need": "Parts below their reorder level.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:151-165 stock_count.counted and .reorder_level",
+     "executed_by": "typed_check.rs:385 check_operand; typed_match.rs:392 compare_holds (lt on quantity intervals); typed.rs:321 execute. Fields written at projection.rs:112.",
+     "query": {
+      "target_type": "stock_count",
+      "filters": [
+       {
+        "attribute": "counted",
+        "op": "lt",
+        "value": {
+         "attribute": "reorder_level"
+        },
+        "negate": false
+       }
+      ],
+      "relations": [],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "The comparison of two attributes of one count line is exactly the form the grammar offers (the 07 n6 case in tests/typed_ledger.rs). A line with no reorder_level is set aside and said so. The query covers every count line, not only the latest sheet; the owner does not name that.",
+     "adjudication": "rejudge stands (code changed or cited); first pass inexpressible (value-compare)"
+    }
+   ]
+  },
+  {
+   "id": "08-leases",
+   "record_types_run": true,
+   "record_types_note": "flat, tenant, contractor, tenancy, maintenance_job are entities with identity_criterion and no source, so RESOLVE decides them (resolution_records.rs:81; validate prints 'identity: ... -> RESOLVE under its identity_criterion'). tenant and contractor read fields get default fold agree (validate prints 'derived: tenant.name ...'). All claim kinds carry force and a resolvable subject (decl.rs:462,544). Validate printed no warnings.",
+   "validate_exit": 0,
+   "needs": [
+    {
+     "n": 1,
+     "need": "Every tenancy: which flat, which tenants, start and end date, monthly rent and currency, deposit held.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:96-106 tenancy (flat agree, tenants all, start agree, end latest); :122-133 agreement_terms (monthly_rent, currency, deposit)",
+     "executed_by": "typed.rs:321 execute, twice. Tenancy attributes are folded by read_fields.rs:43,278,423 (decide resolution_derived.rs:583; clock from change.document recipe.toml:228). agreement_terms fields are written at projection.rs:112. The link is agreement_terms.subject (typed_check.rs:440,525; typed_match.rs:557).",
+     "query": [
+      {
+       "target_type": "tenancy",
+       "filters": [],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "agreement_terms",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "agreement_terms.subject",
+         "other_type": "tenancy",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Flat, tenants, start and end are on the tenancy record. Rent, currency and deposit are claim fields on agreement_terms one subject-hop away, so the answer is two listings joined by subject, not one row."
+    },
+    {
+     "n": 2,
+     "need": "Rent changes over time, and when each took effect.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:135-146 rent_change (new_rent, previous_rent, currency, effective_from)",
+     "executed_by": "typed.rs:321 execute; fields written at projection.rs:112; subject link resolution_records.rs:755.",
+     "query": {
+      "target_type": "rent_change",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "rent_change.subject",
+        "other_type": "tenancy",
+        "other_name": null,
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Each rent_change row states the new rent and the effective_from date as written, which may differ from the announcing email's date."
+    },
+    {
+     "n": 3,
+     "need": "Renewals and notices to quit, with their dates.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:148-158 renewal (agreed_on, new_term, renewal_type); :160-172 notice_to_quit (served_on, quit_date, served_by)",
+     "executed_by": "typed.rs:321 execute, once per kind; fields written at projection.rs:112.",
+     "query": [
+      {
+       "target_type": "renewal",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "renewal.subject",
+         "other_type": "tenancy",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "notice_to_quit",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "notice_to_quit.subject",
+         "other_type": "tenancy",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Both kinds are claim types whose date attributes are claim fields the reader writes."
+    },
+    {
+     "n": 4,
+     "need": "Every maintenance request: which flat, what was wrong, when it was reported, who fixed it, its status and cost.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:108-118 maintenance_job (flat agree, problem earliest, fixed_by latest, status latest); :185-196 maintenance_request.reported_on; :210-222 invoice.amount",
+     "executed_by": "typed.rs:321 execute. Job folds are read_fields.rs:278,423 (earliest/latest by document date, resolution_derived.rs:667). Cost sum: typed_check.rs:264 check_group accepts 'subject' (:275), typed_group.rs:83 group_value and :122 sum_headline. Claim fields at projection.rs:112.",
+     "query": [
+      {
+       "target_type": "maintenance_job",
+       "filters": [],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "maintenance_request",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "maintenance_request.subject",
+         "other_type": "maintenance_job",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "invoice",
+       "filters": [],
+       "relations": [],
+       "aggregate": "sum",
+       "aggregate_over": "amount",
+       "group_by": "subject"
+      }
+     ],
+     "gap": null,
+     "why": "The job record holds flat, problem, fixer and status. Reported-on is on the request claims and cost is invoice.amount summed per job subject. An invoice with no single readable amount is reported by id, never summed as zero (typed_group.rs:122)."
+    },
+    {
+     "n": 5,
+     "need": "Which flats are empty and since when.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:63-67 flat.occupancy (let/vacant, latest); :174-183 occupancy_change (change, effective_from)",
+     "executed_by": "typed.rs:321 execute and :487 best (argmax over effective_from, typed_match.rs:460 interval). occupancy folded at read_fields.rs:278,423 (Latest, resolution_derived.rs:667, document clock recipe.toml:228). Subject link resolution_records.rs:755.",
+     "query": [
+      {
+       "target_type": "flat",
+       "filters": [
+        {
+         "attribute": "occupancy",
+         "op": "eq",
+         "value": "vacant",
+         "negate": false
+        }
+       ],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "occupancy_change",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "occupancy_change.subject",
+         "other_type": "flat",
+         "other_name": "Flat 3, Elm Court",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "argmax",
+       "aggregate_over": "effective_from"
+      }
+     ],
+     "gap": null,
+     "why": "The first query lists vacant flats from the folded record attribute. The second is the per-flat argmax of the effective date, repeated for each vacant flat, read as 'empty since'."
+    },
+    {
+     "n": 6,
+     "need": "A tenant who moves to another of my flats is the same person with a new tenancy.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:71-82 tenant identity_criterion; :96-106 tenancy.tenants (ref, by all) and identity_criterion",
+     "executed_by": "RESOLVE resolution_records.rs:231,726 decides tenant and tenancy; tenants written by read_fields.rs:278,423 (FoldBy::All, resolution_derived.rs:648). Query side: typed_check.rs:540 check_over gives RefIn('tenants'); typed.rs:487 best; typed_match.rs:596 linked_in_scope.",
+     "query": [
+      {
+       "target_type": "tenant",
+       "filters": [],
+       "relations": [],
+       "aggregate": "argmax",
+       "aggregate_over": "tenancy"
+      },
+      {
+       "target_type": "tenancy",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "tenancy.tenants",
+         "other_type": "tenant",
+         "other_name": "<tenant name>",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "One tenant record linked from several tenancy records is the stated requirement. argmax over the related type tenancy shows the tenant with the most tenancies, and the named form lists them. There is no 'two or more' count filter, but the named lookup answers it."
+    }
+   ]
+  },
+  {
+   "id": "09-grants",
+   "record_types_run": true,
+   "record_types_note": "application, report and payment are RESOLVE-decided. funder and contact are metadata-sourced (resolution_sources.rs:145; validate prints 'source: funder <- document fields from, to, cc' and 'identity: contact -> email'). contact.funder is written at resolution_sources.rs:215-236. 'OUR_CHARITY_DOMAIN' in two exclude lists is a literal placeholder like SOURCE_PATH; left unreplaced it adds the charity's own domain as a funder and contact (extra rows, none missing). Validate printed no warnings.",
+   "validate_exit": 0,
+   "needs": [
+    {
+     "n": 1,
+     "need": "Every application: which funder, which programme, how much we asked for and in what currency, when we applied.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:85-96 application (funder ref agree, programme, project); :128-141 funding_request (amount_requested, currency, dated, stage)",
+     "executed_by": "typed.rs:321 execute, twice. application fields via read_fields.rs:43,278,423; funder resolved by held() (read_fields.rs:248) against the metadata funder records. Request fields written at projection.rs:112.",
+     "query": [
+      {
+       "target_type": "application",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "application.funder",
+         "other_type": "funder",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "funding_request",
+       "filters": [
+        {
+         "attribute": "stage",
+         "op": "eq",
+         "value": "submitted",
+         "negate": false
+        }
+       ],
+       "relations": [
+        {
+         "relation": "funding_request.subject",
+         "other_type": "application",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Funder and programme are on the application record. Amount asked, currency and date applied are on the submitted funding_request claims, one subject-hop away. Drafts are filtered out by stage."
+    },
+    {
+     "n": 2,
+     "need": "The outcome of each application (pending, awarded, declined, withdrawn), and the amount awarded.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:95 application.status derived=application_status; :243-274 protocol fold; :143-156 funding_decision.amount_awarded",
+     "executed_by": "typed.rs:321 execute. status is written after RESOLVE by derive_attributes (resolution_derived.rs:64,148; atlas_resolve_documents.rs:169,193) via protocol.rs:31. The non-machine branch protocol.rs:692 takes the latest document's state. Decision fields at projection.rs:112. Validate prints 'derived: application.status <- fold application_status by protocol'.",
+     "query": [
+      {
+       "target_type": "application",
+       "filters": [],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "funding_decision",
+       "filters": [
+        {
+         "attribute": "outcome",
+         "op": "eq",
+         "value": "awarded",
+         "negate": false
+        }
+       ],
+       "relations": [
+        {
+         "relation": "funding_decision.subject",
+         "other_type": "application",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "The status attribute is an ordinary derived text attribute, so rows carry it and it can be filtered (typed_check.rs:311 uses effective_attributes). The amount awarded is on the decision claims."
+    },
+    {
+     "n": 3,
+     "need": "The conditions of each award, and every reporting deadline it imposes.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:171-181 grant_condition (category, deadline); :98-110 report (grant ref, due latest); :183-194 reporting_requirement",
+     "executed_by": "typed.rs:321 execute; report.due and report.grant are subject fields folded at read_fields.rs:278,423 (Latest resolution_derived.rs:667). The relation is report.grant (RefOut, typed_check.rs:440). Condition fields at projection.rs:112.",
+     "query": [
+      {
+       "target_type": "grant_condition",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "grant_condition.subject",
+         "other_type": "application",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "report",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "report.grant",
+         "other_type": "application",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Condition text is the claim content and its category and deadline are fields. Reporting deadlines are the due attribute of report records, tied to their award by the grant ref. A later extension replaces the earlier date through the latest fold."
+    },
+    {
+     "n": 4,
+     "need": "Which reports we have sent and which are overdue.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:109 report.status derived=report_status; :276-325 protocol fold; :108 report.due",
+     "executed_by": "typed.rs:321 execute; typed_match.rs:350 filter_holds (text eq negated; time lt with a day literal via time_spans typed_check.rs:591). status written by protocol.rs:31 after RESOLVE (resolution_derived.rs:64,148). Validate prints 'derived: report.status <- fold report_status by protocol'.",
+     "query": [
+      {
+       "target_type": "report",
+       "filters": [
+        {
+         "attribute": "status",
+         "op": "eq",
+         "value": "due",
+         "negate": true
+        },
+        {
+         "attribute": "status",
+         "op": "eq",
+         "value": "waived",
+         "negate": true
+        }
+       ],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "report",
+       "filters": [
+        {
+         "attribute": "status",
+         "op": "eq",
+         "value": "due",
+         "negate": false
+        },
+        {
+         "attribute": "due",
+         "op": "lt",
+         "value": "2026-10-20",
+         "negate": false
+        }
+       ],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Sent means status is set and not due or waived (submitted, accepted, revision_requested). Overdue means status due with due before the asker's date bound. A report with no status is set aside, not counted."
+    },
+    {
+     "n": 5,
+     "need": "Payments received against each award, with dates and amounts.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:112-124 payment (grant ref, amount, currency, received_on, instalment); :220-225 payment_notice (subject payment)",
+     "executed_by": "typed.rs:321 execute; all payment fields are subject fields read from payment_notice statements (schema.rs:137 subject_read_attributes) and folded at read_fields.rs:278,423. Sum: typed_check.rs:264,294 and typed_group.rs:122 with a ref group.",
+     "query": [
+      {
+       "target_type": "payment",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "payment.grant",
+         "other_type": "application",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "payment",
+       "filters": [],
+       "relations": [],
+       "aggregate": "sum",
+       "aggregate_over": "amount",
+       "group_by": "grant"
+      }
+     ],
+     "gap": null,
+     "why": "Payment records carry grant, amount and received_on as record attributes, and the sum groups them per award record."
+    },
+    {
+     "n": 6,
+     "need": "Our contact at each funder.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:71-81 contact (email, name, funder ref, metadata source with refs)",
+     "executed_by": "typed.rs:321 execute; typed_check.rs:440 contact.funder (RefOut); typed_match.rs:557. Records and the funder link are written by resolution_sources.rs:145,215-236 with no model call.",
+     "query": {
+      "target_type": "contact",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "contact.funder",
+        "other_type": "funder",
+        "other_name": null,
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Contacts are every non-excluded address on from/to/cc, each linked to the funder atom of its domain. A contact whose domain was excluded (a mailbox provider) links nothing and is left out by the relation."
+    }
+   ]
+  },
+  {
+   "id": "10-fleet",
+   "record_types_run": true,
+   "record_types_note": "van, garage, defect and the event garage_job are RESOLVE-decided (decl.rs:563 admits events with a criterion and no source). driver is metadata-sourced from 'from' (validate prints 'source: driver <- document fields from'). job_record and garage_details declare no attributes, so garage_job and garage fields are subject fields read from them (schema.rs:137) and folded at read_fields.rs:278. Validate printed no warnings.",
+   "validate_exit": 0,
+   "needs": [
+    {
+     "n": 1,
+     "need": "Every van, by registration, with its model and year.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:56-66 van (registration agree, model most, year most)",
+     "executed_by": "typed.rs:321 execute; RESOLVE resolution_records.rs:231,726; folds read_fields.rs:278,423 (Agree/Most resolution_derived.rs:643,652).",
+     "query": {
+      "target_type": "van",
+      "filters": [],
+      "relations": [],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Van records hold all three attributes as folded fields, so each row states the answer."
+    },
+    {
+     "n": 2,
+     "need": "Each van's mileage over time, from the readings drivers and garages report.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:137-147 mileage_reading (odometer, read_on, reported_by; subject van)",
+     "executed_by": "typed.rs:321 execute; typed_check.rs:440 mileage_reading.subject with a named van (typed_match.rs:511 witnesses); fields at projection.rs:112; subject link resolution_records.rs:755.",
+     "query": {
+      "target_type": "mileage_reading",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "mileage_reading.subject",
+        "other_type": "van",
+        "other_name": "AB19 CDE",
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "One listing per named van, each row carrying odometer, read_on and reporter. The date is a claim field, so no document clock is needed."
+    },
+    {
+     "n": 3,
+     "need": "Every defect reported, on which van, by which driver, and whether and when it was fixed.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:93-103 defect (van, item, status derived=defect_status); :160-172 defect_update (outcome, on, reported_by ref driver); :191-222 protocol fold",
+     "executed_by": "typed.rs:321 execute. status is written by protocol.rs:31 after RESOLVE (resolution_derived.rs:64,148); defect.van by read_fields.rs:278; reported_by by statement_refs.rs:57-142 against the metadata driver records; update fields at projection.rs:112. Validate prints 'derived: defect.status <- fold defect_status by protocol'.",
+     "query": [
+      {
+       "target_type": "defect",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "defect.van",
+         "other_type": "van",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "defect_update",
+       "filters": [
+        {
+         "attribute": "outcome",
+         "op": "eq",
+         "value": "reported",
+         "negate": false
+        }
+       ],
+       "relations": [
+        {
+         "relation": "defect_update.subject",
+         "other_type": "defect",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        },
+        {
+         "relation": "defect_update.reported_by",
+         "other_type": "driver",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "defect_update",
+       "filters": [
+        {
+         "attribute": "outcome",
+         "op": "eq",
+         "value": "fixed",
+         "negate": false
+        }
+       ],
+       "relations": [
+        {
+         "relation": "defect_update.subject",
+         "other_type": "defect",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "The defect record holds van and current status. The reporting driver is on the 'reported' updates, and the fix date is the 'on' of the 'fixed' updates."
+    },
+    {
+     "n": 4,
+     "need": "Every service and repair: which van, which garage, the work done, the cost and currency, the date.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:105-119 garage_job event (van, garage, work_done, cost latest, currency, done_on); :123-128 job_record",
+     "executed_by": "typed.rs:321 execute; typed_check.rs:202 lists Event types, and Judge::new includes events (typed_match.rs:210-216). Records come from RESOLVE (resolution_records.rs:709) and fields from read_fields.rs:278,423, which also writes events. Validate prints 'derived: garage_job.work_done <- fold by agree'.",
+     "query": {
+      "target_type": "garage_job",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "garage_job.van",
+        "other_type": "van",
+        "other_name": null,
+        "negate": false,
+        "where": null
+       },
+       {
+        "relation": "garage_job.garage",
+        "other_type": "garage",
+        "other_name": null,
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Each job record holds van, garage, work, cost, currency and date as attributes. The invoice figure wins over an estimate through the latest fold."
+    },
+    {
+     "n": 5,
+     "need": "When each van's next service is due by mileage or by date.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:174-183 service_due (due_mileage, due_date; subject van); :188 supersedes (tension only)",
+     "executed_by": "typed.rs:321 execute and :487 best; typed_check.rs:540 check_over (time/quantity attribute); typed_match.rs:460 interval. Fields at projection.rs:112.",
+     "query": [
+      {
+       "target_type": "service_due",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "service_due.subject",
+         "other_type": "van",
+         "other_name": "AB19 CDE",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "argmax",
+       "aggregate_over": "due_date"
+      },
+      {
+       "target_type": "service_due",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "service_due.subject",
+         "other_type": "van",
+         "other_name": "AB19 CDE",
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "argmax",
+       "aggregate_over": "due_mileage"
+      }
+     ],
+     "gap": null,
+     "why": "Per-van argmax over the due date and over the due mileage, taken as the next service. supersedes is not a typed-query axis, and document_date is not a declared attribute so it cannot be ranked. Claims lacking that attribute are counted as unranked."
+    },
+    {
+     "n": 6,
+     "need": "Which driver had which van on which day.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:149-158 allocation (driver ref, day; subject van); :68-78 driver",
+     "executed_by": "typed.rs:321 execute; typed_check.rs:440 allocation.driver and allocation.subject; driver written by statement_refs.rs:57-142 (metadata driver records, resolution_sources.rs:145); day at projection.rs:112.",
+     "query": {
+      "target_type": "allocation",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "allocation.subject",
+        "other_type": "van",
+        "other_name": null,
+        "negate": false,
+        "where": null
+       },
+       {
+        "relation": "allocation.driver",
+        "other_type": "driver",
+        "other_name": null,
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Each row states the day and driver, and the van is the claim's subject (the row is named by the claim content). A day filter (day eq a date) narrows it."
+    }
+   ]
+  },
+  {
+   "id": "11-expenses",
+   "record_types_run": true,
+   "record_types_note": "expense_claim is RESOLVE-decided. employee is metadata-sourced from from/to/cc (validate prints 'source: employee <- document fields from, to, cc'). claim_status is a state-machine protocol (rules carry 'from'; protocol_moves.rs:18) replayed in document-date order (protocol.rs:636). Validate printed no warnings.",
+   "validate_exit": 0,
+   "needs": [
+    {
+     "n": 1,
+     "need": "Every expense claim: who claimed, for what, the amount and currency, the date incurred, the category, the client project if any.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:70-91 expense_claim (claimant ref, purpose, amount, currency, incurred, category, project)",
+     "executed_by": "typed.rs:321 execute; folds read_fields.rs:43,278,423 (latest/agree, resolution_derived.rs:583); claimant resolved by held() (read_fields.rs:248) against the metadata employee records.",
+     "query": {
+      "target_type": "expense_claim",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "expense_claim.claimant",
+        "other_type": "employee",
+        "other_name": null,
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "All seven facts are attributes of the claim record, so each row states the answer."
+    },
+    {
+     "n": 2,
+     "need": "Who approved or rejected each claim, and when.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:109-122 approval_decision (decision, approver ref, effective_on; subject expense_claim)",
+     "executed_by": "typed.rs:321 execute; approver written by statement_refs.rs:57-142 against the employee records; decision and date at projection.rs:112; subject link resolution_records.rs:755.",
+     "query": {
+      "target_type": "approval_decision",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "approval_decision.subject",
+        "other_type": "expense_claim",
+        "other_name": null,
+        "negate": false,
+        "where": null
+       },
+       {
+        "relation": "approval_decision.approver",
+        "other_type": "employee",
+        "other_name": null,
+        "negate": false,
+        "where": null
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "Each decision row carries the decision, approver and date; its subject is the claim."
+    },
+    {
+     "n": 3,
+     "need": "Each claim's status (submitted, approved, rejected, paid) and the payment date.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:90 expense_claim.status derived=claim_status; :140-202 protocol; :124-136 payment_notice (outcome, effective_on)",
+     "executed_by": "typed.rs:321 execute. status is written by protocol.rs:31 (machine replay :636) after RESOLVE (resolution_derived.rs:64,148; atlas_resolve_documents.rs:193). Payment fields at projection.rs:112. Validate prints 'derived: expense_claim.status <- fold claim_status by protocol'.",
+     "query": [
+      {
+       "target_type": "expense_claim",
+       "filters": [],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "payment_notice",
+       "filters": [
+        {
+         "attribute": "outcome",
+         "op": "eq",
+         "value": "paid",
+         "negate": false
+        }
+       ],
+       "relations": [
+        {
+         "relation": "payment_notice.subject",
+         "other_type": "expense_claim",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Status is a record attribute and the payment date is effective_on on the paid notices."
+    },
+    {
+     "n": 4,
+     "need": "Totals per employee, per project and per category for a period.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:83-89 expense_claim.amount (quantity), claimant (ref), project, category, incurred (time)",
+     "executed_by": "typed.rs:321 execute with AnswerShape::Sum (typed.rs:166); typed_check.rs:264 check_group, :294 check_summand; typed_group.rs:26 buckets, :122 sum_headline; period filter typed_match.rs:350 on incurred. Amounts come from the latest fold (read_fields.rs:423).",
+     "query": [
+      {
+       "target_type": "expense_claim",
+       "filters": [
+        {
+         "attribute": "incurred",
+         "op": "eq",
+         "value": "2026-03",
+         "negate": false
+        }
+       ],
+       "relations": [],
+       "aggregate": "sum",
+       "aggregate_over": "amount",
+       "group_by": "claimant"
+      },
+      {
+       "target_type": "expense_claim",
+       "filters": [
+        {
+         "attribute": "incurred",
+         "op": "eq",
+         "value": "2026-03",
+         "negate": false
+        }
+       ],
+       "relations": [],
+       "aggregate": "sum",
+       "aggregate_over": "amount",
+       "group_by": "project"
+      },
+      {
+       "target_type": "expense_claim",
+       "filters": [
+        {
+         "attribute": "incurred",
+         "op": "eq",
+         "value": "2026-03",
+         "negate": false
+        }
+       ],
+       "relations": [],
+       "aggregate": "sum",
+       "aggregate_over": "amount",
+       "group_by": "category"
+      }
+     ],
+     "gap": null,
+     "why": "One sum per grouping, with the period as a time filter on incurred. A claim whose amount is unset or reads as several numbers is listed as not summed (typed_group.rs:122) and never counted as zero.",
+     "adjudication": "rejudge stands (code changed or cited); first pass inexpressible (totals)"
+    },
+    {
+     "n": 5,
+     "need": "Claims that break policy (over the limit for their category, or missing a receipt).",
+     "verdict": "inexpressible",
+     "declared_by": "recipe.toml:102-107 expense_submission.receipt (attached/missing) is declared; the per-category limit appears only in guidance prose (recipe.toml:49)",
+     "executed_by": null,
+     "query": null,
+     "gap": "policy-limit-unrecorded",
+     "why": "The missing-receipt half is expressible (expense_submission, receipt eq missing). 'Over the limit for their category' needs the per-category limit, which is no declared attribute or type, and the material (claim emails, approvals, bank notices) holds no limits. The compare-two-attributes filter (typed_check.rs:385) has nothing to compare amount against. The weakest part decides. The author's transcript confirms the limit table was dropped. Only a manager's reason=over_limit (recipe.toml:119) is recorded, which is not the claim breaking policy.",
+     "adjudication": "rejudge stands (code changed or cited); first pass runs (None)"
+    },
+    {
+     "n": 6,
+     "need": "Claims re-submitted after a rejection are the same claim.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:75-81 expense_claim identity_criterion; :95-107 expense_submission.action=resubmitted; :159-160 resubmission rule",
+     "executed_by": "RESOLVE resolution_records.rs:231,726 decides expense_claim and puts every submission on it (755). Query: typed_check.rs:440,493 (relation with where); typed_match.rs:511 witnesses.",
+     "query": {
+      "target_type": "expense_claim",
+      "filters": [],
+      "relations": [
+       {
+        "relation": "expense_submission.subject",
+        "other_type": "expense_submission",
+        "other_name": null,
+        "negate": false,
+        "where": {
+         "filters": [
+          {
+           "attribute": "action",
+           "op": "eq",
+           "value": "resubmitted",
+           "negate": false
+          }
+         ],
+         "relations": []
+        }
+       }
+      ],
+      "aggregate": "none",
+      "aggregate_over": null
+     },
+     "gap": null,
+     "why": "A resubmission is a submission claim whose subject is the same claim record. The rows are single claim records that carry a resubmitted submission, and their status shows the later approval."
+    }
+   ]
+  },
+  {
+   "id": "12-coliving",
+   "record_types_run": true,
+   "record_types_note": "housemate, house_rule, chore and the event purchase are RESOLVE-decided (decl.rs:563; validate prints 'identity: ... -> RESOLVE under its identity_criterion'). The extractor is plaintext with no change.document, so there is no document clock. No need below uses a latest/earliest fold or a protocol, only agree folds (purchase.payer, items, bought_on) and claim fields. Validate printed no warnings.",
+   "validate_exit": 0,
+   "needs": [
+    {
+     "n": 1,
+     "need": "The house rules in force now, and when each was agreed.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:61-65 house_rule; :115-128 decision (outcome, wording, decided_on; subject house_rule)",
+     "executed_by": "typed.rs:321 execute; typed_check.rs:440 decision.subject (RefIn, ref_target :525); typed_match.rs:511 witnesses and :286 meets (negated relation with where); decision fields at projection.rs:112; subject link resolution_records.rs:755.",
+     "query": [
+      {
+       "target_type": "house_rule",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "decision.subject",
+         "other_type": "decision",
+         "other_name": null,
+         "negate": false,
+         "where": {
+          "filters": [
+           {
+            "attribute": "outcome",
+            "op": "eq",
+            "value": "agreed",
+            "negate": false
+           }
+          ],
+          "relations": []
+         }
+        },
+        {
+         "relation": "decision.subject",
+         "other_type": "decision",
+         "other_name": null,
+         "negate": true,
+         "where": {
+          "filters": [
+           {
+            "attribute": "outcome",
+            "op": "eq",
+            "value": "dropped",
+            "negate": false
+           }
+          ],
+          "relations": []
+         }
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "decision",
+       "filters": [
+        {
+         "attribute": "outcome",
+         "op": "eq",
+         "value": "agreed",
+         "negate": false
+        }
+       ],
+       "relations": [
+        {
+         "relation": "decision.subject",
+         "other_type": "house_rule",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "In force is read as an agreed decision and no dropped one, judged over recorded links (typed.rs notes this). The agreement date is decided_on on the agreed decision rows. If a drop-then-readopt must be honoured, the per-rule form is argmax of decided_on over that rule's decisions (typed.rs:487), a per-record state question."
+    },
+    {
+     "n": 2,
+     "need": "Rules that were proposed but not agreed, and who objected.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:86-98 proposal; :102-113 stance (position, respondent ref); :115-128 decision",
+     "executed_by": "typed.rs:321 execute; typed_match.rs:511 witnesses with negate and where; stance.respondent written by statement_refs.rs:57-142 onto the housemate records.",
+     "query": [
+      {
+       "target_type": "house_rule",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "proposal.subject",
+         "other_type": "proposal",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        },
+        {
+         "relation": "decision.subject",
+         "other_type": "decision",
+         "other_name": null,
+         "negate": true,
+         "where": {
+          "filters": [
+           {
+            "attribute": "outcome",
+            "op": "eq",
+            "value": "agreed",
+            "negate": false
+           }
+          ],
+          "relations": []
+         }
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "stance",
+       "filters": [
+        {
+         "attribute": "position",
+         "op": "eq",
+         "value": "objects",
+         "negate": false
+        }
+       ],
+       "relations": [
+        {
+         "relation": "stance.subject",
+         "other_type": "house_rule",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        },
+        {
+         "relation": "stance.respondent",
+         "other_type": "housemate",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "The first query lists rules with a proposal and no agreed decision. The second lists the objecting stances with their respondents. A stance is one housemate's response, kept apart from the house's decision."
+    },
+    {
+     "n": 3,
+     "need": "How a rule changed when it was amended, and which rules were dropped.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:115-128 decision (outcome amended/dropped, wording, decided_on); :86-98 proposal.wording",
+     "executed_by": "typed.rs:321 execute; claim fields at projection.rs:112; decision.subject link as in n1.",
+     "query": [
+      {
+       "target_type": "decision",
+       "filters": [
+        {
+         "attribute": "outcome",
+         "op": "eq",
+         "value": "amended",
+         "negate": false
+        }
+       ],
+       "relations": [
+        {
+         "relation": "decision.subject",
+         "other_type": "house_rule",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "decision",
+       "filters": [
+        {
+         "attribute": "outcome",
+         "op": "eq",
+         "value": "dropped",
+         "negate": false
+        }
+       ],
+       "relations": [
+        {
+         "relation": "decision.subject",
+         "other_type": "house_rule",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "The amended decision rows hold the new wording and date; the earlier wording is on the same rule's agreed decision and proposal rows (compare by decided_on). Dropped rules are the dropped decision rows."
+    },
+    {
+     "n": 4,
+     "need": "The chore rota: who has which chore in which week, and whether it got done.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:145-155 assignment (assignee ref, week range, basis); :157-168 completion (week, outcome, done_by)",
+     "executed_by": "typed.rs:321 execute, twice; assignee written by statement_refs.rs:57-142; week/outcome at projection.rs:112; time ranges read by typed_match.rs:460 interval.",
+     "query": [
+      {
+       "target_type": "assignment",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "assignment.subject",
+         "other_type": "chore",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        },
+        {
+         "relation": "assignment.assignee",
+         "other_type": "housemate",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "completion",
+       "filters": [],
+       "relations": [
+        {
+         "relation": "completion.subject",
+         "other_type": "chore",
+         "other_name": null,
+         "negate": false,
+         "where": null
+        }
+       ],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "Who/chore/week is on the assignment rows and done/not-done on the completion rows, both keyed by chore subject and week. This is two listings joined by chore and week, not a single row."
+    },
+    {
+     "n": 5,
+     "need": "Shared purchases: who paid, how much and in what currency, and who owes whom.",
+     "verdict": "inexpressible",
+     "declared_by": "purchase.payer (by=agree); expense: amount, currency, split, share; debt (subject debtor): creditor, amount, status",
+     "executed_by": null,
+     "query": null,
+     "gap": "totals",
+     "why": "Payer, amount and currency run, but who owes whom is each housemate's share across purchases less what was paid back, a sum (and a split) nothing computes; debt claims hold only debts someone states, and a later `settled` does not net an earlier `owed`.",
+     "adjudication": "first-pass reading holds: 'who owes whom' is the standing debt; a later settled statement does not remove an earlier owed one",
+     "rejudge_verdict": "runs"
+    },
+    {
+     "n": 6,
+     "need": "A rule, a chore or a purchase mentioned several times in the chat is one thing.",
+     "verdict": "runs",
+     "declared_by": "recipe.toml:65 house_rule, :71 chore, :77 purchase identity_criterion",
+     "executed_by": "RESOLVE resolution_records.rs:81 decides (entities and events), :231,726,709 build the records; every claim's subject is its record (:755). Listing: typed.rs:321 execute.",
+     "query": [
+      {
+       "target_type": "house_rule",
+       "filters": [],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "chore",
+       "filters": [],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      },
+      {
+       "target_type": "purchase",
+       "filters": [],
+       "relations": [],
+       "aggregate": "none",
+       "aggregate_over": null
+      }
+     ],
+     "gap": null,
+     "why": "The requirement is identity, which RESOLVE decides under each declared criterion. The listings show one record per rule, chore and purchase, with all mentions as claims whose subject is that record."
+    }
+   ]
+  }
+ ],
+ "summary": {
+  "needs_total": 75,
+  "runs": 64,
+  "first_pass_runs": 53,
+  "rejudge_unadjudicated_runs": 69,
+  "not_running_by_gap": {
+   "computed-value": [
+    "01-recruiting n6",
+    "02-contracts n6",
+    "07-inventory n2"
+   ],
+   "as-of-state": [
+    "02-contracts n5"
+   ],
+   "linked-count-filter": [
+    "04-procurement n2"
+   ],
+   "value-compare": [
+    "04-procurement n4"
+   ],
+   "document-date-unqueryable": [
+    "04-procurement n6"
+   ],
+   "ref-target-unrecorded": [
+    "05-incidents n1"
+   ],
+   "fold-needs-document-date": [
+    "05-incidents n5"
+   ],
+   "policy-limit-unrecorded": [
+    "11-expenses n5"
+   ],
+   "totals": [
+    "12-coliving n5"
+   ]
+  }
+ }
+}

@@ -558,6 +558,9 @@ impl SovereignInferenceAdapter {
         if hermes_reason.is_none() {
             conversation::into_conversation(&mut req, request);
         }
+        // After the conversation, which clears the budget this may set.
+        vendor_fields::thinking_for_a_vendor(&mut req, request, self.provider.serving_locus());
+        req.logprobs = vendor_fields::logprobs_asked(request);
         let (speed, slot_picker) = if req.tools.is_some() {
             (sovereign_contracts::types::Speed::Slow, "tools_bias_slow")
         } else {
@@ -1147,6 +1150,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             .complete(&req)
             .await
             .map_err(map_provider_error)?;
+        let logprobs = vendor_fields::logprobs_answered(&req, &resp);
 
         // Tool-call extraction. Only parse when the caller supplied
         // tools; otherwise any stray `<tool_call>` text the model
@@ -1334,6 +1338,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             model: resp.model_id,
             choices: vec![ChatChoice {
                 index: 0,
+                logprobs,
                 message: assistant_msg,
                 finish_reason: Some(finish_reason.as_openai_str().to_string()),
             }],
@@ -1613,6 +1618,8 @@ mod conversation;
 
 #[path = "inference_adapter/provider_error.rs"]
 mod provider_error;
+#[path = "inference_adapter/vendor_fields.rs"]
+mod vendor_fields;
 use provider_error::map_provider_error;
 
 #[cfg(test)]

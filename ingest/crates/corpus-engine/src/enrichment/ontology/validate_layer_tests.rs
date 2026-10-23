@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The fill analysis's warnings, one test each, over one domain-free
-//! declaration: a sourced `party`, an `item` RESOLVE decides, and a `move`
-//! claim about it whose protocol, identity and derived path are keyed on
-//! fields the passes reader never asks (blind round 2's silent failures,
-//! campaign ontology-layer 2026-10-10).
+//! `recipe validate` on the ontology layer, one test each, over one
+//! domain-free declaration: a sourced `party`, an `item` RESOLVE decides, and
+//! a `move` claim about it with a protocol, identity rules and a derived path.
 
 use super::super::validate_block;
 use crate::recipe::Recipe;
@@ -117,99 +115,10 @@ fn warned<'a>(v: &'a super::super::OntologyValidation, needle: &str) -> Vec<&'a 
     v.warnings.iter().filter(|w| w.contains(needle)).collect()
 }
 
+/// `by` folds a read field onto its record; a `by` on a type RESOLVE does not
+/// decide, on a derived field, or by `first` is refused, each with why.
 #[test]
-fn every_field_a_pass_asks_is_named_with_its_pass_and_the_rest_is_warned() {
-    let v = validated(&fixture());
-    let note = |t: &str| {
-        v.notes
-            .iter()
-            .find(|n| n.starts_with(&format!("fill: {t}:")))
-            .unwrap_or_else(|| panic!("a fill note for {t}: {:#?}", v.notes))
-            .clone()
-    };
-    let mv = note("move");
-    for filled in [
-        "subject `item` ← RESOLVE",
-        "step ← Act on move",
-        "move_id ← Point on move",
-        "at ← Point on move",
-        "holder ← Pick on move (candidates: `party`'s source records, Mention)",
-        "batch ← Pick on move (candidates: Mention)",
-    ] {
-        assert!(mv.contains(filled), "{filled} in {mv}");
-    }
-    assert!(
-        note("item").contains("code ← Point on each move statement, not the record"),
-        "{}",
-        note("item")
-    );
-    // `grade` is wider than a forced choice: warned, with why.
-    let wide = warned(&v, "ontology type `move`: nothing fills");
-    assert_eq!(wide.len(), 1, "{:#?}", v.warnings);
-    assert!(
-        wide[0].contains("`grade` (closed with more values") && !wide[0].contains("`holder`"),
-        "{}",
-        wide[0]
-    );
-    assert!(warned(&v, "ontology type `item`: nothing fills").is_empty());
-    // No read claim kind asks a type no claim kind is about, nor a sourced
-    // type's non-identity field.
-    let lot = warned(&v, "ontology type `lot`: nothing fills");
-    assert!(
-        lot.len() == 1 && lot[0].contains("`lot_code`") && lot[0].contains("`tag`"),
-        "{lot:#?}"
-    );
-    let party = warned(&v, "ontology type `party`: nothing fills");
-    assert!(party.len() == 1 && party[0].contains("`tier`") && !party[0].contains("`domain`"));
-}
-
-#[test]
-fn a_protocol_keyed_on_an_unfilled_field_is_warned() {
-    // Point fills `move_id` and `at`: the protocol keyed on them is silent.
-    let v = validated(&fixture());
-    assert!(
-        warned(&v, "derived fold `item_status`").is_empty(),
-        "{:#?}",
-        v.warnings
-    );
-    // Keyed on a field nothing fills, it is warned.
-    let wide = fixture().replace("identity = \"move_id\"", "identity = \"grade\"");
-    let v = validated(&wide);
-    let identity = warned(&v, "protocol.identity `move.grade`");
-    assert_eq!(identity.len(), 1, "{:#?}", v.warnings);
-    assert!(
-        identity[0].contains("`item.status` never folds"),
-        "{}",
-        identity[0]
-    );
-}
-
-#[test]
-fn an_identity_rule_keyed_on_an_unfilled_field_is_warned() {
-    let v = validated(&fixture());
-    let id = warned(&v, "ontology type `lot`: identity is keyed on");
-    assert_eq!(id.len(), 1, "{:#?}", v.warnings);
-    assert!(id[0].contains("`lot_code` (identity)"), "{}", id[0]);
-    // Point fills `item.code`; the sourced party's key is read by its source.
-    assert!(warned(&v, "ontology type `item`: identity").is_empty());
-    assert!(warned(&v, "ontology type `party`: identity").is_empty());
-}
-
-#[test]
-fn a_derived_step_through_an_unfilled_ref_is_warned() {
-    let v = validated(&fixture());
-    let step = warned(&v, "derived `lot_tag` steps through `tag`");
-    assert_eq!(step.len(), 1, "{:#?}", v.warnings);
-    assert!(step[0].contains("reaches nothing"), "{}", step[0]);
-    // `holder` is Picked: the fold stepping through it is not warned.
-    assert!(warned(&v, "derived `owner_of_item`").is_empty());
-}
-
-/// `by` folds a read field onto its record, and the fill note says how; a
-/// `by` on a type RESOLVE does not decide, on a derived field, or by `first`
-/// is refused, each with why.
-#[test]
-fn a_folded_read_field_is_named_and_a_misplaced_by_refuses() {
+fn a_folded_read_field_is_accepted_and_a_misplaced_by_refuses() {
     let code = r#"{ name = "code", type = "text" },"#;
     let v =
         validated(&fixture().replace(code, r#"{ name = "code", type = "text", by = "agree" },"#));
@@ -218,21 +127,12 @@ fn a_folded_read_field_is_named_and_a_misplaced_by_refuses() {
         "{:#?}",
         v.errors
     );
-    let item = v
-        .notes
-        .iter()
-        .find(|n| n.starts_with("fill: item:"))
-        .unwrap();
-    assert!(
-        item.contains("code ← Point on each move statement, the record by agree"),
-        "{item}"
-    );
     let status = r#"derived = "item_status" },"#;
     for (from, to, says) in [
         (
-            r#"{ name = "lot_code", type = "text" },"#,
-            r#"{ name = "lot_code", type = "text", by = "all" },"#,
-            "RESOLVE does not decide `lot`",
+            r#"{ name = "domain", type = "text" },"#,
+            r#"{ name = "domain", type = "text", by = "all" },"#,
+            "RESOLVE does not decide `party`",
         ),
         (
             status,
@@ -301,47 +201,71 @@ fn a_transition_names_its_mover_by_path_and_its_states_from_the_closed_set() {
     }
 }
 
-/// A sourced type a reference targets: without an identity criterion its
-/// mentions stay Pick's proposals and its identity line says what would
-/// change that; with one, the line says RESOLVE decides them.
-#[test]
-fn a_referenced_sourced_type_says_who_decides_its_mentions() {
-    let line = |v: &super::super::OntologyValidation| {
-        v.notes
-            .iter()
-            .find(|n| n.starts_with("identity: party"))
-            .cloned()
-            .expect("party's identity line")
-    };
-    let bare = line(&validated(&fixture()));
-    assert!(bare.contains("stay Pick's proposals"), "{bare}");
-    let decided = line(&validated(&fixture().replace(
-        "name = \"party\"\nkind = \"entity\"\n",
-        "name = \"party\"\nkind = \"entity\"\nidentity_criterion = \"the same party\"\n",
-    )));
-    assert!(
-        decided.contains("RESOLVE decides its mentions"),
-        "{decided}"
-    );
-}
-
 /// A declaration the document reader reads makes no record of a type no
-/// statement is about and no source supplies: `lot`, which `move` only
-/// references, is named. A state of `item` is read since 2026-10-15 (its
-/// holder is decided), so it is not; nor are `item`, `move` and the sourced
-/// `party`. The general extractor reads every kind, so a template it reads
-/// warns of nothing (`recipe_templates_all_ten_parse`).
+/// statement is about, no reference names and no source supplies: `bin` is
+/// named. `lot`, which `move` references, is decided by name since
+/// 2026-10-20 (`resolve_defaults`), so it is not. A state of `item` is read
+/// since 2026-10-15 (its holder is decided), so it is not; nor are `item`,
+/// `move` and the sourced `party`. The general extractor reads every kind, so
+/// a template it reads warns of nothing (`recipe_templates_all_ten_parse`).
 #[test]
 fn a_type_the_document_reader_makes_no_record_of_is_warned() {
     let v = validated(&fixture().replace(
         "[[enrichment.ontology.types]]\nname = \"move\"",
         "[[enrichment.ontology.types]]\nname = \"mood\"\nkind = \"state\"\nof = \"item\"\n\n\
+         [[enrichment.ontology.types]]\nname = \"bin\"\nkind = \"entity\"\n\n\
          [[enrichment.ontology.types]]\nname = \"move\"",
     ));
     let unread = warned(&v, "makes no record of");
     assert_eq!(unread.len(), 1, "{:#?}", v.warnings);
-    assert!(unread[0].contains("`lot` (entity)"), "{}", unread[0]);
-    for read in ["`mood`", "`item`", "`move`", "`party`"] {
+    assert!(unread[0].contains("`bin` (entity)"), "{}", unread[0]);
+    for read in ["`lot`", "`mood`", "`item`", "`move`", "`party`"] {
         assert!(!unread[0].contains(read), "{read}: {}", unread[0]);
     }
+}
+
+/// What the document reader leaves inert is warned, each by name: argument
+/// reconstruction, a pattern, a voice, a table source and a specializing type
+/// with no criterion of its own. The general extractor applies the first three
+/// and reads the last two from text, so a template it reads warns of none
+/// (`recipe_templates_all_ten_parse`).
+#[test]
+fn what_the_document_reader_leaves_inert_is_warned_by_name() {
+    let v = validated(&format!(
+        "{}\n\
+         [[enrichment.ontology.types]]\nname = \"near\"\nkind = \"relation\"\nfrom = \"item\"\nto = \"party\"\n\n\
+         [[enrichment.ontology.types]]\nname = \"batch_row\"\nkind = \"entity\"\nsource = {{ file = \"batches.csv\" }}\n\n\
+         [[enrichment.ontology.types]]\nname = \"gadget\"\nkind = \"entity\"\nspecializes = \"item\"\n\n\
+         [[enrichment.ontology.patterns]]\ntype = \"circular_flow\"\nedge_types = [\"near\"]\nmin_entities = 3\n\n\
+         [[enrichment.ontology.patterns]]\ntype = \"circular_flow\"\nname = \"loop\"\nedge_types = [\"near\", \"move\"]\nmin_entities = 3\n\n\
+         [enrichment.ontology.derive]\narguments = true\n\n\
+         [enrichment.ontology.voices]\nnot_entities = [\"the poster\"]\nattributed_to = [\"member\"]\n",
+        fixture()
+    ));
+    let ours = ["near", "batch_row", "gadget", "pattern", "derive", "voices"];
+    assert!(
+        !v.errors.iter().any(|e| ours.iter().any(|o| e.contains(o))),
+        "{:#?}",
+        v.errors
+    );
+    for needle in [
+        "`derive.arguments` reconstructs arguments",
+        "pattern `loop` walks `move`, which the document reader makes no relation atom of",
+        "`voices` (attributed_to)",
+        "`batch_row` declares a table source",
+        "`gadget` specializes `item` but declares no identity_criterion",
+    ] {
+        assert_eq!(warned(&v, needle).len(), 1, "{needle}: {:#?}", v.warnings);
+    }
+    assert!(
+        warned(&v, "not_entities").is_empty(),
+        "the reader refuses a declared voice as a subject: {:#?}",
+        v.warnings
+    );
+    assert!(
+        warned(&v, "`near`").is_empty(),
+        "a relation of a decided holder is read, and a pattern over it walks its atoms: {:#?}",
+        v.warnings
+    );
+    assert_eq!(warned(&v, "pattern `").len(), 1, "{:#?}", v.warnings);
 }

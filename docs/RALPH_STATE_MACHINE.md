@@ -291,7 +291,9 @@ The loop is one process. It writes its heartbeat every tick in every pool
 state, so a stale heartbeat means dead and only dead. It exits 0 at `done` and
 at `stopped`. The host restarts it on any other exit: `KeepAlive` with
 `SuccessfulExit` false on macOS, `Restart=on-failure` on Linux. Deployment stays
-as it is: between waves, and from committed code only. The watchdog keeps one
+as it is: between waves, and from committed code only. The queue's `queue.toml`
+counts as code, since its checks and models are read once at start: a committed
+edit to it re-execs the loop as an edit to `ralph.py` does. The watchdog keeps one
 job, noticing that the loop is down or its heartbeat is stale, which is the one
 thing the loop cannot report about itself.
 

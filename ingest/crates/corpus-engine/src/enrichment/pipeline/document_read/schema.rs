@@ -9,18 +9,25 @@ use crate::enrichment::ontology::{
 };
 use crate::enrichment::pipeline::types::{ChapterInput, ChatPrompt};
 
-/// v4: one reader remains (passes); the one-shot prompt, its decoder schema and
-/// its citation handles are gone, so reads cached under v3 are not reused.
+/// v4: one reader remained (passes, deleted 2026-10-16); the one-shot prompt,
+/// its decoder schema and its citation handles are gone, so reads cached under
+/// v3 are not reused.
 /// v5: prefill, line classes, Point, Mention and Pick; a v4 read left open
 /// fields and references unknown, so it is not reused.
 /// v6: a claim carries its subject's readings whole and the projection
 /// sketches no subject; a v5 section holds bare values and subject sketches,
 /// so it is not reused.
-const CONTRACT_VERSION: u32 = 6;
+/// v7: a window read's statements and particulars carry their subject's name
+/// (`SUBJECT_NAME_ATTRIBUTE`); a v6 section lacks it, so it is not reused.
+/// v8: a window reference written as a particular's label reads as its name;
+/// a v7 section left it unknown, so it is not reused.
+/// v9: a window claim citing lines its document quotes or embeds, not its
+/// own, is refused; a v8 section may hold one, so it is not reused.
+const CONTRACT_VERSION: u32 = 9;
 
 /// The Phase-1 prompt of a declared reading: the plan this chapter will be read
-/// by, never dispatched. The passes reader asks its own small questions
-/// (`passes::read`); this is what `--dry-run` shows and part of what keys the
+/// by, never dispatched. The window reader composes its own prompt
+/// (`window::read`); this is what `--dry-run` shows and part of what keys the
 /// section cache (`runner_support::cache_text`).
 pub fn compose(chapter: &ChapterInput, policies: &OntologyPolicies, phase_id: &str) -> ChatPrompt {
     let documents: Vec<&str> = chapter.source_documents.iter().map(|d| d.key()).collect();
@@ -111,7 +118,9 @@ pub(super) fn contract_value(policies: &OntologyPolicies) -> Value {
         "claim_types": eligible_claims,
         "subject_types": subjects,
         "metadata_sources": metadata_sources,
-        "passes": super::passes::contract_value(policies),
+        // The key predates the window reader; renaming it would change
+        // every cached read's fingerprint for no change in what is asked.
+        "passes": super::window::contract_value(policies),
     })
 }
 
@@ -125,7 +134,7 @@ fn attrs_value(attrs: Vec<&AttrDecl>) -> Vec<Value> {
 
 /// Fields a read may use for one declared subject: all extracted fields for a
 /// source-free record, only declared identity keys for a metadata projection.
-pub(super) fn subject_read_attributes<'a>(
+pub fn subject_read_attributes<'a>(
     policies: &'a OntologyPolicies,
     index: &TypeIndex<'a>,
     subject_name: &str,

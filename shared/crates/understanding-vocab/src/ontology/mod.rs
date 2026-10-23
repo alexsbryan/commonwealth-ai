@@ -26,6 +26,7 @@
 
 pub mod decl;
 pub mod derived;
+pub mod limits;
 pub mod navigation;
 pub mod source;
 
@@ -106,6 +107,11 @@ pub struct ShapePolicy {
     /// ([`decl::MIN_ENTITIES_PER_SECTION`]..=[`decl::MAX_ENTITIES_PER_SECTION`]).
     #[serde(default)]
     pub max_entities_per_section: Option<usize>,
+    /// The most characters one window holds, when the author set it; `None`
+    /// takes `window_manifest::WINDOW_CHARS`. Held to
+    /// [`limits::MIN_WINDOW_CHARS`]..=[`limits::MAX_WINDOW_CHARS`] at load.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window_chars: Option<usize>,
 }
 
 /// Axis 2 — what a source says, at corpus level.

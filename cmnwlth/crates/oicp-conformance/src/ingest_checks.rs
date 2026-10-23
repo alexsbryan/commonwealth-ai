@@ -104,7 +104,7 @@ pub async fn check_ingest_recipe(
             Err(e) => return fail(format!("install reply does not decode: {e}: {}", r.brief())),
         }
         // v0.6 §2.9: an install that spawned is listed on the very next poll.
-        if replies.len() == 1 && replies[0].spawned && m.has_feature(features::INGEST_DOCUMENTS) {
+        if replies.len() == 1 && replies[0].spawned && documents_listed(m) {
             let r = match host.get(&ing.progress_endpoint).await {
                 Ok(r) => r,
                 Err(e) => return fail(e),
@@ -135,18 +135,100 @@ pub async fn check_ingest_recipe(
     if let Err(e) = wait_terminal(host, &ing.progress_endpoint, &lib.corpus_id).await {
         return fail(e);
     }
+    // v0.6 §2.9 (platform row PV3g): installed again under another recipe,
+    // the held fixture starts its entry again; then its own recipe goes back,
+    // so the checks after this one read the fixture as it was.
+    let again =
+        documents_listed(m).then(|| format!("{recipe}\n# oicp-conformance: installed again\n"));
+    if let Some(again) = &again {
+        for r in [again.as_str(), recipe.as_str()] {
+            let (install, progress) = (&ing.install_endpoint, &ing.progress_endpoint);
+            if let Err(e) = reinstall_starts_again(host, install, progress, &lib.corpus_id, r).await
+            {
+                return fail(e);
+            }
+        }
+    }
     (
         Check::pass(
             id,
             Level::Feature,
             format!(
                 "400 on a bad recipe; {} installed (first spawned={}), identical re-install \
-                 spawned=false, recipe_sha256 matches",
-                lib.corpus_id, replies[0].spawned
+                 spawned=false, recipe_sha256 matches{}",
+                lib.corpus_id,
+                replies[0].spawned,
+                if again.is_some() {
+                    "; installed again under another recipe, listed as that install from its spawn"
+                } else {
+                    ""
+                }
             ),
         ),
         FixtureState::Installed(lib.corpus_id.clone()),
     )
+}
+
+/// Whether the host lists each install from its spawn, with its documents
+/// (v0.6 §2.9, `ingest:documents`).
+fn documents_listed(m: &ProviderManifest) -> bool {
+    m.has_feature(features::INGEST_DOCUMENTS)
+}
+
+/// Installs `recipe` over the fixture the host holds from another recipe.
+/// The reply must say it spawned, and the next poll must list the corpus as
+/// this install, never the last one's `complete` with no documents (v0.6
+/// §2.9: listed from its spawn; "a new attempt starts it again"). Then waits
+/// for it to settle. Red against the reference host at d95ba219e, which kept
+/// the last install's entry until the engine's first callback. Judged only
+/// when the last install listed documents: an entry with none is otherwise
+/// `ingest.documents`' failure, and this one cannot tell the two apart.
+async fn reinstall_starts_again(
+    host: &Host,
+    install: &str,
+    progress: &str,
+    corpus: &str,
+    recipe: &str,
+) -> Result<(), String> {
+    let documents_of = |entry: Option<&serde_json::Value>| {
+        entry
+            .and_then(|e| e.get("documents"))
+            .and_then(|d| d.as_array())
+            .map_or(0, Vec::len)
+    };
+    let before = host.get(progress).await?;
+    let last = documents_of(before.body.get("progress").and_then(|p| p.get(corpus)));
+    let r = host
+        .post(
+            install,
+            &json!({"corpus_id": corpus, "recipe_toml": recipe}),
+        )
+        .await?;
+    if r.status != 200 {
+        return Err(format!("an install under another recipe: {}", r.brief()));
+    }
+    let reply = serde_json::from_value::<CorpusInstallResponse>(r.body.clone())
+        .map_err(|e| format!("install reply does not decode: {e}: {}", r.brief()))?;
+    if !reply.spawned {
+        return Err(format!(
+            "an install of {corpus} under another recipe answered spawned=false: {}",
+            r.brief()
+        ));
+    }
+    let r = host.get(progress).await?;
+    let Some(entry) = r.body.get("progress").and_then(|p| p.get(corpus)) else {
+        return Err(format!(
+            "an install under another recipe answered spawned=true and the next poll did not list {corpus}"
+        ));
+    };
+    let complete = entry.get("phase").and_then(|p| p.as_str()) == Some("complete");
+    if last > 0 && complete && documents_of(Some(entry)) == 0 {
+        return Err(format!(
+            "installed again under another recipe, {corpus}'s next poll is complete with no \
+             documents: the last install's entry, not this one's: {entry}"
+        ));
+    }
+    wait_terminal(host, progress, corpus).await
 }
 
 /// Poll progress by v0.4 §5.3 until `corpus` is terminal: `complete`, an

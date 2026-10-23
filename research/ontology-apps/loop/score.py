@@ -21,15 +21,28 @@ scratchpad as score_fixed.py until loop.sh made it the loop's one scorer), each 
        not the stage the model declares for the record (2026-10-14: the declared stage served deals whose
        statements end elsewhere). A record none of whose statements states a stage keeps the declared one: the
        one-shot wrote no per-statement stage at all on world-s4.
+  An embedded message is a document of its own (2026-10-17, ward-rootcause-prereg.md step 2): a statement citing
+  one matches the gold updates filed at any message carrying it, as GOLD_SPEC files a quoted statement at its
+  carrier. Which messages carry it is what the index's own documents say (`embedded_in`, each segment's
+  `message`), read from documents.lance.
+  best a statement is credited to a deal only when no other deal's gold sentence on its message is held more
+       wholly in it (the 60% rule's own measure: the share of the gold sentence's words the statement holds); a
+       tie keeps both, as when a statement cites a line holding both deals' sentences whole, or gold files one
+       sentence under two deals. Without it "The Cal 01 Kingsgate 4k/d call option is being replaced" (held
+       whole) is credited to the Q1 deal too, because "the Q1 Kingsgate 4k/d call option at .50" has four of
+       its six words in it (world-s2 verent/3., 2026-10-15). Measured from the statement's side instead, the
+       rule broke world-s3 quanova/6., one unpunctuated line holding both deals' sentences whole.
 Everything else is score_ward.py's. The report also carries `matches` {claim: [gold update index]}.
 """
-import json, os, re, subprocess, sys
+import inspect, json, os, re, subprocess, sys
 from email.utils import parsedate_to_datetime
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import corpora, misses
 
 RECORDS = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--records=")), None)
-_fx = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--fixes=")), "cap,msg,own,fold")
+_fx = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--fixes=")), "cap,msg,own,fold,best")
 FIXES = set() if _fx == "none" else set(_fx.split(","))
-assert FIXES <= {"cap", "msg", "own", "fold"}, FIXES
+assert FIXES <= {"cap", "msg", "own", "fold", "best"}, FIXES
 sys.argv = [a for a in sys.argv if not a.startswith("--records=") and not a.startswith("--fixes=")]
 MSGIDS = sys.argv[1]
 OUT = sys.argv[2] if len(sys.argv) > 2 else None
@@ -134,6 +147,11 @@ else:
                 sys.exit(f"stage_update partition {fs} is still capped: {ans['notes']}")
             claims.update({r["atom_id"]: r for r in ans["rows"]})
         total = q({"target_type": "stage_update"})["matched"]
+        # A statement with no stage is in no stage partition (the query sets an absence aside, negated too);
+        # reach it by its name's words. A capped letter is fine here: the count below is the guarantee.
+        for ch in ("abcdefghijklmnopqrstuvwxyz0123456789" if len(claims) < total else ""):
+            claims.update({r["atom_id"]: r for r in q({"target_type": "stage_update", "filters": [
+                {"attribute": "name", "op": "contains", "value": ch}]})["rows"]})
         if len(claims) != total:
             sys.exit(f"read {len(claims)} stage_update statements of {total}")
 
@@ -171,6 +189,32 @@ def message_of(doc):
     return doc_of_file.get(doc, doc) if doc else None
 
 
+def carriers_of_embedded():
+    """Each embedded message's document id -> the messages carrying it, from the index's documents."""
+    out = {}
+    path = os.path.expanduser(f"~/.svrnmesh/indexes/{CORPUS}/documents.lance")
+    if RECORDS or not os.path.exists(path):
+        return out
+    import lance
+    for row in lance.dataset(path).to_table(columns=["source_id", "metadata"]).to_pylist():
+        meta = json.loads(row["metadata"] or "{}")
+        if meta.get("embedded_in"):
+            out.setdefault(row["source_id"], set()).add(meta["embedded_in"])
+        for seg in meta.get("segments") or []:
+            if seg.get("message"):
+                out.setdefault(seg["message"], set()).add(row["source_id"])
+    return out
+
+
+carriers = carriers_of_embedded()
+
+
+def messages_of(doc):
+    """The messages a statement on `doc` may answer for: its own, and every message carrying it."""
+    msg = message_of(doc)
+    return {msg} | carriers.get(msg, set()) if msg else set()
+
+
 _cache = {}
 
 
@@ -181,11 +225,13 @@ def match(cid):
     c = claims.get(cid)
     text = " ".join([c["name"] if c else ""] + sorted(claim_text.get(cid, ())))
     folder = (file_of_doc.get(claim_doc.get(cid)) or "/").split("/")[0]
-    msg = message_of(claim_doc.get(cid))
+    msgs = messages_of(claim_doc.get(cid))
+    if not folder and msgs:
+        folder = next((file_of_doc[m].split("/")[0] for m in msgs if m in file_of_doc), folder)
     hits = []
     for i, u in enumerate(gold_updates):
         if "msg" in FIXES:
-            if msg is None or (u["doc"] or f"{u['folder']}/{u['file']}") != msg:
+            if (u["doc"] or f"{u['folder']}/{u['file']}") not in msgs:
                 continue
         # Same account; a duplicate message repeats a quote gold files once.
         elif folder and u["folder"] != folder:
@@ -193,12 +239,18 @@ def match(cid):
         gw, cw = words(u["quote"]), words(text)
         if len(gw) >= 2 and len(gw & cw) / len(gw) >= 0.6:
             hits.append(i)
+    if "best" in FIXES and hits:
+        cw = words(text)
+        held = {i: len(words(gold_updates[i]["quote"]) & cw) / len(words(gold_updates[i]["quote"])) for i in hits}
+        top = max(held.values())
+        deals_kept = {gold_updates[i]["deal"] for i in hits if held[i] >= top - 1e-9}
+        hits = [i for i in hits if gold_updates[i]["deal"] in deals_kept]
     _cache[cid] = hits
     return hits
 
 
 report = {"deals": [], "gold": {}, "unmatched_statements": [], "unknown_docs": sorted(
-    {v for v in claim_doc.values() if v not in file_of_doc})}
+    {v for v in claim_doc.values() if v not in file_of_doc and v not in carriers})}
 from collections import Counter
 gold_to_records = {g: set() for g in gold_deals}
 for d in deals:
@@ -258,6 +310,12 @@ report["summary"] = {
     "gold_updates_matched": len({h for d in deals for cid in placed[d["atom_id"]] for h in match(cid)}),
 }
 report["fixes"] = sorted(FIXES)
+# Which messages carry each embedded message the scorer matched statements through (empty: none in the index).
+report["summary"]["embedded_documents"] = len(carriers)
+report["carriers"] = {k: sorted(v) for k, v in sorted(carriers.items())}
+# This file, its fixes, the served rule that counts a deal (misses.served) and the gold it held records to: the
+# stamp table.py checks.
+report["summary"]["judge"] = corpora.judge_id([open(__file__).read(), inspect.getsource(misses.served), ",".join(sorted(FIXES))], [f"{GOLD}/{f}.json" for f in FOLDERS])
 report["matches"] = {cid: match(cid) for d in deals for cid in sorted(placed[d["atom_id"]])}
 report["placed"] = {d["atom_id"]: sorted(placed[d["atom_id"]]) for d in deals}
 report["claim_doc"] = {cid: claim_doc.get(cid) for cid in report["matches"]}

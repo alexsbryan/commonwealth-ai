@@ -16,8 +16,8 @@
 #   stage confirmed (cited to 05's "please go ahead"), price a conflict
 #   between 2,400 (03, 05) and 2,250 (06), each reading cited.
 # - 04 forwards a note from a merchant whose message is not in the corpus;
-#   its lines are an embedded message, left unread and reported, never dated
-#   or authored by 04.
+#   the note is read as a message of its own, dated and authored by its own
+#   header (Sam Reed, 3 March), never by 04 (Mia Holt, 4 March).
 # - No header line, of a message or of an embedded one, is ever asked; no
 #   company is named with an address or trailing punctuation.
 

@@ -1016,6 +1016,7 @@ mod tests {
                 Register::ValueExtraction => "NONE".to_string(),
             };
             Ok(CompletionResponse {
+                logprobs: None,
                 text,
                 tokens_used: 0,
                 prompt_tokens: 0,

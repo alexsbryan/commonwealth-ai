@@ -27,7 +27,9 @@ sizes an inline library before it sends one (§2.12), and a span says
 spoken in (§2.14). Verify can find a claim's candidates **by meaning**,
 name its specifics by kind, and say which figure a source states otherwise
 (§2.15). For an install that allows it, a document's DOI or ISBN fills in
-its **record**, under what the recipe declared (§2.16).
+its **record**, under what the recipe declared (§2.16). A request can say
+who waits on it, so a person's typing is **served first** over a client's
+background work (§2.17).
 
 As in v0.5, everything v0.6 adds is a serde-defaulted field, an optional
 endpoint, or a feature string, and **feature presence, not the version
@@ -52,6 +54,7 @@ string, gates behaviour**. The types are in
 | `evidence:verify_sentences` | verify's candidates are §2.11's sentences, each claim names its specifics by kind, the fast tier's literal miss is a hint, and a contradicted passage names what differs (§2.15) | `evidence:verify`, `knowledge:sentences` |
 | `ingest:lookups` | for an install that allows it, a document's identifiers are looked up and its record merged under its declared metadata, listed on progress and on its hits (§2.16) | `ingest:documents`, `ingest:recipe` |
 | `ingest:transcripts` | a recipe `[[document]]` takes `format = "transcript"`, read by turn, each turn's start and speaker the locator of its spans (§2.14) | `knowledge:locator`, `ingest:recipe` |
+| `knowledge:priority` | knowledge search, and verify where offered, take `priority`; while an `interactive` request's model work is in flight a `background` request starts none (§2.17) | none |
 
 ```rust
 EvidenceEndpoints {
@@ -125,6 +128,7 @@ VerifyVerdict = {"kind": "supported" | "contradicted" | "unsupported" | "abstain
 
 | rung | tier | decides |
 |---|---|---|
+| `class/opinion` | any | a claim offered as the writer's view is `not_checkable`, decided before any search or model call by a marker rule kept as data (`svrn/crates/sovereign-daemon/data/opinion_markers.toml`): a first-person view ("I think", "in my view") or a judgement ("overstates", "misguided"), each a whole word, case-insensitive, any whitespace between a phrase's words, a straight apostrophe matching a curly one. `verifier` names the rule as `opinion=<digest>` of its markers, `opinion=none` where it does not read |
 | `class/no-specifics` | any | a claim carrying no number, date or name is `not_checkable` |
 | `fast/value-presence` | fast | each specific of the claim is looked for in the passages lexical search returns for the claim and for the specific; one found in none is `unsupported`, named in `specifics_absent`; otherwise `abstained`, because presence is not support |
 | `checker/chunk-support` | checker | the in-turn gate's per-claim register judges each of the claim's best three lexical candidates in turn (the reference host's `CHECKER_PASSAGES`, named in `verifier` as `passages=3`); support at or above 0.5 on any is `supported`, otherwise `unsupported`. The register says support or not, so this rung never says `contradicted` |
@@ -335,6 +339,15 @@ QueuedCorpus    { corpus: String, pending: Option<u64> }
   (`"` `“` `(` `[`) or the end; never at a `.` after a lone capital (an
   initial). Each range is trimmed of whitespace; a text with no stop is one
   sentence, and whitespace alone is none.
+- **What is not the work's.** A host yields no sentence from text a
+  distributor wrapped around the work, so neither a search nor verify's
+  candidates (§2.15) quote it as the work's word; the stored text, its name
+  and every span into it are unchanged. The reference host leaves out a
+  Project Gutenberg wrapper (`sentence_index/wrapper.rs`): the header
+  through its `*** START OF … GUTENBERG …` line and the licence from its
+  `*** END OF` line, a sentence reaching across a marker keeping its part
+  in the work. Quoted as a source's word, that header was most of the
+  `contradicted` flags in zoracite's K2 run.
 - **Scope.** `corpora` and `documents` apply as in §2.8, before the top
   `limit` is cut: under a non-empty `documents` every sentence is from a
   named text, and a malformed name is `400`.
@@ -628,7 +641,7 @@ A host advertising `evidence:verify_sentences` verifies by this section;
 advertises it (`svrn/crates/sovereign-daemon/src/routes_oicp_verify.rs`),
 its floor `verify_floor` in its data file
 (`svrn/crates/sovereign-daemon/data/sentence_search.toml`). Its rungs are
-`class/no-specifics`, then `sentences/floor` (`unsupported`, no
+`class/opinion` (§2.6), then `class/no-specifics`, then `sentences/floor` (`unsupported`, no
 evidence), then `fast/value-presence` as a hint (`abstained`), then
 `checker/sentence-support` judging the best candidate sentences, with a
 differing figure, date or quantity making `contradicted`; its specifics
@@ -672,6 +685,13 @@ RecordLookup { identifier: String,            // the CSL variable: "DOI", "ISBN"
   origin `declared`. A looked-up field enters only where the metadata
   declares none, its origin the resolver's name. `origins` names exactly
   the fields of `csl`.
+- **CSL's own.** `csl` is CSL-JSON as CSL 1.0.2 defines it, so any CSL
+  processor reads it. A looked-up field enters in CSL's shape or not at
+  all: a resolver's item type is read as CSL's (Crossref's `journal-article`
+  is `article-journal`) and one CSL lacks is left out; a name keeps CSL's
+  name fields, a date CSL's date fields; a variable CSL holds as one string
+  or number, given as a list, is read at its first item. The mapping is the
+  host's data, beside each resolver.
 - **Named, never invented.** `unresolved` (the resolver does not know the
   identifier) and `unreachable` (it could not be asked, or did not answer)
   add no field. A client may install again later; the host may ask again
@@ -684,8 +704,103 @@ RecordLookup { identifier: String,            // the CSL variable: "DOI", "ISBN"
   corpus's `texts_digest`; a lookup never changes a stored text.
 
 The reference host does not advertise `ingest:lookups` yet. When it does,
-its data file maps `DOI` to Crossref and `ISBN` to Open Library, and its
-records keep CSL-JSON field names as the resolvers return them.
+its data file maps `DOI` to Crossref and `ISBN` to Open Library, each
+with its types read as CSL's.
+
+### 2.17 The writer's request first
+
+A client that checks a draft while its writer types sends the host two kinds
+of work at once: searches a person waits on, and checks nobody is watching.
+On a host whose models share one accelerator, the checks' model work slows
+every search the writer makes. A request can say which it is.
+
+```
+KnowledgeSearchRequest { …, priority: Option<RequestPriority> }   // never written when absent
+VerifyRequest          { …, priority: Option<RequestPriority> }   // §2.6; never written when absent
+RequestPriority = "interactive" | "background"
+```
+
+- **Who waits.** `interactive`: a person waits on the answer as they type.
+  `background`: the client runs it on its own schedule, such as a draft's
+  checks. A request without `priority` is neither: it is served as before
+  this section, neither waiting nor waited for.
+- **The writer's first.** A request's model work is what it asks of the
+  host's models: the query's embedding, a verify's embeddings and its
+  checker's completions. While an `interactive` request's model work is in
+  flight, a `background` request starts none: each of its steps waits until
+  no interactive model work is in flight, then starts. Work already started
+  is not preempted, but a host may read a background step in parts and
+  start no part while interactive work is in flight; a part already
+  started finishes.
+- **Bounded.** A background step is held for interactive work at most the
+  host's hold ceiling, then starts, so interactive requests in a row cannot
+  starve it. The ceiling bounds that hold, not the step's turn behind other
+  background work: a step that goes on at the ceiling does not go ahead of
+  the background steps before it, nor before an interactive step already
+  waiting at its stage. The reference host's ceiling is 2 s.
+- **When, never what.** The same request with either priority, or none, is
+  answered the same; only when its model work starts differs. A step read
+  in parts reads the same tokens in the same order, its parts fixed by its
+  length alone, never by timing.
+- **Refused, never defaulted.** A value outside the set is refused (`400`
+  or `422`), never read as absent.
+- **Seen.** The host says at debug, for each background step that waited,
+  how long and behind how many interactive steps, and when the ceiling sent
+  it on.
+
+The reference host holds steps at its embedding slot and at the admission
+of its generation slots, the two places its search and verify start model
+work. Background steps waiting to enter one stage go one at a time, so at
+most one stands between an interactive step and the stage it queues at:
+background steps already queued at a stage would otherwise be served first.
+A background step keeps its place in that line however long the ones ahead
+of it take, its hold counted from its place: places given up at the
+ceiling sent several to a stage at once, and under a draft's checks 91 of
+222 writer's steps parked behind two to four of them.
+A background step inside its stage holds no other back. It reads a
+background completion's prompt in parts of 64 tokens and pauses between
+them while an interactive step is running inside its stage, never for one
+waiting on the slot the prompt holds, each pause within the ceiling:
+a checker's prompt read whole held the accelerator for most of a second,
+and an interactive embedding running beside it took up to nine times as
+long as alone. A background embedding batch likewise lets the embedding
+context go between its sub-batches and pauses while an interactive step is
+in flight: held across a whole batch, it kept a writer's query embedding
+waiting 300 to 540 ms. Where its embedding context computes on the
+accelerator its generation slots share, it keeps a second context on the
+CPU for an interactive request's embeddings: beside the primary's compute,
+a writer's query embedding took 353 ms on the shared accelerator and under
+50 ms on the CPU.
+
+### 2.18 Alignment where the words stand
+
+v0.5 §2.3 leaves a host to pick the texts it aligns against, and counts a
+mark as a token in `coverage`. On the reference host both let a quotation
+its writer got right be "fixed" to other words: "in their sleep." stands
+word for word in Mill, but the lexical search's top chunks were Malthus's,
+where "in their population." matched three of its four tokens, the stop
+among them. This section amends §2.3; its shapes are unchanged.
+
+- **Recall.** A quotation that stands word for word in a stored text of a
+  requested corpus, its punctuation aside, is aligned there: the host
+  aligns against every such text, however its own search ranked it. Which
+  other texts it reads is still its own.
+- **A mark is not a word.** `coverage` is the quotation's words matched
+  exactly over its words, in `[0, 1]`; the first word may differ in its
+  first letter's case. Marks are still aligned and every difference in them
+  is still reported. A mark for a mark costs less than a word for a word,
+  so a span that differs from the quotation in punctuation alone comes
+  before every span with a word changed.
+- **Specific.** A host returns an alignment only when the words it matched
+  say it is that place, not any place holding the quotation's common words.
+  The reference host keeps one whose matched words carry at least its
+  `specific_floor` (0.7) of the quotation's words, each weighted by its
+  rarity in the texts read (`ln(1 + words / (1 + occurrences))`), or hold a
+  run of `specific_run` (5) words: "there is no" matched of "there is no
+  alternative" is neither, and "To be, or not to be, that is the" matched of
+  a quotation ending "problem" is the run.
+- `aligner` moves with this: the reference host's is `align/4 norm/0`, so a
+  client's alignments cached under `align/3` are asked again.
 
 ## 6. Conformance (additions)
 
@@ -694,7 +809,7 @@ records keep CSL-JSON field names as the resolvers return them.
 | `evidence.verify` | the fixture's planted sentence comes back as claims whose `exact` is the unit's `[start, end)`; every verdict is one of the five; every passage's `span` dereferences to its `exact`; a tier outside `verify_tiers` is `422 tier not offered` | a passage `exact` one character off |
 | `knowledge.range` | every hit for each fixture signature carries `span` or a `span_absent` from the set, never both; each span dereferences to its `exact`; at least one hit over the fixture's plain texts is ranged | a hit `exact` one character off |
 | `evidence.verify_correction` | a decided claim of the fixture unit carries an `episode_id`; a correction whose witness is a span verify returned is `verified`, one running past its text `out_of_range`; a malformed episode is `400 not an episode id`. Writes two correction lines on a live host | a host that never reads the witness back |
-| `ingest.documents` | once the fixture's install has returned, every fixture document is listed `ready` under the sha256 of its text, each with a `source`, none `failed`; and `ingest.recipe` holds that an install answering `spawned: true` is in the next poll | an entry listing no documents; an install missing from the first poll |
+| `ingest.documents` | once the fixture's install has returned, every fixture document is listed `ready` under the sha256 of its text, each with a `source`, none `failed`; and `ingest.recipe` holds that an install answering `spawned: true` is in the next poll, a held corpus installed again under another recipe as that install, not the last one's entry | an entry listing no documents; an install missing from the first poll; a re-install whose first poll is the last install's `complete` with no documents |
 | `knowledge.scoped` | a query reaching several fixture texts, scoped to the second-ranked one, returns at least one hit and every hit from that text; a `documents` entry that is not a text name is `400` | a host that ignores `documents` |
 | `ingest.install_limit` | with `ingest:recipe` and `max_install_bytes` stated, an install body of exactly that many bytes, a recipe that does not load padded to the size, is read: `400`, never `413`; one byte more is `413 install too large` naming the limit. A stated limit past 256 MiB is probed at 256 MiB, with nothing sent past it | a host stating a limit whose install route reads bodies only to its surface's 8 MiB |
 | `knowledge.sentences` | each fixture signature, at `granularity: sentence` scoped to its own text, returns at least one sentence, at most `limit`, best first, every one from that text; each carries `span` whose `exact` is its `content` and whose range reads back byte-equal through `text_endpoint`; the reply names the advertised scorer and a model, and a route, with `sentences_pending` exactly on `passages`. A `503 scorer unavailable` naming the advertised scorer is could-not-judge | a sentence range one code point off; a sentence from outside the scope; a host advertising `rerank`, holding no rerank slot, that answers with cosine |
@@ -703,6 +818,7 @@ records keep CSL-JSON field names as the resolvers return them.
 | `evidence.verify_sentences` | installs its own library (`fixture/claims.json`, a ledger of figure sentences) and verifies five units at each served tier: every specific is an exact range of the unit inside its claim; each listed figure, date or quantity is covered, a parenthesised one too; nothing inside `(Okafor 2019)` or `(page 14)` is a specific; the fast tier never says `supported` or `contradicted` and says `unsupported` only with no evidence; a unit restating the library's figure in another form is `abstained` at `fast` and `supported` at `checker`; another figure is `contradicted`, naming the pair, each side read back; a concept the library lacks is `unsupported` with no evidence. A checker that answers `could_not_judge` is could-not-judge | a claim settled from the fast tier's literal miss; a citation's year made a specific; a figure inside parentheses left out; a contradiction that names no differing specific |
 | `ingest.lookups` | installs its own library (`fixture/records.json`: a document declaring a title and a DOI that resolves, one declaring a DOI that does not, one declaring none) allowing lookups, and again as another corpus not allowing them; reads each record off progress: every field has an origin, every declared field kept as `declared`, the resolving DOI `resolved`, the other `unresolved` with nothing taken, the undeclared document no looked-up field; every lookup of the second install `not_allowed` with nothing taken; with `knowledge:document`, a hit carries the record progress lists. A resolver `unreachable` is could-not-judge | a field invented for an identifier that did not resolve; a declared title overwritten by the looked-up one; a lookup sent for an install that did not allow it |
 | `ingest.transcript` | installs its own library (`fixture/transcripts.json`: a paragraph transcript with three header shapes and an opening, Whisper's JSON with a sentence across segments, and a declared transcript in neither shape) and aligns each listed quotation verbatim; each span's `locator` is its turn's start and speaker, a Whisper segment's with none; with `ingest:documents`, the one in neither shape is listed `failed: not a transcript` and the others `ready`. Needs `evidence:align`, could-not-judge without | a header line read into the turn before it (the turn given the previous speaker); a speaker invented for a Whisper segment; a document in neither shape stored as plain text |
+| `knowledge.priority` | each fixture signature searched with `priority: interactive`, with `background` and with none returns the same hits in the same order; with `evidence:verify`, the fixture unit verified at the first served tier with each priority returns the same verdicts; a priority outside the set is `400` or `422` | a host that answers differently by priority; a host that reads an unknown priority as absent |
 
 `manifest.features` checks §2.1's co-occurrence: `evidence:verify` iff
 `verify_endpoint`, with a non-empty `verify_tiers`, and never without
@@ -716,7 +832,7 @@ never without `knowledge:sentences`; `knowledge:locator` never
 without `knowledge:range`; `ingest:transcripts` never without
 `knowledge:locator` and `ingest:recipe`; `evidence:verify_sentences` never
 without `evidence:verify` and `knowledge:sentences`; `ingest:lookups` never
-without `ingest:documents` and `ingest:recipe`.
+without `ingest:documents` and `ingest:recipe`; `knowledge:priority` never without a knowledge plane.
 
 ## 7. Backward compatibility
 
@@ -744,6 +860,12 @@ without `ingest:documents` and `ingest:recipe`.
   when absent, so a v0.5 install request and a v0.5 document read and write
   back unchanged; a host without `ingest:lookups` ignores the allowance
   and sends no lookup.
+- `priority` is never written when absent, so a v0.5 search or a §2.6
+  verify request reads and writes back unchanged. A client sends it only
+  to a host advertising `knowledge:priority`; a host without it may refuse
+  the field or ignore it, serving the request as one without.
+- §2.18 changes no shape: a v0.5 client reads its alignments as before,
+  and one that keys cached alignments on `aligner` asks again.
 - A client sends `format = "transcript"` only to a host advertising
   `ingest:transcripts`; a host without it may refuse the recipe or read the
   document as plain text, its spans then carrying no turn.

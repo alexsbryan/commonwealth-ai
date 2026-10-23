@@ -227,8 +227,8 @@ fn validate_outcome(
     {
         outcome.status = DocumentReadStatus::CouldNotJudge;
         outcome.reason = Some(format!(
-            "every claim ({before}) and particular ({offered}) was refused: its citation did not \
-             verify in this document"
+            "every claim ({before}) and particular ({offered}) was refused; `refused` names why \
+             each one was"
         ));
     }
     Ok(changed)
@@ -254,18 +254,16 @@ fn verify_particular(
     if particular.subject_local_ref.trim().is_empty() || particular.subject_name.trim().is_empty() {
         return Err(format!("a particular of `{of}` lacks its local reference"));
     }
+    refuse_voice(
+        policies,
+        &particular.subject_name,
+        &particular.subject_local_ref,
+    )?;
     if !claim_evidence_exists(document, &particular.evidence) {
         return Err(format!(
             "the line naming it is not an exact passage in document `{}`",
             document.key()
         ));
-    }
-    if let Some(words) = &particular.words {
-        if words.trim().is_empty() || !particular.evidence.contains(words.as_str()) {
-            return Err(format!(
-                "the mention's words {words:?} are not on the line it cites"
-            ));
-        }
     }
     validate_fields(
         &particular.subject_fields,
@@ -274,6 +272,34 @@ fn verify_particular(
     )
     .map_err(|error| error.to_string())?;
     fields_cited(&particular.subject_fields, document)
+}
+
+/// Why a subject cannot be a record: its name or the words of its `l{n}:`
+/// local reference are a declared voice — the reader's
+/// side of what the general extractor's parser enforces (`VoicesDecl::is_voice`).
+fn refuse_voice(
+    policies: &OntologyPolicies,
+    name: &str,
+    local_ref: &str,
+) -> std::result::Result<(), String> {
+    let voices = &policies.assertion.voices;
+    match [Some(name), local_ref_words(local_ref)]
+        .into_iter()
+        .flatten()
+        .find(|n| voices.is_voice(n))
+    {
+        Some(name) => Err(format!(
+            "`{name}` is a declared voice (voices.not_entities), never a particular"
+        )),
+        None => Ok(()),
+    }
+}
+
+/// The words of an `l{n}:{words}` local reference, the form the deleted passes
+/// reader gave a particular; `None` for any other (a window's `sec_1/p1`).
+fn local_ref_words(local_ref: &str) -> Option<&str> {
+    let (line, words) = local_ref.strip_prefix('l')?.split_once(':')?;
+    (!line.is_empty() && line.bytes().all(|b| b.is_ascii_digit())).then_some(words)
 }
 
 /// `Ok(())` when every supported field's evidence is in the document.
@@ -292,6 +318,14 @@ fn fields_cited(
         }
     }
     Ok(())
+}
+
+/// Whether `speaker` is words `document`'s body holds, whitespace and case
+/// aside: what a claim's voice must be. The window reader keeps a voice only
+/// when it is (`window_voice.rs`), so this check never costs it a claim.
+pub(super) fn speaker_in_body(document: &SourceDocument, speaker: &str) -> bool {
+    let speaker = fold_ws(speaker);
+    !speaker.is_empty() && fold_ws(&document.raw_body()).contains(&speaker)
 }
 
 /// Why one claim cannot be projected, or `Ok(())` when its citation, voice
@@ -317,16 +351,18 @@ fn verify_claim(
             claim.kind
         ));
     }
+    refuse_voice(policies, &claim.subject_name, &claim.subject_local_ref)?;
     if !claim_evidence_exists(document, &claim.evidence) {
         return Err(format!(
             "evidence is not an exact passage in document `{}` nor one of its declared identity fields",
             document.key()
         ));
     }
-    if claim.speaker.as_deref().is_some_and(|speaker| {
-        let speaker = fold_ws(speaker);
-        speaker.is_empty() || !fold_ws(&document.raw_body()).contains(&speaker)
-    }) {
+    if claim
+        .speaker
+        .as_deref()
+        .is_some_and(|speaker| !speaker_in_body(document, speaker))
+    {
         return Err(format!(
             "claim `{}` names a speaker not present in the source body; metadata.author is context only",
             claim.kind

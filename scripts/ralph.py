@@ -1967,13 +1967,21 @@ class Loop:
         self.disk_floor_gb = disk_floor_gb
         self.mech = Lanes(paths, lane_root=root, base_branch=base_branch,
                           disk_free_gb=lambda: self.disk_free_gb(), disk_floor_gb=disk_floor_gb)
-        self.code_digest = code_digest or (lambda: hashlib.sha256(SELF.read_bytes()).hexdigest())
-        self.compiles = compiles or (lambda: compile(SELF.read_text(), str(SELF), "exec"))
+        # The manifest's [checks], models and freeze are read once at start, so it
+        # is deployed code like this file: before 2026-10-22 only this file
+        # redeployed, and a check narrowed in queue.toml ran its old argv for
+        # hours (corpus-engine-core's HUMAN-line-u).
+        self.deployed = [SELF] + ([paths.p(paths.manifest.path)] if paths.manifest else [])
+        self.code_digest = code_digest or (lambda: hashlib.sha256(
+            b"".join(f.read_bytes() for f in self.deployed)).hexdigest())
+        self.compiles = compiles or (lambda: (
+            compile(SELF.read_text(), str(SELF), "exec"),
+            paths.manifest and load_manifest(paths.workdir, paths.queue)))
         # The launch line runs the working tree's file, so a half-made edit that
         # happens to compile would go live: only committed code is deployed.
-        self.committed = committed or (lambda: subprocess.run(
-            ["git", "-C", str(SELF.parent), "diff", "--quiet", "HEAD", "--", SELF.name],
-            capture_output=True).returncode == 0)
+        self.committed = committed or (lambda: all(subprocess.run(
+            ["git", "-C", str(f.parent), "diff", "--quiet", "HEAD", "--", f.name],
+            capture_output=True).returncode == 0 for f in self.deployed))
         self.reexec = reexec or (lambda argv: os.execv(argv[0], argv))
         self.argv = argv or [sys.executable, str(SELF), *sys.argv[1:]]
         self.static = {}
@@ -2134,21 +2142,26 @@ class Loop:
             return
         if now in (self._loaded, self._refused):
             return
+        what = " or ".join(f.name for f in self.deployed)
         if not self.committed():
             if now != self._uncommitted:
                 self._uncommitted = now
-                say(f"loop: {SELF.name} changed but holds uncommitted edits — staying on the "
+                say(f"loop: {what} changed but holds uncommitted edits — staying on the "
                     "loaded code")
             return
         try:
             self.compiles()
         except SyntaxError as e:
             self._refused = now
-            say(f"loop: {SELF.name} changed but does not compile ({e.msg}, line {e.lineno}) — "
+            say(f"loop: {what} changed but does not compile ({e.msg}, line {e.lineno}) — "
                 "staying on the loaded code")
             return
+        except ValueError as e:         # load_manifest's refusal, by name
+            self._refused = now
+            say(f"loop: {what} changed but does not load ({e}) — staying on the loaded code")
+            return
         self.ledger.save()
-        say(f"loop: {SELF.name} changed ({self._loaded[:12]} → {now[:12]}) — re-exec; "
+        say(f"loop: {what} changed ({self._loaded[:12]} → {now[:12]}) — re-exec; "
             f"{len(self.units_in(*SESSION))} session(s) and {len(self.units_in(U.AWAITING))} "
             "run(s) carry across")
         sys.stdout.flush()

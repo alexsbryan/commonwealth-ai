@@ -2,7 +2,7 @@
 use serde_json::{json, Value};
 
 use super::*;
-use crate::enrichment::pipeline::document_read::CLAIM_FIELDS_ATTRIBUTE;
+use crate::enrichment::pipeline::document_read::{CLAIM_FIELDS_ATTRIBUTE, SUBJECT_NAME_ATTRIBUTE};
 use crate::recipe::Recipe;
 
 const RECIPE: &str = r#"
@@ -113,4 +113,54 @@ fn compatibility_claim_keeps_supported_and_unknown_document_field_evidence() {
         "attribution has no separate field-evidence contract"
     );
     assert_eq!(extraction.claims[0].attributed_to.as_deref(), Some("Alice"));
+}
+
+/// A window read (chapter scope) names each statement's and particular's
+/// subject on `SUBJECT_NAME_ATTRIBUTE`; a per-document read does not.
+#[test]
+fn a_window_read_names_its_subjects_and_a_document_read_does_not() {
+    let source = "Issue 842 was closed. Issue 900 is open.";
+    let unknown = json!({ "status": "unknown", "reason": "not stated" });
+    let read = |subjects: &str| {
+        json!({
+            "subjects": subjects,
+            "documents": [{
+                "document_id": "doc-842",
+                "status": "read",
+                "claims": [{
+                    "kind": "update",
+                    "content": "Issue 842 was closed.",
+                    "subject_type": "issue",
+                    "subject_local_ref": "issue-842",
+                    "subject_name": "Issue 842",
+                    "evidence": source,
+                    "fields": { "action": unknown, "polarity": unknown },
+                    "subject_fields": { "number": unknown }
+                }],
+                "particulars": [{
+                    "subject_type": "issue",
+                    "subject_local_ref": "issue-900",
+                    "subject_name": "Issue 900",
+                    "evidence": "Issue 900 is open.",
+                    "subject_fields": { "number": unknown }
+                }]
+            }]
+        })
+        .to_string()
+    };
+    let names = |subjects: &str| -> Vec<Option<Value>> {
+        let parsed = parse_response(&read(subjects), &policies()).unwrap();
+        parsed
+            .section_extraction
+            .unwrap()
+            .claims
+            .iter()
+            .map(|c| c.attributes.get(SUBJECT_NAME_ATTRIBUTE).cloned())
+            .collect()
+    };
+    assert_eq!(
+        names("chapter"),
+        [Some(json!("Issue 842")), Some(json!("Issue 900"))]
+    );
+    assert_eq!(names("document"), [None, None]);
 }

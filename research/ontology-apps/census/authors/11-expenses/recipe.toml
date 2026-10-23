@@ -1,0 +1,216 @@
+# Employee expenses at a consultancy: expense-claim emails with receipts (as text),
+# managers' approval replies, and the bank's payment notices.
+#
+# Authored blind from DESCRIPTION.md; see transcript.md for the interview and the
+# source of every answer.
+
+[corpus]
+id = "consultancy-expenses"
+name = "Employee expense claims"
+description = "Expense-claim emails with receipts, managers' approval replies and the bank's payment notices, read as claims, decisions and payments."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+[acquire]
+type = "local_file"
+path = "SOURCE_PATH"
+
+# A mailbox export (maildir or .eml files). The email extractor gives every
+# message its date, thread, sender and message id as metadata.
+[extract]
+type = "email"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "employee-expenses"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is a consultancy's employee expenses, as finance sees them: an employee emails
+an expense claim with the receipt pasted in as text (what it was for, the amount and
+currency, the date the cost was incurred, the expense category, and the client project it
+should be charged to if any); a manager replies approving or rejecting it, often with a
+reason; the bank later sends a payment notice when the reimbursement is paid. One expense
+claim is one reimbursement request for one cost or one trip. A claim re-submitted after a
+rejection, perhaps with a receipt added or the amount corrected, is the SAME claim, not a
+new one. A reminder or chase about a claim is not a new submission. Policy sets a spending
+limit for each category and requires a receipt for every claim.
+"""
+must_not = [
+  "judge an employee's honesty or intent: a claim that breaks policy is reported as a breach of a stated rule, nothing more",
+]
+
+# ── Who ──────────────────────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "employee"
+kind = "entity"
+description = "A member of staff who sends or answers expense emails: a claimant or an approving manager. Known by their email address."
+attributes = [
+  { name = "email", type = "text" },
+  { name = "name",  type = "text" },
+]
+identity = ["email"]
+source = { metadata = ["from", "to", "cc"], attributes = { email = "address", name = "display_name" } }
+
+# ── The claim, as a record ──────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "expense_claim"
+kind = "entity"
+label = "expense claim"
+description = "One reimbursement request by one employee for one cost (or one trip's costs), from first submission to payment."
+identity_criterion = """
+Two mentions are one expense claim when they are the same employee asking to be reimbursed
+for the same cost: the same claim reference if one is quoted; otherwise the same purchase
+(merchant or trip), incurred on the same date. A claim re-submitted after a rejection is
+the same claim even when the amount, category, project or receipt has changed. Two separate
+purchases by the same employee on the same day are two claims.
+"""
+attributes = [
+  { name = "claimant", type = "ref",      of = "employee", by = "agree", description = "The employee asking to be reimbursed." },
+  { name = "purpose",  type = "text",     by = "latest", description = "What the expense was for: merchant and business reason." },
+  { name = "amount",   type = "quantity", by = "latest", description = "The amount claimed, as written in digits." },
+  { name = "currency", type = "text",     by = "latest", description = "The currency of the amount claimed, as an ISO 4217 code (GBP, EUR, USD)." },
+  { name = "incurred", type = "time",     by = "latest", description = "The date the cost was incurred (the receipt date), not the date it was claimed." },
+  { name = "category", type = "text",     by = "latest", values = ["air_rail_travel", "ground_transport", "mileage", "accommodation", "meals", "client_entertainment", "training", "equipment", "software", "phone_internet", "office_supplies", "other"] },
+  { name = "project",  type = "text",     by = "latest", description = "The client project the expense is charged to, if any: the project or job code as written, else the client engagement's name." },
+  { name = "status",   type = "text",     values = ["submitted", "approved", "rejected", "paid"], derived = "claim_status" },
+]
+
+# ── What the emails say ─────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "expense_submission"
+kind = "claim"
+force = "directive"
+deontic = ["request"]
+subject = "expense_claim"
+description = "An employee asks to be reimbursed for an expense: a first submission or a re-submission after a rejection."
+attributes = [
+  { name = "action",       type = "text", values = ["submitted", "resubmitted", "chased"], description = "submitted: a first request; resubmitted: sent again after a rejection; chased: a reminder about a claim already sent." },
+  { name = "receipt",      type = "text", values = ["attached", "missing"], description = "Whether the email carries the receipt for the expense." },
+  { name = "reference",    type = "text", description = "The words that identify this submission: the claim reference if one is quoted, else the email's subject line as written in the body." },
+  { name = "effective_on", type = "time", description = "The date the claim was submitted." },
+]
+
+[[enrichment.ontology.types]]
+name = "approval_decision"
+kind = "claim"
+force = "declaration"
+subject = "expense_claim"
+description = "A manager (or finance) approves or rejects an expense claim, usually in a reply to it."
+attributes = [
+  { name = "decision",      type = "text", values = ["approved", "rejected"] },
+  { name = "approver",      type = "ref",  of = "employee", description = "Who approved or rejected the claim." },
+  { name = "approver_role", type = "text", values = ["manager", "finance", "claimant", "other"], description = "The role the decider speaks in: the claimant's manager, the finance team, the claimant themself, or someone else." },
+  { name = "reason",        type = "text", values = ["over_limit", "missing_receipt", "not_business", "wrong_project", "duplicate", "other", "none_given"], description = "The reason given, for a rejection or a conditional approval." },
+  { name = "reference",     type = "text", description = "The words that identify this decision: the claim reference it answers, or the decision sentence itself." },
+  { name = "effective_on",  type = "time", description = "The date of the decision." },
+]
+
+[[enrichment.ontology.types]]
+name = "payment_notice"
+kind = "claim"
+force = "assertive"
+subject = "expense_claim"
+description = "The bank reports a reimbursement payment to an employee for an expense claim."
+attributes = [
+  { name = "outcome",      type = "text",     values = ["paid", "returned"], description = "paid: the money was sent; returned: a payment bounced or was recalled." },
+  { name = "amount_paid",  type = "quantity", description = "The amount the bank paid, as written in digits." },
+  { name = "paid_currency", type = "text",    description = "The currency of the amount paid, ISO 4217." },
+  { name = "reference",    type = "text",     description = "The bank's payment reference." },
+  { name = "effective_on", type = "time",     description = "The payment (value) date." },
+]
+
+# ── Status over time ────────────────────────────────────────────────────────
+
+[[enrichment.ontology.folds]]
+id = "claim_status"
+by = "protocol"
+from = ["^subject"]
+
+[enrichment.ontology.folds.protocol]
+identity = "reference"
+effective_time = "effective_on"
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "first_submission"
+claim_kind = "expense_submission"
+state = "submitted"
+when = { action = "submitted" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "resubmission_after_rejection"
+claim_kind = "expense_submission"
+state = "submitted"
+when = { action = "resubmitted" }
+from = ["rejected"]
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "manager_approves"
+claim_kind = "approval_decision"
+state = "approved"
+when = { decision = "approved", approver_role = "manager" }
+from = ["submitted"]
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "finance_approves"
+claim_kind = "approval_decision"
+state = "approved"
+when = { decision = "approved", approver_role = "finance" }
+from = ["submitted"]
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "manager_rejects"
+claim_kind = "approval_decision"
+state = "rejected"
+when = { decision = "rejected", approver_role = "manager" }
+from = ["submitted", "approved"]
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "finance_rejects"
+claim_kind = "approval_decision"
+state = "rejected"
+when = { decision = "rejected", approver_role = "finance" }
+from = ["submitted", "approved"]
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "bank_pays"
+claim_kind = "payment_notice"
+state = "paid"
+when = { outcome = "paid" }
+from = ["approved"]
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "payment_returned"
+claim_kind = "payment_notice"
+state = "approved"
+when = { outcome = "returned" }
+from = ["paid"]
+
+[enrichment.ontology.change]
+document = { date = "date", thread = "thread_id", id = "message_id", author = "from" }
+supersedes = { expense_submission = "document_date" }
+
+[enrichment.ontology.tension]
+label = "discrepancy"
+between = ["expense_submission", "approval_decision", "payment_notice"]
+same = ["subject"]
+not_conflicts = [
+  "A rejection followed by a re-submission and then an approval is the claim's history, not a conflict.",
+  "A payment in another currency than the claim, converted at the bank's rate, is not a conflict when the converted amount matches.",
+  "A reminder that repeats a claim's details is not a second claim.",
+]

@@ -548,8 +548,8 @@ impl<'a> Graph<'a> {
 
 /// Whether `fields` meet every condition of `set`: `None` when a condition's
 /// attribute is absent, which is no answer either way. The one reading of a
-/// set: a derived step's filter here, and the passes reader's prefill and Pick
-/// exclusions (`pipeline/document_read/`).
+/// set: a derived step's filter here, and the window reader's candidate
+/// exclusions (`pipeline/document_read/pick.rs`).
 pub fn conditions_hold(set: &SetDecl, fields: &serde_json::Map<String, Value>) -> Option<bool> {
     for (attr, cond) in &set.conditions {
         let values: Vec<String> = scalars(fields.get(attr))
@@ -719,3 +719,7 @@ mod tests;
 #[cfg(test)]
 #[path = "resolution_derived/statement_refs_tests.rs"]
 mod statement_refs_tests;
+
+#[cfg(test)]
+#[path = "resolution_derived/ref_targets_tests.rs"]
+mod ref_targets_tests;

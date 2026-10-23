@@ -6,26 +6,15 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-mod about;
-mod act;
-mod ask;
+use crate::enrichment::reconciliation::identity_signals::fold_identity_value;
+
 mod cache;
-mod folded;
 mod line_classes;
-mod locate;
-mod mention;
-mod passes;
 mod pick;
-mod point;
-mod prefill;
 mod projection;
 mod runner_support;
 mod schema;
 mod validation;
-mod waves;
-mod waves_forms;
-mod waves_jobs;
-mod waves_readings;
 mod window;
 
 pub use cache::{
@@ -33,18 +22,16 @@ pub use cache::{
     phase1_cache_matches, validate_checkpoint,
 };
 pub use line_classes::LineClasses;
-pub use passes::read as read_passes;
-pub use passes::read_fields as reader_read_fields;
 pub use projection::parse_response;
 pub(super) use runner_support::{
     cache_text as runner_cache_text, load_exemplar_bank as runner_load_exemplar_bank,
     missing_source_documents as runner_missing_source_documents,
     phase1_inputs as runner_phase1_inputs, validate_response as runner_validate_response,
 };
-pub use schema::{compose, statement_attributes, unread_types};
+pub use schema::{compose, statement_attributes, subject_read_attributes, unread_types};
 pub use validation::field_evidence_exists;
 pub use validation::validate_and_stamp;
-pub use window::chosen as window_chosen;
+pub use window::read as read_documents;
 
 #[cfg(test)]
 use schema::read_kind;
@@ -68,20 +55,62 @@ pub const CLAIM_FIELDS_ATTRIBUTE: &str = "__document_read_fields";
 /// from a [`DocumentReadParticular`]: such a claim declares no claim kind, so
 /// this is where its subject's type is read ([`about_type`]).
 pub const ABOUT_ATTRIBUTE: &str = "__document_read_about";
-/// A mention's words, on the claim projected from a mention particular: its
-/// statement is these words on its line (RESOLVE), and a reference reading
-/// that names them lands on its record (`resolution_derived/read_fields.rs`).
-/// Stays on the claim after RESOLVE, cited by its evidence.
-pub const WORDS_ATTRIBUTE: &str = "__document_read_words";
+/// The name a window read ([`SubjectScope::Chapter`]) gave a statement's
+/// subject: a reference reading of that name in the same document lands on
+/// the record RESOLVE put the statement on (`resolution_derived/read_fields.rs`).
+/// Stays on the claim after RESOLVE, which shows it beside the statement and on
+/// the record's card (`resolve_records::Described`) and never compares it.
+pub const SUBJECT_NAME_ATTRIBUTE: &str = "__document_read_subject_name";
 
 /// The type a claim projected from a [`DocumentReadParticular`] is about.
 pub fn about_type(attributes: &Map<String, Value>) -> Option<&str> {
     attributes.get(ABOUT_ATTRIBUTE).and_then(Value::as_str)
 }
 
-/// The words a mention particular's claim names its particular by.
-pub fn mention_words(attributes: &Map<String, Value>) -> Option<&str> {
-    attributes.get(WORDS_ATTRIBUTE).and_then(Value::as_str)
+/// The name a window read gave a statement's subject.
+pub fn window_subject_name(attributes: &Map<String, Value>) -> Option<&str> {
+    attributes
+        .get(SUBJECT_NAME_ATTRIBUTE)
+        .and_then(Value::as_str)
+}
+
+/// The other names a window read gave the things a statement names: each name
+/// (its subject's, or a reading's value) mapped to the names a document says
+/// the same thing also has, from the answer's typed `other_names` list on a
+/// particular (`window_particulars.rs::other_names_for`). An object; absent
+/// when no thing the statement names has another name. A name is never split:
+/// "Input / Output" is one name. RESOLVE shows the other names
+/// (`resolve_records::Described`), never compares them, and a reference
+/// reading lands on a record by any of them (`resolution_derived/read_fields.rs`).
+pub const OTHER_NAMES_ATTRIBUTE: &str = "__document_read_other_names";
+/// Who a window read says asserts a statement, kept on the claim and shown by
+/// its row (the atlas-reader leaf owns the key). `attributed_to` binds the
+/// same words at build only to a sourced record; a window read's other
+/// records come from RESOLVE, so the reading as read stays here.
+pub use corpus_engine_atlas_reader::records::SAID_BY_ATTRIBUTE;
+
+/// The other names `attributes` records for `name` ([`OTHER_NAMES_ATTRIBUTE`]),
+/// matched as identity values are (`fold_identity_value`); none when it
+/// records none.
+pub fn other_names<'a>(attributes: &'a Map<String, Value>, name: &str) -> Vec<&'a str> {
+    attributes
+        .get(OTHER_NAMES_ATTRIBUTE)
+        .and_then(Value::as_object)
+        .map_or_else(Vec::new, |others| other_names_in(others, name))
+}
+
+/// The other names the [`OTHER_NAMES_ATTRIBUTE`] object `others` records for
+/// `name` (see [`other_names`]).
+pub fn other_names_in<'a>(others: &'a Map<String, Value>, name: &str) -> Vec<&'a str> {
+    let Some(want) = fold_identity_value(name) else {
+        return Vec::new();
+    };
+    others
+        .iter()
+        .filter(|(n, _)| fold_identity_value(n).as_deref() == Some(want.as_str()))
+        .flat_map(|(_, others)| others.as_array().into_iter().flatten())
+        .filter_map(Value::as_str)
+        .collect()
 }
 
 /// The value of each supported reading among `fields`, by field.
@@ -122,7 +151,8 @@ pub struct DocumentRead {
 #[serde(rename_all = "snake_case")]
 pub enum SubjectScope {
     /// One reference is one particular within one document; across documents
-    /// it says nothing and RESOLVE alone decides (the passes reader).
+    /// it says nothing and RESOLVE alone decides. The deleted passes reader's
+    /// scope; reads cached before 2026-10-13 carry it.
     #[default]
     Document,
     /// One reference is one particular across the chapter's documents: the
@@ -156,17 +186,12 @@ pub struct DocumentReadOutcome {
 }
 
 /// A particular a document is about that no claim of the document is about
-/// (`document_read/about.rs`): an issue that opens its thread is about a case
+/// (`window_particulars.rs`): an issue that opens its thread is about a case
 /// before any line says where the case stands. Its type is one RESOLVE
-/// decides; `evidence` is the line that first names it, its words are in its
-/// reference, and its identifying fields are read at them. It reaches RESOLVE as a statement of its own, so
-/// the document belongs to the particular's record whether or not a line
-/// states a claim kind.
-///
-/// Or a mention (`document_read/mention.rs`) of a type whose source names
-/// only who took part (`resolution_records::decides_mentions`): its `words`
-/// are the line's own, its statement is those words on that line, and it
-/// reads no field.
+/// decides; `evidence` is the line that names it, and its identifying fields
+/// are read there. It reaches RESOLVE as a statement of its own, so the
+/// document belongs to the particular's record whether or not a line states a
+/// claim kind.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct DocumentReadParticular {
@@ -175,8 +200,10 @@ pub struct DocumentReadParticular {
     pub subject_name: String,
     pub evidence: String,
     pub subject_fields: BTreeMap<String, DocumentReadField>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub words: Option<String>,
+    /// The other names a window read gave what it names
+    /// ([`OTHER_NAMES_ATTRIBUTE`]).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub other_names: BTreeMap<String, Vec<String>>,
 }
 
 /// One claim refused by evidence verification, with the reason it failed.
@@ -206,15 +233,25 @@ pub struct DocumentReadClaim {
     pub subject_type: String,
     pub subject_local_ref: String,
     pub subject_name: String,
-    /// The voice in the passage, when stated. It is never inferred from metadata.author.
+    /// Who asserts the claim, as the window read gave it (`said_by`): words
+    /// its document holds. None for the document's own voice, or when no
+    /// voice was read or the one read is not in the document. It is never
+    /// inferred from metadata.author.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub speaker: Option<String>,
+    /// One of the grades its kind declares, as declared (`window_voice::grade`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grade: Option<String>,
     /// Exact source-body passage supporting the assertion.
     pub evidence: String,
     /// Non-derived attributes declared on the claim type.
     pub fields: BTreeMap<String, DocumentReadField>,
     /// Non-derived attributes declared on its subject type.
     pub subject_fields: BTreeMap<String, DocumentReadField>,
+    /// The other names a window read gave what it names
+    /// ([`OTHER_NAMES_ATTRIBUTE`]).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub other_names: BTreeMap<String, Vec<String>>,
 }
 
 /// A field value with evidence, or an explicit absence with a reason.

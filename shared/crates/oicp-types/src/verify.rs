@@ -84,6 +84,10 @@ pub struct VerifyRequest {
     /// [`crate::evidence::DEFAULT_CONTEXT`] when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub span_context: Option<u32>,
+    /// v0.6 §2.17 (`knowledge:priority`): who waits on the answer. Absent,
+    /// the unit is judged as before §2.17 and is never written.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority: Option<crate::knowledge::RequestPriority>,
 }
 
 impl VerifyRequest {

@@ -53,6 +53,50 @@ fn marked_lines_are_quotes_and_the_answers_between_them_are_the_authors() {
     }
 }
 
+/// A Notes history holds one message per header block, each running to the
+/// next; the sender and date lines a Notes client writes above "To:" open the
+/// block across the line of tabs between them. Failing input, named:
+/// ward-story tep/2., where Jason Williams' name and date read as Dan Hyvl's.
+#[test]
+fn a_notes_history_is_one_segment_per_message() {
+    let body = "Debra,\n Can you forward it.\n\n\n\tJason R Williams/ENRON@enronXgate\n\
+                \t03/26/2001 03:51 PM\n\t\t \n\t\t To: Debra Perlingiere/HOU/ECT@ECT\n\t\t cc: \n\
+                \t\t Subject: Tucson Electric Power\n\nDebra -\nAttached is a worksheet.\n\n\
+                Tracy Ngo\n12/19/2000 02:13 PM\nTo: Ed Sacks/HOU/ECT@ECT\ncc:\nSubject: TEP\n\n\
+                The cp is looking for a power swap.\n";
+    let found = embedded_segments(body);
+    assert_eq!(found.len(), 2, "{found:?}");
+    assert!(body[found[0].start..].starts_with("\tJason R Williams"));
+    assert_eq!(found[0].end, found[1].start);
+    assert!(body[found[0].header_end..found[0].end].contains("Attached is a worksheet."));
+    assert!(!body[found[0].start..found[0].end].contains("power swap"));
+    assert!(body[found[1].start..].starts_with("Tracy Ngo"));
+    assert_eq!(found[1].end, body.len());
+}
+
+/// A separator a client wrapped onto a second line its dashes close, a Notes
+/// "Sent by:" line, and a blank line between "cc:" and "Subject:" are all
+/// one message's header, so none of them reads as a message's text. Failing
+/// input, named: ward-story tep/1. and tep/10.
+#[test]
+fn a_wrapped_separator_and_a_spaced_notes_header_are_one_header() {
+    let body = "See below.\n\n---------------------- Forwarded by Chris H Foster/HOU/ECT on 03/30/2001 \n\
+                09:24 AM ---------------------------\n\n\nChristopher McKey\n03/29/2001 08:48 AM\n\
+                Sent by: Christopher McKey\nTo: Chris H Foster/HOU/ECT@ECT\ncc:  \n\nSubject: PD\n\n\
+                In case you hadn't seen this.\n";
+    let s = one(body);
+    assert_eq!(s.kind, SegmentKind::Forward);
+    assert!(
+        body[s.start..s.header_end].ends_with("Subject: PD"),
+        "{:?}",
+        &body[s.start..s.header_end]
+    );
+    assert_eq!(
+        body[s.header_end..s.end].trim(),
+        "In case you hadn't seen this."
+    );
+}
+
 #[test]
 fn one_field_shaped_line_in_prose_embeds_nothing() {
     let body = "Hello,\n\nSubject: the chairs are late again.\nPlease call me.\n";

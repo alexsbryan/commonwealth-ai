@@ -58,6 +58,7 @@ impl InferenceProvider for ScriptedInference {
     async fn complete(&self, _r: &CompletionRequest) -> Result<CompletionResponse> {
         let i = self.idx.fetch_add(1, Ordering::SeqCst);
         Ok(CompletionResponse {
+            logprobs: None,
             text: self.responses.get(i).cloned().unwrap_or_default(),
             tokens_used: 0,
             prompt_tokens: 0,

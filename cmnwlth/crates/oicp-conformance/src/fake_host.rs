@@ -20,7 +20,8 @@ use oicp_types::evidence::{reasons, texts_digest_preimage, DEFAULT_CONTEXT};
 use oicp_types::transcript::reasons::NOT_A_TRANSCRIPT;
 use oicp_types::{
     AlignRequest, Alignment, Difference, DifferenceKind, Document, HeadingOutline, KnowledgeResult,
-    KnowledgeSearchRequest, SourceRef, Span, SpanLocator, TextSlice, TranscriptShape, TurnOutline,
+    KnowledgeSearchRequest, RequestPriority, SourceRef, Span, SpanLocator, TextSlice,
+    TranscriptShape, TurnOutline,
 };
 use serde_json::{json, Value};
 
@@ -46,6 +47,10 @@ pub struct Breaks {
     pub scope_leaks: bool,
     /// ingest.recipe: an install is missing from the first poll after it.
     pub late_listing: bool,
+    /// ingest.recipe: the first poll after a re-install under another
+    /// recipe lists the last install's `complete` with no documents (the
+    /// reference host at d95ba219e, platform row PV3g).
+    pub stale_reinstall: bool,
     /// evidence.verify_correction: a correction's witness is never read
     /// back; every one is `verified`.
     pub witness_unread: bool,
@@ -118,6 +123,10 @@ pub struct Breaks {
     /// ingest.install_limit: the manifest states `max_install_bytes` and the
     /// install route reads bodies only to the surface's 8 MiB.
     pub install_at_surface_limit: bool,
+    /// knowledge.priority: a `background` search answers one hit fewer.
+    pub priority_changes_answer: bool,
+    /// knowledge.priority: a priority outside the set is read as absent.
+    pub priority_unknown_absent: bool,
     /// A configuration, not a break: the extractor trims each text's
     /// trailing whitespace, as the reference host's does, so a text's name
     /// is not the sha256 of its source's bytes.
@@ -167,6 +176,8 @@ struct Fake {
     resolved: BTreeMap<String, Value>,
     /// Polls of progress since each corpus's last install.
     polls: Mutex<BTreeMap<String, u32>>,
+    /// Corpora installed again under another recipe, until their next poll.
+    reinstalled: Mutex<BTreeSet<String>>,
     /// The corpora whose sentences the fake's one worker embeds, first in
     /// first out (v0.6 §2.11): the front is embedding now. An install of a
     /// corpus in `queueable` joins it; each sentence search over a queued
@@ -411,6 +422,7 @@ pub async fn spawn(breaks: Breaks) -> Running {
         allowed: Mutex::new(BTreeSet::new()),
         resolved: records::resolver_table(),
         polls: Mutex::new(BTreeMap::new()),
+        reinstalled: Mutex::new(BTreeSet::new()),
         queue: Mutex::new(Vec::new()),
         finished: Mutex::new(Vec::new()),
         queueable: sentences::queue_corpora(),
@@ -551,7 +563,7 @@ async fn capabilities(State(f): State<Arc<Fake>>) -> Json<Value> {
         "features": [
             "ingest:v1", "ingest:recipe_test", "ingest:recipe", "ingest:documents", "ingest:lookups", "evidence:text",
             "evidence:align", "evidence:verify", "evidence:verify_corrections", "evidence:verify_sentences", "knowledge:document", "knowledge:scoped",
-            "knowledge:range", "knowledge:sentences", "knowledge:sentence_queue", "knowledge:locator", "ingest:transcripts", "auth:named_client"
+            "knowledge:range", "knowledge:sentences", "knowledge:sentence_queue", "knowledge:locator", "knowledge:priority", "ingest:transcripts", "auth:named_client"
         ],
         "knowledge": {
             "corpora": [],
@@ -579,7 +591,8 @@ async fn capabilities(State(f): State<Arc<Fake>>) -> Json<Value> {
 /// reaches several texts (`knowledge.scoped`). Each hit is its whole text, so
 /// its span is `[0, len)`; `exact_off_by_one` shifts it, `scope_leaks`
 /// ignores `documents`, and a malformed name is 400 as §2.8 says. At
-/// `granularity: sentence` it answers [`sentences`].
+/// `granularity: sentence` it answers [`sentences`]. A `priority` changes
+/// nothing it answers, and one outside the set is 400 (§2.17).
 async fn search(State(f): State<Arc<Fake>>, Json(req): Json<Value>) -> Response {
     let query = req.get("query").and_then(Value::as_str).unwrap_or("");
     let words: Vec<String> = query
@@ -608,12 +621,18 @@ async fn search(State(f): State<Arc<Fake>>, Json(req): Json<Value>) -> Response 
     {
         return refuse(StatusCode::BAD_REQUEST, json!({"results": []}));
     }
+    let priority = match req.get("priority").cloned().map(serde_json::from_value) {
+        None => None,
+        Some(Ok(p)) => Some(p),
+        Some(Err(_)) if f.breaks.priority_unknown_absent => None,
+        Some(Err(_)) => return refuse(StatusCode::BAD_REQUEST, json!({"results": []})),
+    };
     if req.get("granularity").and_then(Value::as_str) == Some("sentence") {
         let limit = req.get("limit").and_then(Value::as_u64);
         let limit = limit.unwrap_or(KnowledgeSearchRequest::DEFAULT_LIMIT.into()) as usize;
         return sentences::search(&f, query, &corpora, &documents, limit);
     }
-    let hits: Vec<KnowledgeResult> = f
+    let mut hits: Vec<KnowledgeResult> = f
         .of(&corpora)
         .filter(|s| {
             let lower = s.text.to_lowercase();
@@ -622,6 +641,9 @@ async fn search(State(f): State<Arc<Fake>>, Json(req): Json<Value>) -> Response 
         .filter(|s| f.in_scope(&documents, s))
         .map(|s| f.hit(s, 0, s.text.chars().count() as u64, 1.0))
         .collect();
+    if f.breaks.priority_changes_answer && priority == Some(RequestPriority::Background) {
+        hits.pop();
+    }
     Json(json!({"results": hits, "corpora_searched": f.searched(&corpora)})).into_response()
 }
 

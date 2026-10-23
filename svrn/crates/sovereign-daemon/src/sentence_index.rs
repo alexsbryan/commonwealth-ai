@@ -18,6 +18,7 @@ pub mod queue;
 pub mod scan;
 pub mod store;
 mod worker;
+pub mod wrapper;
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -269,7 +270,7 @@ impl SentenceIndex {
             Err(e) => return Err(format!("its records do not read: {e}")),
         };
         let held = read(&entry.data).version;
-        if held == version && !read(&entry.data).texts.is_empty() {
+        if held == version && !read(&entry.data).texts.is_empty() && !read(&entry.data).recut {
             tracing::debug!(target: TARGET, corpus = corpus_id, ?version, "sentence index: current");
             return Ok(Arc::clone(&entry));
         }

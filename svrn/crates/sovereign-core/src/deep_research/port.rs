@@ -1278,6 +1278,7 @@ mod tests {
                 Err(ContractError::Inference(self.error_text.clone()))
             } else {
                 Ok(CompletionResponse {
+                    logprobs: None,
                     text: "the answer".to_string(),
                     tokens_used: 0,
                     prompt_tokens: 0,

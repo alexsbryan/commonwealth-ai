@@ -67,6 +67,18 @@ fn the_data_file_maps_doi_to_crossref_and_isbn_to_open_library() {
         ]
     );
     assert!(ResolverTable::parse(&DATA_FILE.replace("concurrency", "concurency")).is_err());
+    // A type read as one CSL lacks, and a name variable `keep` lacks.
+    let not_csl = DATA_FILE.replace(
+        r#"journal-article = "article-journal""#,
+        r#"journal-article = "journal-article""#,
+    );
+    assert!(ResolverTable::parse(&not_csl)
+        .unwrap_err()
+        .contains("not a CSL type"));
+    let not_kept = DATA_FILE.replace(r#"names = ["author""#, r#"names = ["composer""#);
+    assert!(ResolverTable::parse(&not_kept)
+        .unwrap_err()
+        .contains("`composer`"));
 }
 
 #[test]
@@ -113,6 +125,47 @@ async fn recorded_replies_give_the_golden_records() {
     }
     assert!(!r.contains_key("plain-note"), "it declares nothing");
     assert_eq!(fetch.asked().len(), 4, "each identifier asked once");
+}
+
+/// Platform row PB1b's PASS BAR: Crossref's reply for a paper, recorded
+/// 2026-10-18, gives zoracite's golden record for it
+/// (`fixtures/v1-bib/references.json` `einstein1905`, restated here) field for
+/// field, and every field is CSL 1.0.2's: `type` `article-journal`, not
+/// Crossref's `journal-article`; `ISSN` one string, not a list; each name
+/// `family` and `given` alone. FAILING INPUT: the record as Crossref sends
+/// it, which pandoc 3.7.0.2 refuses ("expected String or Number, but
+/// encountered Array").
+#[tokio::test]
+async fn a_recorded_crossref_reply_is_the_papers_csl_record() {
+    let t = table();
+    let doi = "10.1002/andp.19053221004";
+    let fetch = RecordedFetch::default().with(
+        t.resolvers[0].url_for(doi),
+        200,
+        include_str!("../../tests/fixtures/records/crossref_10.1002_andp.19053221004.json"),
+    );
+    let declared = json!({"id": "einstein1905", "DOI": doi});
+    let declared = declared.as_object().unwrap();
+    let answers = resolve(&t, [declared], &RecordLookups::for_install(true, &fetch)).await;
+    let record = merge(&t, declared, answers.as_ref()).expect("a record").csl;
+    let golden = json!({
+        "DOI": "10.1002/andp.19053221004",
+        "URL": "http://dx.doi.org/10.1002/andp.19053221004",
+        "author": [{"family": "Einstein", "given": "A."}],
+        "container-title": "Annalen der Physik",
+        "id": "einstein1905",
+        "issue": "10",
+        "issued": {"date-parts": [[1905, 1]]},
+        "page": "891-921",
+        "publisher": "Wiley",
+        "title": "Zur Elektrodynamik bewegter K\u{f6}rper",
+        "type": "article-journal",
+        "volume": "322"
+    });
+    for (field, want) in golden.as_object().unwrap() {
+        assert_eq!(record.get(field), Some(want), "{field}: {record:?}");
+    }
+    assert_eq!(record.get("ISSN"), Some(&json!("0003-3804")), "{record:?}");
 }
 
 /// FAILING INPUT: a field invented for an identifier that did not resolve.

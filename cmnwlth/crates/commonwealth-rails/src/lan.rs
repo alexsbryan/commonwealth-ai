@@ -12,13 +12,16 @@
 //! authorization").
 //!
 //! Opt-in: `cw-rails run --mdns` advertises; `cw-rails join` browses only for
-//! an invite that carries no dial string.
+//! an invite that carries no dial string. Advertising is refused, by cause,
+//! on a host that lets a send to the mDNS group leave on no interface
+//! (`mdns::group_reach`), so `/v1/mesh/status` reads `advertising: false`
+//! there rather than announcing into a host that drops every packet.
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use commonwealth_core::mesh::Mesh;
-use commonwealth_discovery::mdns::{BrowseHandle, DiscoveredPeer, MdnsDiscovery};
+use commonwealth_discovery::mdns::{group_reach, BrowseHandle, DiscoveredPeer, MdnsDiscovery};
 
 use crate::RailsNode;
 
@@ -41,6 +44,9 @@ pub fn advertise(node: &RailsNode, mesh: &Mesh) -> Result<Lan, String> {
         .find(|a| a.is_ipv4())
         .map(|a| a.port())
         .ok_or("the iroh endpoint bound no IPv4 socket to advertise")?;
+    // mdns-sd registers Ok on a host that refuses every multicast send, so
+    // whether an announcement can leave at all is asked first.
+    let via = group_reach().map_err(|e| e.to_string())?;
     let pubkey = hex::encode(node.pubkey().0);
     let mdns = MdnsDiscovery::new_keyed(
         node.self_id,
@@ -53,7 +59,7 @@ pub fn advertise(node: &RailsNode, mesh: &Mesh) -> Result<Lan, String> {
     .map_err(|e| e.to_string())?;
     let (tx, _rx) = tokio::sync::mpsc::channel::<DiscoveredPeer>(32);
     let browse = mdns.browse(tx).map_err(|e| e.to_string())?;
-    tracing::info!(target: "rails", mesh = %mesh.name, port, "lan: advertising on mDNS by key");
+    tracing::info!(target: "rails", mesh = %mesh.name, port, via = %via, "lan: advertising on mDNS by key");
     Ok(Lan {
         mdns: Arc::new(mdns),
         _browse: browse,

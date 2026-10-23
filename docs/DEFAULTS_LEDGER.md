@@ -30,13 +30,34 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
-### `SOVEREIGN_READER=window` — the window reader, off until measured (2026-10-13)
+### `SOVEREIGN_READER=window` — the window reader, off until measured (2026-10-13) → **GRADUATED 2026-10-15: the default reader**
+
+**Graduated.** The flip condition below was met on DeepSeek Flash through the
+loop's default commands: the five worlds served 81/93 (arm c123-verify,
+2026-10-15; the current default's reads 76/93 under the same scorer) against
+the one-shot's 68/93 under the current scorer (66/93 under the race's), and
+Ward 9/14 against the one-shot's 8/14. The window reader is now the one
+reader: the passes reader was deleted 2026-10-16 (3058feb36), with the wave
+transport (f3101f027), the reader switch and `SOVEREIGN_READER` (5d5b93ccc)
+and the mention words only it wrote (afa549596), each records-identical in a
+zero-spend replay of the eight loop corpora against a same-store baseline
+(arm q4-base).
 
 **What ships.** `document_read/window.rs` reads a chapter in one call;
 `enrich init` cuts the corpus into windows in clock order
 (`window_manifest.rs`); a window's particulars reach RESOLVE as a chapter-wide
-sufficient key (`CHAPTER_SUBJECT_KEY`). Unset, the passes reader and the
-corpus's own sections, unchanged.
+sufficient key (`CHAPTER_SUBJECT_KEY`).
+
+**Known gap.** The window reader never binds a company named only in prose
+(no header names it) to the record a header seeds: it sends no mention of a
+type RESOLVE decides from mentions (`resolution_records::decides_mentions`),
+where the passes reader's Mention pass did. The gap has existed since the flip
+(5f2711847); the passes pin (8158a90be) hid it, and the three tests that
+asserted it retired with the passes reader (2026-10-16):
+`mailraw::a_company_named_before_its_mail_is_its_seeded_record_and_named_cleanly`,
+`reader::a_company_named_in_prose_binds_to_its_header_record_and_is_the_orders_client`,
+`reader::a_company_first_named_where_no_header_names_it_binds_to_its_seeded_record`.
+No measured corpus exercises it; nothing is built for it (operator, 2026-10-16).
 
 **Why off.** It replaces how documents are read and how chapters are cut; the
 race that motivated it (REVIEW_BRIEF.md, 2026-10-13) ran outside the product.
@@ -47,7 +68,12 @@ Ward's served deals by more than single-run noise (~3 of 14). Then it becomes
 the one reader and passes and waves are deleted (operator, 2026-10-13).
 Refuted, this row moves to Rejected and the window files are deleted.
 
-### `SOVEREIGN_READER=waves` — the compiled reader, off until measured (2026-10-12)
+### ~~`SOVEREIGN_READER=waves`~~ — RETIRED 2026-10-16: the window reader graduated first; deleted unmeasured
+
+The window reader became the default (2026-10-15) before this row's experiment ran, so the compiled reader
+was deleted without one. Its value is now warned and the window reader reads. The row
+below is the record of what shipped dark.
+
 
 **What ships.** `document_read/waves.rs`: the declaration compiled into levels
 of closed questions, particulars first (count, then each pointed at), then per
@@ -60,8 +86,8 @@ reader reads, unchanged.
 Locate and Mention become enumerations, and fields are read per particular
 over the whole document. Served records may move either way.
 
-**Flip condition.** The pre-registered experiment (cast-probe-style PREREG
-under research/ontology-apps/waves/) passes on Ward, uv and GVC: no system
+**Flip condition.** The pre-registered experiment (cast-probe-style PREREG,
+`research/ontology-apps/waves/PREREG.md`, deleted 2026-10-16 with the reader) passes on Ward, uv and GVC: no system
 loses more than run-to-run churn on its served-record metric, and the cost
 per document falls as its bar says. Refuted, the row moves to Rejected and
 the three files are deleted.
@@ -134,7 +160,8 @@ field. Until then the operator says so.
 
 **What ships.** No switch. A version-1 recipe whose claim kinds all have a
 force and a subject RESOLVE or a metadata source identifies is read by the
-passes reader (Locate per numbered line, Choose per closed-valued field); one
+passes reader (Locate per numbered line, Choose per closed-valued field; the
+window reader since 2026-10-15, the passes reader deleted 2026-10-16); one
 with no such claim kind is read by the general extractor; a mix refuses at
 parse (`OntologyPolicies::reads_documents`, `recipe_ontology/language.rs`).
 The one-shot reader is deleted. Both keys still load, are ignored, and are
@@ -148,6 +175,23 @@ re-shaped campaign retired; their bars are tuning targets on the scaffold's runs
 
 **Closure.** Order 3 of campaign ontology-layer removes the two keys from
 `V1_RETIRED_KEYS` once no recipe carries them. **Review by 2026-10-31.**
+
+### Lifecycle kinds of a protocol-folded record — off unless a recipe opts in (2026-10-18)
+
+**What ships.** `lifecycle = true` (or a pinned `replaced = "<state>"` / `acts_under = "<state>"`) on
+`[enrichment.ontology.folds.protocol]` gives the record two statement kinds the method writes,
+`<type>_replaced` and `<type>_act_under` (`corpus-engine/src/recipe_ontology/lifecycle.rs`); the fold applies
+them. `recipe validate` names them, and the levers when they are off.
+
+**Why off.** Supplied by default they failed `research/ontology-apps/lifecycle-prereg.md` (life-inner, 623k
+tokens): world-s1 regained 4 of its 5 losses to 20k windows, and world-s3 and ward-story fell 2 each, because the
+reader read a replaced deal's end as won 2 times in 4 and on real mail wrote stage moves as acts under.
+
+**Flip condition.** A fresh read in which the kinds hold the inner ring's guards (world-s3 and ward-story at or
+above their controls) with world-s1's regain intact; the two failure classes are where to start: the replaced end
+left to the reader (a pinned `replaced` removes it), and the act-under description's reach on real mail.
+
+**Review by 2026-11-01.**
 
 ### Recipe-declared qualified scalar protocol fold — off unless a recipe opts in (2026-10-07)
 

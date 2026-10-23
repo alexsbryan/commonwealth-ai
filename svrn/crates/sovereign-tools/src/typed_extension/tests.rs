@@ -63,6 +63,7 @@ impl InferenceProvider for CannedInferenceProvider {
     async fn complete(&self, _request: &CompletionRequest) -> SovResult<CompletionResponse> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         Ok(CompletionResponse {
+            logprobs: None,
             text: self.body.clone(),
             tokens_used: 64,
             prompt_tokens: 32,

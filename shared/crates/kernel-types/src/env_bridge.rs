@@ -84,10 +84,12 @@ pub const REMOVED_ENV: &[RemovedEnv] = &[
     RemovedEnv { name: "SOVEREIGN_GRAPH_NEIGHBOR_EXPAND", instead: "retired: the graph-neighbour expansion step was deleted (ac032e5bc)" },
     RemovedEnv { name: "SOVEREIGN_META_BRIDGE", instead: "retired: the meta-atlas bridge boost was deleted (ac032e5bc)" },
     RemovedEnv { name: "SOVEREIGN_QUERY_DECOMP", instead: "retired: the query-decomposition retrieval step was deleted (ac032e5bc)" },
+    RemovedEnv { name: "SOVEREIGN_READER", instead: "retired: the window reader is the one reader; the passes reader was deleted (3058feb36)" },
     RemovedEnv { name: "SOVEREIGN_SERVER_PATH", instead: "retired: the mobile host that read it was deleted (efa709871)" },
     RemovedEnv { name: "SOVEREIGN_SUFFICIENCY_CHARS", instead: "retired with SOVEREIGN_AGENTIC_KQ's loop (cc78b933b)" },
     RemovedEnv { name: "SOVEREIGN_SUFFICIENCY_CHUNKS", instead: "retired with SOVEREIGN_AGENTIC_KQ's loop (cc78b933b)" },
     RemovedEnv { name: "SOVEREIGN_TITLE_EXPAND", instead: "retired: the title-expansion retrieval step was deleted (ac032e5bc)" },
+    RemovedEnv { name: "SOVEREIGN_WAVES_ONE_BY_ONE", instead: "retired: nothing builds a forced-choice wave since the passes reader was deleted (3058feb36), so every question already goes alone" },
 ];
 
 /// The [`REMOVED_ENV`] rows the given env keys set, under either prefix, once

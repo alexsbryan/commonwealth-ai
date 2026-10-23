@@ -8,6 +8,7 @@ Task guides, one journey each:
 
 - [`KNOWLEDGE_BASES.md`](KNOWLEDGE_BASES.md) — the corpora you can install, and how search uses them
 - [`ENRICH_A_CORPUS.md`](ENRICH_A_CORPUS.md) — enrich an installed corpus into a queryable atlas
+- [`RECORDS_FROM_DOCUMENTS.md`](RECORDS_FROM_DOCUMENTS.md) — declare the records you keep (deals, cases, rules in force) and get them from your documents, every value cited
 - [`GOVERN_A_CORPUS.md`](GOVERN_A_CORPUS.md) — surface tensions in a corpus, resolve them into common law
 - [`CODE_INTELLIGENCE.md`](CODE_INTELLIGENCE.md) — index your codebase: symbols, call graphs, search, and the tools your AI harness gets
 - [`docs/GROUND_YOUR_AGENT.md`](../../docs/GROUND_YOUR_AGENT.md) — the agent session protocol: boot informed, durable notes, coordination, continuity

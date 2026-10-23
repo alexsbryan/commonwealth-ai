@@ -1,0 +1,156 @@
+# Company policy register: policy memos as issued, leadership-meeting minutes
+# that approve / amend / retire them, and the announcement emails.
+
+[corpus]
+id = "policy-register"
+name = "Company policy register"
+description = "Internal policies (travel, security, leave, expenses, ...) as issued memos, the leadership minutes that approve, amend or retire them, and their announcement emails; read as policies, their clauses, the rules each clause imposes, and the dated decisions that put each version in force."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# A folder of mixed office documents (memo PDFs/DOCX, minutes, saved emails).
+[acquire]
+type = "local_file"
+path = "SOURCE_PATH"
+
+[extract]
+type = "described_asset"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "company-policies"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is a company's internal policies (travel, security, leave, expenses and so on)
+in three kinds of document: the policy memos as issued, the leadership-meeting minutes in
+which policies are approved, amended or retired, and the emails announcing them.
+
+A policy is a standing document with an owner and an area it governs; it has numbered
+clauses, and it passes through versions. Every clause imposes rules: who must, must not or
+may do what, under which conditions. A policy decision is what the leadership meeting (or
+whoever has authority) does to a policy: issue it, approve it, amend it, or retire it, on a
+date, taking effect from a date, sometimes replacing it with another policy. An amendment
+changes particular clauses: record the clause wording before and after.
+
+Only decisions actually taken count: a proposal discussed in the minutes and not adopted,
+or deferred, is not a decision. An announcement email that restates a policy in other words
+is a weaker witness than the memo or the minute itself.
+"""
+must_not = [
+  "present a proposed, draft or deferred policy as approved or in force",
+  "give advice on an individual employee's case as if it were the policy owner's ruling",
+]
+
+# ── Shape ────────────────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "policy"
+kind = "entity"
+label = "policy"
+description = "A company policy as a standing document across its versions: the travel policy, the information-security policy, the parental-leave policy."
+attributes = [
+  { name = "title", type = "text", description = "The policy's name as written." },
+  { name = "code", type = "text", description = "The policy's reference number or code, when it has one (e.g. HR-04)." },
+  { name = "owner", type = "text", description = "Who owns the policy: the role, department or person named as owner.", by = "most" },
+  { name = "area", type = "text", description = "The area of company life the policy governs (travel, security, leave, expenses, ...).", by = "most" },
+]
+identity = ["code"]
+identity_fallback = ["title"]
+identity_criterion = "Two mentions are one policy when they name the same standing policy, even across versions, re-issues and small changes of title (the 'Travel Policy v3' and the 'travel and subsistence policy' are one policy if the later memo says it is the same policy revised). A policy that replaces a retired one is a different policy."
+
+[[enrichment.ontology.types]]
+name = "clause"
+kind = "entity"
+label = "clause"
+description = "One numbered clause or section of a policy (4.2 of the expenses policy), the unit an amendment changes and a rule comes from."
+attributes = [
+  { name = "policy", type = "ref", of = "policy", description = "The policy the clause belongs to." },
+  { name = "number", type = "text", description = "The clause or section number as written (4.2, s.7(b))." },
+  { name = "heading", type = "text", description = "The clause heading, when it has one." },
+]
+identity_fallback = ["policy", "number"]
+identity_criterion = "Two mentions are one clause when they are the same numbered clause of the same policy; a clause keeps its identity through amendments to its wording. When a version renumbers clauses, a clause that carries the same heading and subject matter under a new number is the same clause."
+
+# ── Assertion ────────────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "rule"
+kind = "claim"
+label = "rule"
+force = "directive"
+deontic = ["require", "forbid", "permit"]
+subject = "clause"
+description = "Something a policy clause requires, forbids or permits: who must, must not, or may do what."
+attributes = [
+  { name = "bearer", type = "text", description = "Who the rule binds or permits, as written (all employees, managers, contractors, travellers)." },
+  { name = "conditions", type = "text", description = "Conditions or thresholds under which the rule applies (over 500 EUR, outside the EU)." },
+  { name = "exceptions", type = "text", description = "Exceptions the clause itself grants." },
+  { name = "effective", type = "time", description = "The date from which the wording carrying this rule applies." },
+  { name = "version", type = "text", description = "The version of the policy the rule is stated in." },
+]
+grades = ["policy memo text", "minuted wording", "announcement paraphrase"]
+
+[[enrichment.ontology.types]]
+name = "policy_decision"
+kind = "claim"
+label = "policy decision"
+force = "declaration"
+subject = "policy"
+description = "A decision that issues, approves, amends or retires a policy, with who decided, when, and from when it takes effect."
+attributes = [
+  { name = "action", type = "text", values = ["issued", "approved", "amended", "retired"], description = "What was done to the policy." },
+  { name = "decided_by", type = "text", description = "Who approved, amended or retired it: the meeting, body or person, as written." },
+  { name = "decided_on", type = "time", description = "The date the decision was taken (the meeting date, the memo's issue date)." },
+  { name = "effective", type = "time", description = "The date the decision takes effect, when stated." },
+  { name = "version", type = "text", description = "The version of the policy the decision puts in force." },
+  { name = "replaced_by", type = "ref", of = "policy", description = "For a retirement: the policy that replaces the retired one." },
+  { name = "minute_ref", type = "text", description = "The minute item or memo number that records the decision." },
+]
+grades = ["minuted decision", "issued memo", "announcement email"]
+
+[[enrichment.ontology.types]]
+name = "clause_change"
+kind = "claim"
+label = "amendment"
+force = "declaration"
+subject = "clause"
+description = "What an amendment does to one clause: its wording before and after."
+attributes = [
+  { name = "change", type = "text", values = ["added", "reworded", "removed"], description = "Whether the clause was added, reworded or removed." },
+  { name = "before", type = "text", description = "The clause's wording before the amendment." },
+  { name = "after", type = "text", description = "The clause's wording after the amendment." },
+  { name = "effective", type = "time", description = "The date the new wording takes effect." },
+  { name = "version", type = "text", description = "The version of the policy the amendment produces." },
+]
+grades = ["minuted decision", "issued memo", "announcement email"]
+
+# ── Change ───────────────────────────────────────────────────────────────
+
+[enrichment.ontology.change]
+supersedes = { policy_decision = "effective", clause_change = "effective", rule = "effective" }
+
+# ── Derivation ───────────────────────────────────────────────────────────
+
+[enrichment.ontology.tension]
+label = "discrepancy"
+between = ["rule", "clause_change", "policy_decision"]
+not_conflicts = [
+  "an amendment replacing a clause's earlier wording (that is a new version, not a contradiction)",
+  "a rule for one group of staff versus a rule for another (employees versus contractors)",
+  "an exception the clause itself grants",
+  "an announcement email that summarises a clause in fewer words without changing what it requires",
+  "a proposal discussed in the minutes that was not adopted",
+]

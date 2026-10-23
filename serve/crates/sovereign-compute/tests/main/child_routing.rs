@@ -34,6 +34,7 @@ struct StubProvider {
 impl InferenceProvider for StubProvider {
     async fn complete(&self, _request: &CompletionRequest) -> Result<CompletionResponse> {
         Ok(CompletionResponse {
+            logprobs: None,
             text: self.marker.clone(),
             tokens_used: 1,
             prompt_tokens: 0,

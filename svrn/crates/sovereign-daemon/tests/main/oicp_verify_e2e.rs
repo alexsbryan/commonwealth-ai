@@ -24,6 +24,9 @@ use oicp_types::verify::{Checkability, VerifyResponse, VerifyTier, VerifyVerdict
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities};
 use sovereign_daemon::routes_oicp_verify::{VerifyJudge, CHECKER_PASSAGES};
+use sovereign_daemon::routes_oicp_verify_opinion as opinion;
+use sovereign_daemon::sentence_index::config::DATA_FILE;
+use sovereign_daemon::sentence_index::SentenceSearchConfig;
 use sovereign_daemon::server::client_router;
 use sovereign_daemon::state::AppState;
 use tower::ServiceExt;
@@ -139,7 +142,11 @@ async fn the_fast_tiers_miss_is_a_hint_and_never_a_verdict() {
     let r = reply(&body);
     assert_eq!(
         r.verifier,
-        "verify/2 scorer=cosine floor=0.5 fast/value-presence"
+        format!(
+            "verify/3 scorer=cosine floor={} {} fast/value-presence",
+            shipped_floor(),
+            opinion::identity()
+        )
     );
     assert_eq!(r.corpora.len(), 1, "{body}");
     let [c] = r.claims.as_slice() else {
@@ -215,6 +222,34 @@ async fn each_sentence_is_a_claim_and_one_with_nothing_to_look_for_is_not_checke
     );
 }
 
+/// Failing input (platform row PB1): a claim offered as the writer's view
+/// carried a figure, so it was searched and judged like a fact. It is
+/// `not_checkable` at `class/opinion`, before any sentence is read (no
+/// evidence, no specifics), while a fact with a figure beside it is judged.
+#[tokio::test]
+async fn a_claim_offered_as_opinion_is_not_checked_and_a_fact_beside_it_is() {
+    let (_tmp, state) = fixture_state().await;
+    let opinion = "I think Smith overstates the 1776 tariff\u{2019}s reach.";
+    let fact = "Okafor surveyed 14 agreements on the shared gauges.";
+    let (status, body) = verify_on(
+        client_router(state).layer(axum::Extension(VerifyJudge(Arc::new(TideTableJudge)))),
+        serde_json::json!({"unit": format!("{opinion} {fact}"), "tier": "checker"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let r = reply(&body);
+    let [o, f] = r.claims.as_slice() else {
+        panic!("two sentences are two claims: {body}")
+    };
+    assert_eq!(o.exact, opinion);
+    assert_eq!(o.class, Checkability::NotCheckable, "{body}");
+    assert_eq!(o.verdict, VerifyVerdict::Abstained, "{body}");
+    assert_eq!(o.rung, "class/opinion", "{body}");
+    assert!(o.evidence.is_empty() && o.specifics.is_empty(), "{body}");
+    assert_eq!(f.class, Checkability::Checkable, "{body}");
+    assert_eq!(f.verdict, VerifyVerdict::Contradicted, "{body}");
+}
+
 #[tokio::test]
 async fn the_checker_maps_its_judges_support_and_names_its_model() {
     let (_tmp, state) = fixture_state().await;
@@ -234,8 +269,12 @@ async fn the_checker_maps_its_judges_support_and_names_its_model() {
     let r = reply(&body);
     assert_eq!(
         r.verifier,
-        "verify/2 scorer=cosine floor=0.5 checker/sentence-support tau=0.5 passages=3 \
-         model=tide-table-judge"
+        format!(
+            "verify/3 scorer=cosine floor={} {} checker/sentence-support tau=0.5 passages=3 \
+             model=tide-table-judge",
+            shipped_floor(),
+            opinion::identity()
+        )
     );
     let [c] = r.claims.as_slice() else {
         panic!("{body}")
@@ -692,4 +731,11 @@ async fn a_checker_the_queue_sheds_answers_host_busy_with_its_retry_hint() {
         kept.is_empty(),
         "nothing journaled for an unanswered unit: {kept:?}"
     );
+}
+
+/// The floor the shipped data file names, as the verifier writes it.
+fn shipped_floor() -> f32 {
+    SentenceSearchConfig::parse(DATA_FILE)
+        .expect("the shipped data file parses")
+        .verify_floor
 }

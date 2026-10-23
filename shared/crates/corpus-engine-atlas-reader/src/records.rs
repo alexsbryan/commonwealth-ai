@@ -24,6 +24,12 @@ pub const INBOUND_SHOWN: usize = 20;
 const FOLDS: &str = "__folds";
 /// Where a statement keeps how its subject was decided (`resolve_link`).
 const LINK: &str = "__resolve_link";
+/// A claim's grade, one of the grades its kind declares: both readers write
+/// it, each through the general extractor's rule (`parse_policy::validated_choice`).
+pub const ATTR_GRADE: &str = "grade";
+/// Who asserts a statement, as the window reader read it (`said_by`): words
+/// its document holds. Absent for the document's own voice or none read.
+pub const SAID_BY_ATTRIBUTE: &str = "__document_read_said_by";
 
 /// An atom's own text: an entity's or event's description, a claim's content.
 pub fn atom_text(a: &AtomEnvelope) -> &str {
@@ -274,7 +280,7 @@ impl<'a> RecordView<'a> {
             "kind": a.atom_type().label(),
             "name": a.display_name(Some(120)),
             "text": truncate(atom_text(a), 400),
-            "evidence_chunks": a.evidence().iter().map(|c| c.chunk_id.clone()).collect::<Vec<_>>(),
+            "evidence_chunks": a.evidence().iter().map(|c| c.cited_id()).collect::<Vec<_>>(),
             "type": declared_type(a),
             "attributes": attributes,
             "unset": unset,
@@ -285,6 +291,15 @@ impl<'a> RecordView<'a> {
         let folds = self.folds(a);
         if !folds.is_empty() {
             row["folds"] = Value::Object(folds);
+        }
+        // A statement's voice and grade belong to no declared attribute, so
+        // they are shown beside them.
+        if let (AtomEnvelope::Claim(_), Some(map)) = (a, stored(a)) {
+            for (key, shown) in [(SAID_BY_ATTRIBUTE, "said_by"), (ATTR_GRADE, "grade")] {
+                if let Some(v) = map.get(key) {
+                    row[shown] = v.clone();
+                }
+            }
         }
         if let Some(link) = stored(a).and_then(|m| m.get(LINK)) {
             row["link"] = link.clone();

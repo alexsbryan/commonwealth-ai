@@ -3,11 +3,11 @@ use serde_json::{json, Value};
 use super::super::tests::{input_chapter, policies, row, scripted};
 use super::super::{
     parse_response, validate_and_stamp, DocumentReadField, DocumentReadStatus, SubjectScope,
-    CHAPTER_SUBJECT_ATTRIBUTE,
+    CHAPTER_SUBJECT_ATTRIBUTE, SAID_BY_ATTRIBUTE,
 };
 use super::{read, WINDOW_PHASE};
 
-fn value(field: &DocumentReadField) -> Option<&Value> {
+pub(super) fn value(field: &DocumentReadField) -> Option<&Value> {
     match field {
         DocumentReadField::Supported { value, .. } => Some(value),
         DocumentReadField::Unknown { .. } => None,
@@ -15,7 +15,7 @@ fn value(field: &DocumentReadField) -> Option<&Value> {
 }
 
 /// Two documents of one window: an issue opened in uv, then closed.
-fn window() -> crate::enrichment::pipeline::types::ChapterInput {
+pub(super) fn window() -> crate::enrichment::pipeline::types::ChapterInput {
     input_chapter(&[
         row(1, "doc-a", "Issue 42 in uv is open.", r#"{"author":"ana"}"#),
         row(2, "doc-b", "Issue 42 is now closed.", r#"{"author":"bo"}"#),
@@ -243,27 +243,8 @@ async fn a_window_read_reasons_first_and_reads_what_follows_the_reasoning() {
     );
 }
 
-/// A quote cut at a mail's line wrap is cited as its whole sentence, across
-/// the wrap and no further; a price's decimal point ends no sentence; a quote
-/// whose words are not in the text is left for validation to refuse.
-#[test]
-fn a_quote_is_widened_to_its_sentence_across_line_wraps() {
-    use super::sentence_of;
-    let text = "Thanks for the call.\nHartosn the Border piece is .50, subject to credit and\nKim's got the attached confirm. Talk soon.\n\nNext para.";
-    assert_eq!(
-        sentence_of(text, "Hartosn the Border piece is .50").as_deref(),
-        Some("Hartosn the Border piece is .50, subject to credit and Kim's got the attached confirm.")
-    );
-    assert_eq!(
-        sentence_of(text, "talk SOON.").as_deref(),
-        Some("Talk soon.")
-    );
-    assert_eq!(sentence_of(text, "Next").as_deref(), Some("Next para."));
-    assert_eq!(sentence_of(text, "a sentence the mail never says"), None);
-}
-
 /// A particular no statement of the window is about goes to RESOLVE as one
-/// of its own, on the first document whose own lines name it; one no line
+/// of its own, on each document whose own lines name it; one no line
 /// names is dropped. Failing input, named: saltgrass (2026-10-14), nine
 /// characters named, four records.
 #[tokio::test]
@@ -326,5 +307,481 @@ fn the_window_names_every_decided_type_a_statement_is_about_or_not() {
     assert!(
         shown.contains("- case: A support case.\n  Same case when: same issue number"),
         "{shown}"
+    );
+}
+
+/// Failing input, named: saltgrass-asked's window wrote `speaker: "p6"`, the
+/// label it gave a particular, and every such reading was unknown. A label of
+/// a particular of the reference's type reads as that particular's name; a
+/// label naming no particular, or one of another type, stays unknown.
+#[tokio::test]
+async fn a_window_ref_label_reads_as_its_particulars_name() {
+    let ontology: crate::enrichment::ontology::OntologyV1 = toml::from_str(
+        r#"
+[[types]]
+name = "case"
+kind = "entity"
+identity_criterion = "same issue number"
+identity = ["number"]
+
+[[types.attributes]]
+name = "number"
+type = "text"
+
+[[types]]
+name = "person"
+kind = "entity"
+
+[[types]]
+name = "firm"
+kind = "entity"
+
+[[types]]
+name = "remark"
+kind = "claim"
+force = "assertive"
+subject = "case"
+attributes = [{ name = "speaker", type = "ref", of = "person" }]
+"#,
+    )
+    .unwrap();
+    let policies = ontology.into_policies();
+    let chapter = input_chapter(&[
+        row(1, "doc-a", "Issue 42 is open, she said.", "{}"),
+        row(2, "doc-b", "Issue 42 is still open.", "{}"),
+        row(3, "doc-c", "Issue 42 stays open.", "{}"),
+    ]);
+    let remark = |document: &str, quote: &str, speaker: &str| {
+        json!({"kind": "remark", "about": "p1", "document": document, "quote": quote,
+               "fields": {"speaker": speaker}})
+    };
+    let answer = json!({
+        "particulars": [
+            {"ref": "p1", "type": "case", "name": "issue 42", "fields": {}},
+            {"ref": "p2", "type": "person", "name": "Mara Vell", "fields": {}},
+            {"ref": "p3", "type": "firm", "name": "Acme", "fields": {}}],
+        "claims": [
+            remark("d1", "Issue 42 is open, she said.", "p2"),
+            remark("d2", "Issue 42 is still open.", "p9"),
+            remark("d3", "Issue 42 stays open.", "p3")]});
+    let (infer, _) = scripted(vec![answer]);
+    let raw = read(&chapter, &policies, &Default::default(), &infer)
+        .await
+        .unwrap();
+    let mut extraction = parse_response(&raw, &policies)
+        .unwrap()
+        .section_extraction
+        .unwrap();
+    validate_and_stamp(&chapter, &policies, &mut extraction).unwrap();
+
+    let read = extraction.document_read.as_ref().unwrap();
+    let speakers: Vec<&DocumentReadField> = read
+        .documents
+        .iter()
+        .map(|d| &d.claims[0].fields["speaker"])
+        .collect();
+    let [named, none, firm] = speakers.as_slice() else {
+        panic!("{:?}", read.documents)
+    };
+    assert!(
+        matches!(named, DocumentReadField::Supported { value, evidence, .. }
+            if value == &json!("Mara Vell") && evidence == "Issue 42 is open, she said."),
+        "{named:?}"
+    );
+    assert!(
+        matches!(none, DocumentReadField::Unknown { reason } if reason.contains("\"p9\" is neither a person")),
+        "{none:?}"
+    );
+    assert!(
+        matches!(firm, DocumentReadField::Unknown { reason } if reason.contains("\"p3\" is neither a person")),
+        "{firm:?}"
+    );
+}
+
+/// Failing input, named: a local model's window answer wrote a price as
+/// `"value":.02` (runs/loop/local35b-s4-think-w10k, window 5). JSON requires
+/// the leading zero, so the strict parse refused the whole window. The number
+/// is read as written, counted; text inside a string is never rewritten.
+#[test]
+fn a_bare_fraction_reads_as_its_number() {
+    let parsed = super::answer::parse(
+        r#"{"particulars": [{"ref": "p1", "fields": {"amount": {"value": .02, "quote": "at .02"},
+            "low": {"value":-.5, "quote": "down .5 \".5\""}, "list": [.1, 2]}}], "claims": []}"#,
+        "sec_1",
+    )
+    .unwrap();
+    let f = &parsed.value["particulars"][0]["fields"];
+    assert_eq!(f["amount"]["value"], json!(0.02));
+    assert_eq!(f["low"]["value"], json!(-0.5));
+    assert_eq!(f["list"], json!([0.1, 2]));
+    assert_eq!(f["amount"]["quote"], json!("at .02"));
+    assert_eq!(f["low"]["quote"], json!("down .5 \".5\""));
+    assert_eq!((parsed.repaired, parsed.dropped), (3, 0));
+}
+
+/// Failing input, named: one element of a window answer that is not JSON
+/// (a missing comma) failed the strict parse and lost every statement of the
+/// window. Each element is parsed on its own: the malformed particular and
+/// the malformed claim are dropped and counted, a claim about the dropped
+/// particular goes with it, and the rest of the window is read.
+#[tokio::test]
+async fn one_malformed_element_costs_only_itself() {
+    use std::sync::Arc;
+    let raw = r#"{"particulars": [
+        {"ref": "p1", "type": "case", "name": "issue 42", "fields": {}},
+        {"ref": "p2", "type": "case" "name": "issue 7", "fields": {}}],
+      "claims": [
+        {"kind": "membership", "about": "p1", "document": "d1", "quote": "Issue 42 in uv is open.", "fields": {}},
+        {"kind": "reported_status", "about": "p2", "document": "d2", "quote": "Issue 42 is now closed.",
+         "fields": {"status": "Closed"}},
+        {"kind": "reported_status", "about": "p1", "document": "d2" "quote": "Issue 42 is now closed."}]}"#;
+    let parsed = super::answer::parse(raw, "sec_1").unwrap();
+    assert_eq!(
+        parsed.value["particulars"].as_array().map(Vec::len),
+        Some(1)
+    );
+    assert_eq!(parsed.value["claims"].as_array().map(Vec::len), Some(1));
+    assert_eq!((parsed.repaired, parsed.dropped), (0, 3));
+
+    let policies = policies();
+    let chapter = window();
+    let infer: crate::InferenceFn =
+        Arc::new(move |_, _| Box::pin(async move { Ok(raw.to_string()) }));
+    let out = read(&chapter, &policies, &Default::default(), &infer)
+        .await
+        .expect("the window is read without its malformed elements");
+    let mut extraction = parse_response(&out, &policies)
+        .unwrap()
+        .section_extraction
+        .unwrap();
+    validate_and_stamp(&chapter, &policies, &mut extraction).unwrap();
+    let read = extraction.document_read.as_ref().unwrap();
+    assert_eq!(read.documents[0].claims.len(), 1, "{:?}", read.documents);
+    assert!(read.documents[1].claims.is_empty(), "{:?}", read.documents);
+    assert!(
+        read.documents.iter().all(|d| d.refused.is_empty()),
+        "a dropped element is lost, not refused: {:?}",
+        read.documents
+    );
+}
+
+/// An answer with no array to read element by element fails the window as
+/// before, with the parse error.
+#[test]
+fn an_answer_with_no_readable_array_still_fails() {
+    assert!(super::answer::parse(r#"{"particulars": "none" "claims"}"#, "sec_1").is_err());
+}
+
+/// Failing input, named: world-s1's window 7 at 20k (runs/loop/w20-inner)
+/// wrote every claim's `"stage"` beside an empty `"fields"`, and all 18 stages
+/// were lost (204 claims in 8 of 343 saved windows). A key outside a claim's
+/// envelope is read in `fields`; one `fields` already holds is not.
+#[tokio::test]
+async fn a_field_written_beside_fields_is_read_in_it() {
+    let answer = json!({
+        "particulars": [{"ref": "p1", "type": "case", "name": "issue 42", "fields": {}}],
+        "claims": [{"kind": "reported_status", "about": "p1", "document": "d2",
+                    "quote": "Issue 42 is now closed.", "status": "Closed", "fields": {}},
+                   {"kind": "reported_status", "about": "p1", "document": "d2",
+                    "quote": "Issue 42 is now closed.", "status": "Open", "fields": {"status": "Closed"}}]});
+    let parsed = super::answer::parse(&answer.to_string(), "sec_1").unwrap();
+    assert_eq!(parsed.beside, 1);
+    let (policies, chapter) = (policies(), window());
+    let (infer, _) = scripted(vec![answer]);
+    let raw = read(&chapter, &policies, &Default::default(), &infer)
+        .await
+        .unwrap();
+    let mut extraction = parse_response(&raw, &policies)
+        .unwrap()
+        .section_extraction
+        .unwrap();
+    validate_and_stamp(&chapter, &policies, &mut extraction).unwrap();
+    let claims = &extraction.document_read.as_ref().unwrap().documents[1].claims;
+    let status: Vec<_> = claims
+        .iter()
+        .map(|c| value(&c.fields["status"]).cloned())
+        .collect();
+    assert_eq!(status, vec![Some(json!("closed")), Some(json!("closed"))]);
+}
+
+/// A claim's envelope is read from the prompt's answer shape, so a key added
+/// there is never mistaken for a field written beside `fields`.
+#[test]
+fn the_claim_envelope_is_the_prompts() {
+    let keys: Vec<&str> = super::answer::CLAIM_KEYS
+        .iter()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(
+        keys,
+        ["about", "document", "fields", "grade", "kind", "quote", "said_by"]
+    );
+}
+
+/// Failing input, named: replies whose quoted history named the deal they
+/// answer ("redline", "the Waha piece") were shown with that history hidden
+/// and nothing in its place, so the reader could not tell which deal they
+/// answer and split or merged them (world-s4 faircroft-d2, world-s3
+/// velica-d3; arm c123-verify, 2026-10-15). Hidden quoted lines are replaced
+/// by a pointer to the document they come from: its label in the window, or
+/// its date outside it. The quoted text stays unshown and uncitable, and a
+/// claim's sentence never takes in the pointer.
+#[tokio::test]
+async fn a_reply_points_to_the_document_it_quotes() {
+    let mut policies = policies();
+    policies.change.document = Some(crate::enrichment::ontology::DocumentFieldsDecl {
+        date: Some("date".into()),
+        thread: None,
+        id: None,
+        author: None,
+    });
+    let both = input_chapter(&[
+        row(
+            1,
+            "doc-a",
+            "Issue 42 in uv is open.\nIt fails on start.",
+            r#"{"date":"Mon, 14 May 2001 09:00:00 -0700"}"#,
+        ),
+        row(
+            2,
+            "doc-b",
+            "Issue 42 is now closed.\n> Issue 42 in uv is open.\n> It fails on start.",
+            r#"{"date":"Tue, 15 May 2001 09:00:00 -0700"}"#,
+        ),
+    ]);
+    let classes = super::super::LineClasses::of(&both.source_documents, &policies);
+    let answer = json!({
+        "particulars": [{"ref": "p1", "type": "case", "name": "issue 42", "fields": {}}],
+        "claims": [{"kind": "reported_status", "about": "p1", "document": "d2",
+                    "quote": "Issue 42 is now closed.", "fields": {"status": "Closed"}}]});
+    let (infer, seen) = scripted(vec![answer]);
+    let raw = read(&both, &policies, &classes, &infer).await.unwrap();
+    let user = seen.lock().unwrap()[0].user.clone();
+    let d2 = &user[user.find("=== d2 ===").unwrap()..];
+    assert!(
+        d2.contains("Issue 42 is now closed.\n[quoted from d1]"),
+        "{d2}"
+    );
+    assert!(!d2.contains("in uv is open"), "{d2}");
+    assert_eq!(
+        d2.matches("[quoted from").count(),
+        1,
+        "one pointer per run: {d2}"
+    );
+    assert!(
+        !user.contains("answers d") && !user.contains("[quotes d3]"),
+        "the pointer says what it is; no prompt line explains it or assumes a reply"
+    );
+    let mut extraction = parse_response(&raw, &policies)
+        .unwrap()
+        .section_extraction
+        .unwrap();
+    validate_and_stamp(&both, &policies, &mut extraction).unwrap();
+    let read_b = &extraction.document_read.as_ref().unwrap().documents[1];
+    assert_eq!(read_b.claims[0].evidence, "Issue 42 is now closed.");
+
+    let alone = input_chapter(&[row(
+        2,
+        "doc-b",
+        "Issue 42 is now closed.\n> Issue 42 in uv is open.\n> It fails on start.",
+        r#"{"date":"Tue, 15 May 2001 09:00:00 -0700"}"#,
+    )]);
+    let (infer, seen) = scripted(vec![json!({"particulars": [], "claims": []})]);
+    read(&alone, &policies, &classes, &infer).await.unwrap();
+    let user = seen.lock().unwrap()[0].user.clone();
+    assert!(
+        user.contains("[quoted from a document of 2001-05-14T16:00:00Z, outside this window]"),
+        "{user}"
+    );
+}
+
+/// Failing input, named: a reply's quoted history is hidden from the reader,
+/// but a claim citing it passed through `envelope` unchanged and validation
+/// found the quote in the raw body, so a January reply could still be read
+/// as saying October's "gone with another supplier" (note 32e3ff3d). A claim
+/// whose quote is in the lines a document quotes or embeds, and not in its
+/// own, is refused by name; one in its own lines is read; one found nowhere
+/// is left for validation to refuse.
+#[tokio::test]
+async fn a_claim_citing_lines_its_document_quotes_is_refused() {
+    let mut policies = policies();
+    policies.change.document = Some(crate::enrichment::ontology::DocumentFieldsDecl {
+        date: Some("date".into()),
+        thread: None,
+        id: None,
+        author: None,
+    });
+    let chapter = input_chapter(&[
+        row(
+            1,
+            "doc-a",
+            "Issue 42 in uv is open.\nIt fails on start.",
+            r#"{"date":"Mon, 14 May 2001 09:00:00 -0700"}"#,
+        ),
+        row(
+            2,
+            "doc-b",
+            "Issue 42 is now closed.\n> Issue 42 in uv is open.\n> It fails on start.",
+            r#"{"date":"Tue, 15 May 2001 09:00:00 -0700"}"#,
+        ),
+    ]);
+    let classes = super::super::LineClasses::of(&chapter.source_documents, &policies);
+    let answer = json!({
+        "particulars": [{"ref": "p1", "type": "case", "name": "issue 42", "fields": {}}],
+        "claims": [
+            {"kind": "reported_status", "about": "p1", "document": "d2",
+             "quote": "Issue 42 in uv is open.", "fields": {"status": "Open"}},
+            {"kind": "reported_status", "about": "p1", "document": "d2",
+             "quote": "Issue 42 is now closed.", "fields": {"status": "Closed"}},
+            {"kind": "reported_status", "about": "p1", "document": "d2",
+             "quote": "Issue 42 was reopened.", "fields": {"status": "Open"}}]});
+    let (infer, _) = scripted(vec![answer]);
+    let raw = read(&chapter, &policies, &classes, &infer).await.unwrap();
+    let mut extraction = parse_response(&raw, &policies)
+        .unwrap()
+        .section_extraction
+        .unwrap();
+    validate_and_stamp(&chapter, &policies, &mut extraction).unwrap();
+    let d2 = &extraction.document_read.as_ref().unwrap().documents[1];
+    let read: Vec<&str> = d2.claims.iter().map(|c| c.evidence.as_str()).collect();
+    assert_eq!(read, ["Issue 42 is now closed."], "{:?}", d2.refused);
+    let reasons: Vec<&str> = d2.refused.iter().map(|r| r.reason.as_str()).collect();
+    assert_eq!(reasons.len(), 2, "{reasons:?}");
+    assert!(
+        reasons
+            .iter()
+            .any(|r| r.contains("quotes or embeds") && r.contains("not its own")),
+        "{reasons:?}"
+    );
+    assert!(
+        reasons.iter().any(|r| r.contains("not an exact passage")),
+        "a quote found nowhere is validation's to refuse: {reasons:?}"
+    );
+}
+
+/// Failing input, named: saltgrass-asked's readers dropped "They took Severin
+/// Quenholt at The Cold Lantern that evening" in all four reads ("Speaker?
+/// narrator. Not character. Maybe omit."). Who says a statement is read beside
+/// it and never costs it: a particular's label reads as a name its document
+/// holds, words the document holds are kept, the document's own voice names
+/// no one, and a voice the document does not hold is dropped with its claim
+/// kept. A grade is one of its kind's grades, as declared, or none.
+#[tokio::test]
+async fn who_says_a_statement_is_read_beside_it_and_never_costs_it() {
+    let ontology: crate::enrichment::ontology::OntologyV1 = toml::from_str(
+        r#"
+[[types]]
+name = "case"
+kind = "entity"
+identity_criterion = "same issue number"
+
+[[types]]
+name = "person"
+kind = "entity"
+
+[[types]]
+name = "remark"
+kind = "claim"
+force = "assertive"
+subject = "case"
+grades = ["saw it", "heard it"]
+"#,
+    )
+    .unwrap();
+    let policies = ontology.into_policies();
+    let chapter = input_chapter(&[
+        row(1, "doc-a", "Mara Vell says issue 42 is open.", "{}"),
+        row(
+            2,
+            "doc-b",
+            "Issue 42 is open, as several users swore.",
+            "{}",
+        ),
+        row(3, "doc-c", "They closed issue 42 that evening.", "{}"),
+        row(4, "doc-d", "Issue 42 stays closed.", "{}"),
+        row(5, "doc-e", "Issue 42 was reopened.", "{}"),
+    ]);
+    let remark = |document: &str, quote: &str, said_by: Value, grade: Value| {
+        json!({"kind": "remark", "about": "p1", "document": document, "quote": quote,
+               "said_by": said_by, "grade": grade, "fields": {}})
+    };
+    let answer = json!({
+        "particulars": [
+            {"ref": "p1", "type": "case", "name": "issue 42", "fields": {}},
+            {"ref": "p2", "type": "person", "name": "Mara Vell", "fields": {}}],
+        "claims": [
+            remark("d1", "Mara Vell says issue 42 is open.", json!("p2"), json!("Saw it")),
+            remark("d2", "Issue 42 is open, as several users swore.", json!("several users"), json!("heard it")),
+            remark("d3", "They closed issue 42 that evening.", json!("the document"), json!("vibes")),
+            remark("d4", "Issue 42 stays closed.", json!("the board"), Value::Null),
+            remark("d5", "Issue 42 was reopened.", Value::Null, Value::Null)]});
+    let (infer, seen) = scripted(vec![answer]);
+    let raw = read(&chapter, &policies, &Default::default(), &infer)
+        .await
+        .unwrap();
+    let mut extraction = parse_response(&raw, &policies)
+        .unwrap()
+        .section_extraction
+        .unwrap();
+    validate_and_stamp(&chapter, &policies, &mut extraction).unwrap();
+
+    let read = extraction.document_read.as_ref().unwrap();
+    let kept: Vec<(Option<&str>, Option<&str>)> = read
+        .documents
+        .iter()
+        .map(|d| {
+            assert_eq!(
+                d.claims.len(),
+                1,
+                "a voice never costs a claim: {:?}",
+                d.refused
+            );
+            (d.claims[0].speaker.as_deref(), d.claims[0].grade.as_deref())
+        })
+        .collect();
+    assert_eq!(
+        kept,
+        [
+            (Some("Mara Vell"), Some("saw it")),
+            (Some("several users"), Some("heard it")),
+            (None, None),
+            (None, None),
+            (None, None)
+        ]
+    );
+    let remarks: Vec<_> = extraction
+        .claims
+        .iter()
+        .filter(|c| c.claim_kind.as_deref() == Some("remark"))
+        .collect();
+    let said: Vec<Option<&Value>> = remarks
+        .iter()
+        .map(|c| c.attributes.get(SAID_BY_ATTRIBUTE))
+        .collect();
+    assert_eq!(
+        said,
+        [
+            Some(&json!("Mara Vell")),
+            Some(&json!("several users")),
+            None,
+            None,
+            None
+        ]
+    );
+    assert_eq!(remarks[1].attributes.get("grade"), Some(&json!("heard it")));
+    let bound: Vec<Option<&str>> = remarks.iter().map(|c| c.attributed_to.as_deref()).collect();
+    assert_eq!(
+        bound,
+        [Some("Mara Vell"), Some("several users"), None, None, None],
+        "the same words go to the build's binding, which holds them only for a sourced record"
+    );
+    let prompt = &seen.lock().unwrap()[0].user;
+    assert!(
+        prompt.contains("  Grade, its evidence, strongest first: saw it | heard it."),
+        "{prompt}"
+    );
+    assert!(
+        prompt.contains(&format!("\"{}\"", super::voice::OWN_VOICE)),
+        "the answer's word for the document's own voice is the one code reads"
     );
 }

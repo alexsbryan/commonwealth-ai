@@ -98,6 +98,10 @@ pub mod features {
     /// stored its text found one, the plain-text extractor's heading paths
     /// by that section's rule; requires `knowledge:range`.
     pub const KNOWLEDGE_LOCATOR: &str = "knowledge:locator";
+    /// v0.6 §2.17: knowledge search, and verify where offered, take
+    /// `priority`; while an `interactive` request's model work is in flight a
+    /// `background` request starts none.
+    pub const KNOWLEDGE_PRIORITY: &str = "knowledge:priority";
     /// v0.6 §2.14: a recipe `[[document]]` takes `format = "transcript"`,
     /// read by turn, each turn's start and speaker its spans' locator;
     /// requires `knowledge:locator` and `ingest:recipe`.
@@ -198,6 +202,7 @@ pub mod features {
         KNOWLEDGE_SENTENCES,
         KNOWLEDGE_SENTENCE_QUEUE,
         KNOWLEDGE_LOCATOR,
+        KNOWLEDGE_PRIORITY,
         INGEST_TRANSCRIPTS,
         INGEST_RECIPE,
         AUTH_NAMED_CLIENT,

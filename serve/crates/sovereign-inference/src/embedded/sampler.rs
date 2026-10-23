@@ -3,6 +3,7 @@
 //! concern per file; re-exported flat through `embedded/mod.rs` so every
 //! `crate::embedded::<Item>` path stays valid.
 #![allow(unused_imports)]
+use super::think_budget::{opens_think, ThinkWait};
 use super::*;
 use std::collections::{BTreeMap, HashMap};
 use std::num::NonZeroU32;
@@ -74,6 +75,10 @@ pub struct ConstrainedSampler {
     /// `request.structured_output` (JSON Schema body run through the
     /// `additionalProperties:false` walker before serialising).
     llg_constraint: Option<crate::llguidance_constraint::LlguidanceConstraint>,
+    /// `Some` while `llg_constraint` waits for the think block the prompt
+    /// opened, with the vocabulary's bytes to see it close: no mask and no
+    /// matcher step until `</think>` (`think_budget::ThinkWait`).
+    llg_think_wait: Option<(ThinkWait, Arc<Vec<Vec<u8>>>)>,
     /// URL-allowlist constraint. When `Some`, every sampled token's
     /// bytes are simulated against a byte-trie of allowed URLs; tokens
     /// whose bytes would start or extend a URL outside the allowlist
@@ -120,6 +125,9 @@ fn observing_tokens() -> Option<Vec<i64>> {
 
 impl Drop for ConstrainedSampler {
     fn drop(&mut self) {
+        if self.llg_think_wait.is_some() {
+            tracing::warn!("the think block never closed: the answer was not held to the schema");
+        }
         if let Some(ids) = self.observed_tokens.take() {
             sovereign_contracts::engine_observe::observe(|| {
                 sovereign_contracts::engine_observe::Observation::GeneratedTokens { ids }
@@ -161,7 +169,9 @@ impl ConstrainedSampler {
         // freely since `http(s)://` and `[ev-T` live in disjoint byte
         // patterns.
         if let Some(llg) = self.llg_constraint.as_mut() {
-            llg.mask(&mut data);
+            if self.llg_think_wait.is_none() {
+                llg.mask(&mut data);
+            }
         } else {
             if let Some(uc) = self.url_constraint.as_ref() {
                 uc.mask(&mut data);
@@ -211,7 +221,19 @@ impl ConstrainedSampler {
         // must stay synchronised with emitted bytes even when the
         // schema/grammar mask was the gating constraint.
         if let Some(llg) = self.llg_constraint.as_mut() {
-            llg.accept_llama(token);
+            let closed = match self.llg_think_wait.as_mut() {
+                None => {
+                    llg.accept_llama(token);
+                    false
+                }
+                Some((wait, vocab)) => {
+                    wait.closes(vocab.get(token.0 as usize).map_or(&[][..], Vec::as_slice))
+                }
+            };
+            if closed {
+                self.llg_think_wait = None;
+                tracing::info!("grammar-constrained decoding armed: the think block closed");
+            }
         }
         // Advance URL FSM unconditionally (even when JSON constraint
         // is active and the URL mask was skipped) so the cursor stays
@@ -246,10 +268,12 @@ impl ConstrainedSampler {
     /// in the generation loop is its stop signal. This method is
     /// scoped to llguidance only.
     pub fn grammar_is_stopped(&self) -> bool {
-        self.llg_constraint
-            .as_ref()
-            .map(|llg| llg.is_stopped())
-            .unwrap_or(false)
+        self.llg_think_wait.is_none()
+            && self
+                .llg_constraint
+                .as_ref()
+                .map(|llg| llg.is_stopped())
+                .unwrap_or(false)
     }
 
     /// Latched llguidance matcher failure, if any. The decode loops
@@ -286,7 +310,11 @@ impl ConstrainedSampler {
     /// non-canonical BPE tokenisations; that's expected — the Tier 2
     /// path falls through to ordinary sampling.
     pub fn forced_next_run(&mut self, max_bytes: usize) -> Vec<LlamaToken> {
-        let Some(llg) = self.llg_constraint.as_mut() else {
+        let Some(llg) = self
+            .llg_constraint
+            .as_mut()
+            .filter(|_| self.llg_think_wait.is_none())
+        else {
             return Vec::new();
         };
         llg.forced_ff_tokens()
@@ -328,6 +356,7 @@ pub(crate) fn build_sampler(
     model: &LlamaModel,
     request: &CompletionRequest,
     quirks: &ModelQuirks,
+    turn_opener: &str,
 ) -> Result<ConstrainedSampler> {
     // Two ways to engage llguidance:
     //   1. `request.lark_grammar` — pre-built Lark string (tool envelope
@@ -399,6 +428,14 @@ pub(crate) fn build_sampler(
     } else {
         None
     };
+
+    let llg_think_wait = (llg_constraint.is_some() && opens_think(turn_opener)).then(|| {
+        tracing::info!("grammar-constrained decoding waits for the think block the prompt opened");
+        (
+            ThinkWait::default(),
+            crate::vocab_cache::vocab_bytes_for(model),
+        )
+    });
 
     // URL-allowlist constraint: built when the caller declares a
     // non-empty allowlist on the request. Shares vocab_bytes storage
@@ -510,6 +547,7 @@ pub(crate) fn build_sampler(
             inner_explore: server.chain(model, rand_seed()),
             inner_content: server.chain(model, rand_seed()),
             llg_constraint,
+            llg_think_wait,
             url_constraint,
             evidence_id_constraint,
             non_latin_denylist,
@@ -689,6 +727,7 @@ pub(crate) fn build_sampler(
         inner_explore: build_chain(&explore, explore.temp),
         inner_content: build_chain(&content, content_temp),
         llg_constraint,
+        llg_think_wait,
         url_constraint,
         evidence_id_constraint,
         non_latin_denylist,

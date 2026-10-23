@@ -1,4 +1,4 @@
-use super::build_window_manifest;
+use super::{build_window_manifest, window_chars, WINDOW_CHARS};
 use corpus_index::index::EnrichmentChunkRow;
 
 fn row(id: u64, doc: &str, date: Option<&str>, chars: usize) -> EnrichmentChunkRow {
@@ -102,4 +102,14 @@ fn a_document_longer_than_a_window_is_cut_at_its_chunks() {
     ];
     let m = build_window_manifest("c", rows, &Default::default(), None, 100);
     assert_eq!(windows(&m), vec![vec![1, 2, 3], vec![4, 5], vec![6, 7]]);
+}
+
+/// The window size is the recipe's `window_chars` when it sets one, the
+/// shipped [`WINDOW_CHARS`] when it does not.
+#[test]
+fn the_window_size_is_the_recipes_when_it_sets_one() {
+    let mut p = corpus_engine::enrichment::ontology::OntologyPolicies::default();
+    assert_eq!(window_chars(&p), WINDOW_CHARS);
+    p.shape.window_chars = Some(30_000);
+    assert_eq!(window_chars(&p), 30_000);
 }

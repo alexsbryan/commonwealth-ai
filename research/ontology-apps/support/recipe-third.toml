@@ -1,0 +1,121 @@
+[corpus]
+id = "uv-third"
+name = "Support cases from an issue tracker: astral-sh/uv, the fixed tune third (47 issues, 554 documents)"
+description = "The second example for composed types (svrn/docs/specs/ONTOLOGY_METHOD.md): cases composed from issue, comment and event documents, scored against research/ontology-apps/support/GOLD_SPEC.md. The same code path as crm-ward-acts; only the declaration differs."
+license = "evaluation-only"
+schema_version = 1
+mesh_sharing = false
+size_compressed_gb = 0.0
+size_indexed_gb = 0.05
+
+[acquire]
+type = "local_file"
+path = "~/.svrnmesh/bench-corpora/uv-third/raw/documents.jsonl"
+
+# Every field the extractor does not consume (id, thread, kind, author, author_association, created_at,
+# labels, event_type, url) passes through as document metadata: the declared document fields read it.
+[extract]
+type = "jsonl"
+content_field = "body"
+title_field = "title"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 0
+
+[index]
+fts = true
+vector = false
+
+[enrichment]
+enabled = true
+type = "atlas"
+
+[enrichment.ontology]
+version = 1
+
+[[enrichment.ontology.types]]
+name = "person"
+kind = "entity"
+attributes = [{ name = "login", type = "text" }]
+identity = ["login"]
+source = { metadata = ["author"], attributes = { login = "value" } }
+
+[[enrichment.ontology.types]]
+name = "case"
+kind = "entity"
+description = "one underlying problem or request, whatever the number of issues reporting it"
+identity_criterion = "Two mentions are one case when they are about the same underlying problem or request: the same bug, feature request or question, however many issues report it and whoever writes. Issues a maintainer closes as duplicates of each other are one case. Two issues that only look alike, or share a root cause no maintainer has stated, are different cases, and so is a comment that raises a different problem inside an existing thread."
+identity_bar = 0.5
+attributes = [
+  { name = "reporter", type = "ref", of = "person", derived = "reporter_of_case" },
+  { name = "state", type = "text", values = ["reported", "confirmed", "in_progress", "resolved", "declined"], derived = "case_state_now" },
+]
+
+[[enrichment.ontology.types]]
+name = "case_state"
+kind = "claim"
+description = "a statement that shows where a case stands"
+force = "assertive"
+subject = "case"
+attributes = [
+  { name = "state", type = "text", values = ["reported", "confirmed", "in_progress", "resolved", "declined"], description = "reported: a user describes a problem or asks for something; confirmed: a maintainer reproduces it or accepts it as valid; in_progress: a fix or design is being worked on, or a pull request is open; resolved: it is fixed, implemented, answered or released; declined: it is closed as won't fix, not planned, works as intended or invalid" },
+]
+
+[enrichment.ontology.change]
+supersedes = { case_state = "document_date" }
+document = { date = "created_at", thread = "thread", id = "id" }
+
+# Derived attributes (ONTOLOGY_PRIMITIVES.md §8): a case's reporter is who wrote its earliest document that no
+# maintainer wrote, read from the document's author field, never from a mention.
+[[enrichment.ontology.sets]]
+id = "maintainer_post"
+type = "document"
+where = { author_association = ["MEMBER", "OWNER", "COLLABORATOR"] }
+
+[[enrichment.ontology.folds]]
+id = "reporter_of_case"
+by = "earliest"
+from = ["^subject / document [!maintainer_post] / author"]
+
+# A case's state now is its latest report by document date, projected by the protocol fold: only a state the reader
+# supported with field evidence counts, and a case with any unqualified report stays pending, its reasons listed. A
+# transition is identified by the state it enters; the tracker declares no corrections.
+[[enrichment.ontology.folds]]
+id = "case_state_now"
+by = "protocol"
+from = ["^subject"]
+
+[enrichment.ontology.folds.protocol]
+identity = "state"
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "reported"
+claim_kind = "case_state"
+state = "reported"
+when = { state = "reported" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "confirmed"
+claim_kind = "case_state"
+state = "confirmed"
+when = { state = "confirmed" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "in_progress"
+claim_kind = "case_state"
+state = "in_progress"
+when = { state = "in_progress" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "resolved"
+claim_kind = "case_state"
+state = "resolved"
+when = { state = "resolved" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "declined"
+claim_kind = "case_state"
+state = "declined"
+when = { state = "declined" }

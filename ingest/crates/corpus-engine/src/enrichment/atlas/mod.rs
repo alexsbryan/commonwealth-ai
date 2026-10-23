@@ -53,6 +53,7 @@ pub mod resolution_derived;
 pub mod resolution_documents;
 pub mod resolution_identity;
 pub mod resolution_ontology;
+pub mod resolution_placement;
 pub mod resolution_records;
 pub mod resolution_sources;
 pub mod resolve_records;
@@ -102,6 +103,7 @@ pub use resolution_documents::{
     SourceDocument,
 };
 pub use resolution_ontology::ResolutionPolicy;
+pub use resolution_placement::{place_index_chunks, PlacementReport, Unplaced};
 pub use resolution_sources::{
     next_entity_index, project_source_atoms, Participants, SourceFoldReport, SourceProjection,
     SourceReport,

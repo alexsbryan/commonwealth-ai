@@ -578,17 +578,14 @@ async fn cmd_init_from_corpus(
     let stream_ms = t_stream.elapsed().as_millis() as u64;
     eprintln!("streamed {} chunk rows in {} ms", rows.len(), stream_ms);
 
-    // The window reader reads windows, every document in clock order cut by
-    // size (`window_manifest`); the other readers read the corpus's sections.
-    let window_policies = ontology.as_ref().map(|spec| spec.policies()).filter(|p| {
-        corpus_engine::enrichment::pipeline::document_read::window_chosen() && p.reads_documents()
-    });
+    // A declaration the document reader reads is read in windows, every
+    // document in clock order cut by size (`window_manifest`); the general
+    // extractor reads the corpus's sections.
+    let window_policies = ontology
+        .as_ref()
+        .map(|spec| spec.policies())
+        .filter(|p| p.reads_documents());
     let manifest = if let Some(policies) = window_policies {
-        let date = policies
-            .change
-            .document
-            .as_ref()
-            .and_then(|d| d.field(corpus_engine::enrichment::ontology::DocumentStamp::Date));
         if parsed.limit_articles.is_some()
             || parsed.include_articles.is_some()
             || parsed.max_chapter_words.is_some()
@@ -599,7 +596,7 @@ async fn cmd_init_from_corpus(
             &parsed.corpus_id,
             &index,
             rows,
-            date,
+            &policies,
         )
         .await
     } else {

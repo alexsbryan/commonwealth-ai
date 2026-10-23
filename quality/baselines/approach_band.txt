@@ -3,5 +3,5 @@
 #   cargo run -p xtask -- arch-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- arch-gate --tighten
-190	files
-187777	lines
+196	files
+192892	lines

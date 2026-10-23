@@ -16,22 +16,24 @@
 //! ```
 //!
 //! A filter compares one declared attribute (or `name`) by `eq`, `lt`, `gt` or
-//! `contains`. A relation constraint asks for a far-end atom of `other_type`
+//! `contains` with a literal, or by `eq`, `lt` or `gt` with another attribute
+//! of its kind: `{"attribute": "reorder_level"}`, of the same atom, or, inside
+//! a `where`, `{"target": "invoiced_amount"}`, of the query's target. A relation constraint asks for a far-end atom of `other_type`
 //! joined by a declared relation type or a ref attribute spelled
 //! `<type>.<attribute>`, optionally NAMED and optionally meeting a `where` of
 //! its own filters and one-hop relations — depth 2, by the types: a `where`'s
 //! relations have no `where`. `aggregate` is `none`, `count`, `argmax` /
 //! `argmin` over a time or quantity attribute or a related type (the count of
-//! distinct linked atoms meeting that relation's `where`), or `tally` by an
-//! attribute. The shape is the one the feature-fidelity query-layer probe
+//! distinct linked atoms meeting that relation's `where`), `tally` by an
+//! attribute, or `sum` of a quantity attribute, per value of an optional
+//! `group_by` attribute (a ref groups by the record it holds). The shape is the one the feature-fidelity query-layer probe
 //! validated (`research/ontology-retrieval/ontology-proof/ans/k2_query.py`).
 //!
 //! Every query is checked against the declared vocabulary before it runs, and
 //! a name the vocabulary does not hold is refused, never skipped. The per-atom
 //! judgements — names, intervals, links, absence — are in [`super::typed_match`],
-//! the vocabulary check in [`super::typed_check`].
-
-use std::collections::BTreeMap;
+//! the vocabulary check in [`super::typed_check`], the grouping a tally and a
+//! sum share in [`super::typed_group`].
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -40,6 +42,7 @@ use crate::enrichment::ontology::TypeIndex;
 
 use super::engine::{AtlasView, TraversalResult};
 use super::typed_check::{check, Checked, Over, Shape};
+use super::typed_group::{sum_headline, tally_headline};
 use super::typed_match::{Atom, Judge, Via};
 
 /// A question over the atoms of one declared type.
@@ -79,13 +82,28 @@ pub enum FilterOp {
     Contains,
 }
 
-/// A filter's operand, as JSON spells it. A time is a signed year (B.C.
-/// negative), as a number or as text ("318 B.C.").
+/// A filter's operand, as JSON spells it: a literal, or another attribute.
+/// A time is a signed year (B.C. negative), as a number or as text
+/// ("318 B.C."), or a date.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Scalar {
     Number(serde_json::Number),
     Text(String),
+    Attr(AttrOperand),
+}
+
+/// Another attribute as a filter's operand, compared value with value: an
+/// object with exactly one key, which says whose attribute it is. `attribute`
+/// is the atom the filter is on ("counted below its own reorder_level");
+/// `target` is the query's target, so inside a relation's `where` the far end
+/// is compared with the near one ("an order total unlike the invoice's
+/// amount"). At the top level the two are the same atom.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AttrOperand {
+    Attribute(String),
+    Target(String),
 }
 
 /// A far-end atom the target must (or, negated, must not) be joined to.
@@ -143,6 +161,9 @@ pub enum AnswerShape {
     Argmin(String),
     /// A count of the atoms per value of one declared attribute.
     Tally(String),
+    /// The total of a quantity attribute (`aggregate_over`) over the atoms,
+    /// per value of `by` (the wire's `group_by`; `None` = one total).
+    Sum { over: String, by: Option<String> },
 }
 
 /// `aggregate` + `aggregate_over` as JSON spells them.
@@ -158,6 +179,10 @@ struct TypedQueryWire {
     aggregate: AggregateWord,
     #[serde(default)]
     aggregate_over: Option<String>,
+    /// Only `sum` takes one; absent from the wire when unset, so a query
+    /// without it serialises as it was written.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    group_by: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -169,21 +194,34 @@ enum AggregateWord {
     Argmax,
     Argmin,
     Tally,
+    Sum,
 }
 
 impl TryFrom<TypedQueryWire> for TypedQuery {
     type Error = String;
 
-    /// An `aggregate_over` the shape does not use, or a missing one it needs,
-    /// is refused here rather than ignored or defaulted.
+    /// An `aggregate_over` or `group_by` the shape does not use, or a missing
+    /// `aggregate_over` it needs, is refused here rather than ignored or
+    /// defaulted.
     fn try_from(w: TypedQueryWire) -> Result<Self, String> {
         use AggregateWord as A;
+        if let (word, Some(by)) = (w.aggregate, &w.group_by) {
+            if word != A::Sum {
+                return Err(format!(
+                    "aggregate {word:?} takes no group_by (got '{by}'); only sum groups"
+                ));
+            }
+        }
         let aggregate = match (w.aggregate, w.aggregate_over) {
             (A::None, None) => AnswerShape::None,
             (A::Count, None) => AnswerShape::Count,
             (A::Argmax, Some(o)) => AnswerShape::Argmax(o),
             (A::Argmin, Some(o)) => AnswerShape::Argmin(o),
             (A::Tally, Some(o)) => AnswerShape::Tally(o),
+            (A::Sum, Some(o)) => AnswerShape::Sum {
+                over: o,
+                by: w.group_by,
+            },
             (word @ (A::None | A::Count), Some(o)) => {
                 return Err(format!(
                     "aggregate {word:?} takes no aggregate_over (got '{o}')"
@@ -202,12 +240,13 @@ impl TryFrom<TypedQueryWire> for TypedQuery {
 
 impl From<TypedQuery> for TypedQueryWire {
     fn from(q: TypedQuery) -> Self {
-        let (aggregate, aggregate_over) = match q.aggregate {
-            AnswerShape::None => (AggregateWord::None, None),
-            AnswerShape::Count => (AggregateWord::Count, None),
-            AnswerShape::Argmax(o) => (AggregateWord::Argmax, Some(o)),
-            AnswerShape::Argmin(o) => (AggregateWord::Argmin, Some(o)),
-            AnswerShape::Tally(o) => (AggregateWord::Tally, Some(o)),
+        let (aggregate, aggregate_over, group_by) = match q.aggregate {
+            AnswerShape::None => (AggregateWord::None, None, None),
+            AnswerShape::Count => (AggregateWord::Count, None, None),
+            AnswerShape::Argmax(o) => (AggregateWord::Argmax, Some(o), None),
+            AnswerShape::Argmin(o) => (AggregateWord::Argmin, Some(o), None),
+            AnswerShape::Tally(o) => (AggregateWord::Tally, Some(o), None),
+            AnswerShape::Sum { over, by } => (AggregateWord::Sum, Some(over), by),
         };
         TypedQueryWire {
             target_type: q.target_type,
@@ -215,6 +254,7 @@ impl From<TypedQuery> for TypedQueryWire {
             relations: q.relations,
             aggregate,
             aggregate_over,
+            group_by,
         }
     }
 }
@@ -280,7 +320,7 @@ pub struct TypedRow {
 /// answering on bare `entity_type` equality would be a second, weaker one.
 pub fn execute(query: &TypedQuery, atlas: AtlasView<'_>) -> TraversalResult {
     let kind = match query.aggregate {
-        AnswerShape::Tally(_) => "aggregate",
+        AnswerShape::Tally(_) | AnswerShape::Sum { .. } => "aggregate",
         _ => "enumerate",
     };
     let target = query.target_type.as_str();
@@ -311,6 +351,9 @@ pub fn execute(query: &TypedQuery, atlas: AtlasView<'_>) -> TraversalResult {
         let why = match &query.aggregate {
             AnswerShape::Tally(over) => {
                 format!("No {target} atoms in this atlas to tally by {over}.")
+            }
+            AnswerShape::Sum { over, .. } => {
+                format!("No {target} atoms in this atlas to sum {over} over.")
             }
             _ => format!("No {target} atoms in this atlas."),
         };
@@ -349,7 +392,12 @@ pub fn execute(query: &TypedQuery, atlas: AtlasView<'_>) -> TraversalResult {
             };
             (headline, matched)
         }
-        Shape::Tally(over) => (tally_headline(&matched, over, &label), matched),
+        Shape::Tally(over) => (tally_headline(&judge, &matched, over, &label), matched),
+        Shape::Sum { over, by } => {
+            let (headline, unsummed) = sum_headline(&judge, &matched, over, by.as_ref(), &label);
+            notes.extend(unsummed);
+            (headline, matched)
+        }
         Shape::Best { highest, over } => {
             let (winners, unscored) = best(&judge, &checked, matched, *highest, over);
             if unscored > 0 {
@@ -425,36 +473,6 @@ fn declared_label(index: &TypeIndex, entity_type: &str) -> String {
         .get(entity_type)
         .and_then(|d| d.label.clone())
         .unwrap_or_else(|| entity_type.to_string())
-}
-
-/// The tally headline. An atom missing the attribute is counted under
-/// `(unset)` rather than dropped — an absence is reported, never defaulted.
-fn tally_headline(matched: &[(Atom<'_>, Vec<Via<'_>>)], over: &str, label: &str) -> String {
-    const UNSET: &str = "(unset)";
-    let mut tally: BTreeMap<String, usize> = BTreeMap::new();
-    for (atom, _) in matched {
-        let key = match atom.attributes().get(over) {
-            Some(Value::String(s)) => match s.trim() {
-                "" => UNSET.to_string(),
-                t => t.to_string(),
-            },
-            Some(Value::Null) | None => UNSET.to_string(),
-            Some(v) => v.to_string(),
-        };
-        *tally.entry(key).or_insert(0) += 1;
-    }
-    let breakdown = tally
-        .iter()
-        .map(|(k, n)| format!("{k}: {n}"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    tracing::debug!(
-        over,
-        total = matched.len(),
-        buckets = tally.len(),
-        "atlas traversal: aggregate over declared attribute"
-    );
-    format!("{} {label} by {over} — {breakdown}", matched.len())
 }
 
 /// The winners of an `argmax`/`argmin`, every tie kept, and how many matching
@@ -559,3 +577,7 @@ fn row(atom: Atom<'_>, via: &[Via<'_>], named: &[&str]) -> TypedRow {
 #[cfg(test)]
 #[path = "tests/typed.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tests/typed_ledger.rs"]
+mod ledger_tests;

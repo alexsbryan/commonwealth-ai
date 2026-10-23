@@ -1211,6 +1211,7 @@ impl sovereign_core::traits::InferenceProvider for EvidenceProbeInference {
                 .to_string()
         };
         Ok(CompletionResponse {
+            logprobs: None,
             text,
             tokens_used: 5,
             prompt_tokens: 0,
@@ -1932,6 +1933,7 @@ async fn conv_frame_fold_uses_fast_slot_only() {
             // test inspects the *captured request*, not the
             // response.
             Ok(CompletionResponse {
+                logprobs: None,
                 text: r#"{"summary": "captured"}"#.to_string(),
                 tokens_used: 1,
                 prompt_tokens: 0,
@@ -2066,6 +2068,7 @@ async fn memory_integrity_guards_route_primary_and_stay_local() {
             // returns Ok with no findings. The test inspects the
             // captured request, not the response.
             Ok(CompletionResponse {
+                logprobs: None,
                 text: "[]".to_string(),
                 tokens_used: 1,
                 prompt_tokens: 0,

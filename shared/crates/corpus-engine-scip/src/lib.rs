@@ -53,6 +53,9 @@ pub mod error;
 pub mod lsp_tier;
 /// The one merged-graph loader over `<indexes>/*/scip_graph.db`.
 pub mod merged_graph;
+/// The crate's synchronous bulk work, run on the blocking pool so it never
+/// holds an async worker (or the runtime driver) for seconds.
+mod off_worker;
 /// Does a repo-relative path lie under a scope, on whole components?
 pub mod path_scope;
 /// Duplicated concept ROLE over the graph — the third feed, seeing what

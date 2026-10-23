@@ -412,8 +412,10 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // (`/internal/guest/grant` and friends). LocalDaemon, same reason as the
     // turn-client rows above.
     ("clients/desktop/src-tauri/src/guest_room_commands.rs", Class::LocalDaemon, 1),
-    // 1 -> 2 (c4a0b8f61): the quotation lookup reads this host's daemon's
-    // capabilities and reading routes from `base_url`, as the first does.
+    // 1 -> 2 (c4a0b8f61): the stored-text read, `daemon_text_slice` — the
+    // daemon's manifest, then `{base}{text_endpoint}/{sha}`, both at
+    // `state.client_base_url()`. The endpoint is a path on that base, so the
+    // client never leaves this host's daemon.
     ("clients/desktop/src-tauri/src/commands/reading.rs", Class::LocalDaemon, 2),
     // state.rs ROW REMOVED 2026-09-11 (ef4a3a06f, svt-3a): B4's identity probe
     // read /status.process.pid on a run-lock refusal; the app takes no run
@@ -595,10 +597,15 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     ("bench/crates/sovereign-cli-bench/src/bench_cmd/uap.rs", Class::LocalDaemon, 1),
     ("bench/crates/sovereign-cli-bench/src/bench_cmd/model_resolve.rs", Class::LocalDaemon, 1),
     ("bench/crates/sovereign-cli-bench/src/bench_cmd/desktop_bridge.rs", Class::LocalDaemon, 1),
-    // The engine-conformance battery replays calls through a scratch daemon's
-    // /internal/engine/replay and a llama-server it started on 127.0.0.1.
+    // engine-conformance run (a67ac0d6d). run.rs: `--daemon`'s
+    // `/internal/engine/replay`, mounted only on the Operator surface
+    // (client_surface.rs `serves_operator_routes`). server.rs: the
+    // llama-server at `--server`, asked over llama.cpp's own
+    // `/apply-template`, `/tokenize`, `/slots`, `/props` — routes no vendor
+    // API serves, so the target is an operator-run server: the operator's
+    // class, as corpus-mcp's llama-server rung is (registry_tail.rs).
     ("bench/crates/sovereign-cli-bench/src/bench_cmd/engine_conformance/run.rs", Class::LocalDaemon, 1),
-    ("bench/crates/sovereign-cli-bench/src/bench_cmd/engine_conformance/server.rs", Class::LocalDaemon, 1),
+    ("bench/crates/sovereign-cli-bench/src/bench_cmd/engine_conformance/server.rs", Class::OperatorSurface, 1),
     ("ingest/crates/sovereign-pipeline/src/bench_atlas.rs", Class::LocalDaemon, 1),
     ("ingest/crates/sovereign-pipeline/src/alignment_cmd.rs", Class::LocalDaemon, 1),
     // `corpus install --inline` (OICP v0.6 §2.12): the daemon's manifest,

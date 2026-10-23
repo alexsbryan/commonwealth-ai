@@ -25,10 +25,12 @@ use crate::llama::cpp::sampling::LlamaSampler;
 use crate::llama::cpp::token::LlamaToken;
 use crate::llama::{LlamaContextExt, LlamaModelExt};
 
+use oicp_types::RequestPriority;
 use sovereign_contracts::error::Error;
 use sovereign_contracts::model_family::{
     EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
 };
+use sovereign_contracts::request_priority;
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::*;
 use sovereign_contracts::Result;
@@ -75,6 +77,40 @@ pub(crate) struct EmbedSlot {
     /// instruction-prefix + EOS (`model_family::Qwen3Embedding`), which `load`
     /// auto-detects from the gguf when the caller passes `None`.
     pub(crate) embed_quirks: Option<EmbedQuirks>,
+    /// The writer's context, when `contexts[0]` computes on the GPU: see
+    /// [`WriterContext`].
+    pub(crate) writer: Option<WriterContext>,
+}
+
+/// A CPU context over a CPU copy of the model, for an interactive request's
+/// embeds while `contexts[0]` computes on the GPU (OICP v0.6 §2.17, PV3d).
+/// The GPU is shared with the primary: on 2026-10-17 a writer's query embed
+/// took p50 353 ms beside the primary's compute against 78 ms without it
+/// (zoracite a181013), and the 0.6B embedder read a 32-token batch in 47 ms
+/// on 16 CPU threads with the primary computing (llama-bench, op offload
+/// off). Its vectors score within 0.0051 of the GPU's against GPU-embedded
+/// sentences.
+pub(crate) struct WriterContext {
+    pub(crate) ctx: Mutex<EmbedSlotContext>,
+}
+
+/// The writer's context holds two sequences of `max_input_tokens` each: a
+/// sentence search embeds its query and its probe together.
+const WRITER_SEQ_MAX: u32 = 2;
+const WRITER_CTX_TOKENS: u32 = 2048;
+
+/// Whether a slot keeps a writer's context. Only an engine that serves the
+/// writer beside the primary on one device wants one: an embed-only engine's
+/// calls carry no priority, so its writer's context would never be used.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Writer {
+    OnCpu,
+    None,
+}
+
+/// Whether a request that asked `priority` embeds on the writer's context.
+fn on_writers_context(priority: Option<RequestPriority>) -> bool {
+    priority == Some(RequestPriority::Interactive)
 }
 
 pub(crate) struct EmbedSlotContext {
@@ -91,6 +127,7 @@ impl EmbedSlot {
         model_path: &Path,
         n_gpu_layers: u32,
         embed_quirks: Option<EmbedQuirks>,
+        writer: Writer,
     ) -> Result<Self> {
         // Force full-GPU offload when a GPU is present but the caller
         // passed 0. On Apple Silicon, Metal embed runs at ~33 seq/sec
@@ -283,6 +320,12 @@ impl EmbedSlot {
             "EmbedSlot::load — slot ready"
         );
 
+        let writer = if used_gpu && writer == Writer::OnCpu {
+            Self::load_writer(backend, model_path, n_threads, max_input_tokens)
+        } else {
+            None
+        };
+
         Ok(Self {
             model: model.clone(),
             contexts: vec![Mutex::new(EmbedSlotContext { ctx, _model: model })],
@@ -291,7 +334,74 @@ impl EmbedSlot {
             ctx_tokens: ctx_tokens as usize,
             n_seq_max: n_seq_max as usize,
             embed_quirks,
+            writer,
         })
+    }
+
+    /// The writer's context: the model loaded again with no layer on the GPU,
+    /// and a context that offloads no op, so its compute stays on the CPU. A
+    /// failure is said and leaves the writer's embeds on `contexts[0]`.
+    fn load_writer(
+        backend: &Arc<LlamaBackend>,
+        model_path: &Path,
+        n_threads: usize,
+        max_input_tokens: usize,
+    ) -> Option<WriterContext> {
+        debug_assert!(max_input_tokens <= (WRITER_CTX_TOKENS / WRITER_SEQ_MAX) as usize);
+        let params = LlamaModelParams::default().with_n_gpu_layers(0);
+        let model = match LlamaModel::load_from_file(backend, model_path, &params) {
+            Ok(m) => Arc::new(m),
+            Err(e) => {
+                tracing::warn!(error = %e, "EmbedSlot::load — the writer's CPU model did not load; interactive embeds stay on the GPU context");
+                return None;
+            }
+        };
+        let ctx_params = LlamaContextParams::default()
+            .with_n_ctx(NonZeroU32::new(WRITER_CTX_TOKENS))
+            .with_n_batch(WRITER_CTX_TOKENS)
+            .with_n_ubatch(WRITER_CTX_TOKENS)
+            .with_n_seq_max(WRITER_SEQ_MAX)
+            .with_n_threads(n_threads as i32)
+            .with_n_threads_batch(n_threads as i32)
+            .with_embeddings(true)
+            .with_offload_kqv(false)
+            .with_op_offload(false);
+        let ctx = unsafe {
+            let model_ref: &'static LlamaModel = &*(Arc::as_ptr(&model));
+            model_ref.new_context(backend, ctx_params)
+        };
+        match ctx {
+            Ok(ctx) => {
+                tracing::info!(
+                    n_ctx = WRITER_CTX_TOKENS,
+                    n_seq_max = WRITER_SEQ_MAX,
+                    n_threads,
+                    size_mb = model.size() / (1024 * 1024),
+                    "EmbedSlot::load — the writer's CPU context ready"
+                );
+                Some(WriterContext {
+                    ctx: Mutex::new(EmbedSlotContext { ctx, _model: model }),
+                })
+            }
+            Err(e) => {
+                tracing::warn!(error = ?e, "EmbedSlot::load — the writer's CPU context failed; interactive embeds stay on the GPU context");
+                None
+            }
+        }
+    }
+
+    /// The context an embed for the running request computes on, with the
+    /// tokens and sequences one decode of it holds: the writer's when the
+    /// request asked as interactive and the slot has one, else `contexts[0]`.
+    pub(crate) fn context_for_request(&self) -> (&Mutex<EmbedSlotContext>, usize, usize) {
+        let asked = request_priority::current().map(|a| a.priority());
+        match &self.writer {
+            Some(w) if on_writers_context(asked) => {
+                tracing::debug!(target: "priority", "priority: an interactive embed on the writer's CPU context");
+                (&w.ctx, WRITER_CTX_TOKENS as usize, WRITER_SEQ_MAX as usize)
+            }
+            _ => (&self.contexts[0], self.ctx_tokens, self.n_seq_max),
+        }
     }
 
     /// Embed a document string, applying the document-side instruction prefix
@@ -409,20 +519,21 @@ impl EmbedSlot {
     /// 1. Tokenize every input up front (no llama.cpp state, so
     ///    we can do this outside the context lock).
     /// 2. Bin-pack tokenized inputs into sub-batches subject to:
-    ///      (a) total tokens ≤ `slot.ctx_tokens`
-    ///      (b) sequence count ≤ `slot.n_seq_max`
+    ///      (a) total tokens ≤ the context's `ctx_tokens`
+    ///      (b) sequence count ≤ the context's `n_seq_max`
     /// 3. For each sub-batch: clear KV cache, add tokens with
     ///    distinct `seq_id`s, `decode()`, then read one pooled
     ///    embedding per sequence.
     /// 4. Splice results back in input order — bin-packing is
     ///    order-preserving so this is just concatenation.
     ///
-    /// A pathological input longer than `slot.ctx_tokens` is
+    /// A pathological input longer than the context's `ctx_tokens` is
     /// truncated to `slot.max_input_tokens` up front, so single
     /// oversized chunks always fit in their own sub-batch.
     pub(crate) fn run_embed_batch_sync(
         slot: &EmbedSlot,
         inputs: &[String],
+        step: &mut crate::priority_gate::Step,
     ) -> Result<Vec<Vec<f32>>> {
         if inputs.is_empty() {
             return Ok(vec![]);
@@ -450,7 +561,6 @@ impl EmbedSlot {
         }
 
         let batch_start = std::time::Instant::now();
-        let mut ctx_lock = slot.contexts[0].blocking_lock();
         let mut results: Vec<Vec<f32>> = Vec::with_capacity(inputs.len());
 
         let mut sub_batches = 0usize;
@@ -458,95 +568,108 @@ impl EmbedSlot {
         // Reuse one `LlamaBatch` allocation across sub-batches;
         // `clear()` resets n_tokens without freeing the backing
         // memory. Matches the context's n_batch capacity.
-        let mut batch = LlamaBatch::new(slot.ctx_tokens, slot.n_seq_max as i32);
+        let (context, ctx_tokens, n_seq_max) = slot.context_for_request();
+        let mut batch = LlamaBatch::new(ctx_tokens, n_seq_max as i32);
 
         // Pack to ~90% of the nominal ctx budget. llama.cpp uses
         // some headroom inside the unified KV cache for scheduler
         // bookkeeping; packing to exactly `ctx_tokens` has tripped
         // `NoKvCacheSlot` at decode time on real-world corpora.
-        let pack_budget = slot.ctx_tokens.saturating_sub(slot.ctx_tokens / 10);
+        let pack_budget = ctx_tokens.saturating_sub(ctx_tokens / 10);
 
-        while cursor < prepared.len() {
-            // Greedily accumulate sequences into `batch` until the
-            // next one would overflow either bound. `take >= 1`
-            // always — a single input exceeding ctx_tokens already
-            // had its tokens truncated to max_input_tokens, and
-            // max_input_tokens ≤ ctx_tokens / n_seq_max by
-            // construction at `EmbedSlot::load`.
-            batch.clear();
-            let mut tokens_in_batch = 0usize;
-            let mut seqs_in_batch = 0usize;
-            let sub_start = cursor;
+        // A background request's sub-batches each take the context and let it
+        // go after, so a writer's embed queued at it goes between them (PV3c);
+        // the KV cache is cleared before every decode, so nothing carries over.
+        let gate = crate::priority_gate::PriorityGate::process();
+        gate.parts_under(
+            "embed_batch",
+            || {
+                let held = context.blocking_lock();
+                step.entered();
+                held
+            },
+            |ctx_lock| {
+                // Greedily accumulate sequences into `batch` until the
+                // next one would overflow either bound. `take >= 1`
+                // always — a single input exceeding ctx_tokens already
+                // had its tokens truncated to max_input_tokens, and
+                // max_input_tokens ≤ ctx_tokens / n_seq_max by
+                // construction at `EmbedSlot::load`.
+                batch.clear();
+                let mut tokens_in_batch = 0usize;
+                let mut seqs_in_batch = 0usize;
+                let sub_start = cursor;
 
-            while cursor < prepared.len() {
-                let next_len = prepared[cursor].len().max(1);
-                if seqs_in_batch > 0
-                    && (tokens_in_batch + next_len > pack_budget
-                        || seqs_in_batch + 1 > slot.n_seq_max)
-                {
-                    break;
-                }
-                let seq_id = seqs_in_batch as i32;
-                let toks = &prepared[cursor];
-                if toks.is_empty() {
-                    // Zero-token input: record a sentinel so we
-                    // can inject a zero vector without running it
-                    // through llama.cpp (adding zero tokens to a
-                    // batch is a no-op that then has no seq to
-                    // read from).
-                    // We handle this by NOT advancing seqs_in_batch
-                    // for this input; instead we account for it
-                    // after the decode. Track its global index.
-                    // Simpler: fabricate a synthetic token? Cheaper
-                    // to skip. We'll handle below by post-filling.
-                } else {
-                    for (pos, &tok) in toks.iter().enumerate() {
-                        batch.add(tok, pos as i32, &[seq_id], true).map_err(|e| {
-                            Error::Inference(format!("Embed batch add failed: {e}"))
-                        })?;
+                while cursor < prepared.len() {
+                    let next_len = prepared[cursor].len().max(1);
+                    if seqs_in_batch > 0
+                        && (tokens_in_batch + next_len > pack_budget
+                            || seqs_in_batch + 1 > n_seq_max)
+                    {
+                        break;
                     }
-                    tokens_in_batch += next_len;
-                    seqs_in_batch += 1;
+                    let seq_id = seqs_in_batch as i32;
+                    let toks = &prepared[cursor];
+                    if toks.is_empty() {
+                        // Zero-token input: record a sentinel so we
+                        // can inject a zero vector without running it
+                        // through llama.cpp (adding zero tokens to a
+                        // batch is a no-op that then has no seq to
+                        // read from).
+                        // We handle this by NOT advancing seqs_in_batch
+                        // for this input; instead we account for it
+                        // after the decode. Track its global index.
+                        // Simpler: fabricate a synthetic token? Cheaper
+                        // to skip. We'll handle below by post-filling.
+                    } else {
+                        for (pos, &tok) in toks.iter().enumerate() {
+                            batch.add(tok, pos as i32, &[seq_id], true).map_err(|e| {
+                                Error::Inference(format!("Embed batch add failed: {e}"))
+                            })?;
+                        }
+                        tokens_in_batch += next_len;
+                        seqs_in_batch += 1;
+                    }
+                    cursor += 1;
                 }
-                cursor += 1;
-            }
 
-            // Decode whatever sequences were packed. If every
-            // input in the range was empty, `seqs_in_batch == 0`
-            // and we skip the decode entirely.
-            if seqs_in_batch > 0 {
-                ctx_lock.ctx.clear_kv_cache();
-                // See run_embed_sync for why this per-decode toggle
-                // is load-bearing on llama-cpp-4 0.2.x.
-                super::ffi_trace::record(super::ffi_trace::FfiCall::SetEmbeddings);
-                ctx_lock.ctx.set_embeddings(true);
-                ctx_lock
-                    .ctx
-                    .decode(&mut batch)
-                    .map_err(|e| Error::Inference(format!("Embed decode failed: {e}")))?;
-                super::ffi_trace::record(super::ffi_trace::FfiCall::EmbedDecode);
-            }
-
-            // Walk the inputs that belonged to this sub-batch and
-            // emit one embedding per input, mapping local seq_id
-            // back to the original input slot. Empty inputs get
-            // zero vectors of the right length. Non-empty inputs
-            // read the libllama-pooled vector via `embeddings_seq_ith`.
-            let mut local_seq: i32 = 0;
-            for prepared_item in &prepared[sub_start..cursor] {
-                if prepared_item.is_empty() {
-                    results.push(vec![0.0; slot.n_embd]);
-                } else {
-                    let raw = ctx_lock
+                // Decode whatever sequences were packed. If every
+                // input in the range was empty, `seqs_in_batch == 0`
+                // and we skip the decode entirely.
+                if seqs_in_batch > 0 {
+                    ctx_lock.ctx.clear_kv_cache();
+                    // See run_embed_sync for why this per-decode toggle
+                    // is load-bearing on llama-cpp-4 0.2.x.
+                    super::ffi_trace::record(super::ffi_trace::FfiCall::SetEmbeddings);
+                    ctx_lock.ctx.set_embeddings(true);
+                    ctx_lock
                         .ctx
-                        .embeddings_seq_ith(local_seq)
-                        .map_err(|e| Error::Inference(format!("Failed to read embedding: {e}")))?;
-                    results.push(l2_normalize(raw.to_vec()));
-                    local_seq += 1;
+                        .decode(&mut batch)
+                        .map_err(|e| Error::Inference(format!("Embed decode failed: {e}")))?;
+                    super::ffi_trace::record(super::ffi_trace::FfiCall::EmbedDecode);
                 }
-            }
-            sub_batches += 1;
-        }
+
+                // Walk the inputs that belonged to this sub-batch and
+                // emit one embedding per input, mapping local seq_id
+                // back to the original input slot. Empty inputs get
+                // zero vectors of the right length. Non-empty inputs
+                // read the libllama-pooled vector via `embeddings_seq_ith`.
+                let mut local_seq: i32 = 0;
+                for prepared_item in &prepared[sub_start..cursor] {
+                    if prepared_item.is_empty() {
+                        results.push(vec![0.0; slot.n_embd]);
+                    } else {
+                        let raw = ctx_lock.ctx.embeddings_seq_ith(local_seq).map_err(|e| {
+                            Error::Inference(format!("Failed to read embedding: {e}"))
+                        })?;
+                        results.push(l2_normalize(raw.to_vec()));
+                        local_seq += 1;
+                    }
+                }
+                sub_batches += 1;
+                Ok::<_, Error>(cursor < prepared.len())
+            },
+        )?;
 
         let total_ms = batch_start.elapsed().as_millis();
         let seqs_per_sec = if total_ms > 0 {
@@ -565,3 +688,7 @@ impl EmbedSlot {
         Ok(results)
     }
 }
+
+#[cfg(test)]
+#[path = "embed_slot_tests.rs"]
+mod tests;

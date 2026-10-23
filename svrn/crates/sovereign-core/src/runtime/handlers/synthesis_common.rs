@@ -150,6 +150,7 @@ mod tests {
 
     fn completion() -> CompletionResponse {
         CompletionResponse {
+            logprobs: None,
             text: "answer".to_string(),
             tokens_used: 321,
             prompt_tokens: 100,

@@ -13,6 +13,8 @@ use crate::enrichment::pipeline::types::ChapterInput;
 mod cache_reuse_tests;
 #[path = "document_read/claim_check_tests.rs"]
 mod claim_check_tests;
+#[path = "document_read/voices_tests.rs"]
+mod voices_tests;
 
 pub(super) fn policies() -> OntologyPolicies {
     let ontology: OntologyV1 = toml::from_str(
@@ -83,12 +85,7 @@ pub(super) fn scripted(
             })
         },
     );
-    // A wave is answered question by question, in order, as a port that
-    // cannot batch answers one (`resolve_records::one_by_one`).
-    (
-        crate::enrichment::atlas::resolve_records::one_by_one(f),
-        seen,
-    )
+    (f, seen)
 }
 
 pub(super) fn row(
@@ -158,60 +155,26 @@ fn response(documents: Value) -> String {
     json!({"documents": documents}).to_string()
 }
 
-/// A model for the passes reader: Locate answers the first declared kind for a
-/// line holding `needle` and "none of them" otherwise; Choose answers the first
-/// value. Every prompt is kept, and every call counted.
-fn passes_model(
-    needle: &'static str,
-    calls: std::sync::Arc<std::sync::atomic::AtomicUsize>,
-    prompts: std::sync::Arc<std::sync::Mutex<Vec<crate::enrichment::pipeline::types::ChatPrompt>>>,
-) -> crate::types::InferenceFn {
-    crate::enrichment::atlas::resolve_records::one_by_one(std::sync::Arc::new(move |prompt, _| {
-        calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        prompts.lock().unwrap().push(prompt.clone());
-        let labels: Vec<String> = prompt.response_schema.as_ref().unwrap()["enum"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|l| l.as_str().unwrap().to_string())
-            .collect();
-        let locate = prompt.phase_id.as_deref() == Some("document_passes_locate");
-        let asked_line = prompt.user.split("\n\nLine ").nth(1).unwrap_or("");
-        let pick = if locate && !asked_line.contains(needle) {
-            labels.last().unwrap().clone()
-        } else {
-            labels[0].clone()
-        };
-        let dist: serde_json::Map<String, Value> = labels
-            .iter()
-            .map(|l| {
-                (
-                    l.clone(),
-                    json!(if *l == pick {
-                        0.9
-                    } else {
-                        0.1 / labels.len() as f64
-                    }),
-                )
-            })
-            .collect();
-        let answer = Value::Object(dist).to_string();
-        Box::pin(async move { Ok(answer) })
-    }))
-}
+/// The one statement the runner tests' document makes.
+const CLOSED: &str = "Issue 842 was closed by pull request #1380.";
 
-fn counted(
-    needle: &'static str,
-) -> (
+/// A window model for a one-document window holding [`CLOSED`]: case 842's
+/// membership, quoting that line, its number read at "Issue 842". Every
+/// prompt is kept, one per window read; a second read errs.
+fn counted() -> (
     crate::types::InferenceFn,
-    std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    std::sync::Arc<std::sync::Mutex<Vec<crate::enrichment::pipeline::types::ChatPrompt>>>,
 ) {
-    let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let model = passes_model(needle, calls.clone(), Default::default());
-    (model, calls)
+    scripted(vec![json!({
+        "particulars": [{"ref": "p1", "type": "case", "name": "issue 842",
+            "fields": {"number": {"value": "842", "quote": "Issue 842"}}}],
+        "claims": [{"kind": "membership", "about": "p1", "document": "d1", "quote": CLOSED, "fields": {}}]})])
 }
 
-const CLOSED: &str = "closed by pull request";
+/// The window reads `counted` was asked.
+fn calls(prompts: &std::sync::Mutex<Vec<crate::enrichment::pipeline::types::ChatPrompt>>) -> usize {
+    prompts.lock().unwrap().len()
+}
 
 fn reader_runner(
     root: &std::path::Path,
@@ -252,18 +215,13 @@ fn reader_runner(
 }
 
 /// The body-word floor guards the general extractor against heading-only
-/// sections; the passes reader asks per line, so an 8-word document under a
-/// floor of 40 is still read (abfe32a14: the floor skipped 12 uv states).
+/// sections; a declared document read is exempt from it (`runner.rs`,
+/// `!document_reading`), so an 8-word document under a floor of 40 is still
+/// read (abfe32a14: the floor skipped 12 uv states).
 #[tokio::test]
-async fn the_passes_reader_reads_a_section_under_the_body_word_floor() {
-    let rows = [row(
-        1,
-        "doc-a",
-        "Issue 842 was closed by pull request #1380.",
-        "{}",
-    )];
-    let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let chat = passes_model(CLOSED, calls.clone(), Default::default());
+async fn a_document_read_reads_a_section_under_the_body_word_floor() {
+    let rows = [row(1, "doc-a", CLOSED, "{}")];
+    let (chat, prompts) = counted();
     let temp = tempfile::tempdir().unwrap();
     let runner = reader_runner(temp.path(), &policies(), chat, false).with_min_body_words(40);
     let result = runner
@@ -275,27 +233,20 @@ async fn the_passes_reader_reads_a_section_under_the_body_word_floor() {
         .await
         .unwrap();
     assert!(result.failures.is_empty(), "{:?}", result.failures);
-    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 7);
+    assert_eq!(calls(&prompts), 1);
 }
 
 #[tokio::test]
 async fn production_phase1_uses_the_mock_provider_with_actual_document_context() {
-    use std::sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc, Mutex,
-    };
-
     let rows = [row(
         1,
         "doc-a",
-        "Issue 842 was closed by pull request #1380.",
+        CLOSED,
         r#"{"author":"Alice","role":"member","date":"2024-02-03","kind":"comment","id":"doc-a"}"#,
     )];
     let chapter = input_chapter(&rows);
     let policies = policies();
-    let calls = Arc::new(AtomicUsize::new(0));
-    let prompts = Arc::new(Mutex::new(Vec::new()));
-    let chat = passes_model(CLOSED, calls.clone(), prompts.clone());
+    let (chat, prompts) = counted();
     let temp = tempfile::tempdir().unwrap();
     let runner = reader_runner(temp.path(), &policies, chat, false);
     let result = runner
@@ -307,10 +258,8 @@ async fn production_phase1_uses_the_mock_provider_with_actual_document_context()
         .await
         .unwrap();
 
-    // One Locate per line; About: one case, first named on line 1, its
-    // words pointed at, start and end ("Issue"); then the case's fields, at
-    // those words: `number` (open) pointed at among one word, `project` chosen.
-    assert_eq!(calls.load(Ordering::SeqCst), 7);
+    // One window read of the chapter.
+    assert_eq!(calls(&prompts), 1);
     assert!(result.output.questions_by_chapter[0].questions.is_empty());
     let read = result.output.questions_by_chapter[0]
         .section_extraction
@@ -335,24 +284,15 @@ async fn production_phase1_uses_the_mock_provider_with_actual_document_context()
         .iter()
         .map(|p| p.phase_id.as_deref().unwrap_or(""))
         .collect();
-    assert_eq!(
-        phases,
-        [
-            "document_passes_locate",
-            "document_passes_about",
-            "document_passes_about",
-            "document_passes_about",
-            "document_passes_about",
-            "document_passes_point",
-            "document_passes_choose"
-        ]
-    );
-    // A metadata-sourced author is a declared fact every question carries
-    // first (prefill), and never what a question asks about.
+    assert_eq!(phases, [super::window::WINDOW_PHASE]);
+    // A metadata-sourced author is a declared fact the document's head
+    // carries, and never text the reader reads in its body.
     for p in prompts.iter() {
-        let (facts, asked) = p.user.split_once("\n\n").unwrap();
+        let block = &p.user[p.user.find("=== d1 ===\n").unwrap()..];
+        let (facts, body) = block.split_once("\n\n").unwrap();
         assert!(facts.contains("author: Alice"), "{}", p.user);
-        assert!(!asked.contains("Alice"), "{}", p.user);
+        assert!(body.contains(CLOSED), "{}", p.user);
+        assert!(!body.contains("Alice"), "{}", p.user);
     }
     assert!(phase1_cache_matches(&[chapter.clone()], &result.output, &policies).is_ok());
     let default_policy = OntologyPolicies::default();
@@ -602,8 +542,12 @@ fn a_repeated_local_reference_with_a_changed_label_is_refused_not_fatal() {
         .contains("changes label"));
 }
 
+/// The window reader decides sameness inside a window, so it is shown each
+/// decided type's identity criterion ("Same case when: ...",
+/// `window.rs::ontology_text`): a criterion change is a new read contract and
+/// re-reads. The identity keys are RESOLVE's alone and reuse the read.
 #[test]
-fn undeclared_claim_kinds_are_refused_and_identity_changes_reuse_read_contract() {
+fn undeclared_claim_kinds_are_refused_and_a_criterion_change_rereads_where_a_key_change_does_not() {
     let rows = [row(
         1,
         "doc-a",
@@ -620,20 +564,28 @@ fn undeclared_claim_kinds_are_refused_and_identity_changes_reuse_read_contract()
     assert!(parse_response(&undeclared, &policies).is_err());
 
     let first = contract_fingerprint(&policies);
-    let mut changed_identity = policies.clone();
-    let record = changed_identity
+    let mut changed_keys = policies.clone();
+    let record = changed_keys
         .shape
         .types
         .iter_mut()
         .find(|ty| ty.name == "case")
         .unwrap();
-    record.identity_criterion = Some("a revised resolution rule".into());
     record.identity = vec!["number".into(), "external_key".into()];
-    changed_identity
+    changed_keys
         .identity
         .identity
         .insert("case".into(), vec!["external_key".into()]);
-    assert_eq!(first, contract_fingerprint(&changed_identity));
+    assert_eq!(first, contract_fingerprint(&changed_keys));
+    let mut changed_criterion = policies.clone();
+    changed_criterion
+        .shape
+        .types
+        .iter_mut()
+        .find(|ty| ty.name == "case")
+        .unwrap()
+        .identity_criterion = Some("a revised resolution rule".into());
+    assert_ne!(first, contract_fingerprint(&changed_criterion));
 
     let read = response(json!([{
         "document_id":"doc-a",
@@ -643,7 +595,8 @@ fn undeclared_claim_kinds_are_refused_and_identity_changes_reuse_read_contract()
     let mut result = parse_response(&read, &policies).unwrap();
     let extraction = result.section_extraction.as_mut().unwrap();
     validate_and_stamp(&chapter, &policies, extraction).unwrap();
-    assert!(cache_matches_chapter(&chapter, extraction, &changed_identity).is_ok());
+    assert!(cache_matches_chapter(&chapter, extraction, &changed_keys).is_ok());
+    assert!(cache_matches_chapter(&chapter, extraction, &changed_criterion).is_err());
 
     let changed_author_rows = [row(
         1,

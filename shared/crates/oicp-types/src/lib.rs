@@ -134,7 +134,7 @@ pub use ingest::{
 pub use knowledge::{
     ChunkRange, CorpusShardInfo, Granularity, IndexPlace, KnowledgeResult, KnowledgeSearchRequest,
     KnowledgeSearchResponse, LandscapeDigestEntry, LandscapeDigestRequest, LandscapeDigestResponse,
-    QueuedCorpus, Scorer, SentencePlace, SentenceRoute, SentenceScorer, Truncated,
+    QueuedCorpus, RequestPriority, Scorer, SentencePlace, SentenceRoute, SentenceScorer, Truncated,
 };
 pub use locator::{HeadingOutline, SpanLocator};
 pub use manifest::{

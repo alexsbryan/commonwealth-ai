@@ -258,6 +258,7 @@ async fn v05_checks(host: &Host, m: &ProviderManifest, args: &Args) -> Vec<Check
                 "knowledge.range",
                 "knowledge.scoped",
                 "knowledge.sentences",
+                "knowledge.priority",
             ] {
                 out.push(Check::fail(
                     id,

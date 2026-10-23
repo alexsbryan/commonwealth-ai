@@ -20,7 +20,7 @@ use crate::enrichment::atlas::precision::{Precision, SourcePrecision};
 use crate::enrichment::atlas::resolution_records::BuildAtoms;
 use crate::enrichment::ontology::{AttrFamily, OntologyPolicies, TypeIndex};
 use crate::enrichment::pipeline::document_read::{
-    field_readings, statement_attributes, DocumentReadField, CLAIM_FIELDS_ATTRIBUTE,
+    field_readings, other_names, statement_attributes, DocumentReadField, CLAIM_FIELDS_ATTRIBUTE,
 };
 
 /// Every `(statement kind, field, referenced type)` the document reader reads.
@@ -98,7 +98,11 @@ pub(super) fn resolve(
                     unjudged: Vec::new(),
                     unresolved: Vec::new(),
                 };
-                match held(&graph, &exclusions, doc, &of, &value) {
+                let also = value
+                    .as_str()
+                    .map(|w| other_names(&claim.attributes, w))
+                    .unwrap_or_default();
+                match held(&graph, &exclusions, doc, &of, &value, &also) {
                     Held::Record { id, unjudged } => {
                         debug!(claim = %claim.id.as_str(), attribute = %attr, atom = %id, unjudged = ?unjudged, "atlas/derive: a statement's reference holds the record its reading names");
                         d.unjudged.extend(unjudged.map(|_| id.clone()));

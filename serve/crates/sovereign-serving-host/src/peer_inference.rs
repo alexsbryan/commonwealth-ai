@@ -3900,6 +3900,7 @@ mod tests {
             self.served.fetch_add(1, Ordering::SeqCst);
             *self.saw_model.lock().expect("saw_model poisoned") = Some(_req.model_id.clone());
             Ok(CompletionResponse {
+                logprobs: None,
                 text: "served locally".into(),
                 tokens_used: 2,
                 prompt_tokens: 1,

@@ -125,6 +125,7 @@ struct OkLlmEmbedOk;
 impl InferenceProvider for OkLlmEmbedOk {
     async fn complete(&self, _req: &CompletionRequest) -> Result<CompletionResponse> {
         Ok(CompletionResponse {
+            logprobs: None,
             text: r#"{"summary": "The cluster centers on the anchor sentence theme.", "primary_entities": ["Anchor"]}"#.to_string(),
             tokens_used: 10,
             prompt_tokens: 5,

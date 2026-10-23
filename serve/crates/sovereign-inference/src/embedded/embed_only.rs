@@ -23,7 +23,7 @@ use sovereign_contracts::types::{
 use crate::hardware::{detect_hardware, HardwareProfile};
 use crate::llama::cpp::llama_backend::LlamaBackend;
 
-use super::EmbedSlot;
+use super::{EmbedSlot, Writer};
 
 /// An `InferenceProvider` that loads only an embedding slot.
 pub struct EmbedOnlyProvider {
@@ -45,7 +45,13 @@ impl EmbedOnlyProvider {
         let backend = Arc::new(backend);
         let n_gpu_layers = detect_hardware().recommended_gpu_layers;
         let embed_quirks = embed_family.default_quirks().embed;
-        let slot = EmbedSlot::load(&backend, embed_model_path, n_gpu_layers, embed_quirks)?;
+        let slot = EmbedSlot::load(
+            &backend,
+            embed_model_path,
+            n_gpu_layers,
+            embed_quirks,
+            Writer::None,
+        )?;
         Ok(Self {
             slot: Arc::new(slot),
             _backend: backend,

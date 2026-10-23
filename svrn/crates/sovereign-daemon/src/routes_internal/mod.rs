@@ -40,6 +40,7 @@ use oicp_types::EmbedModelInfo;
 
 mod atlas_status;
 mod client_token;
+mod corpus_attempt;
 mod corpus_collaborate;
 mod corpus_grant;
 mod corpus_ingest;

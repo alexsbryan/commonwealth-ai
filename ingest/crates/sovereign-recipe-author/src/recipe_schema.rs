@@ -435,6 +435,9 @@ fn ontology_schema(descriptor: &Value) -> Value {
             "must_not": { "type": "array", "items": { "type": "string" } },
             // Range is `recipe_ontology/language.rs`'s check; absent = 15.
             "max_entities_per_section": { "type": "integer", "minimum": 5, "maximum": 60 },
+            // The window reader's window size in characters; its range is
+            // `recipe_ontology/language.rs`'s check, not repeated here.
+            "window_chars": { "type": "integer" },
             "types": { "type": "array", "items": ontology_type_schema(descriptor) },
             "voices": {
                 "type": "object",

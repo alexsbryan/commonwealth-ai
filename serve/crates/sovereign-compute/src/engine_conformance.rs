@@ -255,6 +255,7 @@ mod tests {
 
     fn echo_response(text: String) -> CompletionResponse {
         CompletionResponse {
+            logprobs: None,
             text,
             tokens_used: 1,
             prompt_tokens: 1,

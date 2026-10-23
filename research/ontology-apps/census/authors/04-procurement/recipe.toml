@@ -1,0 +1,275 @@
+# Purchasing at a manufacturing site: purchase requests, approval replies,
+# purchase orders, supplier confirmations and invoices, as one mailbox export.
+# Authored blind from DESCRIPTION.md; every answer not quoted from it is an
+# assumption recorded in transcript.md.
+
+[corpus]
+id = "site-purchasing"
+name = "Site purchasing: requests, approvals, orders, invoices"
+description = "Purchase-request emails, approval replies, purchase orders sent to suppliers, supplier confirmations and invoices, read as purchases moving from request to payment."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# The material is mail: requests and approvals are emails, POs are sent to
+# suppliers by email, confirmations and invoices arrive by email (as text).
+[acquire]
+type = "local_file"
+path = "SOURCE_PATH"
+
+[extract]
+type = "email"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "site-purchasing"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is the purchasing department of a manufacturing site. A purchase starts as
+a purchase request from a colleague (what they want, how many, an estimated cost and its
+currency), is approved or rejected in reply by one or more approvers (requests above
+10,000 need two approvals), becomes a purchase order sent to one supplier with an order
+total, is confirmed and delivered by the supplier, is invoiced by the supplier against
+the purchase order (one or several invoices), and is paid. It can be cancelled at any
+point before payment. A purchase is one thing from request to payment: the request and
+the purchase order it became are the same purchase. Suppliers are companies we buy from;
+their contacts are the people who write to us from them. Amounts are numbers with a
+currency; never mix an estimated cost with an ordered or invoiced amount.
+"""
+must_not = [
+  "approve, reject or release a purchase or payment on anyone's behalf",
+  "report an estimated cost as an ordered or invoiced amount",
+]
+
+# ── Who is in the mail ──────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "supplier"
+kind = "entity"
+description = "A company we buy from, known by the email domain its people write from."
+attributes = [{ name = "domain", type = "text" }]
+identity = ["domain"]
+# OUR_COMPANY_DOMAIN is a placeholder for the site's own mail domain, so our
+# own company is never projected as a supplier.
+source = { metadata = ["from", "to", "cc"], attributes = { domain = "domain" }, exclude = ["@bundled:mailbox_providers", "OUR_COMPANY_DOMAIN"] }
+
+[[enrichment.ontology.types]]
+name = "contact"
+kind = "entity"
+description = "A person who writes or is written to: a colleague (requester, approver, buyer) or a supplier's contact."
+attributes = [
+  { name = "email", type = "text" },
+  { name = "name", type = "text" },
+  { name = "organization", type = "ref", of = "supplier" },
+]
+identity = ["email"]
+source = { metadata = ["from", "to", "cc"], attributes = { email = "address", name = "display_name" }, refs = { organization = { of = "supplier", reader = "domain" } } }
+
+# ── The purchase, from request to payment ───────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "purchase"
+kind = "entity"
+description = "One purchase from request to payment: the purchase request and the purchase order it became."
+attributes = [
+  { name = "request_number", type = "text", description = "The request's number in the tracking sheet or mail, where one is given." },
+  { name = "po_number", type = "text", description = "The purchase order number, once it is ordered." },
+  { name = "status", type = "text", values = ["requested", "approved", "rejected", "ordered", "delivered", "invoiced", "paid", "cancelled"], derived = "purchase_status" },
+]
+identity = ["po_number"]
+identity_fallback = ["request_number"]
+identity_criterion = "Two mentions are one purchase when they carry the same PO number or the same request number, or when a reply, order, confirmation or invoice answers or quotes that request (same requester, same item and quantity, in the same thread). Two requests for the same item by different people, or on different dates without a thread between them, are different purchases."
+
+[[enrichment.ontology.types]]
+name = "purchase_request"
+kind = "claim"
+description = "A colleague asking purchasing to buy something."
+force = "directive"
+deontic = ["request"]
+subject = "purchase"
+attributes = [
+  { name = "reference", type = "text", description = "The request number, else the requester's name as signed." },
+  { name = "requester", type = "ref", of = "contact" },
+  { name = "item", type = "text", description = "What is asked for, as written (part, material, service)." },
+  { name = "quantity", type = "quantity" },
+  { name = "quantity_unit", type = "text", description = "The unit the quantity is in (pieces, kg, m, hours)." },
+  { name = "estimated_cost", type = "quantity", description = "The estimated total cost the requester gives." },
+  { name = "currency", type = "text", description = "Currency of the estimated cost (EUR, USD, ...)." },
+  { name = "action", type = "text", values = ["raise", "amend", "withdraw"], description = "Whether the message raises a new request, changes one already raised, or withdraws it." },
+]
+
+[[enrichment.ontology.types]]
+name = "approval"
+kind = "claim"
+description = "An approver's reply approving or rejecting a purchase request."
+force = "declaration"
+subject = "purchase"
+attributes = [
+  { name = "reference", type = "text", description = "Who gives this decision, by name as signed." },
+  { name = "approver", type = "ref", of = "contact" },
+  { name = "decision", type = "text", values = ["approved", "rejected"] },
+  { name = "reason", type = "text", description = "The reason or condition given, if any." },
+]
+
+[[enrichment.ontology.types]]
+name = "purchase_order"
+kind = "claim"
+description = "A purchase order sent to a supplier: we commit to buy at the stated total."
+force = "commissive"
+subject = "purchase"
+attributes = [
+  { name = "reference", type = "text", description = "The purchase order number." },
+  { name = "supplier", type = "ref", of = "supplier" },
+  { name = "order_total", type = "quantity", description = "The order's total amount." },
+  { name = "currency", type = "text" },
+  { name = "delivery_date", type = "time", description = "The delivery date the order asks for." },
+  { name = "action", type = "text", values = ["issued", "amended", "cancelled"] },
+]
+
+[[enrichment.ontology.types]]
+name = "supplier_confirmation"
+kind = "claim"
+description = "A supplier confirming, declining, shipping or delivering an order."
+force = "assertive"
+subject = "purchase"
+attributes = [
+  { name = "reference", type = "text", description = "The supplier's confirmation, dispatch or delivery-note number, else the PO number it quotes." },
+  { name = "supplier", type = "ref", of = "supplier" },
+  { name = "confirms", type = "text", values = ["order_accepted", "order_declined", "shipped", "delivered"] },
+  { name = "confirmed_total", type = "quantity" },
+  { name = "currency", type = "text" },
+  { name = "delivery_date", type = "time", description = "The delivery date confirmed or the date delivered." },
+]
+
+[[enrichment.ontology.types]]
+name = "invoice"
+kind = "claim"
+description = "A supplier's invoice (or credit note) against a purchase order."
+force = "assertive"
+subject = "purchase"
+attributes = [
+  { name = "reference", type = "text", description = "The invoice or credit-note number." },
+  { name = "supplier", type = "ref", of = "supplier" },
+  { name = "invoiced_amount", type = "quantity", description = "The invoice's total amount." },
+  { name = "currency", type = "text" },
+  { name = "invoice_date", type = "time" },
+  { name = "due_date", type = "time" },
+  { name = "po_quoted", type = "text", description = "The purchase order number the invoice quotes." },
+  { name = "document_kind", type = "text", values = ["invoice", "credit_note"] },
+]
+
+[[enrichment.ontology.types]]
+name = "payment"
+kind = "claim"
+description = "A statement that an invoice has been paid (remittance advice, payment confirmation)."
+force = "assertive"
+subject = "purchase"
+attributes = [
+  { name = "reference", type = "text", description = "The payment or remittance reference, else the invoice number paid." },
+  { name = "amount", type = "quantity" },
+  { name = "currency", type = "text" },
+  { name = "paid_on", type = "time" },
+  { name = "outcome", type = "text", values = ["paid", "failed", "reversed"] },
+]
+
+# ── What holds when ─────────────────────────────────────────────────────────
+
+[enrichment.ontology.change]
+document = { date = "date", thread = "thread_id", id = "message_id", author = "from" }
+supersedes = { purchase_request = "document_date", purchase_order = "document_date" }
+
+# ── Invoice against order ───────────────────────────────────────────────────
+
+[enrichment.ontology.tension]
+label = "mismatch"
+between = ["purchase_order", "invoice"]
+same = ["subject"]
+not_conflicts = [
+  "a partial invoice for a partial delivery, where the invoices together match the order",
+  "freight, tax or surcharge lines the order states separately",
+  "an amended purchase order whose new total the invoice matches",
+  "a credit note that brings the invoiced total back to the order total",
+]
+
+# ── Status: requested -> approved -> ordered -> delivered -> invoiced -> paid ─
+
+[[enrichment.ontology.folds]]
+id = "purchase_status"
+by = "protocol"
+from = ["^subject"]
+
+[enrichment.ontology.folds.protocol]
+identity = "reference"
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "request_raised"
+claim_kind = "purchase_request"
+state = "requested"
+when = { action = "raise" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "request_resubmitted"
+claim_kind = "purchase_request"
+state = "requested"
+when = { action = "amend" }
+from = ["rejected"]
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "request_withdrawn"
+claim_kind = "purchase_request"
+state = "cancelled"
+when = { action = "withdraw" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "approved"
+claim_kind = "approval"
+state = "approved"
+when = { decision = "approved" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "rejected"
+claim_kind = "approval"
+state = "rejected"
+when = { decision = "rejected" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "order_issued"
+claim_kind = "purchase_order"
+state = "ordered"
+when = { action = "issued" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "order_cancelled"
+claim_kind = "purchase_order"
+state = "cancelled"
+when = { action = "cancelled" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "delivered"
+claim_kind = "supplier_confirmation"
+state = "delivered"
+when = { confirms = "delivered" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "invoiced"
+claim_kind = "invoice"
+state = "invoiced"
+when = { document_kind = "invoice" }
+
+[[enrichment.ontology.folds.protocol.rules]]
+id = "paid"
+claim_kind = "payment"
+state = "paid"
+when = { outcome = "paid" }

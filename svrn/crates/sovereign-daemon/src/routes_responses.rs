@@ -582,6 +582,9 @@ fn translate_request(
         stable_prefix_len: None,
         top_k: None,
         turn_admission: None,
+        thinking: None,
+        logprobs: None,
+        top_logprobs: None,
     })
 }
 

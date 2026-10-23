@@ -3,8 +3,11 @@ QUERY GRAMMAR (answer with exactly one JSON object):
 - filters: conditions on the target's OWN attributes, or on `name` (the entity's own name).
   op `eq` = equals, `contains` = the attribute's text mentions the value, `lt` / `gt` =
   earlier/smaller or later/larger than the value. negate=true keeps the targets that do NOT
-  meet the condition. Times are years as signed numbers: years B.C. are negative
-  (318 B.C. = -318), A.D. positive.
+  meet the condition. A time is a date ("2026-10-20"), a month ("2026-10") or a year as a
+  signed number (318 B.C. = -318, A.D. positive); `lt` / `gt` = wholly before / after it,
+  `eq` = within it. Instead of a value, `value` may name another attribute of the same kind,
+  compared by `eq` / `lt` / `gt`: {"attribute": "<attr>"} = of the same entity; inside `where`,
+  {"target": "<attr>"} = of the target.
 - relations: the target must (negate=false) or must not (negate=true) be linked by `relation`
   to an entity of `other_type` named `other_name` (null = to any such entity) that also meets
   `where` (null = no further condition). `where` holds that linked entity's own filters and
@@ -14,7 +17,10 @@ QUERY GRAMMAR (answer with exactly one JSON object):
   argmax / argmin = the matching target with the largest / smallest `aggregate_over`, which is
   one of the target's time or quantity attributes, or a related type (= how many distinct
   linked entities of that type the target has, counting only those that meet the `where` of
-  the query's relation to that type).
+  the query's relation to that type); sum = the total of `aggregate_over`, a quantity attribute
+  of the target, over the matching targets, one total per value of `group_by`: one of the
+  target's attributes, or the `attr` of a relation `<target>.<attr>` to total per linked entity
+  (null = one total). Only sum takes `group_by`.
 
 EXAMPLES (a different knowledge base: books, authors, libraries):
 Q: Which books printed before 1600 are held by the Bodleian?

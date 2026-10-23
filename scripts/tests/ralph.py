@@ -166,6 +166,7 @@ class Rig:
         self.disk = disk or (lambda: 100)
         self.probe = probe or (lambda m: (True, ""))
         self.manifest = manifest
+        kw.setdefault("code_digest", lambda: "same")
         self.kw = dict(label="t", lanes=lanes, lane_mode=lane_mode, base_branch="main",
                        charter=charter, models=models or {"MODEL": "prov/m"},
                        state_dir=self.tmp / "state", lane_root=self.tmp / "lanes", **kw)
@@ -176,7 +177,7 @@ class Rig:
             ralph.Paths(self.wd, manifest=self.manifest), spawn=self.procs.spawn, alive=self.procs.alive,
             kill=self.procs.kill, clock=self.clock, sleep=lambda s: FOREVER,
             probe=lambda m: self.probe(m), jobs_share=lambda n: (2, "test budget"),
-            disk_free_gb=lambda: self.disk(), code_digest=lambda: "same",
+            disk_free_gb=lambda: self.disk(),
             notifier=lambda title, body, enabled: self.notes.append((title, body)),
             **self.kw)
 
@@ -949,6 +950,35 @@ class IncidentTests(unittest.TestCase):
         rig.tick(2)
         self.assertIs(rig.row("a").status, ralph.Status.DONE)
         self.assertEqual(len(rig.procs.session_argvs()), 1)
+
+    def test_a_committed_manifest_change_redeploys_too(self):
+        # [checks] load once at start: a check narrowed in queue.toml ran its
+        # old argv until a restart (corpus-engine-core HUMAN-line-u, 2026-10-22).
+        rel = "ralph/next/t/queue.toml"
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n", manifest=manifest_stub(),
+                  extra={rel: "[checks]\nx = [\"old\"]\n"}, code_digest=None)
+        execs = []
+        rig.loop.committed = lambda: True
+        rig.loop.compiles = lambda: None
+        rig.loop.reexec = execs.append
+        rig.tick()
+        self.assertEqual(execs, [])
+        write(rig.wd, rel, "[checks]\nx = [\"new\"]\n")
+        rig.tick()
+        self.assertEqual(len(execs), 1)
+
+    def test_a_manifest_that_does_not_load_is_not_deployed(self):
+        rig = Rig(self.tmp.name, "- [ ] a — depends []\n")
+        execs = []
+        rig.loop.code_digest = lambda: "changed"
+        rig.loop.committed = lambda: True
+        rig.loop.compiles = mock.Mock(side_effect=ValueError("q.toml: unknown key `chekcs`"))
+        rig.loop.reexec = execs.append
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            rig.tick(2)
+        self.assertEqual(execs, [])
+        self.assertEqual(out.getvalue().count("does not load (q.toml: unknown key `chekcs`)"), 1)
 
     def test_the_job_restarts_on_failure_and_stays_down_when_done(self):
         with tempfile.TemporaryDirectory() as home:

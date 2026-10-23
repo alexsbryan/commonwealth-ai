@@ -42,9 +42,7 @@ impl DaemonInferenceClient {
             temperature: Some(temperature),
             max_tokens: max_tokens.map(|n| n as usize),
             think_budget: Some(think_budget as usize),
-            // A zero budget for the chat template too: the one spelling a
-            // bare llama-server reads (`chat_wire::write_thinking`).
-            enable_thinking: (think_budget == 0).then_some(false),
+            enable_thinking: template_thinking(think_budget),
             // The schema label rides as the schema's `title`, which a
             // function-call host names the function after.
             structured_output: prompt
@@ -257,5 +255,26 @@ pub(super) async fn send_honouring_shed(
         );
         tokio::time::sleep(delay).await;
         waited += delay;
+    }
+}
+
+/// The chat template's thinking switch for a budget, set both ways. An unset
+/// switch renders thinking OFF on the daemon's in-repo path
+/// (`CompletionRequest::templated_thinking`), so a positive budget left it
+/// unset and a local thinking model never thought (2026-10-15: a 4000-token
+/// budget answered in 39 tokens). It is also the one spelling a bare
+/// llama-server reads (`chat_wire::write_thinking`).
+fn template_thinking(think_budget: u32) -> Option<bool> {
+    Some(think_budget > 0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::template_thinking;
+
+    #[test]
+    fn a_positive_think_budget_turns_the_templates_thinking_on() {
+        assert_eq!(template_thinking(48_000), Some(true));
+        assert_eq!(template_thinking(0), Some(false));
     }
 }

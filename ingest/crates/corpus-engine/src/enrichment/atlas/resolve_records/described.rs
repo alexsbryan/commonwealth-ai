@@ -7,7 +7,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 
 /// What a reader read a particular to be, across everything it read of it:
-/// its supported values of the type's declared attributes other than keys and
+/// the names a window read gave it (`SUBJECT_NAME_ATTRIBUTE`), and its
+/// supported values of the type's declared attributes other than keys and
 /// necessary ones (those travel as `keys` and `read`). An
 /// author's identity criterion is written about such values, so the model
 /// deciding identity is shown them on both sides of its question; code never
@@ -15,16 +16,19 @@ use serde::{Deserialize, Serialize};
 /// values.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Described {
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub names: BTreeSet<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub values: BTreeMap<String, BTreeSet<String>>,
 }
 
 impl Described {
     pub fn is_empty(&self) -> bool {
-        self.values.is_empty()
+        self.names.is_empty() && self.values.is_empty()
     }
 
     pub fn extend(&mut self, other: &Described) {
+        self.names.extend(other.names.iter().cloned());
         for (attr, values) in &other.values {
             self.values
                 .entry(attr.clone())
@@ -33,9 +37,9 @@ impl Described {
         }
     }
 
-    /// One line's worth: each attribute's values, at most `SHOWN_VALUES` of
-    /// each (a cost knob: it bounds the prompt, decides nothing). Empty when
-    /// nothing was read.
+    /// One line's worth: its names, then each attribute's values, at most
+    /// `SHOWN_VALUES` of each (a cost knob: it bounds the prompt, decides
+    /// nothing). Empty when nothing was read.
     pub fn render(&self) -> String {
         let few = |vs: &BTreeSet<String>| {
             let mut out: Vec<&str> = vs.iter().map(String::as_str).take(SHOWN_VALUES).collect();
@@ -44,9 +48,14 @@ impl Described {
             }
             out.join(" | ")
         };
-        self.values
-            .iter()
-            .map(|(attr, values)| format!("{attr}: {}", few(values)))
+        let named = (!self.names.is_empty()).then(|| format!("named: {}", few(&self.names)));
+        named
+            .into_iter()
+            .chain(
+                self.values
+                    .iter()
+                    .map(|(attr, values)| format!("{attr}: {}", few(values))),
+            )
             .collect::<Vec<_>>()
             .join("; ")
     }

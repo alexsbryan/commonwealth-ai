@@ -1,0 +1,218 @@
+# The Saltgrass Ledger — a teaching corpus for one novel.
+#
+# Built the way a unit on a mystery is built: every answer a student gives
+# must be findable, explainable and citable to a chapter. The ontology keeps
+# apart what HAPPENED, what a character SAYS happened, what the ledger
+# RECORDS, and who is suspected of what, so the gap between them — the quiet
+# lies — is something the corpus can point at rather than flatten.
+
+[corpus]
+id = "saltgrass-teacher"
+name = "The Saltgrass Ledger — a tale of Glasswater Stave"
+description = "A sixteen-chapter mystery set in a salvage port: the harbormaster's death, the tide ledger, and what the village claims to know. Read for characters, incidents, testimony, ledger entries and suspicion, in chapter order."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# The manuscript as one markdown file (or a folder of them), each chapter
+# under its own heading, chapters in reading order. A chapter heading is the
+# citation a student gives.
+[acquire]
+type = "local_file"
+path = "/Users/alexsbryan/.svrnmesh/bench-corpora/chaos-saltgrass/saltgrass-ledger.txt"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "literary-mystery"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This is a mystery novel in sixteen chapters, set in Glasswater Stave, a salvage
+port whose lock basin is held behind tide gates. Corwin Pellow, the harbormaster,
+is found dead in the basin; Maren Ashquill, who keeps the tide ledger, begins to
+ask what really happened. Read it the way a careful student must: keep apart what
+the narration shows happening, what a character SAYS happened (and whether they
+could have seen it, heard it, read it in the ledger, or are only repeating village
+talk), what the tide ledger RECORDS (gate openings, vessels through, water against
+the painted gauge), and who suspects whom of what. A whisper is still a claim; note
+that it was whispered. The ledger is a document inside the story — it can be
+wrong, altered or silent, and its silence is evidence too. Everything is ordered
+by chapter, and every statement must stay tied to the passage that says it.
+"""
+must_not = [
+  "state who killed Corwin Pellow, or that he was killed, as fact unless the narration itself establishes it",
+  "present what a character claims as what happened",
+  "treat village talk repeated by several people as independent confirmation",
+  "invent a quotation or a chapter reference the text does not hold",
+]
+
+# ── Things ────────────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "character"
+kind = "entity"
+role_of = "person"
+description = "A person in the novel: villagers, the harbormaster, the ledger-keeper, crews of vessels, anyone named or singled out."
+attributes = [
+  { name = "occupation", type = "text", by = "agree", description = "What they do in the port (harbormaster, ledger-keeper, salvager, publican...)." },
+  { name = "routine", type = "text", description = "A habit the text gives them — where they are, at what hour, as a rule." },
+]
+identity_criterion = "Two mentions are one character when they name the same person of Glasswater Stave, whether by full name, surname, first name, nickname or office ('Pellow', 'Corwin', 'the harbormaster'). An office or title names whoever holds it at that point in the story; two people with the same surname are different characters unless the text joins them."
+
+[[enrichment.ontology.types]]
+name = "vessel"
+kind = "entity"
+description = "A boat or ship that comes through the lock gates or lies in the basin."
+identity_criterion = "Two mentions are one vessel when they give the same boat's name, or describe the same unnamed craft by its master, look or berth in the same stretch of the story. A boat renamed or repainted is still one vessel if the text says so."
+
+[[enrichment.ontology.types]]
+name = "location"
+kind = "entity"
+specializes = "place"
+description = "A spot in or near Glasswater Stave the story returns to: the lock basin, the gates, the painted gauge, the cobbles, a house, the harbor office."
+identity_criterion = "Two mentions are one location when they point at the same physical spot, however phrased ('the basin', 'the lock basin', 'the water behind the gates')."
+
+[[enrichment.ontology.types]]
+name = "object"
+kind = "entity"
+description = "A physical thing the plot or the evidence turns on: the tide ledger itself, a page of it, a key, a lantern, a rope, a coat, a letter."
+attributes = [
+  { name = "owner", type = "ref", of = "character" },
+  { name = "found_at", type = "ref", of = "location" },
+]
+identity_criterion = "Two mentions are one object when they are the same physical item, followed through the story — 'the ledger' and 'Maren's book' are one thing; a missing page is its own object once the text treats it as one."
+
+[[enrichment.ontology.types]]
+name = "incident"
+kind = "event"
+description = "Something that happens at a particular time in the story's world: the death, a gate opening, a vessel coming through, a meeting, a sighting, a quarrel."
+participants = { who = "character", vessel = "vessel", where = "location" }
+attributes = [
+  { name = "occurred", type = "time", description = "When, as the text gives it: the hour, the tide, the day." },
+  { name = "gauge_height", type = "quantity", description = "Water against the painted gauge at the time, if given." },
+]
+identity_criterion = "Two mentions are one incident when they are the same occurrence — same place, same night or tide, same people — even when different characters tell it differently ('the night Pellow went in' and 'when the gates were opened late'). A habit repeated every morning is not one incident; a particular morning is."
+
+[[enrichment.ontology.types]]
+name = "tie"
+kind = "relation"
+from = "character"
+to = "character"
+description = "A standing bond between two characters that could give one of them a reason: kin, marriage, debt, work, rivalry, old grudge."
+attributes = [
+  { name = "nature", type = "text", values = ["kin", "marriage", "courtship", "friendship", "employment", "debt", "business", "rivalry", "grudge", "other"] },
+]
+
+# ── States ────────────────────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "inner_state"
+kind = "state"
+of = "character"
+description = "What a character believes, fears, suspects or hides at a point in the story — Maren's first unease, her growing suspicion, someone's guilt or fear."
+
+# ── What the text asserts ────────────────────────────────────────────
+
+[[enrichment.ontology.types]]
+name = "account"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "incident"
+label = "account"
+description = "A character tells what happened, or where someone was, at an incident — testimony, alibi, gossip."
+grades = ["eyewitness", "documented", "inference", "hearsay", "rumor"]
+attributes = [
+  { name = "speaker", type = "ref", of = "character" },
+  { name = "told_to", type = "ref", of = "character" },
+  { name = "manner", type = "text", values = ["openly", "whispered", "in private", "under questioning", "overheard"] },
+]
+
+[[enrichment.ontology.types]]
+name = "ledger_record"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "incident"
+description = "What the tide ledger shows for an incident: a gate opening, a vessel through, a height of water — or that a page is blank, corrected or missing."
+attributes = [
+  { name = "entered_by", type = "ref", of = "character" },
+  { name = "vessel", type = "ref", of = "vessel" },
+  { name = "condition", type = "text", values = ["as written", "corrected", "in another hand", "blank", "missing"] },
+]
+
+[[enrichment.ontology.types]]
+name = "suspicion"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "character"
+description = "Someone says, hints or thinks that a character had a hand in Pellow's death, or had a reason to want it."
+grades = ["eyewitness", "documented", "inference", "hearsay", "rumor"]
+attributes = [
+  { name = "held_by", type = "ref", of = "character" },
+  { name = "motive", type = "text", description = "The reason given, in the text's words." },
+  { name = "manner", type = "text", values = ["openly", "whispered", "in private", "only implied", "only thought"] },
+]
+
+[[enrichment.ontology.types]]
+name = "finding"
+kind = "claim"
+force = "assertive"
+scope = "in_work"
+subject = "object"
+description = "A character notices, finds, handles or describes a physical thing that bears on what happened — where it was, whose it is, what state it was in."
+grades = ["eyewitness", "documented", "inference", "hearsay", "rumor"]
+attributes = [
+  { name = "found_by", type = "ref", of = "character" },
+]
+
+[[enrichment.ontology.types]]
+name = "pressure"
+kind = "claim"
+force = "directive"
+deontic = ["require", "forbid", "request"]
+scope = "in_work"
+subject = "incident"
+description = "A character tells another to keep quiet, look away, say a certain thing, or stop asking about an incident."
+attributes = [
+  { name = "from_whom", type = "ref", of = "character" },
+  { name = "to_whom", type = "ref", of = "character" },
+]
+
+# ── Time, voices, tension ────────────────────────────────────────────
+
+[enrichment.ontology.change]
+clock = "narrative"
+
+[enrichment.ontology.voices]
+not_entities = ["the narrator"]
+
+[enrichment.ontology.tension]
+label = "discrepancy"
+between = ["account", "ledger_record"]
+same = ["subject"]
+not_conflicts = [
+  "One account adding a detail another leaves out is not a contradiction.",
+  "The ledger saying nothing about something is not the ledger contradicting it, unless that thing needed the gates opened.",
+  "Two people repeating the same rumour do not confirm each other; they are one claim twice.",
+  "A time told by the tide and a time told by the clock can name the same moment.",
+]
+
+[enrichment.ontology.derive]
+configurations = true
+arguments = false

@@ -329,11 +329,14 @@ pub(crate) fn format_prompt(
     request: &CompletionRequest,
     quirks: &ModelQuirks,
 ) -> Result<super::chat_template::Prompt> {
-    // Only a conversation's reply is parsed by `chat_turn`, so only its
-    // prompt names a turn opener; every other shape keeps its own parse.
+    // Every shape names the opener its prompt ends in (`turn_opener`): a
+    // template that opens `<think>` in the generation prompt leaves the reply
+    // without the tag, so the turn is re-joined to it and a think budget can
+    // count it (think_budget.rs). A conversation's reply is then parsed by
+    // `chat_turn`; every other shape keeps its own parse.
     let plain = |text: String| super::chat_template::Prompt {
+        turn_opener: super::chat_template::turn_opener(&text).to_string(),
         text,
-        turn_opener: String::new(),
     };
     // Raw pass-through (INLINE_COMPLETION.md §3.1, decision D4): the
     // caller already assembled the exact string the model must see

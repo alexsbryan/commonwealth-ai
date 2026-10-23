@@ -3157,6 +3157,7 @@ mod tests {
             _r: &CompletionRequest,
         ) -> crate::error::Result<CompletionResponse> {
             Ok(CompletionResponse {
+                logprobs: None,
                 text: "no".into(),
                 tokens_used: 0,
                 prompt_tokens: 0,

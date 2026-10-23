@@ -107,6 +107,11 @@ One line per crate, under the top-level directory that owns it (§1;
 `[crate_dirs]`, boundary-gate). For detail, read the crate's `lib.rs`;
 `svrn/docs/` holds the subsystem deep dives.
 
+Since 2026-10-23 the corpus, evidence and deep-research slice is developed
+in corpus-engine-core, and its files here are frozen (`quality/frozen-paths.txt`;
+AGENTS.md, "Frozen: the slice that moved to corpus-engine-core"). The crates
+below still build here because the daemon, desktop and CLI link them.
+
 ### svrn — the assistant and knowledge server
 
 ```
@@ -216,18 +221,25 @@ thing), [`ENRICHMENT_V2.md`](../ingest/crates/corpus-engine/ENRICHMENT_V2.md),
 - `atlas_traversal/` (pure half in `understanding-atlas`) — question →
   `QueryPlan` → `traverse` → brief, no model. Every declared-type question
   runs through ONE executor, `typed::execute`: a `TypedQuery` (target type;
-  filters `eq`/`lt`/`gt`/`contains`, times as signed-year intervals; relation
+  filters `eq`/`lt`/`gt`/`contains` against a literal, or `eq`/`lt`/`gt` against another
+  attribute of the same atom (`{"attribute": ..}`) or, inside a `where`, of the target
+  (`{"target": ..}`), either side unread = unjudged; times as signed-year intervals; relation
   constraints over a declared relation type or a `<type>.<attr>` ref, a named
   far end matched by folded name or alias, never a substring; a depth-2
-  `where`; `none`/`count`/`argmax`/`argmin`/`tally`) answers with a
-  `TypedTable` whose rows carry evidence chunk ids, which the brief prints
+  `where`; `none`/`count`/`argmax`/`argmin`/`tally`, or `sum` of a quantity attribute per
+  `group_by` attribute, a ref grouping by the record it holds, an atom with no single readable
+  number reported by id and never added as 0) answers with a
+  `TypedTable` whose rows carry, per evidence, the installed chunk id that holds its quote
+  (`ChunkRef::cited_id`: `index_chunk` when the build placed it, else the section the read
+  cited), which the brief prints
   as a cited table with a count line. An unset attribute sets the atom
   aside as unjudged and says so. `svrn enrich atlas-query <corpus> --typed
   '<json>'` runs one as written (`--json`: rows `{name, atom_id,
   attributes, evidence, record}`, `record` the row `atoms_lookup` shows,
   from the one builder `corpus_engine_atlas_reader::records::RecordView`). `typed_prompt::query_grammar` renders a declared
   ontology as the documentation and per-type JSON Schema a model writes one
-  against (the query-layer probe's, byte for byte); `AtlasGraph::typed_answer`
+  against (the query-layer probe's bytes, but for the attribute glosses and the time
+  sentence); `AtlasGraph::typed_answer`
   runs the same executor over a loaded graph.
 - `update/`, `meta_atlas/`, `freshness.rs`, `pii.rs`,
   `alignment_projector.rs`.
@@ -635,81 +647,86 @@ question the pipeline asks about a type is a method on the resolved
   subject fields flow to RESOLVE. A claim carries its subject's readings whole
   (`SUBJECT_FIELDS_ATTRIBUTE`, each a `DocumentReadField` like its own fields),
   RESOLVE keys on their supported values and keeps them on the claim, and the
-  projection sketches no subject (RESOLVE alone makes those records). The passes reader asks by default
-  (`document_read/passes.rs`, ONTOLOGY_METHOD §Reading); `SOVEREIGN_READER=waves` (experiment, DEFAULTS_LEDGER)
-  reads with the compiled reader instead (`document_read/waves.rs`): the declaration compiled into levels,
-  each declared target counted and its particulars pointed at first, then per particular its fields and acts,
-  then per claim its fields, every question opening with one document prefix and each round of a level one
-  forced-choice wave (`waves_jobs.rs`). `SOVEREIGN_READER=window` (experiment, DEFAULTS_LEDGER) reads each
+  projection sketches no subject (RESOLVE alone makes those records). The window reader is the one
+  reader (ONTOLOGY_METHOD §Reading; the default from 2026-10-15, the passes reader and its waves deleted
+  2026-10-16, `SOVEREIGN_READER` retired with them). It reads each
   chapter in one call (`document_read/window.rs`, prompt `window_prompt.md`), and `enrich init` then cuts the
   corpus into windows: every document in declared-clock order, cut by size only where a document ends
-  (`sovereign-enrichment-build/src/window_manifest.rs`, `WINDOW_CHARS`). The window reader names each
+  (`sovereign-enrichment-build/src/window_manifest.rs`, `WINDOW_CHARS`, 20,000 characters since 2026-10-17, or the recipe's `window_chars`: a call
+  writes about as many statements whatever it is shown, so the size sets coverage and read-to-read agreement, not
+  only cost). The window reader names each
   particular once across its chapter; its envelope says so (`DocumentRead.subjects = Chapter`), the projection
   carries the reference (`CHAPTER_SUBJECT_ATTRIBUTE`), and RESOLVE links a chapter's statements by it as a
-  sufficient key (`resolution_records.rs::CHAPTER_SUBJECT_KEY`), deciding only across windows. Every question about a
-  document opens with its declared facts (`prefill.rs`: the metadata fields the
-  declaration names and the declared sets they put the document or a sourced
-  record in, read through the projection's own field readers,
+  sufficient key (`resolution_records.rs::CHAPTER_SUBJECT_KEY`), deciding only across windows. The prompt lists
+  statement kinds and types under their own headings and the answer shape names each set's members; a
+  particular's field is written once per stating document (`[{value, quote}]`), and each claim reads the entry
+  its own document states (`window_particulars.rs::own_entry`), so `agree` and dated folds see every reading. A malformed value
+  in the answer costs at most the element holding it (`window_answer.rs`): a bare fraction (`.02`) is read with
+  its leading zero, and if the answer still does not parse each particular and claim is parsed alone, the ones
+  that fail (and the claims about a failed particular) dropped and counted as `lost`; a claim key outside the
+  claim's envelope (the keys `window_prompt.md` gives a claim, read from it) is a field written beside `fields` and
+  is read in it, and so is each key of a `grade` written as an object (a grade is one of its kind's grades, never
+  an object). The answer shape offers a claim's `grade` (`window.rs::GRADE_SLOT`) only when a kind the window reads
+  lists grades; the envelope keeps it either way. A reference value resolves
+  in `window_refs.rs` (label name, candidate, words held), by any of a particular's names when the answer lists
+  `other_names` for it (a name a document says it also has; typed, never a delimiter, so "Input / Output" is one
+  name; `window_particulars.rs::names_for`, also used for a subject's sourced identity and for placing an
+  unstated particular, which is sent as its own statement on every document of the window whose own lines
+  name it, 2026-10-20, so a reference in each of them finds it). Each statement carries who says it as the answer's `said_by` read it (the document's
+  words, or none for its own voice; `window_voice.rs`, kept on `SAID_BY_ATTRIBUTE` and shown by the
+  record row with its grade, `corpus-engine-atlas-reader/src/records.rs`), and the other names of what it names, typed by what it refers to
+  (`OTHER_NAMES_ATTRIBUTE`), which RESOLVE shows beside the subject's name and the readings' values
+  (`resolution_records/described.rs`, never compared) and `read_fields.rs::record_read` lands a reading by, its
+  value first; a listed record answers its identity. Two particulars the reader
+  read in one document stay two: a record holding one is never offered the other, folded or joined earlier in the
+  same document (`resolve_records/apart.rs::read_beside`, tracked in `select::choose`); a record the same document
+  opened is weighed by every window reference that has joined it, not its opener's alone, as the fold's recheck
+  (`gate_plans`) weighs it, so a window-mate opens its own record instead of being refused (code enforces this; no
+  question line restates it); and a statement follows its
+  own particular, joining by key the record that already holds its reference whatever sibling a question let it
+  share (`apart.rs::chapter_conflict`). Every veto event names its conflict. Each document in a window opens
+  with its declared facts: the fields the declaration stamps or its metadata sources read
+  (`window.rs::shown_fields`) and, as `Named here:`, the records those sources name of each type a read
+  reference targets (`pick.rs::candidates`, read through the projection's own field readers,
   `resolution_sources/fields.rs`). A line carried from a document dated
   earlier, shown by structure (a passage of neighbouring lines that document
-  holds in order, or its line under a mark it lacks there), is never asked;
+  holds in order, or its line under a mark it lacks there), is never shown as the document's own;
   a line that only repeats another's words is (`line_classes.rs`, indexed
   once per run over every chapter's documents and part of the section cache
   key). Two more classes come from what the extractor wrote, never from the
   words: a header line before the document's `body_start` and a line inside
   one of its `segments`, an embedded reply or forward
-  (`extractors/email_segments.rs`). Both are offsets into the canonical text
+  (`extractors/email_segments.rs`, one segment per message of a history). Each embedded message is a
+  document of its own since 2026-10-17 (`extractors/email_embedded.rs`): its own lines, dated and authored
+  by its own header (`date_basis`: `header`, or "before its carrier" with why, never the carrier's date as
+  if read), keyed by who said what so one carried by several replies is one document, and marked
+  `embedded_in`; its carrier's segment names it (`message`). `LineClasses` gives every line one owner: a
+  stored document never yields a line to an embedded one, an embedded one yields to any stored document
+  holding the line as its own text and else to an embedded one dated before it (ties by key), and a
+  segment's lines point to that owner. Before this, an embedded message no stored document held was read
+  nowhere (ward-story tep/10., note f9142d79). The window reader shows, in place of each run of lines a document quotes
+  from an earlier one, a pointer to that document (`[quoted from d3]` in the window, its date outside it;
+  self-describing, so no prompt line explains it or assumes the document is a reply;
+  `document_read/window_text.rs::shown_text`, `LineClasses::sources`), so a reply's referent is read where it
+  was written while the quoted text stays unshown and uncitable: a claim whose quote is in the lines its
+  document quotes or embeds and not in its own is refused by name (`window.rs::envelope`, `quoted_text`;
+  counted as `carried` on the chapter-read event), a guarantee code makes, not the prompt. A claim's quote
+  is widened to its sentence only within the run of own lines it stands in (`window_text.rs::own_text`
+  leaves a blank line where lines were removed, `window.rs::sentence_of` stops there), so the evidence code
+  composes is a passage of the body validation checks. Both are offsets into the canonical text
   the reader reads: `SourceDocument::raw_body` prefers the text store's text
   (`corpus_io::document_texts`, attached by `SectionDocuments::with_texts`),
   so no chunk title or overlap is read; a document the store cannot give is
   read from its chunks with those two classes not applied, and the trace says
-  so. A pointed span is trimmed to its first and last letter or digit
-  (`point::trimmed`). Locate (`locate.rs`) asks every remaining
-  numbered line which declared claim kind it states, among the kinds no
-  protocol rule names; a kind a rule names, about a type RESOLVE decides, is an
-  act (`act.rs`, `KindPlan::keys`): after About, each field the rules qualify
-  on is asked of the whole document per particular in two wordings off one
-  wave (a disagreement held, no statement), and an agreed value is cited by one
-  forced choice among the sentence units touching asked lines, with no "none"
-  label (one candidate is cited by code); the statement is the lines that
-  sentence touches, its key `Supported` by `reader_act`. Mention asks each
-  remaining line which entity type a read reference targets it names, pointing at the words (`mention.rs`;
-  no type a table source holds); each of the two asks a document's lines as one
-  forced-choice wave (`decision_wave`, below), since no line's question needs
-  another's answer. About (`about.rs`) asks, per document and per subject type
-  RESOLVE decides (`resolution_records::decides`), whether the document is
-  about none, one or more than one, points at where each particular is first
-  named (a line, then its words; at most five; never a header line, of the
-  document or of an embedded message, `Doc::headers`), and with several asks each
-  statement of the type which it is about; a statement's local reference is its
-  particular's (`l{line}:{words}`), so `local_subjects.rs` joins one
-  particular's statements, and the particular's identifying fields are read
-  once, at its words. A statement about none keeps its own lines as its
-  reference (`l{a}-{b}`). A particular no statement is about is carried on the
-  outcome (`DocumentReadParticular`, citing the whole line that first names it;
-  validation refuses one of a type RESOLVE does not decide or cited off its
-  document) and projected as a claim of no kind whose type rides on
-  `ABOUT_ATTRIBUTE` (`document_read::about_type`, read by 3b's subject binding,
-  which leaves it to RESOLVE, and by `resolve_type`, which makes it a statement
-  of the type), so a document is a member of what it is about whether or not a
-  line states a claim kind; the marker is removed after RESOLVE. Per statement each field is asked by its
-  declared family (`ask.rs`), every such question showing the whole document,
-  numbered as Locate shows it, with the statement named by its lines (never a
-  window around it): Choose a closed value with RESOLVE's READ question,
-  Point at an open one's start and end words and read the value by the family
-  (`point.rs`), Pick a reference among the records the target's metadata source
-  reads from this document plus its mentions, less declared exclusion sets
-  (`pick.rs`), and Pick a subject whose type has a metadata source among that
-  source's records in this document, written as the subject's identity readings
-  (`pick_subject`; the words of a statement rarely hold an address); every
-  question goes through the census funnel (`decision_call`)
-  and every read value carries `reader_choose` / `reader_point` / `reader_pick`
-  at `Precision::Unmeasured`. A closed set wider than one forced choice is
-  Unknown with that reason. Its
-  answers assemble into the `DocumentRead` envelope that validation checks
-  against the document (exact source verification is mandatory) and the section
-  cache keeps; its rendered questions are part of the contract fingerprint
-  (`schema::contract_value`, version 6). The one-shot reader is deleted.
+  so. A particular no statement is about is carried on the outcome (`DocumentReadParticular`; validation
+  refuses one of a type RESOLVE does not decide or cited off its document) and projected as a claim of no
+  kind whose type rides on `ABOUT_ATTRIBUTE` (`document_read::about_type`, read by 3b's subject binding,
+  which leaves it to RESOLVE, and by `resolve_type`, which makes it a statement of the type), so a document
+  is a member of what it is about whether or not a line states a claim kind; the marker is removed after
+  RESOLVE. Every read value carries `reader_window` at `Precision::Unmeasured`. The answer assembles into
+  the `DocumentRead` envelope that validation checks against the document (exact source verification is
+  mandatory) and the section cache keeps; the prompt and the ontology's rendering are part of the contract
+  fingerprint (`schema::contract_value`). The one-shot reader is deleted.
   The Asker (`enrichment/asker.rs`, ONTOLOGY_METHOD §Reading, campaign C5)
   stands in front of the chat and embed ports of `enrich extract`,
   `atlas-resolve` (and `enrich build`, `delta`, `resolve-statements`), built in
@@ -717,16 +734,13 @@ question the pipeline asks about a type is a method on the resolved
   (default) records every answer in `enrichment/<id>/answers.jsonl` keyed by the
   hash of the whole prompt and per-call budget (or the text embedded), one answer
   per question per run, each stamped with the model the client routes it to
-  (`AnsweredBy`); `replay` answers from that store and never calls (or probes)
+  (`AnsweredBy`), an alias stamped as the model the daemon's `/v1/models`
+  binds it to (`corpus_index::v1_models::alias_bindings`; `daemon` and
+  `recorded` refuse to start when the daemon does not answer it); `replay` answers from that store and never calls (or probes)
   the daemon; `recorded` answers from it what the run's own model gave and asks
   the daemon only the rest, recording them, so an iteration pays for the
   questions it changed; `gold` reads `answers.gold.jsonl`. Under `replay` and
-  `gold` a question with no stored answer is refused, never defaulted. A forced-choice wave
-  (`resolve_records/wave.rs`) is split into its single questions, each answered
-  and recorded under its own single prompt's key, the ones the store lacks sent
-  to the daemon as one smaller wave, so a run recorded with or without waves
-  replays either way; `SOVEREIGN_WAVES_ONE_BY_ONE=1` sends each question alone
-  (A/B valve).
+  `gold` a question with no stored answer is refused, never defaulted.
   `change.document` names per-document metadata fields; resolution stamps each
   claim with `document_date` (ISO 8601), `document_thread` and `document_id`
   from its ONE document (`locate`: the document its evidence names, stamped from
@@ -734,7 +748,12 @@ question the pipeline asks about a type is a method on the resolved
   second document never make a second candidate)
   (`enrichment/atlas/resolution_documents.rs`, rows from
   `corpus_io::section_documents`), and records a claim it cannot place in
-  `resolution_failures.json` instead of guessing. An entity type's
+  `resolution_failures.json` instead of guessing. Last, `place_index_chunks`
+  (`enrichment/atlas/resolution_placement.rs`, every recipe, stamped or not) gives every
+  evidence the installed chunk holding its quote (`ChunkRef.index_chunk`, the u64 the
+  corpus chunk endpoint opens; the first in manifest order when overlap holds it twice); a
+  record projected from document metadata cites its document's first chunk, and evidence
+  it cannot place keeps its section and is counted by reason. An entity type's
   `source = { metadata = [...], attributes = {...} }` (`MetadataSourceDecl`)
   projects one atom per distinct identity value read from those same rows'
   fields through a closed reader set (`address`, `domain`, `display_name`,
@@ -752,7 +771,7 @@ question the pipeline asks about a type is a method on the resolved
   or one of a `@bundled:<key>` list it names (`@bundled:mailbox_providers`,
   free-email-domains at a pinned commit), counted as `excluded`; code holds no
   list and skips nothing a recipe does not name (E5, 2026-10-10: the provider
-  skip that was code is now this declaration). The reader's prefill and Pick
+  skip that was code is now this declaration). The window reader's declared facts and candidates
   read fields through the same readers (`field_records`).
   RESOLVE (`enrichment/atlas/resolve_records.rs`; ONTOLOGY_METHOD.md §The core)
   puts each statement of one document into an open record of one declared
@@ -774,8 +793,8 @@ question the pipeline asks about a type is a method on the resolved
   it is as written (a seeded record's identity values, name and the records
   whose refs point at it, `mentions::card`) and the values its statements
   were read with and what its statements' readers read it to be (`Described`:
-  their supported values of its other declared attributes, folded; shown, never
-  compared), never its folded comparison keys or its documents' stamps,
+  the names a window read gave it and their supported values of its other
+  declared attributes, folded; shown, never compared), never its folded comparison keys or its documents' stamps,
   and up to four of
   its statements' cited lines from other documents (`passage::lines_of`: a
   span widened to its whole line, or the reader's lines as they stand on the
@@ -805,7 +824,9 @@ question the pipeline asks about a type is a method on the resolved
   (`resolve_records/read.rs`), unless the document reader already chose it
   (`Statement::read`, filled from its subject fields by `resolution_records.rs`);
   a candidate whose SUPPLIED value (a declared field's, `Statement::keys`)
-  differs is not offered, while a value a model chose, the reader's or RESOLVE's
+  differs is not offered (`resolve_records/apart.rs`, with the window reader's
+  distinctions and the key and field joins that obey both), while a value a
+  model chose, the reader's or RESOLVE's
   own READ, is one more weighed source (`necessary:<attribute>`); each
   document's decisions count the necessary values used by origin
   (`DocumentResolution::necessary`: supplied, reader, resolve_read). A partition
@@ -846,14 +867,21 @@ question the pipeline asks about a type is a method on the resolved
   Weighed | Opened`; anything else is a counted `Refusal` or `Held`, never
   defaulted. A link carries `by`, each source with its `Precision`
   (`atlas/precision.rs`: declared, estimated on the corpus, or unmeasured), as
-  do the reader's chosen fields (`reader_choose`) and each derived value (C3). Records keep the passage around each statement, which is
+  do the reader's fields (`reader_window`) and each derived value (C3). Records keep the passage around each statement, which is
   what later calls compare. `svrn enrich resolve-statements` runs it alone over
   supplied statements (the gold-mention setting). The atlas build runs it after
   3b, which `enrich atlas-resolve` runs by default (`ResolvePhase::All`; `--phase 3a`
   is the only opt-out) (`enrichment/atlas/resolution_records.rs`, from `atlas_resolve_documents::apply`)
   as the ONE decider of every entity or event type that declares an
   `identity_criterion` and no `source` (`decides`; an event type's records are
-  event atoms); under the general extractor a decided type no claim kind names
+  event atoms). When the document reader reads the declaration, a type a read
+  `ref` names that nothing else records (an entity or event with no criterion and
+  no source), or a base kind a `ref` names and no one declares (`of = "person"`,
+  then declared as an entity), takes the one derived criterion
+  `resolve_defaults::DEFAULT_CRITERION` where the policies are built
+  (`recipe_ontology/resolve_defaults.rs`, 2026-10-20), so RESOLVE decides it by
+  name and the references land on its records; `recipe validate` prints each
+  (`identity: … → RESOLVE by name`). Under the general extractor a decided type no claim kind names
   as its subject has no statements, so `enrich extract` refuses it
   (`types_without_statements`) rather than leave it to 3a's merge, while the
   document reader asks About of every decided type and the window names its
@@ -867,7 +895,16 @@ question the pipeline asks about a type is a method on the resolved
   order never changes the records) under `Answerer::Select` with the adopted
   proposer (`ProposalRule::default`, `propose::{NEIGHBOURS, MAX_CANDIDATES,
   MIN_SIMILARITY}`); each record becomes an atom whose id hashes its opening
-  statement, and each claim's subject its statement's record. 3b leaves such a
+  statement, called by the name most of its statements' readers gave it (a
+  tie to the first met in fold order, so one misplaced statement cannot
+  rename it), its other read names its aliases and its opening passage its
+  first passage (the record view's `text`), else by its opening passage
+  (`resolution_records/named.rs`; shown, never compared); an event record's
+  evidence is one chunk per distinct document among its statements, in
+  statement order, each in the section that statement was read in
+  (`resolution_records/evidence.rs`, 2026-10-20; an entity record keeps only
+  its `first_appearance`), and
+  each claim's subject its statement's record. 3b leaves such a
   subject unresolved, and the type's atoms 3a merged from Phase-1 sketches are
   retired with every reference to them, dropped and recorded, never repointed.
   Decisions land in `atlas/resolve_decisions.jsonl`, and each placed claim keeps
@@ -882,13 +919,18 @@ question the pipeline asks about a type is a method on the resolved
   under `__folds` (`outcome::write_fold`: every outcome, decided or not, with the
   readings it folded, each cited by statement, document and words; a
   non-decided outcome leaves the attribute unset, so no filter matches it). A decided type's read field
-  that declares `by` is folded onto each record first, over what its statements
+  is folded onto each record first, by its declared `by` or, with none, by `agree`
+  (`resolve_defaults::DEFAULT_FOLD`, supplied where the policies are built, 2026-10-20), over what its statements
   read of it, by the same decider (`resolution_derived/read_fields.rs`, entity
   and event records alike); a `ref` reading counts as the record of the
   referenced type that its statement's document names in its fields and whose
   identity values it folds equal to (`key_name`, the projection's own naming),
   is dropped (`excluded`) when that record is in an exclusion set over the type
-  (`DerivedPolicy::exclusions_of`, the one Pick reads too), and otherwise is
+  (`DerivedPolicy::exclusions_of`, the one `pick.rs` reads too); failing a named
+  record it counts as the one RESOLVE put the same document's statements a window read
+  under that name on (`SUBJECT_NAME_ATTRIBUTE`, 2026-10-15); failing that, for a metadata-sourced type, the
+  one record of it any document's metadata projected with that exact identity value (several refuse, with the
+  count; `read_fields::sourced_anywhere`, 2026-10-20), and otherwise is
   never held: it stays on the derivation line under `unresolved`, cited by its
   statement, document, words and evidence, so a served reference is a record of
   its type or nothing; RESOLVE itself writes no record value. A read
@@ -896,7 +938,11 @@ question the pipeline asks about a type is a method on the resolved
   `to`) follows the same rule next (`read_fields::held`,
   `resolution_derived/statement_refs.rs`, added 2026-10-15): it holds the
   record its reading names or is removed, its reading kept on the statement
-  and an unresolved one on the derivation line. When
+  and an unresolved one on the derivation line. Then each read state or
+  relation statement is also a State or Relation atom beside its claim, one
+  per statement, and every holder given a state has its trajectory chained
+  again by 3b's own pass (`resolution_records/statement_atoms.rs`,
+  `resolution/trajectories.rs`, 2026-10-15). When
   `change.document` declares a thread and an id, a record also holds each
   document the run read that states nothing of its type and whose thread's
   statements all sit on it, by declared id under `thread_documents`
@@ -1112,8 +1158,7 @@ prompt as branches; the engine renders each branch as the single request it
 stands for, decodes the shared token prefix once, restores that sequence state
 before each branch and reads each distribution as a single forced choice does
 (`embedded/decide_wave.rs`), so every answer equals its single request's.
-Ingest issues waves through `decision_wave`, a census funnel beside
-`decision_call` that the judge-funnel gate counts.
+No ingest path issues a wave since the passes reader was deleted (2026-10-16).
 
 **Retrieval** is `runtime/retrieval_pipeline.rs`, a step ledger where every
 step accounts for what it did to the pool. `apply_atlas_grounding` is a CALLER
@@ -1237,6 +1282,14 @@ finish reads as `stop`, since the adapter derives `tool_calls` from the text
 for every engine. A streamed request asks for usage (`stream_options`), and a
 stream that fails, by an error chunk or the transport, ends in
 `Finish{Error}`.
+A client's vendor fields on `/v1/chat/completions` reach a third-party engine
+(`sovereign-serving-host/src/inference_adapter/vendor_fields.rs`): thinking off in any
+spelling (`thinking: {type: disabled}`, `enable_thinking: false`,
+`think_budget: 0`) becomes a zero budget, which `chat_wire::write_thinking`
+writes in every spelling, and `logprobs`/`top_logprobs` are asked of the host,
+whose `choices[0].logprobs` come back verbatim on a non-streamed reply. An
+engine on this machine reads no `thinking`, as llama-server does not, and
+answers without logprobs.
 The request is written in the spelling `[engine] grammar` names
 (`oicp-client/src/chat_wire.rs`). To a llama-server (`llguidance`) an
 `assistant_prefix` goes as a trailing assistant message the server
@@ -1249,7 +1302,11 @@ engine renders it with (`CompletionRequest::templated_thinking`, off unless
 asked), a positive think budget also goes as `reasoning_budget_tokens`, and a
 schema goes out closed by the same `additionalProperties` default the engine
 compiles it with (`sovereign_contracts::structured_output`), which leaves an
-object that declares no properties open.
+object that declares no properties open. In the embedded engine a schema waits
+for a think block the prompt opened (`think_budget::opens_think`): no mask and
+no matcher step until the accepted bytes close it (`ThinkWait`), so the
+reasoning is free and the answer after it is held to the schema; a block that
+never closes is warned at the sampler's drop.
 
 **Residency is a policy.** `embedded/idle_slot.rs` is the one idleness decider.
 It exists because the daemon is a MESH NODE and must stay available to peers
@@ -1338,7 +1395,11 @@ demoted (spawned, rate-limited, quiescence-gated, `nice +10`); a commit waits
 out the same 15-minute cooldown from the last export's end, its messages
 harvested at once (`reindexer/head_step.rs`), and the export is
 one-writer, staging and renaming under a cross-process flock so a query in
-flight always sees a complete graph. **One project owns one workspace**:
+flight always sees a complete graph. The export's synchronous tail (index
+decode, bulk writes, the integrity-checked open, the merged import) runs on
+tokio's blocking pool (`shared/crates/corpus-engine-scip/src/off_worker.rs`):
+inline, it left the daemon runtime's I/O driver unpolled for the whole tail,
+up to 113 s per rebuild here, and every request and timer waited on it. **One project owns one workspace**:
 registration refuses a root that is an ancestor or descendant of a registered
 one, because nested registrations collapse the freshness pipeline.
 
@@ -1439,7 +1500,10 @@ list and the ring round, and svrn neither accepts nor dials a peer itself
 (svrn reads the roster and reaches peers through the ports a distribution
 composes from cw-rails, `hosted_mesh`). Identity is mesh-independent and
 survives `leave` and every switch. mDNS advertises `_commonwealth._tcp.local`
-when `svrn mesh up` starts cw-rails with `--mdns`; gossip is a 10s round over
+when `svrn mesh up` starts cw-rails with `--mdns`, and refuses by cause on a
+host where a send to the mDNS group leaves on no interface (mdns-sd itself
+registers Ok there; `/v1/mesh/status` reads `mdns.advertising: false` with the
+reason); gossip is a 10s round over
 3 peers (`select_peers`: active keyed members, Online first, rotated by round)
 with timestamp-LWW conflict resolution, and offline-decay reads this node's
 contact clock, never a peer's `last_seen`.
@@ -1673,14 +1737,14 @@ admits and no disk holds; a CLI presents `SOVEREIGN_API_KEY`, read by
 | `GET /v1/models` | Names this daemon can dispatch by name, built from the local OICP manifest + every reachable peer's — the same source `locate_named_model` resolves against, so a listed id resolves and an omitted one does not |
 | `POST /v1/embeddings` | What peers call via `embed_http::http_embed_fn` |
 | `POST /v1/rerank` (and each served kind's route) | Mounted from the served-kind registry (`sovereign_inference::served_kind`); answers with the rerank kind's slot or compute child |
-| `POST /v1/knowledge/search` | Determines target corpora, fans out, merges, reranks. The local corpora searched, here and on the peer route `/internal/knowledge/search`, are the caller's `oicp_evidence::readable_corpora` (a member reaches `query_sharing` corpora, an unverified claimant none, a key its grant); one held here outside that set answers like one nobody holds. Every local hit, and the peer route's, carries `document` (OICP v0.5 §3): its text's record read through `chunk_text_sha256s` + `documents_for` by the one projection `oicp_evidence::knowledge_results`, or names why not in `document_absent` (`texts not stored`, `text not stored`, `document unreadable`); the v0.2 `metadata` map stays empty. Both routes search through `oicp_evidence::search_corpus`: a `documents` filter (text names, OICP v0.6 §2.8, `knowledge:scoped`) runs inside the index (`CorpusIndex::search_in_texts`, `only_if` on `text_sha256`), a malformed name is `400`, it is forwarded to peers, and `build_response` drops any merged hit from an unnamed text. Every hit also carries `span`, its range of its stored text located by `oicp_evidence::span_of` (the locator verify's passages share), or `span_absent` (`knowledge:range`). A hit's document, and its span's, carries the text's record by identifier when its install kept one (OICP v0.6 §2.16, `records_by_identifier::attach_to_hits`, read from the corpus's `_records.json`, on passage and sentence hits alike), the same record progress lists; the text and align routes' documents carry none yet. The span also carries `locator` (v0.6 §2.13, `knowledge:locator`), read by `oicp_evidence::locator_at` from the places the text's writer kept beside it (`StoredText::locators`, the `<sha256>.locators` sidecar of `TextWriter::store_document_located`; `oicp_types::locator::PlacedLocators`), shared by `span_of`, the sentence route's `hit` and align's `wire_alignment`; a declared transcript's turns and a plain text's heading paths are kept, and a span of a text with neither carries none. `svrn search` is the CLI client, and prints each hit's locator (`under BOOK I. › CHAPTER I.`, `at 0:01:04, HARBOUR MASTER`) and its catalogue entry (`search_cmd/catalogue.rs`: author, year, title, container, how many fields a resolver supplied, and any identifier that did not resolve) from that record, or from the declared metadata when there is none. Where its time goes: one DEBUG event per stage (`search_stage::SearchStage`: `admission`, `query_embed`, and per corpus `index_query`, `records`, `text_read`, `span_of`), each with `elapsed_us` and `count`, under one `search{route, query}` span (`query` is the query text's sha256, 12 hex), all on the `search.stage` target, so `RUST_LOG=…,search.stage=debug` shows them; the embed slot's own wait is the engine's `slot_wait_ms` on `inference.embed: done`, under the same span. At `granularity: sentence` (OICP v0.6 §2.11, `knowledge:sentences`) the handler hands the request to `routes_knowledge_sentences::search`, local corpora only: the query and the embedder's sentinel probe embedded in one call, each scoped corpus prepared by `sentence_index::SentenceIndex::prepare` (its texts split by `sentence_ranges`, rows `(text, code-point range, byte range, sha256 of the sentence)`, vectors loaded from the corpus's `_sentences.bin` sidecar or embedded in the background by the one `sentence_index` worker, queued after an OICP install, at the first sentence search naming the corpus, and at start for every corpus with a sidecar), then either the `index` route (every scoped row scored by `scan::top_k`, threaded, up to the data file's `scan_ceiling`, named `truncated` past it) or, while any scoped sentence is pending or the vectors are another embedder's, the `passages` route (`search_corpus`'s hits' overlapping sentences, with `sentences_pending`), and, with `knowledge:sentence_queue` (v0.6 §2.11), `sentence_queue`: where each scoped corpus with sentences waiting stands in the worker's line, `embedding` now or `queued` behind the corpora ahead with their pending counts. The order is `sentence_index::queue::Fifo`'s, the one the worker takes from and finishes against; a search reads a `QueueSnapshot` of it (`SentenceIndex::queue`) and `queue::places` builds the wire places, naming no corpus the worker has finished and none ahead of a corpus with nothing before it (events: `embedding now`, `placed`, and `queue placed` on the search). A corpus whose directory goes away mid-walk (`svrn corpus remove`, which tells the daemon nothing) stops at the worker's next batch and is forgotten (`SentenceIndex::forget`; event `the corpus was removed while it embedded`), so the corpus behind it goes next. The scorer is `data/sentence_search.toml`'s (`cosine`, or `rerank` over cosine's best `rerank_candidates` through `rerank_batch`, its model the resident rerank slot's); one that cannot run is `503 scorer unavailable` by name. Hits are cut from their stored addresses, never `span_of`; its stages are `SearchStage::SENTENCE_ROUTE` (`query_embed`, `admission`, `sentence_scan`, `text_read`) under a `search{route="sentences"}` span, and the index's own events are on the `sovereign_daemon::sentence_index` target (`prepared`, `loaded from its sidecar`, `ready` with `elapsed_ms` and `resident_bytes`). `svrn search --sentences` is the CLI client, and prints each waiting corpus's place (`search_cmd::queue_lines`). `MeshKnowledgeClient` keeps it as `MeshScoredChunk::document` |
+| `POST /v1/knowledge/search` | Determines target corpora, fans out, merges, reranks. The local corpora searched, here and on the peer route `/internal/knowledge/search`, are the caller's `oicp_evidence::readable_corpora` (a member reaches `query_sharing` corpora, an unverified claimant none, a key its grant); one held here outside that set answers like one nobody holds. Every local hit, and the peer route's, carries `document` (OICP v0.5 §3): its text's record read through `chunk_text_sha256s` + `documents_for` by the one projection `oicp_evidence::knowledge_results`, or names why not in `document_absent` (`texts not stored`, `text not stored`, `document unreadable`); the v0.2 `metadata` map stays empty. Both routes search through `oicp_evidence::search_corpus`: a `documents` filter (text names, OICP v0.6 §2.8, `knowledge:scoped`) runs inside the index (`CorpusIndex::search_in_texts`, `only_if` on `text_sha256`), a malformed name is `400`, it is forwarded to peers, and `build_response` drops any merged hit from an unnamed text. Every hit also carries `span`, its range of its stored text located by `oicp_evidence::span_of` (the locator verify's passages share), or `span_absent` (`knowledge:range`). A hit's document, and its span's, carries the text's record by identifier when its install kept one (OICP v0.6 §2.16, `records_by_identifier::attach_to_hits`, read from the corpus's `_records.json`, on passage and sentence hits alike), the same record progress lists; the text and align routes' documents carry none yet. The span also carries `locator` (v0.6 §2.13, `knowledge:locator`), read by `oicp_evidence::locator_at` from the places the text's writer kept beside it (`StoredText::locators`, the `<sha256>.locators` sidecar of `TextWriter::store_document_located`; `oicp_types::locator::PlacedLocators`), shared by `span_of`, the sentence route's `hit` and align's `wire_alignment`; a declared transcript's turns and a plain text's heading paths are kept, and a span of a text with neither carries none. `svrn search` is the CLI client, and prints each hit's locator (`under BOOK I. › CHAPTER I.`, `at 0:01:04, HARBOUR MASTER`) and its catalogue entry (`search_cmd/catalogue.rs`: author, year, title, container, how many fields a resolver supplied, and any identifier that did not resolve) from that record, or from the declared metadata when there is none. Where its time goes: one DEBUG event per stage (`search_stage::SearchStage`: `admission`, `query_embed`, and per corpus `index_query`, `records`, `text_read`, `span_of`), each with `elapsed_us` and `count`, under one `search{route, query}` span (`query` is the query text's sha256, 12 hex), all on the `search.stage` target, so `RUST_LOG=…,search.stage=debug` shows them; the embed slot's own wait is the engine's `slot_wait_ms` on `inference.embed: done`, under the same span. A request's `priority` (OICP v0.6 §2.17, `knowledge:priority`) runs the handler under `sovereign_contracts::request_priority::asked`, and `sovereign_inference::priority_gate::PriorityGate` holds each step of model work at the embed slot (`embed`, `embed_query`, `embed_batch`) and at the generation slots' admission (`acquire_with_queue_gauge`, the step kept in `SlotPermit`): each site tells its `Step` `entered()` once it holds its stage (the embed context's lock, the slot's permit); an `interactive` step is counted from its ask, a `background` step waits until none is, and the background steps waiting to enter one stage (the stage named at `step`: `embed`, or the slot queue's label) go one at a time, a step inside its stage holding none back (PV3e) and a step keeping its place however long the ones ahead take (PV3h), its hold for interactive work bounded by `HOLD_CEILING` (2 s) counted from its place; a background completion's prompt is read in parts of `BACKGROUND_PART_TOKENS` (64) through `PriorityGate::in_parts` (`ModelSlot::prefill_reusing_prefix`, the request carried to the blocking thread by `sovereign_contracts::call_scope::carry`), pausing between parts while an interactive step that has entered its stage runs, never for one waiting on the slot the prompt holds, and a background embed batch takes the embed context once a sub-batch through `PriorityGate::parts_under` (`EmbedSlot::run_embed_batch_sync`), letting it go and pausing between them; an embed slot on the GPU keeps `EmbedSlot::writer`, a CPU context over a CPU copy of the model, and an `interactive` request's embeds compute on it (`EmbedSlot::context_for_request`, PV3d; `Writer::None` for `EmbedOnlyProvider`); events on the `priority` target say what each background step waited behind. At `granularity: sentence` (OICP v0.6 §2.11, `knowledge:sentences`) the handler hands the request to `routes_knowledge_sentences::search`, local corpora only: the query and the embedder's sentinel probe embedded in one call, each scoped corpus prepared by `sentence_index::SentenceIndex::prepare` (its texts split by `sentence_ranges`, a Project Gutenberg wrapper left out by `sentence_index::wrapper::body`, a sidecar an earlier splitter cut re-cut with its vectors kept by key, rows `(text, code-point range, byte range, sha256 of the sentence)`, vectors loaded from the corpus's `_sentences.bin` sidecar or embedded in the background by the one `sentence_index` worker, queued after an OICP install, at the first sentence search naming the corpus, and at start for every corpus with a sidecar), then either the `index` route (every scoped row scored by `scan::top_k`, threaded, up to the data file's `scan_ceiling`, named `truncated` past it) or, while any scoped sentence is pending or the vectors are another embedder's, the `passages` route (`search_corpus`'s hits' overlapping sentences, with `sentences_pending`), and, with `knowledge:sentence_queue` (v0.6 §2.11), `sentence_queue`: where each scoped corpus with sentences waiting stands in the worker's line, `embedding` now or `queued` behind the corpora ahead with their pending counts. The order is `sentence_index::queue::Fifo`'s, the one the worker takes from and finishes against; a search reads a `QueueSnapshot` of it (`SentenceIndex::queue`) and `queue::places` builds the wire places, naming no corpus the worker has finished and none ahead of a corpus with nothing before it (events: `embedding now`, `placed`, and `queue placed` on the search). A corpus whose directory goes away mid-walk (`svrn corpus remove`, which tells the daemon nothing) stops at the worker's next batch and is forgotten (`SentenceIndex::forget`; event `the corpus was removed while it embedded`), so the corpus behind it goes next. The scorer is `data/sentence_search.toml`'s (`cosine`, or `rerank` over cosine's best `rerank_candidates` through `rerank_batch`, its model the resident rerank slot's); one that cannot run is `503 scorer unavailable` by name. Hits are cut from their stored addresses, never `span_of`; its stages are `SearchStage::SENTENCE_ROUTE` (`query_embed`, `admission`, `sentence_scan`, `text_read`; admission's parts `local_embed_model`, `resident_slots` and `admit` on one `admission in parts` event, `search_stage::admission_parts`) under a `search{route="sentences"}` span, and the index's own events are on the `sovereign_daemon::sentence_index` target (`prepared`, `loaded from its sidecar`, `ready` with `elapsed_ms` and `resident_bytes`). `svrn search --sentences` is the CLI client, and prints each waiting corpus's place (`search_cmd::queue_lines`). `MeshKnowledgeClient` keeps it as `MeshScoredChunk::document` |
 | `GET /status` | Node / mesh / inference / knowledge summary, incl. `process.pid` + `run_id` |
 | `GET /oicp/v1/capabilities` | Provider manifest + federation info |
-| `POST /oicp/v1/corpus/install` | OICP install, by registry id or (v0.5 `ingest:recipe`) with `recipe_toml`: the recipe loads through `Recipe::from_toml`, must name `corpus_id`, is written to the local registry, ingested, and stamped as `<corpus>/_recipe.sha256` (`corpus_index::corpus::recipe_sha256`, the one spelling; a snapshot reads it as `source_recipe_sha256`). A recipe `[[document]]` may declare `format = "transcript"` (v0.6 §2.14, `ingest:transcripts`; `DocumentFormat`, a closed set, so any other value fails the recipe load, `400`): `DeclaredMetadata::read` is the one place it is applied, reading the document with `oicp_types::transcript::TurnOutline::read`, so the engine's ingest loop (and reindex) store its words only and keep each turn's start and speaker as locators beside the text (Whisper's JSON never a speaker); a declared document in neither shape is listed `failed` with `not a transcript` and stores nothing. Every other document is read as plain text there too: its heading paths (v0.6 §2.13, `oicp_types::locator::HeadingOutline`, the one rule: a paragraph opening with a part word, a numeral and a stop, part words nesting in the order the text first uses them) are kept as locators beside the text, none for a text with no headings; the delta update (`update::delta::stored_chunks`) stores through the same `read`. The recipe-test runner (`harness::runner`) still chunks the raw source. The same `(corpus_id, recipe_sha256)` is `spawned: false`, a different recipe reingests (validated before the old index is removed). Outcomes map through `routes_internal::install_status`, shared with the internal route: an invalid recipe or parameters 400, an unknown id 404 (until 2026-10-08 all three answered 200 `spawned: false`). The spawn helpers live in `routes_internal/corpus_install.rs`. The route reads bodies to its own `routes_oicp_ingest::MAX_INSTALL_BYTES` (64 MiB, a route-level `DefaultBodyLimit` inside the surface's 8 MiB `MAX_REQUEST_BODY_BYTES`), stated in the manifest as `knowledge.ingest.max_install_bytes` (v0.6 §2.12); a body past it is `413 install too large` naming the limit. Until 2026-10-14 install read to the surface's 8 MiB and refused a 22.6 MB inline library with axum's unnamed 413. `allow_lookups` (OICP v0.6 §2.16, `ingest:lookups`, default false) is part of the install: the same recipe with the other allowance is a new install, reingested (`records_by_identifier::allowed_by_last_install`). Once the engine returns, and while the install is still listed active, `records_by_identifier::record_install` reads each ready text's stored metadata (its lowest `(source, ordinal)` record), and for a `DOI` or `ISBN` the data file `data/record_resolvers.toml` names a resolver for (Crossref's CSL-JSON `transform`, Open Library's Books API, one reader per reply shape in `records_by_identifier/vendors.rs`) asks it, only when the install allowed lookups (`RecordLookups::for_install` is the one place an allowance becomes a way out), each distinct identifier once, `concurrency` at a time, through `RecordFetch` (`WebFetch`, its client from the egress boundary's `search_client`; tests replay `tests/fixtures/records/` through `RecordedFetch`). `merge` keeps every declared field (origin `declared`), adds a returned field in the data file's `keep` set only where none is declared (origin the resolver), and names each lookup `resolved`, `unresolved`, `unreachable` or `not_allowed`, the last three adding nothing. The records, and the allowance, are kept as the corpus's `_records.json` (`InstallRecords`, by text name); a document past the listed cap or in a corpus keeping no texts has no text name, so no record. `unreachable` is a fact about one moment, not about the identifier: a held install (same recipe and allowance) whose kept records name any lookup `unreachable` asks those, and only those, again (`records_by_identifier::retry_last_install`, called from `spawn_install` before the held answer, while the install is still listed active; records only, no text is read or ingested), merging under `merge`'s rules and rewriting `_records.json`; `resolved` and `unresolved` stand (live 2026-10-15: one Crossref 429 had pinned a lookup `unreachable` until the corpus was removed). Every branch traces under `records:` on the `sovereign_daemon::records_by_identifier` target |
-| `GET /oicp/v1/corpus/progress` | OICP progress (`routes_oicp_ingest::corpus_progress`): the internal `corpus_progress` map projected onto coarse phases, unioned with `active_ingests` so an install with no engine callback yet is `pending` from its spawn (v0.6 §2.9, `ingest:documents`). Once an install returns, its entry is `complete` (written by the install task itself) and lists each document from `IngestResult::documents`: the engine's ingest loop records each one `Ready { text_sha256 }` or `Failed { reason }` (`corpus_index::ingest_port::daemon::DocumentOutcome`), named as the recipe names it (`DeclaredMetadata::source_name` / `name_of`: an inline name, a file's path relative to the acquired root); an extractor names the document it failed on with `Error::of_source`. Each ready document carries its record by identifier when its install kept one (v0.6 §2.16, `IngestDocumentState::Ready.record`, from `_records.json`), whether or not any search has hit it; `_records.json` is read as `RecordsRead::{Kept, NotWritten, Unreadable}`, and an unreadable one (corrupt, or the install could not make its records and wrote `unread`) is named in the entry's `detail` (`records unreadable: …`) rather than listed as no records, the same file makes a hit's document and span `document unreadable` (`attach_to_hits`) and the last install's allowance unknown (`allowed_by_last_install` is `None`, so the next install reads again). Kept with the corpus as `_documents.json` (`Corpus::stamp_install_documents`, an `InstallDocuments`), cleared by the next attempt's `clear_stale_failure`; capped at `DOCUMENTS_LISTED_CAP`, the rest counted in `documents_unlisted`. A corpus held from before the daemon's last start has no in-memory entry and is listed `complete` from that record (`held_with_documents`); a stamped corpus with no record is read again on its next install rather than answered `spawned: false` |
+| `POST /oicp/v1/corpus/install` | OICP install, by registry id or (v0.5 `ingest:recipe`) with `recipe_toml`: the recipe loads through `Recipe::from_toml`, must name `corpus_id`, is written to the local registry, ingested, and stamped as `<corpus>/_recipe.sha256` (`corpus_index::corpus::recipe_sha256`, the one spelling; a snapshot reads it as `source_recipe_sha256`). A recipe `[[document]]` may declare `format = "transcript"` (v0.6 §2.14, `ingest:transcripts`; `DocumentFormat`, a closed set, so any other value fails the recipe load, `400`): `DeclaredMetadata::read` is the one place it is applied, reading the document with `oicp_types::transcript::TurnOutline::read`, so the engine's ingest loop (and reindex) store its words only and keep each turn's start and speaker as locators beside the text (Whisper's JSON never a speaker); a declared document in neither shape is listed `failed` with `not a transcript` and stores nothing. Every other document is read as plain text there too: its heading paths (v0.6 §2.13, `oicp_types::locator::HeadingOutline`, the one rule: a paragraph opening with a part word, a numeral and a stop, part words nesting in the order the text first uses them) are kept as locators beside the text, none for a text with no headings; the delta update (`update::delta::stored_chunks`) stores through the same `read`. The recipe-test runner (`harness::runner`) still chunks the raw source. The same `(corpus_id, recipe_sha256)` is `spawned: false`, a different recipe reingests (validated before the old index is removed). Outcomes map through `routes_internal::install_status`, shared with the internal route: an invalid recipe or parameters 400, an unknown id 404 (until 2026-10-08 all three answered 200 `spawned: false`). The spawn helpers live in `routes_internal/corpus_install.rs`. The route reads bodies to its own `routes_oicp_ingest::MAX_INSTALL_BYTES` (64 MiB, a route-level `DefaultBodyLimit` inside the surface's 8 MiB `MAX_REQUEST_BODY_BYTES`), stated in the manifest as `knowledge.ingest.max_install_bytes` (v0.6 §2.12); a body past it is `413 install too large` naming the limit. Until 2026-10-14 install read to the surface's 8 MiB and refused a 22.6 MB inline library with axum's unnamed 413. `allow_lookups` (OICP v0.6 §2.16, `ingest:lookups`, default false) is part of the install: the same recipe with the other allowance is a new install, reingested (`records_by_identifier::allowed_by_last_install`). Once the engine returns, and while the install is still listed active, `records_by_identifier::record_install` reads each ready text's stored metadata (its lowest `(source, ordinal)` record), and for a `DOI` or `ISBN` the data file `data/record_resolvers.toml` names a resolver for (Crossref's CSL-JSON `transform`, Open Library's Books API, one reader per reply shape in `records_by_identifier/vendors.rs`) asks it, only when the install allowed lookups (`RecordLookups::for_install` is the one place an allowance becomes a way out), each distinct identifier once, `concurrency` at a time, through `RecordFetch` (`WebFetch`, its client from the egress boundary's `search_client`; tests replay `tests/fixtures/records/` through `RecordedFetch`). `merge` keeps every declared field (origin `declared`), adds a returned field in the data file's `keep` set only where none is declared (origin the resolver), made CSL 1.0.2's by the file's `[csl]` table and the resolver's `types` or left out (`records_by_identifier::csl::CslSchema::shape`, through `ResolverTable::take_found`, the one place a reply's fields enter a record, for `merge` and the retry alike; platform row PB1b), and names each lookup `resolved`, `unresolved`, `unreachable` or `not_allowed`, the last three adding nothing. The records, and the allowance, are kept as the corpus's `_records.json` (`InstallRecords`, by text name); a document past the listed cap or in a corpus keeping no texts has no text name, so no record. `unreachable` is a fact about one moment, not about the identifier: a held install (same recipe and allowance) whose kept records name any lookup `unreachable` asks those, and only those, again (`records_by_identifier::retry_last_install`, called from `spawn_install` before the held answer, while the install is still listed active; records only, no text is read or ingested), merging under `merge`'s rules and rewriting `_records.json`; `resolved` and `unresolved` stand (live 2026-10-15: one Crossref 429 had pinned a lookup `unreachable` until the corpus was removed). Every branch traces under `records:` on the `sovereign_daemon::records_by_identifier` target |
+| `GET /oicp/v1/corpus/progress` | OICP progress (`routes_oicp_ingest::corpus_progress`): the internal `corpus_progress` map projected onto coarse phases, unioned with `active_ingests` so an install with no engine callback yet is `pending` from its spawn (v0.6 §2.9, `ingest:documents`). Once an install returns, its entry is `complete` (written by the install task itself) and lists each document from `IngestResult::documents`: the engine's ingest loop records each one `Ready { text_sha256 }` or `Failed { reason }` (`corpus_index::ingest_port::daemon::DocumentOutcome`), named as the recipe names it (`DeclaredMetadata::source_name` / `name_of`: an inline name, a file's path relative to the acquired root); an extractor names the document it failed on with `Error::of_source`. Each ready document carries its record by identifier when its install kept one (v0.6 §2.16, `IngestDocumentState::Ready.record`, from `_records.json`), whether or not any search has hit it; `_records.json` is read as `RecordsRead::{Kept, NotWritten, Unreadable}`, and an unreadable one (corrupt, or the install could not make its records and wrote `unread`) is named in the entry's `detail` (`records unreadable: …`) rather than listed as no records, the same file makes a hit's document and span `document unreadable` (`attach_to_hits`) and the last install's allowance unknown (`allowed_by_last_install` is `None`, so the next install reads again). Kept with the corpus as `_documents.json` (`Corpus::stamp_install_documents`, an `InstallDocuments`), cleared, with the last attempt's terminal entry (`complete` or `failed`), by the next attempt's `clear_last_attempt`, so a re-install is `pending` from its spawn (platform row PV3g); capped at `DOCUMENTS_LISTED_CAP`, the rest counted in `documents_unlisted`. A corpus held from before the daemon's last start has no in-memory entry and is listed `complete` from that record (`held_with_documents`); a stamped corpus with no record is read again on its next install rather than answered `spawned: false` |
 | `GET /oicp/v1/text/{text_sha256}` | A stored text by name (OICP v0.5 §2.2, `routes_oicp_text`): whole, or `start`/`end` code points with `context`. Consults only the corpora `oicp_evidence::readable_corpora` admits (the caller's kind and the turn's `PrincipalScope` over the runtime's `corpus_principal`, both; a mesh member reads only `query_sharing` corpora), each opened by `oicp_evidence::open_for_reading` (`Corpus::open`, without the query path's embedding-width gate: a text read compares no vectors), in `corpus_id` order, so the record served is the lowest `(corpus_id, source.id, ordinal)` the caller may read. Refusals are `oicp_types::evidence::reasons`, mapped from `TextAbsence` by `oicp_evidence::absence_reason`; a corpus that did not answer is a 503, never `text not held`. Its second user is svrn's own answers: each `answer_segments` entry carries the quotations the quote guard verified in a stored text whose first byte it holds, each a `QuoteAddress` (`sovereign_contracts::types`: the answer's byte range, `corpus_id`, `text_sha256`, code-point `start`/`end` and `exact`), placed by `quote_surface::address_quotes`; a quotation verified only against the prompt's evidence or a chunk has no address. The desktop opens one where it stands through its `read_text_slice` command (`clients/desktop/src-tauri/src/commands/reading.rs`), which reads the `text_endpoint` the daemon's manifest advertises under `evidence:text` and hands a refusal to the reader by its published reason; the webview never fetches the daemon itself |
-| `POST /oicp/v1/align` | OICP v0.5 §2.3 (`routes_oicp_align`): where a quotation stands in the stored texts the caller reaches (`oicp_evidence::readable_corpora`, the one read decider the text route shares: the caller's kind — the owner and its clients every corpus, a member the `query_sharing` ones, a guest or unverified caller none — and the turn's `PrincipalScope`, keyed attribution and grant, must both admit a corpus). Each corpus, opened by `oicp_evidence::open_for_reading` as the text route opens it, gives its FTS top `candidate_k` chunks (`align.toml`), which name their texts by `text_sha256`, and `quote_align::align` reads those texts; a span names the lowest `(corpus_id, source.id, ordinal)` document whose chunk matched. Every requested corpus is in `corpora` with its `texts_digest` (the engine's, through `IngestPort::texts_digest`) or in `corpora_unavailable` by name (`corpus not held`, `texts not stored`, …). Advertised as `evidence:align` with `knowledge.evidence.align_endpoint` |
-| `POST /oicp/v1/verify` | OICP v0.6 §2.6, by meaning under §2.15 (`routes_oicp_verify`): a unit judged claim by claim against the stored texts the caller reaches (`readable_corpora`, `requested_corpora`; unconstrained, the sentence-indexed ones). Claims are the unit's sentences, and each claim's specifics by kind (`figure`, `date`, `quantity`, `name`) come from `sovereign_core::runtime::sentence_specifics`, which reads a number in digits or a cardinal in words ("forty-eight thousand", "a hundred"; valued by `runtime::number_words`, the one number-word reader, shared with deep research's figure tokens; never an ordinal, a lone "one", a bare word under ten, or a scale word after digits), leaves out everything inside an author-date citation, a citekey, a numbered reference or a locator and keeps a figure in any other parentheses; a claim with none is `not_checkable` (`class/no-specifics`). Every checkable claim carries them as `specifics` (unit ranges). Its candidates are the claim's sentences from `routes_knowledge_sentences::sentences`, the one retrieval path sentence search answers from, queried by the claim less its citations and locators (`without_citations`, cut once per claim and read by the search and the checker alike), `CANDIDATES_K` (8) asked, each with its span; a refusal is `could_not_judge` by its name (`sentences/search`). None at or above `verify_floor` (`data/sentence_search.toml`, on the scorer's scale, named in `verifier`) is `unsupported` with no evidence at every tier (`sentences/floor`). `fast` (no model): each specific looked for in the candidates with `value_present_in_chunks` (numbers by value), the misses named in `specifics_absent` as a hint; the tier says `abstained`. `checker`: the gate's per-claim register `claim_chunk_support` over the best `CHECKER_PASSAGES` (3) candidates at `SUPPORTED_TAU` (`checker/sentence-support`), shown the claim less its citations and locators (`sovereign_core::runtime::without_citations`, cut by the same `cited_ranges` the specifics read, whitespace tidied; the wire's claim `start`/`end`/`exact` stay the unit's), on the daemon runtime's inference, which only the operator listener layers on (`client_surface::operator_listener_router`, `VerifyJudge`); elsewhere `could_not_judge: no checker`. A candidate it does not back that states a figure, date or quantity of the claim otherwise (`sovereign_core::runtime::differing_specifics`: same kind and unit, read by value, `48,000` and `forty-eight thousand` alike; a bounded one, "more than 50" (`FigureBound`, from the words before the number), differs only from a figure no value of its range meets; a figure and a date both differing is another period, a date alone needs something else of the claim carried) is `contradicted` with `differing` naming the pair, ranges in the unit and the stored text; the claim is `supported` on any support, else `contradicted` on any contradiction, else `unsupported` with its candidates. A checker call the model queue sheds (`Error::QueueShed`, kept by `claim_chunk_support_checked`) stops the unit, which is answered `503` + `Retry-After` through `admission::local_queue_shed_response` and journals nothing. Every verdict is `uncalibrated`. Advertised as `evidence:verify` with `knowledge.evidence.verify_endpoint` and `verify_tiers`, and `evidence:verify_sentences` beside `knowledge:sentences` when the data file reads; `svrn verify` is its CLI client |
+| `POST /oicp/v1/align` | OICP v0.5 §2.3, with v0.6 §2.18 (`routes_oicp_align`): where a quotation stands in the stored texts the caller reaches (`oicp_evidence::readable_corpora`, the one read decider the text route shares: the caller's kind — the owner and its clients every corpus, a member the `query_sharing` ones, a guest or unverified caller none — and the turn's `PrincipalScope`, keyed attribution and grant, must both admit a corpus). Each corpus, opened by `oicp_evidence::open_for_reading` as the text route opens it, gives its FTS top `candidate_k` chunks (`align.toml`), which name their texts by `text_sha256`, and, for verbatim recall (OICP v0.6 §2.18), every stored text `quote_align::holds_words` keeps (`CorpusIndex::texts_holding`, one read of each stored text); `quote_align::align` reads those texts, keeping an alignment whose word coverage (a mark is not a word) reaches `coverage_floor` and whose matched words are specific (rarity-weighted share at `specific_floor`, or a run of `specific_run` words); a span names the lowest `(corpus_id, source.id, ordinal)` document whose chunk matched. Every requested corpus is in `corpora` with its `texts_digest` (the engine's, through `IngestPort::texts_digest`) or in `corpora_unavailable` by name (`corpus not held`, `texts not stored`, …). Advertised as `evidence:align` with `knowledge.evidence.align_endpoint` |
+| `POST /oicp/v1/verify` | OICP v0.6 §2.6, by meaning under §2.15 (`routes_oicp_verify`): a unit judged claim by claim against the stored texts the caller reaches (`readable_corpora`, `requested_corpora`; unconstrained, the sentence-indexed ones). Claims are the unit's sentences. A claim holding a marker of the opinion rule (`data/opinion_markers.toml`, matched by `routes_oicp_verify_opinion`: a first-person view or a judgement, whole words, case-insensitive) is offered as the writer's view and is `not_checkable` (`class/opinion`) before any search or model call; `verifier` names the rule `opinion=<digest of its markers>`. Each other claim's specifics by kind (`figure`, `date`, `quantity`, `name`) come from `sovereign_core::runtime::sentence_specifics`, which reads a number in digits or a cardinal in words ("forty-eight thousand", "a hundred"; valued by `runtime::number_words`, the one number-word reader, shared with deep research's figure tokens; never an ordinal, a lone "one", a bare word under ten, or a scale word after digits), leaves out everything inside an author-date citation, a citekey, a numbered reference or a locator and keeps a figure in any other parentheses; a claim with none is `not_checkable` (`class/no-specifics`). Every checkable claim carries them as `specifics` (unit ranges). Its candidates are the claim's sentences from `routes_knowledge_sentences::sentences`, the one retrieval path sentence search answers from, queried by the claim less its citations and locators (`without_citations`, cut once per claim and read by the search and the checker alike), `CANDIDATES_K` (8) asked, each with its span; a refusal is `could_not_judge` by its name (`sentences/search`). None at or above `verify_floor` (`data/sentence_search.toml`, on the scorer's scale, named in `verifier`) is `unsupported` with no evidence at every tier (`sentences/floor`). `fast` (no model): each specific looked for in the candidates with `value_present_in_chunks` (numbers by value), the misses named in `specifics_absent` as a hint; the tier says `abstained`. `checker`: the gate's per-claim register `claim_chunk_support` over the best `CHECKER_PASSAGES` (3) candidates at `SUPPORTED_TAU` (`checker/sentence-support`), shown the claim less its citations and locators (`sovereign_core::runtime::without_citations`, cut by the same `cited_ranges` the specifics read, whitespace tidied; the wire's claim `start`/`end`/`exact` stay the unit's), on the daemon runtime's inference, which only the operator listener layers on (`client_surface::operator_listener_router`, `VerifyJudge`); elsewhere `could_not_judge: no checker`. A candidate it does not back that states a figure, date or quantity of the claim otherwise (`sovereign_core::runtime::differing_specifics`: same kind and unit, read by value, `48,000` and `forty-eight thousand` alike; a bounded one, "more than 50" (`FigureBound`, from the words before the number), differs only from a figure no value of its range meets; a figure and a date both differing is another period, a date alone needs something else of the claim carried) is `contradicted` with `differing` naming the pair, ranges in the unit and the stored text; the claim is `supported` on any support, else `contradicted` on any contradiction, else `unsupported` with its candidates. A checker call the model queue sheds (`Error::QueueShed`, kept by `claim_chunk_support_checked`) stops the unit, which is answered `503` + `Retry-After` through `admission::local_queue_shed_response` and journals nothing. Every verdict is `uncalibrated`. Advertised as `evidence:verify` with `knowledge.evidence.verify_endpoint` and `verify_tiers`, and `evidence:verify_sentences` beside `knowledge:sentences` when the data file reads; `priority` holds its steps as search's do (§2.17). `svrn verify` is its CLI client, printing a `not_checkable` claim as `not checkable (<rung>)` and counting it apart |
 | `POST /oicp/v1/verify/correction` | OICP v0.6 §2.10 (`routes_oicp_verify_journal`): verify keeps each decided claim as a `GroundingLine::Decision` under surface `oicp_verify` in the grounding journal (`sovereign_contracts::types::grounding_journal`), by reference only (rung as `action`, violation = 1 − support, `(corpus, chunk)` handles, `SpecificsTally`), and hands back its `episode_id`; `fast` `abstained` and `not_checkable` keep nothing. This route keeps a client's correction as `GroundingLine::Correction` joined by `episode_id`, after reading its witness range back (`WitnessCheck`). The journal directory is the `VerifyJournal` extension, layered on the operator listener only (`client_surface::operator_listener_router`), so a router without it keeps nothing and refuses corrections `no journal`; `svrn journal grounding` reports each surface apart and counts corrections and the unsupported-with-every-specific-present case. Advertised as `evidence:verify_corrections` with `verify_correction_endpoint` |
 | `/api/{version,tags,ps,show,chat,generate,embed,embeddings}` | Ollama-native compatibility shim, pure translation over the OpenAI handlers |
 | `POST /internal/ring/sync`, `/v1/rail/*` | The ring rail: anti-entropy, append, log, membership (the one walk `admit` calls, read off the same fold — `svrn ring membership`), and the LIVE lane (delivery, not record — nothing reaches a store or a disk). The journals live at `cw-rails` since fp-54: `/v1/rail/*` dials the rails daemon's doors through the rail port, and a guest's WRITE carries a `GuestAttestation` the daemon signs with its node key for the session's lifetime (`AppState::attest_guest`); rails verifies it against the namespace's roster and a refusal comes back by name (`signer_not_in_roster`, `expired`, …, 403) |
