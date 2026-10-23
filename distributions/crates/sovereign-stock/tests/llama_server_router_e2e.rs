@@ -377,7 +377,10 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
     let fim = post_json(
         &format!("http://127.0.0.1:{svrn}/v1/completions"),
         serde_json::json!({
-            "prefix": "def add(a, b):\n    return ",
+            // The F2 spike's prompt: a block opener, so multi-line mode.
+            // After `return ` the 0.8B model's first token is a newline,
+            // which single-line mode stops on with nothing emitted.
+            "prefix": "def add(a, b):",
             "suffix": "\n\nprint(add(1, 2))\n",
             "debug": true
         }),
