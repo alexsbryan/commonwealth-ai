@@ -107,6 +107,11 @@ One line per crate, under the top-level directory that owns it (§1;
 `[crate_dirs]`, boundary-gate). For detail, read the crate's `lib.rs`;
 `svrn/docs/` holds the subsystem deep dives.
 
+Since 2026-10-23 the corpus, evidence and deep-research slice is developed
+in corpus-engine-core, and its files here are frozen (`quality/frozen-paths.txt`;
+AGENTS.md, "Frozen: the slice that moved to corpus-engine-core"). The crates
+below still build here because the daemon, desktop and CLI link them.
+
 ### svrn — the assistant and knowledge server
 
 ```

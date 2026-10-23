@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# commit-msg.sh — refuse a commit whose message is its parent's, verbatim.
+# commit-msg.sh — refuse a commit whose message is its parent's, verbatim, or
+# that changes a file frozen since its slice moved to corpus-engine-core
+# without a `Frozen-path:` trailer (scripts/frozen-paths.py).
 #
 # Workers commit with `git commit -F <file>`, so one skipped rewrite of the
 # file labels a change with the previous commit's description, and nothing
@@ -27,4 +29,5 @@ for sha in $(git rev-list -n "$RECENT" HEAD 2>/dev/null); do
         exit 1
     fi
 done
+python3 "$(git rev-parse --show-toplevel)/scripts/frozen-paths.py" check "$1" || exit 1
 exit 0

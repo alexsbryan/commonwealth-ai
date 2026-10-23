@@ -428,6 +428,32 @@ trigger column is when to open it — the doc section holds the full text.
 | MCP tool inventory, CLI-only tools, deprecated aliases; `cache-audit` context telemetry | §MCP surface; §Read budget — cache-audit telemetry |
 | Test-script scoping flags for iteration, adapter-log paths | §Definition of done — iteration detail |
 
+## Frozen: the slice that moved to corpus-engine-core
+
+Operator, 2026-10-23. The corpus, evidence and deep-research slice now lives
+in corpus-engine-core (github.com/alexsbryan/corpus-engine-core, checked out
+beside this repo), a faithful port of this repo at 4b029d3d0 that serves deep
+research and zoracite. Its files here are frozen: the corpus engine and its
+recipes, corpus-index, the vocabulary and the atlas typed query, the atlas
+reader, the enrichment build and catalog, quote-align, the evidence types,
+the DR in `sovereign-core`, and the daemon's corpus and evidence routes. The
+exact list is `quality/frozen-paths.txt`, generated from the port's own pairs
+by `scripts/frozen-paths.py refresh <corpus-engine-core>`.
+
+- **New work on those files goes to corpus-engine-core**, the ontology layer
+  included. Start from its `AGENTS.md`.
+- **`scripts/commit-msg.sh` refuses a commit that changes a frozen file**
+  unless its message carries a `Frozen-path: <why>` trailer: a backport of a
+  corpus-engine-core fix that a consumer here needs (cite its commit), or a
+  change elsewhere that these files must follow so this repo builds. The hook
+  runs once `scripts/install-git-hooks.sh` has set `core.hooksPath`.
+- **Not frozen:** the shared infrastructure the port also copied
+  (`sovereign-contracts`, `kernel-types`, `host-kit`, `oicp-client`, the
+  grounding gate the chat pipeline uses, the daemon's `server.rs`), and any
+  file of a moved crate the port did not lift. The daemon, desktop, CLI and
+  bench lanes still link the frozen crates, so they keep building and testing
+  here until those consumers move.
+
 ## Architecture
 
 **ONE Cargo workspace, declared at the repo root.** `./Cargo.toml` carries a
