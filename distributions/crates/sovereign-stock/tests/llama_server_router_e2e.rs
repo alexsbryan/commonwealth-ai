@@ -197,12 +197,13 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
     );
 
     let root = tempfile::tempdir().expect("tempdir");
-    let (home, rails_dir, data) = (
+    let (home, rails_dir, data, mesh) = (
         root.path().join("home"),
         root.path().join("rails"),
         root.path().join("data"),
+        root.path().join("svrnmesh"),
     );
-    for d in [&home, &rails_dir, &data] {
+    for d in [&home, &rails_dir, &data, &mesh] {
         std::fs::create_dir_all(d).expect("dir");
     }
     let (svrn, internal, serve, dead_rails) = (
@@ -211,7 +212,12 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
         reserved_port(),
         reserved_port(),
     );
-    let config = root.path().join("config.toml");
+    // At the default path as well as `--config`: the notes rail builds its
+    // KV from `SetupConfig::load()` (sovereign-code face/atlas.rs
+    // `atlas_kv`), which without this file falls back to the host's
+    // cw-rails on :9747 and embeds every note the mesh holds, keeping the
+    // embedder awake through the idle check.
+    let config = mesh.join("config.toml");
     std::fs::write(
         &config,
         format!(
@@ -230,11 +236,13 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
             .args(["run", "--config"])
             .arg(&config)
             .env("HOME", &home)
-            .env("SVRNMESH_DATA_DIR", root.path().join("svrnmesh"))
+            .env("SVRNMESH_DATA_DIR", &mesh)
             .env("CW_RAILS_DIR", &rails_dir)
             .env("CW_RAILS_BIN", root.path().join("no-cw-rails"))
             .env("SOVEREIGN_SERVE_PORT", serve.to_string())
-            .env_remove("RUST_LOG")
+            // Added to the daemon's allowlist (process.rs `compose_filter`),
+            // which does not name the target of atlas_kv's fallback warn.
+            .env("RUST_LOG", "sovereign_code=warn")
             .stdout(Stdio::null())
             .stderr(Stdio::from(std::fs::File::create(&log).expect("log")))
             .spawn()
@@ -391,6 +399,14 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
         estimate.as_u64(),
         Some(truth),
         "the text no longer tells the estimate apart"
+    );
+
+    // No reader of the config fell back to the host's cw-rails.
+    let boot_log = std::fs::read_to_string(&log).expect("the daemon's log");
+    assert!(
+        !boot_log.contains("the rails base is the default"),
+        "a component read no setup config and reached the host's cw-rails:\n{}",
+        log_tail(&log)
     );
 
     // Idle (ENGINE_SWAP_PLAN A2): left past `embed_idle_secs`, the embedder
