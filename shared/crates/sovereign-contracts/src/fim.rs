@@ -526,10 +526,17 @@ mod tests {
         let starcoder = [&fim[..], &["<|end_of_text|>"]].concat();
         let leak = |v: Vec<&'static str>| -> &'static [&'static str] { Vec::leak(v) };
         assert_eq!(fim_style_from(vocab(leak(mellum))), Some(FimStyle::Mellum));
-        assert_eq!(fim_style_from(vocab(leak(starcoder))), Some(FimStyle::StarCoder2));
+        assert_eq!(
+            fim_style_from(vocab(leak(starcoder))),
+            Some(FimStyle::StarCoder2)
+        );
         assert_eq!(fim_style_from(vocab(leak(fim.to_vec()))), None);
         assert_eq!(
-            fim_style_from(vocab(&["<|fim_prefix|>", "<|fim_suffix|>", "<|fim_middle|>"])),
+            fim_style_from(vocab(&[
+                "<|fim_prefix|>",
+                "<|fim_suffix|>",
+                "<|fim_middle|>"
+            ])),
             Some(FimStyle::QwenCoder)
         );
     }
@@ -538,7 +545,11 @@ mod tests {
     fn probe_markers_names_every_marker_once() {
         let markers = probe_markers();
         for row in FIM_MARKER_TABLE {
-            for m in row.also_requires.iter().chain([row.prefix, row.suffix, row.middle].iter()) {
+            for m in row
+                .also_requires
+                .iter()
+                .chain([row.prefix, row.suffix, row.middle].iter())
+            {
                 assert_eq!(markers.iter().filter(|x| *x == m).count(), 1, "{m}");
             }
         }

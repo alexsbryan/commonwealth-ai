@@ -44,7 +44,7 @@ use crate::llama::cpp::model::{AddBos, LlamaModel};
 /// garbage. Returns the first matching table row, `None` when no
 /// family's markers are all atomic (caller refuses the slot).
 pub fn detect_fim_style(model: &LlamaModel) -> Option<FimStyle> {
-    fim_style_from(|marker| {
-        matches!(model.str_to_token(marker, AddBos::Never), Ok(tokens) if tokens.len() == 1)
-    })
+    fim_style_from(
+        |marker| matches!(model.str_to_token(marker, AddBos::Never), Ok(tokens) if tokens.len() == 1),
+    )
 }
