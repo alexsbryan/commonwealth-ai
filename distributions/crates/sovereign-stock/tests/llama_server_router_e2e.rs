@@ -387,7 +387,10 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
         .as_str()
         .unwrap_or_default()
         .to_string();
-    assert!(!infill.trim().is_empty(), "the FIM completion is empty: {fim}");
+    assert!(
+        !infill.trim().is_empty(),
+        "the FIM completion is empty: {fim}"
+    );
     assert!(
         !infill.contains("<|") && !infill.contains("<think>"),
         "the FIM prompt was templated, or a marker leaked: {infill:?}"

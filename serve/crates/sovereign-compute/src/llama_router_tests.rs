@@ -362,7 +362,11 @@ fn the_editing_model_is_a_section_of_its_own_or_the_one_it_shares() {
     m.edit = Some(edit(FAST));
     let preset = RouterPreset::from_models(&m, None, &windows, layers).unwrap();
     assert_eq!(preset.edit(), Some("Qwen3.5-4B-UD-MTP-Q6_K_XL"));
-    assert_eq!(preset.warm_models().len(), 3, "no second copy of the fast GGUF");
+    assert_eq!(
+        preset.warm_models().len(),
+        3,
+        "no second copy of the fast GGUF"
+    );
     let ini = preset.render();
     assert!(
         ini.contains(

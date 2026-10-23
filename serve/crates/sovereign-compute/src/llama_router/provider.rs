@@ -110,7 +110,12 @@ impl RouterProvider {
         Some((model, stops))
     }
 
-    async fn raw(&self, model: &str, stops: &[&str], request: &CompletionRequest) -> Result<Frames> {
+    async fn raw(
+        &self,
+        model: &str,
+        stops: &[&str],
+        request: &CompletionRequest,
+    ) -> Result<Frames> {
         oicp_client::llama_server_raw_completion(&self.router.base_url(), model, request, stops)
             .await
     }
