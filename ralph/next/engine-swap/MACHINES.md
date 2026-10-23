@@ -41,7 +41,7 @@ Two facts every live row on the Mac rests on, neither proved yet:
 | es-p4-ship-onprem-and-pods | linux, rocm | builds the ROCm pod image with podman on the host (`flatpak-spawn --host`) and boots its daemon |
 | es-p5-ci-and-docs | none | workflows and docs; DOCS and LINT |
 | HUMAN-es-p5-release-legs | (the operator's) | the release runners (macos-14, self-hosted macos-x86_64, ubuntu) after a push |
-| es-f1-rpc-peer-child | none | the supervised rpc-server child and a two-load cache test on one host, bound to that host's LAN address |
+| es-f1-rpc-peer-child | linux | the supervised rpc-server child and a two-load cache test on one host, bound to that host's LAN address; its last step (no orphans after a SIGKILLed daemon) rests on PR_SET_PDEATHSIG, Linux-only (`supervisor/child.rs:170`), and the e2e reads `/proc` (engine-swap-3) |
 | es-f2-router-rpc-placement | gpu-exclusive | D2 is a decode tok/s bar on a loopback split of Qwen3.5-9B |
 | REVIEW-audit-es-auto-3 | none | as audit 2 |
 | HUMAN-es-f3-mac-peer | (the operator's) | starts the Mac's pinned `ggml-rpc-server -c` on the LAN/tunnel address and gives its host:port |
