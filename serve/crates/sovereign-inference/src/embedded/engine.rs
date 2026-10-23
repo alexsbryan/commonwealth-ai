@@ -1562,7 +1562,7 @@ impl EmbeddedLlamaCpp {
         // the edit slot's bytes count toward `max_extras_memory_gb`
         // (decision D2: pinned, but accounted).
         let budget = self.extras.read().map(|g| g.budget_bytes).unwrap_or(None);
-        let ctx = section.context_size.unwrap_or(4096);
+        let ctx = section.effective_context_size();
         let model_id = self.load_extra_with_budget(
             EDIT_SLOT_NAME.to_string(),
             section.path.clone(),

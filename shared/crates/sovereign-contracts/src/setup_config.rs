@@ -752,6 +752,9 @@ pub mod fim_defaults {
     pub const MAX_PREFIX_CHARS: usize = 8000;
     /// Suffix clamp — the server keeps this many chars of HEAD.
     pub const MAX_SUFFIX_CHARS: usize = 2000;
+    /// Context for a dedicated editing slot: inline completion never needs
+    /// the chat slot's window, and a small one keeps KV cost tiny.
+    pub const CONTEXT_SIZE: u32 = 4096;
 }
 
 impl EditSection {
@@ -772,6 +775,10 @@ impl EditSection {
     pub fn effective_max_suffix_chars(&self) -> usize {
         self.max_suffix_chars
             .unwrap_or(fim_defaults::MAX_SUFFIX_CHARS)
+    }
+    /// Effective context for the editing model's own slot.
+    pub fn effective_context_size(&self) -> u32 {
+        self.context_size.unwrap_or(fim_defaults::CONTEXT_SIZE)
     }
     /// Effective next-edit prompt/parse contract.
     pub fn effective_next_edit_format(&self) -> crate::types::NextEditFormat {
