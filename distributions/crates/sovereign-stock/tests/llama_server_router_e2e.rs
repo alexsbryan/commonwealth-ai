@@ -4,7 +4,8 @@
 //! build, serves a completion and an embedding through the router, names it
 //! in `/status`, reports the router's facts as its own (context size against
 //! the server's slot, the code model, embed among the resident, an exact token
-//! count from `/tokenize`), lets the embedder sleep on its idle window and
+//! count from `/tokenize`), serves a FIM completion from its `[models.edit]`
+//! section, lets the embedder sleep on its idle window and
 //! wakes it with a request, and when the daemon is SIGKILLed no llama-server
 //! outlives it.
 //!
@@ -257,7 +258,8 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
         &config,
         format!(
             "[engine]\nkind = \"llama-server\"\n\n[models]\nprimary = \"{c}\"\n\
-             code = \"{c}\"\nembed = \"{e}\"\ncontext_size = 4096\n\n[daemon]\n\
+             code = \"{c}\"\nembed = \"{e}\"\ncontext_size = 4096\n\n\
+             [models.edit]\npath = \"{c}\"\ntemperature = 0.0\n\n[daemon]\n\
              client_port = {svrn}\ninternal_port = {internal}\nembed_idle_secs = {EMBED_IDLE_SECS}\n\
              rails_base = \"http://127.0.0.1:{dead_rails}\"\n\n[data]\ndir = \"{d}\"\n",
             c = chat.path.display(),
@@ -356,6 +358,40 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
         .as_array()
         .map_or(0, Vec::len);
     assert!(dims > 0, "the embedding is empty: {embedded}");
+
+    // FIM (ENGINE_SWAP_PLAN A3): `[models.edit]` on the chat GGUF is the
+    // edit slot, its style asked of the router's tokenizer, and a completion
+    // through the daemon's /v1/completions is a raw prompt on the router's
+    // /completion, ended by the family's stop strings.
+    let status: Value = client()
+        .get(format!("http://127.0.0.1:{svrn}/status"))
+        .send()
+        .and_then(|r| r.json())
+        .expect("/status");
+    let edit = &status["inference"]["edit"];
+    let fim_style = edit["fim_style"]
+        .as_str()
+        .unwrap_or_else(|| panic!("the edit slot reports no FIM style: {edit}"))
+        .to_string();
+    assert_eq!(edit["model_id"], chat.id.as_str(), "{edit}");
+    let fim = post_json(
+        &format!("http://127.0.0.1:{svrn}/v1/completions"),
+        serde_json::json!({
+            "prefix": "def add(a, b):\n    return ",
+            "suffix": "\n\nprint(add(1, 2))\n",
+            "debug": true
+        }),
+    )
+    .unwrap_or_else(|e| panic!("{e}\n{}", log_tail(&log)));
+    let infill = fim["choices"][0]["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string();
+    assert!(!infill.trim().is_empty(), "the FIM completion is empty: {fim}");
+    assert!(
+        !infill.contains("<|") && !infill.contains("<think>"),
+        "the FIM prompt was templated, or a marker leaked: {infill:?}"
+    );
 
     // Host truth (ENGINE_SWAP_PLAN A1, A5): what the daemon reports about
     // its engine is what the router says, asked through the replay route the
@@ -501,7 +537,8 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
     );
     eprintln!(
         "booted: {generated} tokens generated, {dims}-dim embedding, ctx {slot_ctx} of \
-         n_ctx_train {trained}, code {chat}, resident {resident:?}, {truth} tokens exact \
+         n_ctx_train {trained}, code {chat}, FIM {fim_style} {infill:?}, resident {resident:?}, \
+         {truth} tokens exact \
          (estimate {estimate}), embedder slept within {slept_after}s of {EMBED_IDLE_SECS}s idle \
          and answered again, llama-servers {:?}",
         servers.keys()

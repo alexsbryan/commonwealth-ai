@@ -251,6 +251,12 @@ impl LiveRouter {
         format!("http://127.0.0.1:{}/v1", self.port)
     }
 
+    /// The router's own base, where its native routes (`/completion`,
+    /// `/tokenize`) are.
+    pub fn base_url(&self) -> String {
+        format!("http://127.0.0.1:{}", self.port)
+    }
+
     /// The preset this router was started with.
     pub fn digest(&self) -> &str {
         &self.digest

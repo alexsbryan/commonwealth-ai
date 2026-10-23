@@ -23,6 +23,8 @@ pub use ner::RemoteNer;
 pub mod openai_passthrough;
 mod pinned_provider;
 pub use pinned_provider::provider_for_model;
+mod llama_completion;
+pub use llama_completion::raw_completion_stream as llama_server_raw_completion;
 mod rerank;
 mod serve_loopback;
 mod turn_admission;
