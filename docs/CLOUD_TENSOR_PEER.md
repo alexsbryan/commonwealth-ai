@@ -60,10 +60,10 @@ vastai create instance <offer-id> --image ghcr.io/alexsbryan/sovereign-cuda:late
 # If SSH is refused: attach your key to the running instance
 #   vastai attach ssh <instance-id> "$(cat ~/.ssh/id_ed25519.pub)"
 
-# 2. Launch the worker (scp + run; script is self-documenting):
+# 2. Launch the peer (scp + run; script is self-documenting):
 scp -P <port> scripts/cloud-rpc-peer-launch.sh root@<ssh-host>:/workspace/
 ssh -p <port> root@<ssh-host> \
-  "DIAL_LINK='<join_link>' nohup bash /workspace/cloud-rpc-peer-launch.sh \
+  "PEER_BIND='<pod tunnel ip>:50052' nohup bash /workspace/cloud-rpc-peer-launch.sh \
    > /workspace/worker.log 2>&1 &"
 ```
 
@@ -72,12 +72,10 @@ The launch script handles the traps found on the first run:
 - `[models].embed` is **required** by the config schema — the stub GGUF
   doubles for it (the worker never embeds; the embed-probe WARN is expected
   and only opts the pod out of collaborative ingestion).
-- `/root/.local/share/svrnmesh` is symlinked to `/root/.svrnmesh` **before**
-  `mesh join` — the CLI persists mesh membership via the XDG root while the
-  daemon reads the HOME root; without the symlink the join is invisible to
-  the daemon.
-- `SOVEREIGN_RPC_SERVE=127.0.0.1:50052` — loopback ONLY (raw ggml-RPC is
-  plaintext; iroh is the only WAN path).
+- `[compute] rpc_peer = PEER_BIND` — the daemon runs the shipped
+  `ggml-rpc-server -c` there as a supervised child. Raw ggml-RPC is
+  plaintext, so PEER_BIND is the pod's tunnel address; the daemon refuses
+  loopback and `0.0.0.0`. The pod joins no mesh: the head names the address.
 
 ## Gates
 
