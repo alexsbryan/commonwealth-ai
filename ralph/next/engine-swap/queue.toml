@@ -28,6 +28,9 @@ audit_every = 8
 # 2026-10-23 at b18972cd0, eutropia 5199ee9).
 lane_prepare = ["sh", "scripts/eutropia/cargo-target", "prepare", "--", "scripts/with-cargo-lock.sh", "cargo", "check", "--workspace", "--all-targets", "--features", "corpus-engine/treesitter,sovereign-cli/dev-tools"]
 lane_setup = ["sh", "scripts/eutropia/cargo-target", "setup"]
+# eutropia's own pushes (claims, heartbeats, landings) skip the pre-push hook;
+# its gate runs once per landing as the land check below (eutropia D10).
+push_hooks = "skip"
 # Machine fit (eutropia design §8): every word a row may need. The Mac
 # provides [macos, metal]; the Halo [linux, rocm, vulkan, halo-daemon, halo].
 # `halo` is any Halo-only reason, the heavy timing rows included, so a binary
@@ -43,6 +46,7 @@ resolve = "claude-opus-5-5"
 variant = "medium"
 
 [checks]
+land = ["bash", "ralph/next/engine-swap/land.sh"]
 # The live router e2e on build.sh's binary (target/debug/llama-server, which a
 # lane's reflink-cloned target carries). Models from SOVEREIGN_MODELS_DIR when
 # the host sets it, else the main checkout's sovereign/models under $HOME: the
