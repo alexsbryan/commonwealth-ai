@@ -1048,6 +1048,19 @@ class IncidentTests(unittest.TestCase):
         self.assertIs(rig.tick(), ralph.Pool.DONE)
         self.assertEqual(rig.procs.spawned, [])
 
+    def test_a_manifest_takes_eutropias_keys_and_still_refuses_a_typo(self):
+        # engine-swap's lane_prepare made every `ralph-check.sh <check>` refuse
+        # the queue (5cb0fc33a); a misspelt key must still refuse it.
+        d = pathlib.Path(self.tmp.name) / "ralph/next/q"
+        d.mkdir(parents=True)
+        (d / "queue.toml").write_text(
+            'label = "q"\nlane_prepare = ["true"]\nlane_setup = ["true"]\n'
+            'push_hooks = false\nneeds = ["mac"]\n[checks]\nx = ["true"]\n')
+        self.assertEqual(ralph.load_manifest(self.tmp.name, "q").label, "q")
+        (d / "queue.toml").write_text('label = "q"\nlane_prepar = ["true"]\n')
+        with self.assertRaisesRegex(ValueError, "unknown key `lane_prepar`"):
+            ralph.load_manifest(self.tmp.name, "q")
+
     def test_a_closing_audit_runs_before_done(self):
         manifest = ('label = "q"\naudit_every = 2\n')
         rig = Rig(self.tmp.name, "", extra={

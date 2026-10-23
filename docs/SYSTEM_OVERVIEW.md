@@ -1233,6 +1233,18 @@ binary and skips the check, and `/status` says which ran. The whole path is
 `sovereign-stock`'s ignored e2e `llama_server_router_e2e`: boot on the
 shipped binary, serve a completion and an embedding, SIGKILL the daemon, no
 llama-server left.
+A node lends its GPU to another node's router with `[compute] rpc_peer =
+"ip:port"`, under any engine: serving assembly's first build starts the
+shipped `ggml-rpc-server -c` there as a supervised child
+(`sovereign_compute::rpc_peer`, kept across reloads like the router), its
+build verified against the same pin, `LLAMA_CACHE` set to
+`<data>/rpc-peer` so its tensor cache is one the daemon names. The address is
+static, with no discovery and no mesh registration, and must be this host's
+LAN or tunnel address: loopback and every-interface binds are refused at
+startup, because rpc-server authenticates nothing. The supervisor watches it
+by connect until it first listens (`HealthTarget::TcpListening`), then by its
+exit alone, since rpc-server serves one client on a backlog of 1. A head on
+another build is refused by upstream's HELLO. Proof: `rpc_peer_child_e2e`.
 `BuiltEngine.llama` is `None` for every non-llama engine, and the VRAM
 preflight is llama's own question, skipped for engines holding no weights.
 The contracts are executable: `engine_conformance::{check_sync, check_serving}`.

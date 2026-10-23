@@ -126,6 +126,13 @@ pub enum HealthTarget {
         /// spawn as failed (→ crash accounting + backoff).
         handshake_deadline: Duration,
     },
+    /// The child serves raw TCP at a known address (ggml's `rpc-server`), so
+    /// health is a connect, and only until the first one succeeds; after
+    /// that the child's exit is the only signal. rpc-server serves one client
+    /// at a time on a listen backlog of 1 (llama.cpp `transport.cpp:677`), so
+    /// probes sent while a head is connected queue behind it, fill the
+    /// backlog and read as failures: probing on would kill a peer for serving.
+    TcpListening(std::net::SocketAddr),
 }
 
 /// Parse the port out of a stdout handshake line. Returns `None` for any
@@ -145,8 +152,8 @@ pub struct SupervisorConfig {
     pub args: Vec<String>,
     pub working_dir: Option<PathBuf>,
     pub env: Vec<(String, String)>,
-    /// How the health URL is resolved — a fixed URL, or parsed from the
-    /// child's stdout handshake. Probed by GET; any 2xx counts as healthy.
+    /// How health is probed: a GET of a fixed URL or of one built from the
+    /// child's stdout handshake (any 2xx is healthy), or a connect.
     pub health: HealthTarget,
     pub crash_log_dir: PathBuf,
     pub heartbeat_interval: Duration,
@@ -530,12 +537,12 @@ impl Supervisor {
             let pid = child.id().unwrap_or(0);
             info!(pid, binary = %self.config.binary_path.display(), "supervisor: child spawned");
 
-            // Resolve the health URL. For `Fixed` this is immediate; for
-            // `StdoutHandshake` it awaits the child's port announcement
+            // Resolve the probe. For `Fixed` and `TcpListening` this is
+            // immediate; for `StdoutHandshake` it awaits the child's port announcement
             // (emitting `Warming`), or fails to local crash-accounting if
             // the child dies or never announces within the deadline.
-            let health_url = match self.resolve_health_url(port_rx, pid, &mut child).await {
-                Some(url) => url,
+            let probe = match self.resolve_probe(port_rx, pid, &mut child).await {
+                Some(probe) => probe,
                 None => {
                     signal_group(pid, Signal::Kill);
                     let outcome = ExitOutcome::WaitError("child did not announce its port".into());
@@ -568,7 +575,7 @@ impl Supervisor {
                     &mut child,
                     pid,
                     spawn_instant,
-                    &health_url,
+                    &probe,
                     &http,
                     &mut reconnect_rx,
                     &mut terminate_rx,

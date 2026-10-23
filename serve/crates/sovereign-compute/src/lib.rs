@@ -49,6 +49,8 @@ pub mod mock;
 pub mod model_transfer;
 pub mod ner;
 pub mod preflight;
+/// The supervised `ggml-rpc-server` a peer lends its GPU through.
+pub mod rpc_peer;
 pub mod server;
 pub mod setup_planner;
 pub mod setup_reads;
