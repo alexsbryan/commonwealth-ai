@@ -2,28 +2,23 @@
 # Plan: ~/dev/svrn-docs/ENGINE_SWAP_PLAN.md (milestones A-G, decisions of
 # 2026-10-11 and 2026-10-12).
 #
-# It runs in ITS OWN WORKTREE on branch `engine-swap`, so other agents keep
-# main to themselves (operator, 2026-10-12): the loop's tree is
-# /home/alexbryan/dev/commonwealth-ai-engine-swap, its lanes sit beside it in
-# commonwealth-ai-engine-swap-lanes, it builds into its own target/ and takes
-# its own cargo lock. Launch INSIDE the toolbox, from that worktree, after
-# checking no other loop is live (`pgrep -f 'ralph.py supervise'`):
+# It runs under eutropia (operator, 2026-10-23) on eutropia's queue branch,
+# never main (merging to main is the operator's), on two machines: a Mac
+# (macOS, 64 GB, Metal; its daemon in remote mode, no local model) and the
+# Halo (Linux, 128 GB, ROCm/Vulkan; inside the `sovereign-vulkan` toolbox; it
+# hosts the deployed daemon). MACHINES.md beside this file says which row needs
+# which. The checks below name no host path: $HOME and SOVEREIGN_MODELS_DIR
+# hold on both, and the toolbox shares the host's $HOME. The worker's
+# permission contract is .eutropia/claude-settings.json (the harness reads it
+# before ralph/claude-settings.json).
 #
-#   cd /home/alexbryan/dev/commonwealth-ai-engine-swap && \
-#   SVRN_CARGO_LOCK_DIR=/tmp/svrn-cargo-lock.$(id -u).engine-swap \
-#   setsid nohup python3 scripts/ralph.py supervise --workdir . --queue engine-swap \
-#     -- python3 scripts/ralph.py pool --workdir . --queue engine-swap --lanes 3 \
-#     --base-branch engine-swap >> ralph/log-engine-swap.txt 2>&1 < /dev/null &
+# Until 2026-10-16 it ran as ralph's pool (3 lanes, in the worktree
+# commonwealth-ai-engine-swap on branch `engine-swap`); worker_bin and
+# settings below are ralph's keys, which eutropia reads and does not act on.
 #
-# The seat merges main INTO engine-swap between waves (the empty-STOP-after-
-# "finished — merging" stop), so the branch keeps up with other agents, and
-# merges engine-swap into main before HUMAN-es-host-flip and at the release
-# flip. Nothing in this loop ever commits to main.
-#
-# Three lanes, simulated against 4 (4 is slower: conflicting rows then delay
-# the router chain). heavy.txt allows one timing row per wave; conflicts.txt
-# keeps rows on the same files out of one wave. HUMAN- rows are the seat's
-# (host grant: restart the daemon, 2026-09-28): the pool parks them and runs on.
+# heavy.txt allows one timing row per wave; conflicts.txt keeps rows on the
+# same files out of one wave. HUMAN- rows are the seat's (host grant: restart
+# the daemon, 2026-09-28): the loop holds them and runs on.
 label = "engine-swap"
 session_timeout = 7200
 audit_every = 8
@@ -38,10 +33,17 @@ variant = "medium"
 
 [checks]
 # The live router e2e on build.sh's binary (target/debug/llama-server, which a
-# lane's reflink-cloned target carries). Models from the main tree, absolute.
-router-e2e = ["bash", "-c", "SOVEREIGN_MODELS_DIR=/home/alexbryan/dev/commonwealth-ai/sovereign/models ./scripts/with-cargo-lock.sh cargo test -p sovereign-stock --test llama_server_router_e2e -- --ignored --nocapture"]
-# A live run needs 60 GB available beside the deployed daemon (2026-10-09 OOM).
-headroom = ["python3", "-c", "import sys; a=[int(l.split()[1]) for l in open('/proc/meminfo') if l.startswith('MemAvailable')][0]//1048576; print(f'available {a} GB'); sys.exit(0 if a >= 60 else 1)"]
+# lane's reflink-cloned target carries). Models from SOVEREIGN_MODELS_DIR when
+# the host sets it, else the main checkout's sovereign/models under $HOME: the
+# same tree on the Mac (/Users/...) and the Halo, where the sovereign-vulkan
+# toolbox shares the host's $HOME. No host path is written here.
+router-e2e = ["bash", "-c", "SOVEREIGN_MODELS_DIR=\"${SOVEREIGN_MODELS_DIR:-$HOME/dev/commonwealth-ai/sovereign/models}\" ./scripts/with-cargo-lock.sh cargo test -p sovereign-stock --test llama_server_router_e2e -- --ignored --nocapture"]
+# Memory available for the run's own need (headroom.py: 16 GB, one live-run
+# model of at most 12 GB plus its working set; a row that loads more passes
+# its GB as an argument). Linux reads MemAvailable, macOS vm_stat; memory a
+# deployed daemon already holds is excluded on both, so no host's resident
+# model is guessed at (the 60 GB bar of the 2026-10-09 OOM was the Halo's).
+headroom = ["python3", "ralph/next/engine-swap/headroom.py"]
 # No llama-server or ggml-rpc-server running without a sovereign-stock above
 # it: a deployed daemon's own router (after HUMAN-es-host-flip) is not an orphan.
 no-orphans = ["python3", "ralph/next/engine-swap/no_orphans.py"]

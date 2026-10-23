@@ -33,15 +33,21 @@ registry are the surfaces; a second implementation of any of them stops (§6, `{
   beside the main checkout, which belongs to other agents. Never check out,
   merge into or commit to `main`; the seat does every merge between the two.
   NOTHING IS EVER PUSHED. Never amend, never rewrite history.
-- Builds, tests and every live run happen inside the `sovereign-vulkan`
-  toolbox. Container builds run on the host through
-  `flatpak-spawn --host podman`.
-- The deployed daemon on :9741 is the operator's daily driver. Never stop,
+- Two machines serve this queue under eutropia (operator, 2026-10-23): the
+  Halo (Linux, 128 GB, ROCm/Vulkan) and a Mac (macOS, 64 GB, Metal).
+  On the Halo, builds, tests and every live run happen inside the
+  `sovereign-vulkan` toolbox, and container builds run on the host through
+  `flatpak-spawn --host podman`. On the Mac they run on the host; there is
+  no toolbox and no podman row runs there. `ralph/next/engine-swap/MACHINES.md`
+  says which rows need which machine. Never write a host's absolute path into
+  a check; `$HOME` and `$SOVEREIGN_MODELS_DIR` hold on both.
+- The deployed daemon on :9741 (on the Halo; the Mac's runs in remote mode
+  with no local model) is the operator's daily driver. Never stop,
   restart or reconfigure it, and never edit `~/.sovereign/config.toml`; only
   `HUMAN-` rows do, and those are the seat's.
 - A live run boots its OWN daemon on a temp root with free ports and its own
   HOME, as **E2E** does, with small GGUFs from
-  `/home/alexbryan/dev/commonwealth-ai/sovereign/models/` (Qwen3.5-0.8B,
+  `$SOVEREIGN_MODELS_DIR`, else `$HOME/dev/commonwealth-ai/sovereign/models/` (Qwen3.5-0.8B,
   Qwen3-Embedding-0.6B, qwen3-reranker-0.6b, Qwen3.5-4B or Mellum2-12B for
   FIM, Qwen3.5-9B for distribution). Run HEADROOM before it and NO-ORPHANS
   after it. Never a model over 12 GB beside the deployed daemon.
@@ -153,10 +159,10 @@ Outside a lane (a REVIEW row in the main tree), mint the same way and run
 | `HUMAN-es-` | never do it and never mark it: the loop holds these for the seat. If you are given one, end with `{{result}} needs-human --operator <the row>` |
 
 <!-- section: checks-queue-1 -->
-| ROUTER-E2E | `scripts/ralph-check.sh router-e2e` — **E2E** on the shipped binary, its own daemon and small models | exit=0, `test result: ok.` with `0 failed`; paste the `booted:` line |
-| HEADROOM | `scripts/ralph-check.sh headroom` — before any live run | exit=0 (60 GB available or more) |
-| NO-ORPHANS | `scripts/ralph-check.sh no-orphans` — after any live run | exit=0, `orphans none` |
-| BOUNDARY | `scripts/ralph-check.sh boundary` — boundary-gate's count, then clone-gate's | the counts do not rise; quote both |
+| ROUTER-E2E | `RALPH_QUEUE=engine-swap scripts/ralph-check.sh router-e2e` — **E2E** on the shipped binary, its own daemon and small models from `$SOVEREIGN_MODELS_DIR`, else `$HOME/dev/commonwealth-ai/sovereign/models` | exit=0, `test result: ok.` with `0 failed`; paste the `booted:` line |
+| HEADROOM | `RALPH_QUEUE=engine-swap scripts/ralph-check.sh headroom [GB]` — before any live run; GB is the run's own need, 16 when omitted (one model of at most 12 GB); a row that loads more names its number | exit=0, `available N GB ... need M GB` |
+| NO-ORPHANS | `RALPH_QUEUE=engine-swap scripts/ralph-check.sh no-orphans` — after any live run | exit=0, `orphans none` |
+| BOUNDARY | `RALPH_QUEUE=engine-swap scripts/ralph-check.sh boundary` — boundary-gate's count, then clone-gate's | the counts do not rise; quote both |
 | ENV | `scripts/ralph-check.sh env` | exit=0 (rows that add or remove an env read) |
 | DESKTOP | `scripts/ralph-check.sh desktop` | exit=0 |
 <!-- section: hard-rules-scope -->

@@ -2,8 +2,11 @@
 without a sovereign-stock above it. A deployed daemon's own router (after
 HUMAN-es-host-flip) is not an orphan; a server a SIGKILLed daemon left behind is.
 Exit 1 names the pids. Watched failing on a stray process named llama-server
-(2026-10-12)."""
+(2026-10-12). Linux reads /proc as it always did; a host without /proc (macOS)
+reads one `ps` table instead, and a failed `ps` is refused (exit 2), never
+read as no orphans."""
 import os
+import subprocess
 import sys
 
 SERVERS = ("llama-server", "ggml-rpc-server")
@@ -28,7 +31,23 @@ def under_a_daemon(pid):
     return False
 
 
-left = [p for p in filter(str.isdigit, os.listdir("/proc"))
-        if stat(p)[0] in SERVERS and not under_a_daemon(p)]
+if os.path.isdir("/proc/self"):
+    pids = list(filter(str.isdigit, os.listdir("/proc")))
+else:
+    ps = subprocess.run(["ps", "-axo", "pid=,ppid=,comm="], capture_output=True, text=True)
+    if ps.returncode != 0:
+        print(f"no-orphans: ps failed: {ps.stderr.strip()}")
+        sys.exit(2)
+    table = {}
+    for line in ps.stdout.splitlines():
+        pid, ppid, comm = line.split(None, 2)
+        table[pid] = (os.path.basename(comm.strip()), int(ppid))
+
+    def stat(pid):  # noqa: F811 — the ps table's answer to the /proc reader
+        return table.get(str(pid), (None, 0))
+
+    pids = list(table)
+
+left = [p for p in pids if stat(p)[0] in SERVERS and not under_a_daemon(p)]
 print("orphans", left or "none")
 sys.exit(1 if left else 0)
