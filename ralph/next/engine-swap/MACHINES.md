@@ -2,8 +2,10 @@
 
 Written 2026-10-23, when the queue moved to eutropia on two machines, for the
 `needs [..]` field eutropia is gaining on rows (hosts gain `provides`). The
-field is not in STATE.md yet: when the grammar lands, copy each row's `needs`
-below into its line in one edit.
+field landed (eutropia 945d3a0) and STATE.md carries it since 2026-10-23, in
+the words queue.toml declares: a Halo-only reason below (the pinned GGUF,
+gpu-exclusive timing, the host outside the toolbox) is `halo`; `none` rows
+carry no field.
 
 The two machines:
 
@@ -42,7 +44,8 @@ Two facts every live row on the Mac rests on, neither proved yet:
 | es-f1-rpc-peer-child | none | the supervised rpc-server child and a two-load cache test on one host, bound to that host's LAN address |
 | es-f2-router-rpc-placement | gpu-exclusive | D2 is a decode tok/s bar on a loopback split of Qwen3.5-9B |
 | REVIEW-audit-es-auto-3 | none | as audit 2 |
-| es-f3-d4-split-on-uneven-memory | macos, metal, linux, gpu-exclusive | D4 between the Mac and the Halo over a direct link: one host's head, the other's peer, both GPUs held. A row needing two hosts at once is a case the `needs`/`provides` grammar must say how to express (run on either, the other reachable and held) |
+| HUMAN-es-f3-mac-peer | (the operator's) | starts the Mac's pinned `ggml-rpc-server -c` on the LAN/tunnel address and gives its host:port |
+| es-f3-d4-split-on-uneven-memory | halo (with the Mac's peer from HUMAN-es-f3-mac-peer) | D4 between the Mac and the Halo over a direct link: one host's head, the other's peer, both GPUs held. The second host is the operator's row before it |
 | HUMAN-es-host-flip | halo-daemon (the seat's) | flips the deployed daemon to `kind = "llama-server"` and runs gate bars 1 and 2 on it |
 | HUMAN-es-measure-sampler-pins | halo-daemon (the seat's) | quality checks and the E1 perf check against the deployed daemon |
 | es-c1-sampler-outcome | none | a code change on P's verdict; TESTALL |
