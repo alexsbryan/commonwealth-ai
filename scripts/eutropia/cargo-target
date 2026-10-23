@@ -1,0 +1,141 @@
+#!/bin/sh
+# A cargo workspace's warm target/ in every lane (design §6, "Lanes",
+# amended 2026-10-23). One script, two argvs in the queue's queue.toml:
+#
+#   lane_prepare = ["sh", "scripts/eutropia/cargo-target", "prepare"]
+#   lane_setup   = ["sh", "scripts/eutropia/cargo-target", "setup"]
+#
+# with this file committed at scripts/eutropia/cargo-target in your
+# repository: both run in a worktree of your clone, so `sh` finds it by a
+# path relative to the tree. Or name an absolute path where every machine
+# has it.
+#
+# prepare   eutropia runs it per queue before this machine claims from it,
+#           in the queue's template ($EUTROPIA_TEMPLATE, a worktree at the
+#           queue tip). It builds the template's target/: `cargo check
+#           --workspace --all-targets`, or the command after `--`:
+#             ["sh", "scripts/eutropia/cargo-target", "prepare", "--",
+#              "scripts/with-cargo-lock.sh", "cargo", "check", "--workspace"]
+#           A failure claims nothing from the queue on this machine, and
+#           strikes nothing; eutropia tries again later.
+# setup     eutropia runs it once in each new lane ($EUTROPIA_LANE_TREE),
+#           before its session. It clones the template's target/ into the
+#           lane copy-on-write: clonefile(2) on macOS APFS (`cp -c`), a
+#           reflink on Linux btrfs or XFS (`cp --reflink=always`). The
+#           clone shares the template's blocks until the lane rebuilds
+#           them, and takes seconds where a copy takes the disk.
+#           Where neither is available it says so and falls back to one
+#           shared target dir for the queue's lanes, named in a cargo
+#           config beside the lane's tree ($EUTROPIA_LANE_DIR/.cargo), which
+#           cargo reads as an ancestor's and git never sees. ralph found a
+#           shared target running another tree's build script (2026-09-01),
+#           so treat the fallback as a stopgap and fix the filesystem.
+#
+# What stays warm. Cargo judges a path dependency fresh by mtime (stable
+# cargo has no checksum freshness: -Zchecksum-freshness is nightly's, and
+# cargo 1.95 refuses it), and a fresh worktree gives every file the time of
+# its checkout, newer than every output in the clone: every workspace
+# crate, and a vendored path dependency such as a C++ build, would build
+# again, and only crates.io's would stay warm. So after the clone, every
+# tracked file the lane's commit holds unchanged from the template's commit
+# (`git diff --name-only <template> <lane>` is the changed set) is given
+# the template file's mtime. A changed file keeps its checkout time, newer
+# than the outputs, so what it feeds builds again: the lane is warm and
+# still correct, at a resumed commit as at the tip.
+set -eu
+
+say() { echo "cargo-target: $*" >&2; }
+
+[ $# -ge 1 ] || { say "usage: cargo-target prepare [-- <build argv>] | setup"; exit 2; }
+mode=$1
+shift
+
+# Gives each tracked file the lane holds unchanged from the template its
+# template twin's mtime, in one perl process (Time::HiRes keeps the
+# nanoseconds cargo compares).
+stamp() {
+    template_at=$(git -C "$EUTROPIA_TEMPLATE" rev-parse HEAD)
+    lane_at=$(git -C "$EUTROPIA_LANE_TREE" rev-parse HEAD)
+    changed=$EUTROPIA_LANE_DIR/.changed-since-template
+    git -C "$EUTROPIA_LANE_TREE" diff --name-only -z --no-renames "$template_at" "$lane_at" >"$changed"
+    stamped=$(git -C "$EUTROPIA_LANE_TREE" ls-files -z | perl -e '
+        use strict; use warnings; use Time::HiRes qw(lstat utime);
+        my ($template, $lane, $changed) = @ARGV;
+        local $/ = "\0";
+        open(my $c, "<", $changed) or die "$changed: $!";
+        my %changed = map { chomp; ($_ => 1) } <$c>;
+        my ($done, $kept) = (0, 0);
+        while (my $path = <STDIN>) {
+            chomp $path;
+            if ($changed{$path}) { $kept++; next; }
+            my @was = lstat("$template/$path") or next;
+            next if -l _;
+            utime($was[8], $was[9], "$lane/$path") and $done++;
+        }
+        print "$done $kept\n";
+    ' "$EUTROPIA_TEMPLATE" "$EUTROPIA_LANE_TREE" "$changed")
+    rm -f "$changed"
+    set -- $stamped
+    say "setup: $1 file(s) given the template's mtime; $2 changed since the template ($template_at..$lane_at) keep their checkout's"
+}
+
+case $mode in
+prepare)
+    : "${EUTROPIA_TEMPLATE:?not set: run as the queue lane_prepare}"
+    cd "$EUTROPIA_TEMPLATE"
+    if [ "${1:-}" = "--" ]; then
+        shift
+        [ $# -ge 1 ] || { say "prepare: nothing after --"; exit 2; }
+    else
+        set -- cargo check --workspace --all-targets
+    fi
+    say "prepare: $* in $EUTROPIA_TEMPLATE"
+    exec "$@"
+    ;;
+setup)
+    : "${EUTROPIA_LANE_TREE:?not set: run as the queue lane_setup}"
+    : "${EUTROPIA_LANE_DIR:?not set: run as the queue lane_setup}"
+    [ $# -eq 0 ] || { say "setup takes no arguments"; exit 2; }
+    shared_config=$EUTROPIA_LANE_DIR/.cargo/config.toml
+    dst=$EUTROPIA_LANE_TREE/target
+    # A kept lane's place may hold an earlier fallback; this lane decides
+    # afresh.
+    rm -f "$shared_config"
+    if [ -z "${EUTROPIA_TEMPLATE:-}" ]; then
+        say "setup: the queue declares no lane_prepare, so there is no warm target; this lane builds cold"
+        exit 0
+    fi
+    src=$EUTROPIA_TEMPLATE/target
+    if [ ! -d "$src" ]; then
+        say "setup: $src does not exist (has the prepare built?); this lane builds cold"
+        exit 0
+    fi
+    if [ -e "$dst" ]; then
+        say "setup: $dst already exists; left as it is"
+        exit 0
+    fi
+    if [ "$(uname -s)" = Darwin ]; then
+        cow=-c
+    else
+        cow=--reflink=always
+    fi
+    if why=$(cp -a "$cow" "$src" "$dst" 2>&1); then
+        say "setup: $src cloned copy-on-write to $dst"
+        stamp
+        exit 0
+    fi
+    # A half-made clone is not a target cargo should trust.
+    rm -rf "$dst"
+    shared=$(dirname "$EUTROPIA_LANE_DIR")/.shared-target
+    mkdir -p "$shared" "$(dirname "$shared_config")"
+    printf '[build]\ntarget-dir = "%s"\n' "$shared" >"$shared_config"
+    say "setup: copy-on-write is not available here ($why)."
+    say "setup: FALLING BACK to the shared target dir $shared, set in $shared_config:"
+    say "setup: this queue's lanes now share one build dir and its lock, and it starts cold."
+    exit 0
+    ;;
+*)
+    say "unknown mode \`$mode\`: prepare or setup"
+    exit 2
+    ;;
+esac

@@ -22,6 +22,12 @@
 label = "engine-swap"
 session_timeout = 7200
 audit_every = 8
+# Each lane gets a copy-on-write clone of a warm target/ (eutropia design §6,
+# "Lanes"): prepare builds the queue's template before this machine claims,
+# setup clones it into each new lane (63 s vs 142 s for a lane check, measured
+# 2026-10-23 at b18972cd0, eutropia 5199ee9).
+lane_prepare = ["sh", "scripts/eutropia/cargo-target", "prepare", "--", "scripts/with-cargo-lock.sh", "cargo", "check", "--workspace", "--all-targets", "--features", "corpus-engine/treesitter,sovereign-cli/dev-tools"]
+lane_setup = ["sh", "scripts/eutropia/cargo-target", "setup"]
 # Machine fit (eutropia design §8): every word a row may need. The Mac
 # provides [macos, metal]; the Halo [linux, rocm, vulkan, halo-daemon, halo].
 # `halo` is any Halo-only reason, the heavy timing rows included, so a binary
