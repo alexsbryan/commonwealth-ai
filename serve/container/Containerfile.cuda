@@ -53,12 +53,17 @@ ENV DEBIAN_FRONTEND=noninteractive
 # need to resolve at link time. `libnccl-dev` provides headers + the
 # static archive for the build stage; the runtime stage adds
 # `libnccl2` for the dlopen path.
+#
+# The webkit/appindicator/rsvg dev packages: workspace-hack pulls tauri (gtk,
+# glib-sys) into every member's build since the hakari move; as in
+# .github/workflows/cli-release.yml "Linux build deps".
 RUN apt-get update && apt-get install -y --no-install-recommends \
       --allow-change-held-packages \
       build-essential cmake git curl ca-certificates pkg-config libssl-dev \
       protobuf-compiler libprotobuf-dev \
       clang libclang-dev llvm-dev lld python3 \
       libnccl-dev libnccl2 \
+      libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
  && rm -rf /var/lib/apt/lists/*
 
 # sccache caches rustc + nvcc + cc/c++ output keyed by content hash.
@@ -285,6 +290,21 @@ RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     | xargs sed -i 's|option(GGML_CUDA_NCCL\s*"[^"]*"\s*ON)|option(GGML_CUDA_NCCL "" OFF)|' \
  && echo "$CMAKE_LISTS" | xargs grep -n GGML_CUDA_NCCL
 
+# The llama-server the daemon ships for kind = "llama-server", built from the
+# pin by build.sh in its CUDA mode (CMAKE_CUDA_ARCHITECTURES above, NCCL off),
+# with ggml-rpc-server and llama-server.manifest.toml, into /usr/local/bin: the
+# daemon looks beside its own executable and verifies the manifest against the
+# pin it was compiled with (sovereign-compute llama_router/live.rs,
+# resolve_binary).
+# RUSTFLAGS is the daemon's link flags; unset here, since llguidance's own
+# cargo build would apply them to every artifact it links, proc-macros
+# included (the ROCm image's -no-pie broke exactly that way).
+RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
+    --mount=type=cache,target=/root/.cargo/git,sharing=locked \
+    --mount=type=cache,target=/root/.cache/sccache,sharing=locked \
+    --mount=type=cache,target=/workspace/target \
+    env -u RUSTFLAGS serve/crates/sovereign-compute/llama-server/build.sh --backend cuda --install-dir /usr/local/bin
+
 # THE `rm -rf` IS LOAD-BEARING — DO NOT DROP IT AS A TIDY-UP (2026-08-28).
 # /workspace/target is a persistent cache mount, and build.rs extracts
 # llama.cpp into target/release/build/llama-cpp-sys-4-*/out/, re-copying only
@@ -400,6 +420,8 @@ COPY --from=build /usr/local/bin/sovereign-cli-llm    /usr/local/bin/sovereign-c
 COPY --from=build /usr/local/bin/sovereign-stock      /usr/local/bin/sovereign-stock
 COPY --from=build /usr/local/bin/sovereign-pod-worker /usr/local/bin/sovereign-pod-worker
 COPY --from=build /usr/local/bin/cuda-preflight /usr/local/bin/cuda-preflight
+COPY --from=build /usr/local/bin/llama-server /usr/local/bin/ggml-rpc-server \
+                  /usr/local/bin/llama-server.manifest.toml /usr/local/bin/
 # NOTE: no llama.cpp shared-lib copy here anymore. The vendored
 # llama-cpp-4 dropped `dynamic-link` from its default features
 # (vendor/llama-cpp-4/Cargo.toml — "sovereign vendor divergence"), so
