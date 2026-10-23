@@ -10,7 +10,7 @@
 //! block count and the tensor table — and both live in each shard's *header*.
 //! `parse_gguf` and `gguf_block_count` are strictly sequential: magic, KV
 //! block, tensor-info table, stop. Neither seeks into the data section, and
-//! tensor byte-mass is computed from dims + ggml type (`ggml_row_size`), never
+//! tensor byte-mass is computed from dims + ggml type (`ggml_row_bytes`), never
 //! from the file length. So a file truncated just past its tensor table parses
 //! identically to the whole thing.
 //!
