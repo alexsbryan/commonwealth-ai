@@ -190,7 +190,12 @@ async fn a_rerank_child_scores_over_the_kind_route() {
         async fn embed(&self, _: &str) -> Result<Vec<f32>> {
             Err(Error::NotImplemented("rerank only".into()))
         }
-        async fn rerank_batch(&self, _: &str, docs: &[String]) -> Result<Vec<f32>> {
+        async fn rerank_batch(
+            &self,
+            _: Option<&str>,
+            _: &str,
+            docs: &[String],
+        ) -> Result<Vec<f32>> {
             Ok(docs.iter().map(|d| d.len() as f32).collect())
         }
         fn capabilities(&self) -> ProviderCapabilities {
@@ -206,6 +211,7 @@ async fn a_rerank_child_scores_over_the_kind_route() {
     let (child, _tx) = serving_child("rerank", port);
     let scores = child
         .rerank_batch(
+            None,
             "q",
             &["aa".to_string(), "b".to_string(), "cccc".to_string()],
         )

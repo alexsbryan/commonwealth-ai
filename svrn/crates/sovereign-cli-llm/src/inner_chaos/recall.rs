@@ -777,7 +777,7 @@ pub async fn run_recall_probe(opts: &RecallRunOptions) -> Result<(), String> {
                 "Lyon is a major city in France known for its cuisine.".to_string(),
                 "The mitochondria is the powerhouse of the cell.".to_string(),
             ];
-            match r.rerank_batch(q, &docs).await {
+            match r.rerank_batch(None, q, &docs).await {
                 Ok(s) => println!(
                     "reranker sanity [capital-of-France]: relevant={:.3} adjacent={:.3} irrelevant={:.3} {}",
                     s[0], s[1], s[2],

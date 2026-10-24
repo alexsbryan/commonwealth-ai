@@ -181,11 +181,21 @@ pub fn rerank_config_from_env() -> corpus_index::types::RerankConfig {
 pub fn inference_to_rerank_fn(
     inference: Arc<dyn InferenceProvider>,
 ) -> corpus_index::types::RerankFn {
+    // Asked once, here: a far end serving more than one model (the router's
+    // rerank section) must be named on every request, and the answer cannot
+    // change under a host that installed this provider.
+    let model = inference.rerank_model_id();
+    tracing::debug!(
+        target: "corpus",
+        model = ?model,
+        "rerank fn: the model the far end's /v1/rerank answers under"
+    );
     Arc::new(move |query: &str, docs: Vec<String>| {
         let inf = Arc::clone(&inference);
+        let model = model.clone();
         let query = query.to_string();
         Box::pin(async move {
-            inf.rerank_batch(&query, &docs)
+            inf.rerank_batch(model.as_deref(), &query, &docs)
                 .await
                 .map_err(|e| corpus_index::Error::Rerank(e.to_string()))
         })

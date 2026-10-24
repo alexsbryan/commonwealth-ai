@@ -90,7 +90,12 @@ impl InferenceProvider for MockProvider {
 
     /// 1.0 for a document that contains the query, else 0.0: model-free, and
     /// enough to tell the kind route answered.
-    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+    async fn rerank_batch(
+        &self,
+        _model: Option<&str>,
+        query: &str,
+        docs: &[String],
+    ) -> Result<Vec<f32>> {
         Ok(docs
             .iter()
             .map(|d| if d.contains(query) { 1.0 } else { 0.0 })

@@ -40,6 +40,13 @@ const FAST_PARALLEL: u32 = 8;
 /// configuration (compute.embeddings 9/9).
 const ENCODER_CTX: u32 = 8192;
 
+/// Server slots on the rerank section. The spike scored its pairs on a server
+/// with `-np 1` and took 2x the embedded engine's wall time (R4, 2026-10-12):
+/// the embedded slot fans a shared prefix out to 16 document sequences, while
+/// a one-slot server runs every document alone. Slots that can overlap are
+/// what recovers that fan-out (A4; R4 re-measured 2026-10-23).
+const RERANK_PARALLEL: u32 = 4;
+
 /// What one router entry serves.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EntryKind {
@@ -332,6 +339,11 @@ impl RouterPreset {
                         out,
                         "{flag} = true\nbatch-size = {ENCODER_CTX}\nubatch-size = {ENCODER_CTX}\n"
                     );
+                    // A rerank request is one task per document, so the
+                    // section's slots are what let them overlap (R4).
+                    if matches!(e.kind, EntryKind::Rerank) {
+                        let _ = writeln!(out, "parallel = {RERANK_PARALLEL}");
+                    }
                 }
             }
         }

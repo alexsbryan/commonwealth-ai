@@ -112,7 +112,19 @@ fn one_gguf_in_two_roles_is_one_entry() {
         1,
         "{ini}"
     );
-    assert!(ini.contains("[Qwen3-Reranker-0.6B]\nmodel = /m/Qwen3-Reranker-0.6B.gguf\nctx-size = 8192\nreranking = true\n"), "{ini}");
+    // The rerank section carries the slots a document-per-task route needs;
+    // the embedder does not (one task per request there).
+    assert!(
+        ini.contains(
+            "[Qwen3-Reranker-0.6B]\nmodel = /m/Qwen3-Reranker-0.6B.gguf\nctx-size = 8192\n\
+         reranking = true\nbatch-size = 8192\nubatch-size = 8192\nparallel = 4\n"
+        ),
+        "{ini}"
+    );
+    assert!(
+        !ini.contains("[Qwen3-Embedding-0.6B-Q8_0]\nmodel = /m/Qwen3-Embedding-0.6B-Q8_0.gguf\nctx-size = 8192\nembedding = true\nbatch-size = 8192\nubatch-size = 8192\nparallel"),
+        "{ini}"
+    );
     assert_eq!(preset.engine_section("http://x/v1").fast_model_id, None);
 }
 

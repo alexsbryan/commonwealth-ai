@@ -141,10 +141,14 @@ async fn run(
         ReplayMethod::RerankBatch => {
             let docs: Vec<String> = serde_json::from_value(req.input["docs"].clone())
                 .map_err(|e| (StatusCode::BAD_REQUEST, format!("input.docs: {e}")))?;
-            p.rerank_batch(&text("query")?, &docs)
+            // `model` is optional: the reranker the far end serves, when the
+            // caller knows it, else the id the provider itself answers.
+            let model = req.input["model"].as_str();
+            p.rerank_batch(model, &text("query")?, &docs)
                 .await
                 .map(|v| json!(v))
         }
+        ReplayMethod::RerankModelId => Ok(json!(p.rerank_model_id())),
         ReplayMethod::CountTokens => Ok(json!(p.count_tokens(&text("text")?))),
         ReplayMethod::CountTokensExact => {
             p.count_tokens_exact(&text("text")?).await.map(|n| json!(n))

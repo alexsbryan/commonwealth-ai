@@ -35,3 +35,28 @@ D3 failed  warm load 1.18x faster (bar 2x). The cache served the load (no
            new tensors written), but loopback has almost no transfer for it
            to save; the bar was framed for a network link.
 D4 never-ran  needs a second machine online (mesh: 1 of 8 online).
+
+R rerun through the daemon, 2026-10-23 (es-r4-rerank, ENGINE_SWAP_PLAN A4).
+  rerank-through-daemon.py; two scratch daemons, one kind = "llama" (the
+  embedded slot) and one kind = "llama-server" (the router's
+  [models.kinds] rerank section), same qwen3-reranker-0.6b-q8_0, the same
+  8 questions x their top 40 SEP hits (320 pairs) gathered fresh for the
+  run. The INSTRUMENT is per-arm: the embedded slot answers margins, the
+  daemon's /v1/rerank answers margins too (oicp-client returns
+  ln(p/(1-p))), so the first pass inverted the daemon's answer a second
+  time and read 311/320 pairs as saturated p = 1 (Spearman 0.376, top-10
+  6.4). That was the harness, not the route; the numbers below are after
+  removing the double transform, which rerank-compare.py's spike needed
+  because it talked to a bare llama-server.
+R1 passed  Spearman over 320 pairs 0.9906 (bar 0.95); per query 0.946-0.990
+R2 passed  mean top-10 overlap 9.125 (bar 9); per query 8,9,8,8,10,10,10,9
+R3 passed  admission (margin > 0) agreement 0.9812 (bar 0.95)
+R4 tracked, INCONCLUSIVE ON THIS HOST: 6.9s embedded / 33.7s daemon in the
+           paired run; with parallel = 4 on the section the same 320 pairs
+           took 14.7/15.2/15.1s in three clean passes, but an A/B/B/A
+           interleaved pass read embedded 7.1s then 67.8s (spread 60.7s on
+           one arm alone) beside another lane's podman build at 7 GB
+           MemAvailable. The host's own noise exceeds the quantity at that
+           point, so no ratio is claimed in either direction. Rerun on a
+           quiet host before treating R4 as evidence about parallel = 4.
+           Detail: rerank-result-a4.json, rerank-r4-timings.json.

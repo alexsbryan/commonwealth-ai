@@ -77,7 +77,7 @@ async fn a_third_party_gets_completions_and_never_texts() {
     refused(p.embed_query("query").await, "embed_query");
     refused(p.embed_batch(&["chunk".to_string()]).await, "embed_batch");
     refused(
-        p.rerank_batch("query", &["chunk".to_string()]).await,
+        p.rerank_batch(None, "query", &["chunk".to_string()]).await,
         "rerank_batch",
     );
     assert_eq!(hits.load(SeqCst), 3, "no text reached the third party");

@@ -132,6 +132,12 @@ impl RouterProvider {
         ))
     }
 
+    /// The served kind's role name for the cross-encoder, so the preset's
+    /// role lookup and the kind registry cannot disagree about it.
+    fn rerank_role(&self) -> &'static str {
+        sovereign_inference::served_kind::RERANK.role
+    }
+
     fn model_for(&self, role: &str) -> Option<&str> {
         self.preset
             .roles()
@@ -225,8 +231,53 @@ impl InferenceProvider for RouterProvider {
         self.inner.embed_query(query).await
     }
 
-    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
-        self.inner.rerank_batch(query, docs).await
+    /// The preset's rerank section, named to the route (A4): the router's
+    /// `/v1/rerank` serves one model per preset entry, so a request must name
+    /// the rerank section; an id outside the preset is a chat model on a
+    /// route that does not know it. No rerank section means the route
+    /// refuses and the caller falls back to un-reranked fusion, the trait's
+    /// contract for an engine without a reranker.
+    async fn rerank_batch(
+        &self,
+        model: Option<&str>,
+        query: &str,
+        docs: &[String],
+    ) -> Result<Vec<f32>> {
+        let Some(section) = self.model_for(self.rerank_role()) else {
+            tracing::debug!(
+                target: "llama_router",
+                docs = docs.len(),
+                "rerank: the preset has no rerank section; the route refuses and fusion carries the search"
+            );
+            return Err(sovereign_contracts::Error::NotImplemented(
+                "this router's preset has no rerank section; add [models.kinds] rerank".to_string(),
+            ));
+        };
+        let model = match model {
+            Some(m) if m == section => m,
+            Some(m) => {
+                tracing::warn!(
+                    target: "llama_router",
+                    named = %m,
+                    rerank = %section,
+                    "rerank: a model id outside the rerank section was named; sending the section"
+                );
+                section
+            }
+            None => section,
+        };
+        tracing::debug!(
+            target: "llama_router",
+            model,
+            docs = docs.len(),
+            "rerank: on the preset's rerank section"
+        );
+        self.inner.rerank_batch(Some(model), query, docs).await
+    }
+
+    /// The rerank section's model id, which is the id its route answers to.
+    fn rerank_model_id(&self) -> Option<String> {
+        self.model_for(self.rerank_role()).map(str::to_string)
     }
 
     fn model_id_for(&self, speed: Speed) -> String {
@@ -381,8 +432,9 @@ impl InferenceProvider for RouterProvider {
 #[cfg(test)]
 mod tests {
     /// The host facts the router answers itself instead of the remote half
-    /// (ENGINE_SWAP_PLAN A1, A5), in trait order.
-    const ANSWERED_HERE: [&str; 8] = [
+    /// (ENGINE_SWAP_PLAN A1, A4, A5), in trait order.
+    const ANSWERED_HERE: [&str; 9] = [
+        "rerank_model_id",
         "n_ctx_train_for_primary",
         "count_tokens_exact",
         "code_model_id",

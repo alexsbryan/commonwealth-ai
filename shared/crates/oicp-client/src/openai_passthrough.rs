@@ -452,8 +452,17 @@ impl InferenceProvider for OpenAiPassthrough {
         self.local.embed_query(query).await
     }
 
-    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
-        self.local.rerank_batch(query, docs).await
+    async fn rerank_batch(
+        &self,
+        model: Option<&str>,
+        query: &str,
+        docs: &[String],
+    ) -> Result<Vec<f32>> {
+        self.local.rerank_batch(model, query, docs).await
+    }
+
+    fn rerank_model_id(&self) -> Option<String> {
+        self.local.rerank_model_id()
     }
 
     fn model_id_for(&self, speed: Speed) -> String {
