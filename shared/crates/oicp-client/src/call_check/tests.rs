@@ -92,6 +92,40 @@ async fn a_daemon_reply_is_not_checked() {
     assert_eq!((hits.load(SeqCst), reply.text.as_str()), (1, "prose"));
 }
 
+/// The router's own answer to a Codex turn is a NATIVE call, not prose
+/// (measured on `kind = "llama-server"`, Qwen3.5-2B, 8 of 8): this is what
+/// es-t4's change sends it — a conversation — so the check must pass it
+/// through unchanged, on the first ask, with nothing re-asked.
+#[tokio::test]
+async fn a_native_call_to_the_router_is_not_asked_again() {
+    let hits = Arc::new(AtomicUsize::new(0));
+    let h = hits.clone();
+    let chat = move |axum::Json(body): axum::Json<Value>| {
+        h.fetch_add(1, SeqCst);
+        // The conversation, whole, and the budget the router keeps.
+        assert_eq!(body["messages"][0]["role"], "system", "{body}");
+        assert_eq!(body["think_budget"], 0, "{body}");
+        async {
+            axum::Json(json!({"choices": [{"message": {"content": "", "tool_calls": [
+                {"id": "c", "type": "function", "function": {
+                    "name": "bash", "arguments": "{\"cmd\":\"ls\"}"}}]},
+                "finish_reason": "tool_calls"}]}))
+        }
+    };
+    let provider = RemoteApiProvider::new(&serve(chat).await, None, "m", 8192)
+        .originating()
+        .with_grammar(GrammarSupport::Llguidance);
+    let mut request = required_bash();
+    request.think_budget = Some(0);
+    request.prompt_shape = Some(sovereign_contracts::types::PromptShape::Conversation {
+        messages: vec![json!({"role": "system", "content": "You are a coding agent."})],
+    });
+    let reply = provider.complete(&request).await.unwrap();
+    assert_eq!(hits.load(SeqCst), 1, "the call stood, so nothing was re-asked");
+    assert!(reply.text.contains("<tool_call>"), "{}", reply.text);
+    assert!(reply.text.contains("\"bash\""), "{}", reply.text);
+}
+
 async fn serve<H, T>(chat: H) -> String
 where
     H: axum::handler::Handler<T, ()>,
