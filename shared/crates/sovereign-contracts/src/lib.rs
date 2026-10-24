@@ -187,6 +187,8 @@ pub mod run_identity;
 pub mod self_claims;
 pub mod served_kinds;
 pub mod setup_config;
+/// `[compute]`, beside `setup_config` for the same reason; re-exported there.
+pub mod setup_config_compute;
 /// `[iroh]` / `[iroh.transport]`, beside `setup_config` because that file is
 /// past its ceiling and this block grows with every origin kind. Re-exported
 /// from `setup_config`, so no call site names this path.

@@ -320,3 +320,59 @@ fn the_models_warmed_are_the_longest_run_that_fits_primary_first() {
         "a primary too big alone is still tried"
     );
 }
+
+/// `[models.edit]` (refused before es-r3-fim) is a chat section at its own
+/// context, pinned as the embedded engine pins its edit slot; on the fast
+/// GGUF it is the fast section, with the fast model's window.
+#[test]
+fn the_editing_model_is_a_section_of_its_own_or_the_one_it_shares() {
+    use sovereign_contracts::setup_config::EditSection;
+    let edit = |path: &str| EditSection {
+        path: path.into(),
+        context_size: None,
+        max_tokens: None,
+        temperature: None,
+        max_prefix_chars: None,
+        max_suffix_chars: None,
+        next_edit_format: None,
+    };
+    let windows = DaemonSection {
+        primary_idle_secs: 600,
+        fast_idle_secs: 300,
+        embed_idle_secs: 0,
+        ..Default::default()
+    };
+    let mut m = models();
+    m.edit = Some(edit("/m/Mellum2-12B-A2.5B-Instruct-Q6_K.gguf"));
+    let preset = RouterPreset::from_models(&m, None, &windows, layers).unwrap();
+    assert_eq!(preset.edit(), Some("Mellum2-12B-A2.5B-Instruct-Q6_K"));
+    let ini = preset.render();
+    assert!(
+        ini.contains(
+            "\n[Mellum2-12B-A2.5B-Instruct-Q6_K]\nmodel = /m/Mellum2-12B-A2.5B-Instruct-Q6_K.gguf\n\
+             ctx-size = 4096\nkv-unified = true\n\n"
+        ),
+        "{ini}"
+    );
+    let all = |_: &[sovereign_inference::capacity::SlotPlan]| true;
+    assert!(preset
+        .models_that_fit(all)
+        .contains(&"Mellum2-12B-A2.5B-Instruct-Q6_K"));
+
+    m.edit = Some(edit(FAST));
+    let preset = RouterPreset::from_models(&m, None, &windows, layers).unwrap();
+    assert_eq!(preset.edit(), Some("Qwen3.5-4B-UD-MTP-Q6_K_XL"));
+    assert_eq!(
+        preset.warm_models().len(),
+        3,
+        "no second copy of the fast GGUF"
+    );
+    let ini = preset.render();
+    assert!(
+        ini.contains(
+            "\n[Qwen3.5-4B-UD-MTP-Q6_K_XL]\nmodel = /m/Qwen3.5-4B-UD-MTP-Q6_K_XL.gguf\n\
+             ctx-size = 32768\nsleep-idle-seconds = 300\n"
+        ),
+        "{ini}"
+    );
+}

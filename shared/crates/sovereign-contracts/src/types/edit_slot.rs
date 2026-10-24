@@ -199,3 +199,44 @@ pub struct EditSlotInfo {
     #[serde(default)]
     pub fim: Option<FimLane>,
 }
+
+/// Decide which lanes an editing slot can serve.
+///
+/// The single answer to that question. Every install path (the embedded
+/// engine's alias, dedicated and fallback slots; the llama-server router's
+/// edit section) routes through here so none of them can decide it
+/// differently — two deciders for one capability is exactly the drift
+/// ARCH §10.6 exists to stop.
+///
+/// - **Next-edit** needs nothing but a prompt dialect, so it is always
+///   available once a model is loaded.
+/// - **FIM** needs marker tokens in the vocabulary. No probe hit, no
+///   lane — and callers must refuse rather than guess a convention,
+///   because a wrong marker set yields confident garbage, not an error.
+///
+/// `section` is `None` for the automatic fallback, which has no
+/// `[models.edit]` to read and takes the shared defaults.
+pub fn edit_lanes(
+    style: Option<FimStyle>,
+    format: NextEditFormat,
+    section: Option<&crate::setup_config::EditSection>,
+) -> (Option<NextEditLane>, Option<FimLane>) {
+    use crate::setup_config::fim_defaults;
+    let fim = style.map(|style| match section {
+        Some(s) => FimLane {
+            style,
+            max_tokens: s.effective_max_tokens(),
+            temperature: s.effective_temperature(),
+            max_prefix_chars: s.effective_max_prefix_chars(),
+            max_suffix_chars: s.effective_max_suffix_chars(),
+        },
+        None => FimLane {
+            style,
+            max_tokens: fim_defaults::MAX_TOKENS,
+            temperature: fim_defaults::TEMPERATURE,
+            max_prefix_chars: fim_defaults::MAX_PREFIX_CHARS,
+            max_suffix_chars: fim_defaults::MAX_SUFFIX_CHARS,
+        },
+    });
+    (Some(NextEditLane { format }), fim)
+}

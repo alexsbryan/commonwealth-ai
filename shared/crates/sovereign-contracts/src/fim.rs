@@ -102,6 +102,44 @@ pub fn markers_for(style: FimStyle) -> &'static FimMarkers {
         .expect("every FimStyle has a marker-table row")
 }
 
+/// The marker convention a vocabulary speaks: the FIRST table row whose
+/// markers (`also_requires` first, then prefix, suffix, middle) are each
+/// one token, as `atomic` answers for a marker. A marker that splits into
+/// pieces means the model was never trained with it as an atomic unit and
+/// FIM prompting would degrade into garbage. The one decider behind the
+/// embedded engine's vocab probe and the llama-server router's `/tokenize`
+/// probe; `None` when no family's markers are all atomic.
+pub fn fim_style_from(atomic: impl Fn(&str) -> bool) -> Option<FimStyle> {
+    FIM_MARKER_TABLE
+        .iter()
+        .find(|row| {
+            row.also_requires
+                .iter()
+                .chain([row.prefix, row.suffix, row.middle].iter())
+                .all(|marker| atomic(marker))
+        })
+        .map(|row| row.style)
+}
+
+/// Every marker [`fim_style_from`] may ask about, once each, in table
+/// order: what a probe that cannot answer inline (an HTTP tokenizer)
+/// tokenizes up front.
+pub fn probe_markers() -> Vec<&'static str> {
+    let mut out: Vec<&'static str> = Vec::new();
+    for row in FIM_MARKER_TABLE {
+        for marker in row
+            .also_requires
+            .iter()
+            .chain([row.prefix, row.suffix, row.middle].iter())
+        {
+            if !out.contains(marker) {
+                out.push(marker);
+            }
+        }
+    }
+    out
+}
+
 /// Assemble the raw FIM prompt in PSM ordering:
 /// `{prefix-marker}{prefix}{suffix-marker}{suffix}{middle-marker}`.
 /// The model generates the infill immediately after the middle
@@ -477,6 +515,45 @@ impl FimStopTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The shared spellings are told apart by the discriminator tokens,
+    /// and a vocab missing one marker of a row falls through to the next.
+    #[test]
+    fn fim_style_from_takes_the_first_row_whose_markers_are_all_atomic() {
+        let vocab = |atomic: &'static [&'static str]| move |m: &str| atomic.contains(&m);
+        let fim = ["<fim_prefix>", "<fim_suffix>", "<fim_middle>"];
+        let mellum = [&fim[..], &["<|im_start|>"]].concat();
+        let starcoder = [&fim[..], &["<|end_of_text|>"]].concat();
+        let leak = |v: Vec<&'static str>| -> &'static [&'static str] { Vec::leak(v) };
+        assert_eq!(fim_style_from(vocab(leak(mellum))), Some(FimStyle::Mellum));
+        assert_eq!(
+            fim_style_from(vocab(leak(starcoder))),
+            Some(FimStyle::StarCoder2)
+        );
+        assert_eq!(fim_style_from(vocab(leak(fim.to_vec()))), None);
+        assert_eq!(
+            fim_style_from(vocab(&[
+                "<|fim_prefix|>",
+                "<|fim_suffix|>",
+                "<|fim_middle|>"
+            ])),
+            Some(FimStyle::QwenCoder)
+        );
+    }
+
+    #[test]
+    fn probe_markers_names_every_marker_once() {
+        let markers = probe_markers();
+        for row in FIM_MARKER_TABLE {
+            for m in row
+                .also_requires
+                .iter()
+                .chain([row.prefix, row.suffix, row.middle].iter())
+            {
+                assert_eq!(markers.iter().filter(|x| *x == m).count(), 1, "{m}");
+            }
+        }
+    }
 
     #[test]
     fn build_prompt_psm_order_qwen() {

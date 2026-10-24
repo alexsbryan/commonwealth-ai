@@ -683,3 +683,7 @@ mod spawn_gate;
 /// The stdout handshake that names a child's port.
 #[path = "supervisor_handshake_tests.rs"]
 mod handshake;
+
+/// A raw-TCP child, probed by connect until it answers once.
+#[path = "supervisor_listen_tests.rs"]
+mod listen;

@@ -84,6 +84,14 @@ pub(super) fn signal_group(pid: u32, signal: Signal) {
     let _ = (pid, signal);
 }
 
+/// What one heartbeat asks of the child.
+pub(super) enum Probe {
+    /// GET the health URL; any 2xx is healthy.
+    Get(String),
+    /// Connect to the child's listening address (`HealthTarget::TcpListening`).
+    Connect(std::net::SocketAddr),
+}
+
 /// Internal reason a supervise-loop iteration ended. Used to decide
 /// whether to count toward the crash-loop ceiling and what reason to
 /// surface in the next `Restarting` event.
@@ -239,19 +247,20 @@ impl Supervisor {
         Ok((child, port_rx))
     }
 
-    /// Resolve the child's health URL. `Fixed` returns immediately;
-    /// `StdoutHandshake` awaits the port announcement (emitting
+    /// Resolve what the heartbeat asks. `Fixed` and `TcpListening` return
+    /// immediately; `StdoutHandshake` awaits the port announcement (emitting
     /// [`SupervisorState::Warming`]) up to `handshake_deadline`, or
     /// returns `None` if the child dies or never announces (→ crash
     /// accounting + backoff in `run()`).
-    pub(super) async fn resolve_health_url(
+    pub(super) async fn resolve_probe(
         &self,
         port_rx: Option<oneshot::Receiver<u16>>,
         pid: u32,
         child: &mut Child,
-    ) -> Option<String> {
+    ) -> Option<Probe> {
         match &self.config.health {
-            HealthTarget::Fixed(url) => Some(url.clone()),
+            HealthTarget::Fixed(url) => Some(Probe::Get(url.clone())),
+            HealthTarget::TcpListening(addr) => Some(Probe::Connect(*addr)),
             HealthTarget::StdoutHandshake {
                 health_path,
                 handshake_deadline,
@@ -284,7 +293,7 @@ impl Supervisor {
                     port, "supervisor: compute child announced port; warming"
                 );
                 self.broadcast(SupervisorState::Warming { pid, port });
-                Some(format!("http://127.0.0.1:{port}{health_path}"))
+                Some(Probe::Get(format!("http://127.0.0.1:{port}{health_path}")))
             }
         }
     }
@@ -312,7 +321,7 @@ impl Supervisor {
         child: &mut Child,
         pid: u32,
         spawn_instant: Instant,
-        health_url: &str,
+        probe: &Probe,
         http: &reqwest::Client,
         reconnect_rx: &mut mpsc::UnboundedReceiver<()>,
         terminate_rx: &mut mpsc::UnboundedReceiver<()>,
@@ -365,9 +374,19 @@ impl Supervisor {
                     return (ExitOutcome::ManualReconnect, cost(first_healthy));
                 }
                 _ = ticker.tick() => {
-                    let ok = http.get(health_url).send().await
-                        .map(|r| r.status().is_success())
-                        .unwrap_or(false);
+                    let ok = match probe {
+                        Probe::Get(url) => http.get(url).send().await
+                            .map(|r| r.status().is_success())
+                            .unwrap_or(false),
+                        // Answered once: never asked again (`TcpListening`).
+                        Probe::Connect(_) if first_healthy.is_some() => true,
+                        Probe::Connect(addr) => tokio::time::timeout(
+                            self.config.heartbeat_timeout,
+                            tokio::net::TcpStream::connect(addr),
+                        )
+                        .await
+                        .is_ok_and(|r| r.is_ok()),
+                    };
                     if ok {
                         if last_health != Some(true) {
                             let since = sovereign_time::unix_now_u64();
@@ -383,6 +402,9 @@ impl Supervisor {
                                 load_secs = now.duration_since(spawn_instant).as_secs_f32(),
                                 "supervisor: child answered its first probe — load cost recorded"
                             );
+                            if let Probe::Connect(addr) = probe {
+                                info!(pid, %addr, "supervisor: child is listening; from here only its exit is watched");
+                            }
                         }
                     } else if first_healthy.is_none()
                         && spawn_instant.elapsed() < self.config.ready_deadline

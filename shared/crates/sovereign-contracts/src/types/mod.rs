@@ -95,7 +95,7 @@ impl Default for InferenceConfig {
 // sovereign-contracts and sovereign-core crate roots — only by being added
 // HERE, as a reviewable diff. api-gate snapshots the resulting surface.
 mod edit_slot;
-pub use edit_slot::{EditSlotInfo, FimLane, FimStyle, NextEditFormat, NextEditLane};
+pub use edit_slot::{edit_lanes, EditSlotInfo, FimLane, FimStyle, NextEditFormat, NextEditLane};
 // Generic local-journal machinery (file layout, rotation, caps,
 // off-switches) — feature-agnostic on purpose; `svrn journal` hosts more
 // than one stream. Per-feature vocabularies live in their own modules and
