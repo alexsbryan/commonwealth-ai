@@ -21,7 +21,7 @@ impl InferenceProvider for InProcess {
     async fn embed(&self, _: &str) -> Result<Vec<f32>> {
         Err(Error::NotImplemented("rerank only".into()))
     }
-    async fn rerank_batch(&self, _: &str, docs: &[String]) -> Result<Vec<f32>> {
+    async fn rerank_batch(&self, _: Option<&str>, _: &str, docs: &[String]) -> Result<Vec<f32>> {
         Ok(vec![0.0; docs.len()])
     }
     fn capabilities(&self) -> ProviderCapabilities {
@@ -51,7 +51,7 @@ fn a_rerank_that_falls_back_from_its_child_is_logged() {
         .build()
         .expect("runtime");
     let (scores, log) = crate::logged_under("compute_child=info", || {
-        runtime.block_on(facade.rerank_batch("q", &["d".to_string()]))
+        runtime.block_on(facade.rerank_batch(None, "q", &["d".to_string()]))
     });
     assert_eq!(scores.expect("the in-process slot answers"), vec![0.0]);
     assert!(

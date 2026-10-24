@@ -63,7 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (query, docs) in &cases {
         println!("Query: {query}");
         let docs_owned: Vec<String> = docs.iter().map(|s| s.to_string()).collect();
-        let scores = reranker.rerank_batch(query, &docs_owned).await?;
+        let scores = reranker.rerank_batch(None, query, &docs_owned).await?;
         let mut indexed: Vec<(usize, f32)> = scores.iter().copied().enumerate().collect();
         indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         for (rank, (i, score)) in indexed.iter().enumerate() {

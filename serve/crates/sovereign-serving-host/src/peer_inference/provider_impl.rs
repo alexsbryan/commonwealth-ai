@@ -642,7 +642,12 @@ impl InferenceProvider for InferenceRouter {
         self.local.code_model_id()
     }
 
-    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+    async fn rerank_batch(
+        &self,
+        model: Option<&str>,
+        query: &str,
+        docs: &[String],
+    ) -> Result<Vec<f32>> {
         // Reranking is local-slot work like embeds and FIM: the peer
         // path never carries it. Without this forward the mesh wrapper
         // — again, the provider the daemon actually installs — reports
@@ -650,7 +655,13 @@ impl InferenceProvider for InferenceRouter {
         // catches that and silently returns un-reranked fusion. So a
         // configured `[rerank]` slot would sit loaded and unused, with
         // retrieval quietly worse and nothing in the logs to say so.
-        self.local.rerank_batch(query, docs).await
+        self.local.rerank_batch(model, query, docs).await
+    }
+
+    /// The local engine's answer: the mesh path never carries a rerank, so
+    /// the reranker a request can name is the one this node holds.
+    fn rerank_model_id(&self) -> Option<String> {
+        self.local.rerank_model_id()
     }
 
     fn edit_slot_info(&self) -> Option<sovereign_contracts::types::EditSlotInfo> {

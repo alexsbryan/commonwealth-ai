@@ -1221,6 +1221,20 @@ read from the router's `/tokenize` over the marker table
 request for a preset model to the router's native `/completion` verbatim with
 that family's stop strings (`oicp_client::llama_server_raw_completion`), so a
 raw prompt is never chat-templated.
+`[models.kinds] rerank` is a section too (`reranking = true`, `parallel = 4`:
+the route scores one task per document, so its slots are what let documents
+overlap). `RouterProvider` names that section on every rerank
+(`rerank_model_id`), because the route serves a model per preset entry and
+the remote half would name the chat model; a preset with no rerank section
+answers `NotImplemented` and retrieval falls back to un-reranked fusion. The
+route's `relevance_score` is a probability, and `oicp_client`'s
+`rerank_over_route` returns `ln(p/(1-p))` so every caller keeps its
+`margin > 0` bar (PPR admission, the rerank/fusion blend, H1's fitted Platt
+map) — the ruler the embedded engine's `YesNoLogit` reads. The whole path is
+`sovereign-stock`'s ignored e2e `llama_server_router_e2e`: boot on the
+shipped binary, serve a completion and an embedding, and rerank through the
+route (the rerank model id named, an answering document above 0 and an
+unrelated one below it).
 The binary is `llama-server` beside the daemon's executable, built by
 `serve/crates/sovereign-compute/llama-server/build.sh` from `PIN.toml` there
 (llama.cpp commit, llguidance, each patch by sha256, the binaries), per
@@ -1232,7 +1246,7 @@ refuses a shipped binary whose manifest disagrees or names a binary not there
 binary and skips the check, and `/status` says which ran. The whole path is
 `sovereign-stock`'s ignored e2e `llama_server_router_e2e`: boot on the
 shipped binary, serve a completion and an embedding, SIGKILL the daemon, no
-llama-server left.
+llama-server left (the rerank call is described above).
 A node lends its GPU to another node's router with `[compute] rpc_peer =
 "ip:port"`, under any engine: serving assembly's first build starts the
 shipped `ggml-rpc-server -c` there as a supervised child

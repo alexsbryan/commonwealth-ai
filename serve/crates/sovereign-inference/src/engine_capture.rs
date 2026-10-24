@@ -152,9 +152,21 @@ impl InferenceProvider for RecordingProvider {
         self.inner.embed_query(query).await
     }
 
-    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
-        self.record("rerank_batch", json!({ "query": query, "docs": docs }));
-        self.inner.rerank_batch(query, docs).await
+    async fn rerank_batch(
+        &self,
+        model: Option<&str>,
+        query: &str,
+        docs: &[String],
+    ) -> Result<Vec<f32>> {
+        self.record(
+            "rerank_batch",
+            json!({ "model": model, "query": query, "docs": docs }),
+        );
+        self.inner.rerank_batch(model, query, docs).await
+    }
+
+    fn rerank_model_id(&self) -> Option<String> {
+        self.inner.rerank_model_id()
     }
 
     fn model_id_for(&self, speed: Speed) -> String {

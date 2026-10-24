@@ -277,7 +277,7 @@ pub(crate) async fn sentences(
                 tracing::warn!(target: TARGET, dropped = before - found.len(), "sentence search: candidates whose text does not read, dropped before the rerank");
             }
             if !docs.is_empty() {
-                match local.rerank_batch(&request.query_text, &docs).await {
+                match local.rerank_batch(None, &request.query_text, &docs).await {
                     Ok(scores) if scores.len() == found.len() => {
                         found.iter_mut().zip(scores).for_each(|(c, s)| c.score = s);
                     }

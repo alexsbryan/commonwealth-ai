@@ -48,6 +48,9 @@ pub enum ReplayMethod {
     EmbedBatch,
     /// `rerank_batch`.
     RerankBatch,
+    /// `rerank_model_id`: the id a rerank request must name at this
+    /// provider's far end. Not a captured method.
+    RerankModelId,
     /// `count_tokens`.
     CountTokens,
     /// `count_tokens_exact`: the server's own count. Not a captured method.

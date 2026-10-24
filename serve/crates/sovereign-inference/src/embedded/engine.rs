@@ -4016,7 +4016,12 @@ impl InferenceProvider for EmbeddedLlamaCpp {
     /// present; returns `Error::NotImplemented` otherwise so the caller
     /// (corpus-engine `search_with_rerank`) falls back to the un-reranked
     /// fusion result without surfacing a hard error.
-    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+    async fn rerank_batch(
+        &self,
+        _model: Option<&str>,
+        query: &str,
+        docs: &[String],
+    ) -> Result<Vec<f32>> {
         let reranker = {
             let guard = self
                 .rerank_slot
@@ -4031,7 +4036,17 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     .to_string(),
             )
         })?;
-        reranker.rerank_batch(query, docs).await
+        reranker.rerank_batch(None, query, docs).await
+    }
+
+    /// The installed rerank slot's model id, as `[models.kinds] rerank`
+    /// named it; `None` with no slot installed.
+    fn rerank_model_id(&self) -> Option<String> {
+        self.rerank_slot
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map(|(id, _)| id.clone())
     }
 
     fn model_id_for(&self, speed: Speed) -> String {

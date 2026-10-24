@@ -209,7 +209,13 @@ impl InferenceProvider for ChildProvider {
         }
     }
 
-    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+    async fn rerank_batch(
+        &self,
+        model: Option<&str>,
+        query: &str,
+        docs: &[String],
+    ) -> Result<Vec<f32>> {
+        let _ = model;
         let client = self.client_or_unavailable()?;
         let watch = self.state.clone();
         tokio::select! {

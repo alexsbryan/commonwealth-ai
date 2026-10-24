@@ -483,11 +483,30 @@ pub trait InferenceProvider: Send + Sync {
     /// raw rank logits in roughly `[-10, +10]`; conventional
     /// relevance threshold is `0.0` (sigmoid → 0.5). Callers must
     /// not compare scores across providers.
-    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
-        let _ = (query, docs);
+    ///
+    /// `model` names the reranker, where the far end serves more than one
+    /// model (a llama-server router section, ENGINE_SWAP_PLAN A4). `None`
+    /// is the far end's own rerank slot, which is what a single-model node
+    /// and the in-process engine have; a HTTP route is sent the id
+    /// [`Self::rerank_model_id`] answers so the request never names a chat
+    /// section the route would not find.
+    async fn rerank_batch(
+        &self,
+        model: Option<&str>,
+        query: &str,
+        docs: &[String],
+    ) -> Result<Vec<f32>> {
+        let _ = (model, query, docs);
         Err(Error::NotImplemented(
             "rerank_batch not supported by this provider".to_string(),
         ))
+    }
+
+    /// The id a rerank request must name at this provider's far end, when it
+    /// serves more than one model (the router's rerank section). `None`
+    /// where the route serves its one rerank slot.
+    fn rerank_model_id(&self) -> Option<String> {
+        None
     }
 
     /// Return the model ID that will be selected for a request at the given
