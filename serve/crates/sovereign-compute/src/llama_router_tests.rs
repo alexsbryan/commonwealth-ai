@@ -388,3 +388,44 @@ fn the_editing_model_is_a_section_of_its_own_or_the_one_it_shares() {
         "{ini}"
     );
 }
+
+/// A hosted node's router (ENGINE_SWAP_PLAN A6): `[engine] embed_path` and
+/// no `[models]` at all, so the router serves the embedder as its one
+/// section and no chat model.
+#[test]
+fn an_embed_only_preset_serves_the_embedder_and_no_chat_model() {
+    let daemon = DaemonSection {
+        embed_idle_secs: 120,
+        ..Default::default()
+    };
+    let preset = RouterPreset::embed_only(Path::new(EMBED), &daemon).unwrap();
+    assert_eq!(preset.primary(), None);
+    assert_eq!(
+        preset.roles(),
+        vec![("embed", "Qwen3-Embedding-0.6B-Q8_0")],
+        "the embedder is the only role a hosted router fills"
+    );
+    assert_eq!(preset.warm_models(), vec!["Qwen3-Embedding-0.6B-Q8_0"]);
+    let ini = preset.render();
+    assert!(
+        ini.contains(
+            "\n[Qwen3-Embedding-0.6B-Q8_0]\nmodel = /m/Qwen3-Embedding-0.6B-Q8_0.gguf\n\
+             ctx-size = 8192\nsleep-idle-seconds = 120\nembedding = true\n\
+             batch-size = 8192\nubatch-size = 8192\n"
+        ),
+        "{ini}"
+    );
+    // No chat section at all, so the router never tries to load one.
+    assert_eq!(ini.matches("model =").count(), 1, "{ini}");
+    assert!(!ini.contains("kv-unified"), "{ini}");
+
+    let section = preset.engine_section("http://127.0.0.1:4242/v1");
+    assert_eq!(section.model_id, None, "no chat model id to send");
+    assert_eq!(section.fast_model_id, None);
+    assert_eq!(
+        section.embed_model_id.as_deref(),
+        Some("Qwen3-Embedding-0.6B-Q8_0")
+    );
+    assert_eq!(section.context_size, 8192);
+    assert_eq!(section.embed_inputs, Some(EmbedInputs::Client));
+}

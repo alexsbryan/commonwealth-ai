@@ -273,13 +273,16 @@ fn default_engine_context_size() -> u32 {
 }
 
 impl EngineSection {
-    /// The embed GGUF this engine loads in process when it holds no
-    /// `[models]`: a remote engine's `embed_path`. `None` for every other
-    /// engine, which embeds from `[models]`.
+    /// The embed GGUF this engine serves WITHOUT a `[models]` section: a
+    /// remote engine's `embed_path`, and a router node's — the router runs
+    /// that GGUF in its own supervised process as the preset's one section
+    /// (ENGINE_SWAP_PLAN A6), so the node still names one embed model.
+    /// `None` for the embedded engine, which embeds from `[models]`.
     pub fn own_embed_path(&self) -> Option<&std::path::Path> {
-        match self.kind.needs_models() {
-            true => None,
-            false => self.embed_path.as_deref(),
+        match self.kind {
+            EngineKind::Llama => None,
+            EngineKind::Remote | EngineKind::LlamaServer => self.embed_path.as_deref(),
+            EngineKind::Custom(_) => self.embed_path.as_deref(),
         }
     }
 }

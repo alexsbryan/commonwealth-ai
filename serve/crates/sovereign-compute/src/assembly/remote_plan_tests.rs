@@ -43,3 +43,40 @@ fn llama_without_models_still_refuses() {
     config.engine = EngineSection::default();
     assert!(plan_serving(&config).is_err());
 }
+
+/// A HOSTED node on the router (ENGINE_SWAP_PLAN A6): `[engine] embed_path`
+/// and no `[models]` at all, so its router serves the embedder as its one
+/// section. Before this, `plan_serving` read `[models]` on every engine but
+/// `remote`, so the shape `svrn setup --hosted` writes could not boot here.
+#[test]
+fn a_hosted_router_plans_the_embedder_as_its_one_section() {
+    let mut config = hosted(Some("/models/Qwen3-Embedding-0.6B-Q8_0.gguf"));
+    config.engine.kind = EngineKind::LlamaServer;
+    config.engine.endpoint = None;
+    let plan = plan_serving(&config).unwrap();
+    assert_eq!(plan.engine, EngineKind::LlamaServer);
+    assert!(
+        plan.in_process.is_empty(),
+        "the router runs the embedder, not this process: {plan:?}"
+    );
+    let preset = plan.router.as_ref().expect("a router node plans a preset");
+    assert_eq!(preset.primary(), None, "no chat model is served here");
+    assert_eq!(
+        preset.roles(),
+        vec![("embed", "Qwen3-Embedding-0.6B-Q8_0")],
+        "{preset:?}"
+    );
+    assert_eq!(plan.embed_family, ModelFamily::Qwen3Embedding);
+}
+
+/// A router node with no `[models]` and no `embed_path` serves nothing: no
+/// preset, no slots, and a build that says so rather than loading weights.
+#[test]
+fn a_hosted_router_without_an_embed_path_serves_nothing() {
+    let mut config = hosted(None);
+    config.engine.kind = EngineKind::LlamaServer;
+    config.engine.endpoint = None;
+    let plan = plan_serving(&config).unwrap();
+    assert!(plan.in_process.is_empty(), "{plan:?}");
+    assert!(plan.router.is_none(), "{plan:?}");
+}

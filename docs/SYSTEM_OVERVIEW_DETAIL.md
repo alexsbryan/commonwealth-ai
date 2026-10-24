@@ -4088,6 +4088,23 @@ supervisor was extracted here from the desktop (shared, byte-identical).
 Crash-isolation acceptance is proven (`compute_child_e2e.rs`). See
 `docs/internal/DISTRIBUTED_PILOT_READINESS.md` P1.
 
+**The router owns the model processes (ENGINE_SWAP_PLAN A6, A7).** On
+`[engine] kind = "llama-server"` the weights live in a supervised
+`llama-server --models-preset` child (`serve/crates/sovereign-compute/src/llama_router/`),
+one process per model, and the daemon holds none: the `generate` and `embed`
+compute-child roles are RETIRED there, and a `[[compute.slot]]` naming either
+is refused at startup by name beside the router (`compute_roles.rs`), as is
+`[compute] distributed_primary` (that model moves into the router's own child,
+es-f2). The supervisor and manager stay for the roles the router does not own.
+A killed model is the router's to repair: llama.cpp leaves a SIGKILLed model
+`failed (exit N)` in `GET /models` for good, so `LiveRouter`'s repair loop
+re-issues `/models/load` on backoff and `/status` reports the death AND the
+reload (`router-model` rows: `failed` → `restarting` → `loaded`). A hosted
+node (`kind = "remote"`, no `[models]`) with `[engine] embed_path` plans an
+embed-only preset (`RouterPreset::embed_only`): its router serves the embedder
+as its one section while chat stays at the vendor, and `[models]` may be
+absent on a router node because the preset is its model list.
+
 **The distributed primary in a child (`[compute] distributed_primary`, default
 OFF).** The payoff the boundary was built for. Distributing a primary across
 mesh workers puts ggml's error-path-free RPC client inside the daemon: a worker

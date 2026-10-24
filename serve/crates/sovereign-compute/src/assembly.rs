@@ -131,9 +131,12 @@ pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
     // there are no slots (a terminal routes instead; an unconfigured node
     // runs `svrn setup`).
     let engine = config.engine.kind.clone();
-    // A remote engine holds no chat slots, so it needs no `[models]`; every
-    // other engine reads its slots from there.
-    let models = if !engine.needs_models() {
+    // A remote engine holds no chat slots, so it needs no `[models]`. Neither
+    // does a router node: its models are the preset's, and a hosted node on
+    // `kind = "llama-server"` has none at all (its chat is at the vendor and
+    // its embedder is the one section [`RouterPreset::embed_only`] builds).
+    let models_may_be_absent = !engine.needs_models() || engine == EngineKind::LlamaServer;
+    let models = if models_may_be_absent {
         config.models().ok()
     } else {
         Some(config.models()?)
@@ -163,6 +166,16 @@ pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
         engine_factory::embed_family_for(&models.embed)
     } else if let (EngineKind::LlamaServer, Some(models)) = (&engine, models) {
         engine_factory::embed_family_for(&models.embed)
+    } else if let (EngineKind::LlamaServer, None, Some(_)) =
+        (&engine, models, config.engine.own_embed_path())
+    {
+        // A router node with no `[models]` embeds from `[engine] embed_path`,
+        // when it names one; the router serves it as its only section, so
+        // the slot is NOT this process's.
+        config
+            .engine
+            .own_embed_path()
+            .map_or(ModelFamily::Unknown, engine_factory::embed_family_for)
     } else if let Some(path) = config.engine.own_embed_path() {
         in_process.insert(PlannedSlot::Embed);
         engine_factory::embed_family_for(path)
@@ -189,6 +202,12 @@ pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
             &config.daemon,
             sovereign_inference::gguf_meta::read_mtp_draft_layers,
         )?),
+        // No `[models]`: a hosted node's router serves only its embedder.
+        (EngineKind::LlamaServer, None) => config
+            .engine
+            .own_embed_path()
+            .map(|path| RouterPreset::embed_only(path, &config.daemon))
+            .transpose()?,
         _ => None,
     };
     Ok(ServingPlan {
@@ -251,6 +270,40 @@ impl ReloadFactory {
             Some(config.models().map_err(fail)?)
         };
         let peer_bind = rpc_peer::configured_bind(config).map_err(fail)?;
+
+        // The router runs every model in its own supervised child, so a
+        // `[compute.slot]` naming the generate or embed role would load a
+        // second, unreachable copy beside it (ENGINE_SWAP_PLAN A7). Refused
+        // here, before anything spawns, naming each slot and the router.
+        let retired = crate::compute_roles::retired_slots(&config.engine.kind, &config.compute);
+        if !retired.is_empty() {
+            tracing::error!(
+                target: "compute_child",
+                slots = ?retired,
+                "refused: compute-child roles the router retired"
+            );
+            return Err(fail(format!(
+                "[compute] declares process roles kind = \"llama-server\" retired:\n  {}\n\
+                 The router loads, supervises and restarts every model itself.",
+                retired.join("\n  ")
+            )));
+        }
+        // The distributed primary moved into the router's own child (its
+        // section's `rpc` key and `-ts` split), so the compute-child copy of
+        // the mode has no embedded engine left to carry it.
+        if config.compute.distributed_primary && config.engine.kind == EngineKind::LlamaServer {
+            tracing::error!(
+                target: "compute_child",
+                "refused: [compute] distributed_primary on a router node"
+            );
+            return Err(fail(
+                "[compute] distributed_primary is retired on kind = \"llama-server\": the \
+                 router places a distributed model in its own supervised child (the section's \
+                 `rpc` key and `-ts` split), never in a compute child carrying the embedded \
+                 engine. Remove the key, or run kind = \"llama\"."
+                    .to_string(),
+            ));
+        }
 
         // `[compute] distributed_primary` — the primary lives in a supervised
         // child, so this process must NOT also hold it.

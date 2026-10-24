@@ -34,6 +34,7 @@ pub mod assets;
 pub mod child;
 pub mod child_main;
 pub mod client;
+pub mod compute_roles;
 pub mod containment;
 pub mod discovery_policy;
 pub mod distributed_discovery;

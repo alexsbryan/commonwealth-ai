@@ -92,10 +92,14 @@ fn shared_window(a: Option<u64>, b: Option<u64>) -> Option<u64> {
 }
 
 /// The router's models and which of them fills each slot role.
+///
+/// `primary` is `None` for an embed-only router: a hosted (remote) node that
+/// embeds in this process ([`RouterPreset::embed_only`]) runs a router that
+/// serves its embedding model and no chat model at all.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RouterPreset {
     entries: BTreeMap<String, RouterEntry>,
-    primary: String,
+    primary: Option<String>,
     fast: Option<String>,
     code: Option<String>,
     /// `[models.edit]`'s model.
@@ -254,12 +258,40 @@ impl RouterPreset {
         };
         Ok(Self {
             entries,
-            primary,
+            primary: Some(primary),
             fast,
             code,
             edit,
             embed,
             rerank,
+        })
+    }
+
+    /// The preset a hosted (remote) node embeds through: its `[engine]
+    /// embed_path` as the one section, and no chat model at all — generation
+    /// stays at the vendor (ENGINE_SWAP_PLAN A6). The embed section is built
+    /// exactly as [`Self::from_models`] builds it, so a hosted node and a
+    /// router-serving one embed the same way.
+    pub fn embed_only(path: &Path, idle: &DaemonSection) -> Result<Self, String> {
+        let name = stem(path)?;
+        let mut entries = BTreeMap::new();
+        entries.insert(
+            name.clone(),
+            RouterEntry {
+                path: path.to_path_buf(),
+                ctx: ENCODER_CTX,
+                kind: EntryKind::Embed,
+                sleep_idle_secs: idle_window(idle.embed_idle_secs),
+            },
+        );
+        Ok(Self {
+            entries,
+            primary: None,
+            fast: None,
+            code: None,
+            edit: None,
+            embed: Some(name),
+            rerank: None,
         })
     }
 
@@ -269,7 +301,7 @@ impl RouterPreset {
     /// GGUF name the same model.
     pub fn roles(&self) -> Vec<(&'static str, &str)> {
         [
-            ("primary", Some(&self.primary)),
+            ("primary", self.primary.as_ref()),
             ("fast", self.fast.as_ref()),
             ("code", self.code.as_ref()),
             ("embed", self.embed.as_ref()),
@@ -288,9 +320,10 @@ impl RouterPreset {
         self.edit.as_deref()
     }
 
-    /// The model that fills the primary role.
-    pub fn primary(&self) -> &str {
-        &self.primary
+    /// The model that fills the primary role. `None` on an embed-only router
+    /// ([`Self::embed_only`]), which serves no chat model.
+    pub fn primary(&self) -> Option<&str> {
+        self.primary.as_deref()
     }
 
     /// The GGUF behind a model this preset serves.
@@ -376,7 +409,7 @@ impl RouterPreset {
     ) -> Vec<&str> {
         let mut order: Vec<&str> = Vec::new();
         for name in [
-            Some(&self.primary),
+            self.primary.as_ref(),
             self.fast.as_ref(),
             self.embed.as_ref(),
             self.code.as_ref(),
@@ -416,7 +449,7 @@ impl RouterPreset {
     /// smaller of primary and fast: a budget the fast model can also hold.
     pub fn engine_section(&self, endpoint_v1: &str) -> EngineSection {
         let ctx_of = |name: &String| self.entries.get(name).map(|e| e.ctx);
-        let context_size = [Some(&self.primary), self.fast.as_ref()]
+        let context_size = [self.primary.as_ref(), self.fast.as_ref()]
             .into_iter()
             .flatten()
             .filter_map(ctx_of)
@@ -425,7 +458,7 @@ impl RouterPreset {
         EngineSection {
             kind: EngineKind::Remote,
             endpoint: Some(endpoint_v1.to_string()),
-            model_id: Some(self.primary.clone()),
+            model_id: self.primary.clone(),
             fast_model_id: self.fast.clone(),
             embed_model_id: self.embed.clone(),
             context_size,

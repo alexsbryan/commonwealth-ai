@@ -49,18 +49,20 @@ impl RouterProvider {
         preset: RouterPreset,
         edit: Option<&EditSection>,
     ) -> Self {
-        let primary = preset.primary().to_string();
-        let n_ctx_train = match preset.path_of(&primary) {
+        let primary = preset.primary().map(str::to_string);
+        let n_ctx_train = match primary.as_deref().and_then(|p| preset.path_of(p)) {
             Some(path) => match sovereign_inference::gguf_meta::read_context_length(path) {
                 Ok(n) => n,
                 Err(e) => {
-                    tracing::warn!(target: "llama_router", model = %primary, error = %e, "n_ctx_train unknown: the GGUF header is unreadable");
+                    tracing::warn!(target: "llama_router", model = %path.display(), error = %e, "n_ctx_train unknown: the GGUF header is unreadable");
                     None
                 }
             },
+            // An embed-only router serves no chat model, so there is no
+            // primary header to read.
             None => None,
         };
-        tracing::debug!(target: "llama_router", model = %primary, ?n_ctx_train, "router provider: primary's trained context");
+        tracing::debug!(target: "llama_router", model = ?primary, ?n_ctx_train, "router provider: primary's trained context");
         let edit_slot = edit.zip(preset.edit()).map(|(section, model)| {
             // The fast turn's model: the fast role, else the primary, as
             // `ModelsSection::fast_path` resolves it for the embedded alias.
@@ -68,7 +70,7 @@ impl RouterProvider {
             let fast_model = roles
                 .iter()
                 .find(|(role, _)| *role == "fast")
-                .map_or(preset.primary(), |(_, m)| *m);
+                .map_or_else(|| preset.primary().unwrap_or_default(), |(_, m)| *m);
             let fast = fast_model == model;
             super::edit::edit_slot(&router, model, section, fast)
         });
@@ -317,9 +319,11 @@ impl InferenceProvider for RouterProvider {
     /// (the fast model, else the primary), as the embedded engine counts on
     /// its fast slot.
     async fn count_tokens_exact(&self, text: &str) -> Result<u32> {
-        let model = self
-            .model_for("fast")
-            .unwrap_or_else(|| self.preset.primary());
+        let Some(model) = self.model_for("fast").or_else(|| self.preset.primary()) else {
+            return Err(sovereign_contracts::Error::NotImplemented(
+                "an embed-only router has no chat model to tokenize on".to_string(),
+            ));
+        };
         self.router
             .token_count(model, text)
             .await
@@ -339,7 +343,11 @@ impl InferenceProvider for RouterProvider {
     /// Load the primary through the router's `POST /models/load` and wait
     /// for `loaded`; a load that fails is an error, never Ok.
     async fn warmup_primary(&self) -> Result<()> {
-        let primary = self.preset.primary();
+        let Some(primary) = self.preset.primary() else {
+            return Err(sovereign_contracts::Error::NotImplemented(
+                "an embed-only router serves no primary chat model to warm".to_string(),
+            ));
+        };
         let result = self.router.load(primary).await;
         tracing::debug!(target: "llama_router", model = primary, ok = result.is_ok(), "router provider: warmup");
         result.map_err(sovereign_contracts::Error::Inference)
