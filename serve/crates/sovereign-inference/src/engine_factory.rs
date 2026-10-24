@@ -195,11 +195,14 @@ pub fn build_engine(config: &SetupConfig) -> Result<BuiltEngine, String> {
         // supervised child that must outlive every reload: serving assembly
         // starts it and builds the remote half here from the live router's
         // section (`sovereign_compute::llama_router`).
-        EngineKind::LlamaServer => Err(
-            "[engine] kind = \"llama-server\" is assembled with its router by \
-             sovereign_compute's serving assembly; the factory builds only its remote half"
-                .to_string(),
-        ),
+        EngineKind::LlamaServer => match unhostable_embed_path(&config.engine) {
+            Some(refusal) => Err(refusal),
+            None => Err(
+                "[engine] kind = \"llama-server\" is assembled with its router by \
+                 sovereign_compute's serving assembly; the factory builds only its remote half"
+                    .to_string(),
+            ),
+        },
         EngineKind::Custom(name) => {
             let builder = {
                 let guard = registry()
@@ -357,6 +360,26 @@ fn remote_embed_input_prep(
              family's id, or set embed_inputs = \"server\" if the server prepares inputs."
         )),
     }
+}
+
+/// The refusal for an `[engine]` section whose `embed_path` beside a hosted
+/// chat model cannot be served on `kind = "llama-server"`.
+///
+/// A second SPELLING, not a second decider: the one implementation is
+/// [`EngineSection::unhostable_on_router`] (sovereign-contracts), and this
+/// only words its answer for an operator reading the boot error. The hosted
+/// `kind = "remote"` build below reaches it, and so does
+/// `SetupConfig::validate_class` before a daemon starts.
+fn unhostable_embed_path(section: &EngineSection) -> Option<String> {
+    let excluded = section.unhostable_on_router()?;
+    Some(format!(
+        "[engine] `{excluded}` with `embed_path` loads the embedding GGUF in this process, \
+         which kind = \"llama-server\" does not do: the router serves the embedder in a \
+         supervised process of its own (ENGINE_SWAP_PLAN A6), and a node whose chat is at a \
+         vendor names no `[models]` to build that preset from. Point `{excluded}` at the \
+         vendor to keep the pair, name `embed_endpoint` to embed on a server, or run \
+         kind = \"llama\"."
+    ))
 }
 
 fn build_remote(section: &EngineSection) -> Result<BuiltEngine, String> {

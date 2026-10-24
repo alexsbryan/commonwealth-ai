@@ -137,6 +137,20 @@ pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
     // its embedder is the one section [`RouterPreset::embed_only`] builds).
     let models_may_be_absent = !engine.needs_models() || engine == EngineKind::LlamaServer;
     let models = if models_may_be_absent {
+        // A hosted pair — a vendor chat (`endpoint`) with an embedding GGUF
+        // — is a refusal, not a plan with nothing in it. `config.models()`
+        // below would refuse this node as an unconfigured one and name
+        // `svrn setup`, which is the wrong advice for a file that is
+        // configured. `EngineSection::unhostable_on_router` is the one
+        // decider; the class check already refused it at load, and this
+        // answers a config built in memory (ARCH 6, 8).
+        if let Some(key) = config.engine.unhostable_on_router() {
+            return Err(format!(
+                "[engine] `{key}` beside `embed_path` is not served by kind = \"llama-server\": \
+                 the router owns the embedding GGUF and a hosted pair names no `[models]` for \
+                 its preset. Name `embed_endpoint`, add `[models]`, or run kind = \"remote\"."
+            ));
+        }
         config.models().ok()
     } else {
         Some(config.models()?)
@@ -263,6 +277,27 @@ impl ReloadFactory {
             plan: Some(plan.clone()),
             reason,
         };
+        // The FIRST refusal: a router node must plan a model at all.
+        // `plan_serving` answers a router with `[models]` or `[engine]
+        // embed_path`, and nothing else, so a hosted pair (a vendor chat, no
+        // `[models]`) reaches here with no preset — the daemon this row
+        // replaced used to load its embedder in this process (ENGINE_SWAP_PLAN
+        // A6). The class check refuses that file where it is read
+        // (`EngineSection::unhostable_on_router`, naming both keys); this is
+        // the boot's own answer for a config constructed in memory (ARCH 6).
+        if config.engine.kind == EngineKind::LlamaServer && plan.router.is_none() {
+            tracing::error!(
+                target: "llama_router",
+                "refused: kind = \"llama-server\" planned no model section"
+            );
+            return Err(fail(
+                "[engine] kind = \"llama-server\" plans no model for this config: it serves \
+                 `[models]` as the router's preset, and with none it serves `[engine] \
+                 embed_path` as its one section. This node names neither. Add `[models]`, \
+                 or run kind = \"remote\" to use a hosted chat model."
+                    .to_string(),
+            ));
+        }
         // Required by every engine but a remote one, as in `plan_serving`.
         let models = if !config.engine.kind.needs_models() {
             config.models().ok()

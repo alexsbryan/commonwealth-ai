@@ -285,6 +285,30 @@ impl EngineSection {
             EngineKind::Custom(_) => self.embed_path.as_deref(),
         }
     }
+
+    /// The key that makes this section unservable on `kind = "llama-server"`
+    /// — `endpoint` beside `embed_path` — or `None` when the section can be
+    /// served there.
+    ///
+    /// On `kind = "remote"` `embed_path` meant "embed in THIS process": the
+    /// daemon loaded the GGUF itself, one of the two things ENGINE_SWAP_PLAN
+    /// A6 moved into the router. A node whose chat model is at a vendor has
+    /// no router to move the embedder to, so the pair cannot be served on
+    /// `kind = "llama-server"` at all — which makes it a by-name refusal, not
+    /// a silently dropped embedder (ARCH 6). The server route is
+    /// `embed_endpoint`, which hosts nothing here.
+    ///
+    /// One implementation, read by both the startup class check
+    /// ([`crate::setup_config::SetupConfig::validate_class`]) and the boot
+    /// (sovereign-inference's engine factory), so the file is refused where
+    /// it is loaded and not several minutes later in the router (ARCH 8).
+    pub fn unhostable_on_router(&self) -> Option<&'static str> {
+        (self.kind == EngineKind::LlamaServer
+            && self.embed_path.is_some()
+            && self.embed_endpoint.is_none()
+            && self.endpoint.is_some())
+        .then_some("endpoint")
+    }
 }
 
 impl Default for EngineSection {

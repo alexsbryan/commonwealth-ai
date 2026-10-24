@@ -1698,6 +1698,18 @@ impl SetupConfig {
             ));
         }
         let serves = self.models.is_some() || !self.engine.kind.needs_models();
+        if let Some(key) = self.engine.unhostable_on_router() {
+            return Err(format!(
+                "{} sets `[engine] {key}` beside `embed_path`, and every engine that could \
+                 serve that pair holds the embedding GGUF in this process, which \
+                 kind = \"{}\" does not do: its router serves the embedder in a supervised \
+                 process of its own, and a node whose chat is at a vendor has no `[models]` \
+                 to build that preset from. Name `embed_endpoint` instead, or run \
+                 kind = \"remote\".",
+                path.display(),
+                self.engine.kind,
+            ));
+        }
         match serves || self.node.binding().is_some() {
             true => Ok(()),
             false => Err(format!(

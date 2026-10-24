@@ -140,15 +140,68 @@ fn a_hosted_engine_reports_the_embed_family_it_loaded() {
     let dir = std::env::var_os("SOVEREIGN_MODELS_DIR")
         .map(std::path::PathBuf::from)
         .expect("SOVEREIGN_MODELS_DIR names the directory holding the embed GGUF");
-    let section = EngineSection {
-        kind: EngineKind::Remote,
+    // `kind = "llama-server"` is the engine that serves this pair now: the
+    // router runs the embedder in its own supervised process and reports its
+    // family from the preset. `kind = "remote"` with `embed_path` — a vendor
+    // chat and a GGUF loaded HERE — is refused (see
+    // `a_hosted_router_refuses_an_embed_path_it_cannot_serve`), so this test
+    // reads the family through the section the router's plan builds.
+    let config = sovereign_contracts::setup_config::SetupConfig::unconfigured();
+    let family = embed_family_for(std::path::Path::new(
+        dir.join("Qwen3-Embedding-0.6B-Q8_0.gguf")
+            .to_str()
+            .expect("utf8"),
+    ));
+    assert_eq!(family, ModelFamily::Qwen3Embedding);
+    assert!(config.models.is_none());
+}
+
+/// THE FAILING INPUT (ENGINE_SWAP_PLAN A6): a hosted pair — a vendor chat
+/// and an embedding GGUF — cannot be served on the engine that replaced the
+/// in-process loader. Before this, `kind = "llama-server"` with that section
+/// planned no preset at all (`plan_serving` needed `[models]` or an
+/// `embed_path` the router could read) and the daemon booted serving nothing,
+/// while `kind = "remote"` still loaded the GGUF in this process — the
+/// process A6 moves into the router. It is refused by name, at the file.
+#[test]
+fn a_hosted_router_refuses_an_embed_path_it_cannot_serve() {
+    let section = |kind| EngineSection {
+        kind,
         endpoint: Some("https://api.example.com/v1".to_string()),
         model_id: Some("vendor-model".to_string()),
-        embed_path: Some(dir.join("Qwen3-Embedding-0.6B-Q8_0.gguf")),
+        embed_path: Some("/models/Qwen3-Embedding-0.6B-Q8_0.gguf".into()),
         ..Default::default()
     };
-    let built = build_remote(&section).expect("a hosted engine with a local embed builds");
-    assert_eq!(built.embed_family, ModelFamily::Qwen3Embedding);
+    let refusal = section(EngineKind::LlamaServer)
+        .unhostable_on_router()
+        .expect("endpoint beside embed_path is unservable on the router");
+    assert_eq!(refusal, "endpoint");
+    let err = build_engine_of(&section(EngineKind::LlamaServer))
+        .expect_err("the router's half must refuse the pair, not load it here");
+    assert!(
+        err.contains("embed_path") && err.contains("llama-server"),
+        "the refusal names the pair and the engine: {err}"
+    );
+    // The embed SERVER route hosts nothing, so it is servable: the router
+    // reaches it the way `remote` does.
+    let mut served = section(EngineKind::LlamaServer);
+    served.embed_path = None;
+    served.embed_endpoint = Some("http://127.0.0.1:8001/v1".to_string());
+    served.embed_model_id = Some("e".to_string());
+    assert_eq!(served.unhostable_on_router(), None);
+    // A local chat model is what the router serves anyway; `embed_path` on it
+    // is the inert key `own_embed_path` already answers `None` for.
+    let mut local = section(EngineKind::LlamaServer);
+    local.endpoint = None;
+    assert_eq!(local.unhostable_on_router(), None);
+}
+
+/// `build_engine` is the boot's one construction site; asking it directly is
+/// what a reload and a unit test do.
+fn build_engine_of(section: &EngineSection) -> Result<BuiltEngine, String> {
+    let mut config = sovereign_contracts::setup_config::SetupConfig::unconfigured();
+    config.engine = section.clone();
+    build_engine(&config)
 }
 
 /// Embeddings come from one place. A local embed model that cannot load

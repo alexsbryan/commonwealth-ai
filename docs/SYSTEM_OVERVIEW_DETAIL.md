@@ -4100,10 +4100,18 @@ A killed model is the router's to repair: llama.cpp leaves a SIGKILLed model
 `failed (exit N)` in `GET /models` for good, so `LiveRouter`'s repair loop
 re-issues `/models/load` on backoff and `/status` reports the death AND the
 reload (`router-model` rows: `failed` → `restarting` → `loaded`). A hosted
-node (`kind = "remote"`, no `[models]`) with `[engine] embed_path` plans an
-embed-only preset (`RouterPreset::embed_only`): its router serves the embedder
-as its one section while chat stays at the vendor, and `[models]` may be
-absent on a router node because the preset is its model list.
+node (`kind = "remote"`, no `[models]`) with `[engine] embed_path` files a
+section the router cannot serve: the preset is built from `[models]`, and a
+vendor chat names none, so the pair would need an embed section beside a chat
+model the router never runs. It is refused by name — at load
+(`EngineSection::unhostable_on_router`, shared with
+`SetupConfig::validate_class`) and at plan time in `plan_serving` — naming
+`embed_endpoint` as the route that hosts nothing here. A router node WITH
+`embed_path` and no `[models]` and no vendor chat plans an embed-only preset
+(`RouterPreset::embed_only`): its router serves the embedder as its one
+section, and `[models]` may be absent on a router node because the preset is
+its model list. With neither, the node is refused at plan time rather than
+started serving nothing.
 
 **The distributed primary in a child (`[compute] distributed_primary`, default
 OFF).** The payoff the boundary was built for. Distributing a primary across

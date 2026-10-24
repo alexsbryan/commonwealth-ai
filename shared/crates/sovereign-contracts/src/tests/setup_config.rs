@@ -639,3 +639,32 @@ fn roundtrip_preserves_mcp_servers() {
     let parsed: SetupConfig = toml::from_str(old).unwrap();
     assert!(parsed.mcp_servers.is_empty());
 }
+
+/// The file's class check refuses an `[engine]` pair no engine can serve:
+/// a vendor chat (`endpoint`) beside an embedding GGUF this process would
+/// load (`embed_path`). On `kind = "llama-server"` the router owns that
+/// GGUF and a hosted pair names no `[models]` for the preset, so the pair is
+/// refused where the file is read, naming both keys, rather than booting a
+/// node that serves nothing (ENGINE_SWAP_PLAN A6). The pair stays loadable
+/// on `kind = "remote"` until the default flips.
+#[test]
+fn an_engine_section_the_router_cannot_serve_is_refused_at_load() {
+    let hosted = |kind: &str| {
+        format!(
+            "[engine]\nkind = \"{kind}\"\nendpoint = \"https://api.example.com/v1\"\n\
+             model_id = \"vendor-model\"\nembed_path = \"/m/Qwen3-Embedding-0.6B-Q8_0.gguf\"\n"
+        )
+    };
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("config.toml");
+
+    std::fs::write(&path, hosted("llama-server")).unwrap();
+    let err = SetupConfig::load_from(&path).expect_err("the router cannot serve the pair");
+    assert!(
+        err.contains("endpoint") && err.contains("embed_path") && err.contains("llama-server"),
+        "the refusal names both keys and the engine: {err}"
+    );
+
+    std::fs::write(&path, hosted("remote")).unwrap();
+    SetupConfig::load_from(&path).expect("kind = \"remote\" still loads it until the flip");
+}

@@ -80,3 +80,25 @@ fn a_hosted_router_without_an_embed_path_serves_nothing() {
     assert!(plan.in_process.is_empty(), "{plan:?}");
     assert!(plan.router.is_none(), "{plan:?}");
 }
+
+/// THE FAILING INPUT (ENGINE_SWAP_PLAN A6): the shape `svrn setup --hosted`
+/// writes — a vendor chat and an embed_path — under the engine that
+/// replaced the in-process loader. It was served by loading the embedder in
+/// this process, which the router now owns; and the router cannot serve it
+/// at all, because a hosted pair names no `[models]` to build a preset from.
+/// Named at plan time, so the boot says why instead of reporting the node
+/// unconfigured (`svrn setup`) or starting a daemon that answers no model.
+#[test]
+fn a_hosted_pair_cannot_be_assembled_on_the_router() {
+    let mut config = hosted(Some("/models/Qwen3-Embedding-0.6B-Q8_0.gguf"));
+    config.engine.kind = EngineKind::LlamaServer;
+    let err = match assemble_serving(&config) {
+        Ok(_) => panic!("nothing to serve must refuse"),
+        Err(e) => e,
+    };
+    assert!(
+        err.reason.contains("embed_path") && err.reason.contains("llama-server"),
+        "the refusal names the key and the engine: {}",
+        err.reason
+    );
+}

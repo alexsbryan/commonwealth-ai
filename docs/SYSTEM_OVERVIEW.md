@@ -1291,10 +1291,16 @@ decides each half's `FarEnd`: a loopback endpoint is a server on this box
 end is released by the operator's config: completions go to it, without our
 OICP envelope, and texts to embed or rerank never do (`FarEnd::admit`, the
 one rule, applied by `RemoteApiProvider::outbound`, the only way to build a
-request). A hosted engine therefore embeds on this machine: `[engine]
-embed_path` loads the embedding GGUF in this process as an
-`EmbedOnlyProvider` (`EngineEmbed::Local`) and reports the family it loaded
-with, which serve's self report and the mesh embed advertisement carry.
+request). A hosted engine therefore embeds on this machine: on
+`kind = "remote"`, `[engine] embed_path` loads the embedding GGUF in this
+process as an `EmbedOnlyProvider` (`EngineEmbed::Local`) and reports the
+family it loaded with, which serve's self report and the mesh embed
+advertisement carry. On `kind = "llama-server"` that load is the router's
+(one supervised process per preset section, ENGINE_SWAP_PLAN A6), so a
+hosted pair — a vendor `endpoint` with `embed_path`, and no `[models]` for
+the preset — is refused by name at load and at plan time
+(`EngineSection::unhostable_on_router`, `ASSEMBLY` §the router owns the model
+processes), where the router's route for it is `embed_endpoint`.
 `EngineKind::needs_models` (every engine but remote) is the one answer to
 whether `[models]` is read — by the load-time class check, `node_class()`,
 `plan_serving` and the reload — so a hosted node needs none. The engine
