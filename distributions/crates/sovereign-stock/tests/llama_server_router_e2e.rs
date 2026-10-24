@@ -656,9 +656,7 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
             std::fs::read_to_string(format!("/proc/{pid}/cmdline"))
                 .is_ok_and(|cmd| cmd.contains(&chat))
         })
-        .unwrap_or_else(|| {
-            panic!("no llama-server process is serving {}: {before:?}", chat)
-        });
+        .unwrap_or_else(|| panic!("no llama-server process is serving {}: {before:?}", chat));
     let _ = Command::new("kill")
         .args(["-9", &chat_server.to_string()])
         .status();
@@ -729,7 +727,9 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
         recovered > 0,
         "the reloaded chat model generated nothing: {after}"
     );
-    eprintln!("router e2e: the killed chat model was reloaded by the router and answered {recovered} tokens");
+    eprintln!(
+        "router e2e: the killed chat model was reloaded by the router and answered {recovered} tokens"
+    );
 
     // SIGKILL the daemon: nothing it started may outlive it.
     stock.0.kill().expect("SIGKILL the daemon");
