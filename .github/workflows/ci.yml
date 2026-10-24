@@ -131,6 +131,11 @@ jobs:
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
       desktop: ${{ steps.filter.outputs.desktop }}
+      # The shipped llama-server's inputs: `build.sh` + `PIN.toml` + the
+      # patches, which no `.rs` filter sees. A pin or a patch is exactly what
+      # a `kind = "llama-server"` daemon refuses at boot, so the one job that
+      # builds and e2e's that server must run when they move.
+      server: ${{ steps.filter.outputs.server }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v3
@@ -161,6 +166,10 @@ jobs:
               - '.github/workflows/ci.yml'
             desktop:
               - 'clients/desktop/**'
+              - '.github/workflows/ci.yml'
+            server:
+              - 'serve/crates/sovereign-compute/llama-server/**'
+              - 'distributions/crates/sovereign-stock/tests/llama_server_router_e2e.rs'
               - '.github/workflows/ci.yml'
 
   # ---------------------------------------------------------------
@@ -544,6 +553,160 @@ jobs:
         run: df -h; echo; free -h; echo; du -sh target 2>/dev/null || true
 
   # ---------------------------------------------------------------
+  # The server the daemon runs on `kind = "llama-server"`, built from the
+  # pin and exercised end to end (ENGINE_SWAP_PLAN D5).
+  #
+  # Why this is a job of its own and not a step in `test`: `test` runs the
+  # whole workspace and bills ~57 min cold on a 16 GB / 4-core runner. This
+  # job builds one crate and its dependencies, and its subject is the
+  # PYTHON-INDEPENDENT half of a release — `build.sh` applies the pinned
+  # patches, installs the server and its manifest beside the daemon, and the
+  # e2e boots the stock daemon on that server and checks that a completion,
+  # an embedding, a FIM completion, a rerank, the router's own host truth,
+  # the idle window, and the child lifecycle all answer. A leg whose server
+  # does not build, or whose manifest disagrees with the pin compiled into
+  # the daemon, fails here and never reaches a tarball.
+  #
+  # Why the hosted ubuntu runner can run it at all: llama.cpp is CPU-built
+  # (`-ngl 0` is the e2e's default — it loads no GPU backend), and the three
+  # GGUFs are fetched and SHA-256-verified below at ~640 MB each. The digests
+  # are the files' actual hashes, so a re-uploaded or replaced file on the
+  # hub fails the fetch rather than silently changing the subject.
+  # ---------------------------------------------------------------
+  router-e2e:
+    name: Router e2e (shipped llama-server, CPU)
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    runs-on: ubuntu-22.04
+    # Cold: a fresh llama.cpp (the CMake tree cache is shared with `test` and
+    # keyed the same way) plus three GGUFs at ~640 MB each. The e2e itself is
+    # ~40 s of wall clock; its boot waits are bounded at 300 s.
+    timeout-minutes: 60
+    env:
+      # The e2e passes no `-ngl`, so llama-server lays the model on whatever
+      # devices it finds: the CPU on this runner (no GPU, no Vulkan driver).
+      # The binary is still the Vulkan-mode build Linux ships — the CPU
+      # backend is in it either way, and carrying the Vulkan toolchain here
+      # keeps this job's build.sh run identical to the Linux release leg's.
+      SOVEREIGN_MODELS_DIR: ${{ github.workspace }}/target/ci-models
+    steps:
+      - uses: actions/checkout@v7
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/.ghcup /opt/hostedtoolcache \
+            /usr/share/swift /usr/local/share/boost 2>/dev/null || true
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h / | tail -1
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: workspace
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-on-failure: true
+      # Same key and the same guard as `test`'s: this is a READ-ONLY consumer
+      # of the CMake tree `test` banks, so the two jobs never fight for the
+      # same cache entry.
+      - name: Resolve llama-cpp-sys-4 version (cache key input)
+        id: llama-ver
+        shell: bash
+        run: |
+          ver=$(awk '/^name = "llama-cpp-sys-4"$/{getline; gsub(/"/,"",$3); print $3; exit}' Cargo.lock)
+          [ -n "$ver" ] || { echo "::error::could not resolve llama-cpp-sys-4 version from Cargo.lock" >&2; exit 1; }
+          echo "ver=$ver" >> "$GITHUB_OUTPUT"
+      - name: Restore llama.cpp CMake tree
+        id: llama-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: target/llama-cmake-cache
+          key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ steps.llama-ver.outputs.ver }}-${{ hashFiles('rust-toolchain.toml') }}
+      - name: Guard llama fingerprint vs missing CMake tree
+        shell: bash
+        run: |
+          if ! ls target/llama-cmake-cache/*/lib*/libllama.* >/dev/null 2>&1; then
+            rm -rf target/*/.fingerprint/llama-cpp-sys-4-* 2>/dev/null || true
+          fi
+      - name: System deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl gnupg cmake mold clang \
+            protobuf-compiler libprotobuf-dev
+          curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
+            | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
+          curl -fsSL "https://packages.lunarg.com/vulkan/lunarg-vulkan-$(lsb_release -cs).list" \
+            | sudo tee /etc/apt/sources.list.d/lunarg-vulkan.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@0.9.140
+      # The server first: build.sh also writes the manifest the e2e's daemon
+      # refuses to boot without, and the e2e looks for `llama-server` beside
+      # the sovereign-stock binary it is compiled next to (target/debug).
+      - name: Build the shipped llama-server
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh serve/crates/sovereign-compute/llama-server/build.sh --backend vulkan --install-dir target/debug
+          ls -l target/debug/llama-server target/debug/llama-server.manifest.toml
+      - name: Fetch the e2e's models by role (verified)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$SOVEREIGN_MODELS_DIR"
+          # (file name, URL, sha256). By ROLE the e2e resolves these names in
+          # SOVEREIGN_MODELS_DIR; a fetch that misses, or a file whose digest
+          # moved, fails here rather than letting the e2e fail with "is not a
+          # file" three minutes later.
+          fetch() {
+            f="$SOVEREIGN_MODELS_DIR/$1"
+            [ -f "$f" ] && [ "$(sha256sum "$f" | cut -d' ' -f1)" = "$3" ] && return 0
+            curl -sSfL -o "$f.part" "$2"
+            got=$(sha256sum "$f.part" | cut -d' ' -f1)
+            [ "$got" = "$3" ] || { echo "::error::$1 is sha256 $got, not the pinned $3" >&2; exit 1; }
+            mv "$f.part" "$f"
+            echo "$1 $(wc -c < "$f") bytes, sha256 ok"
+          }
+          fetch Qwen3.5-0.8B-Q6_K.gguf \
+            "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q6_K.gguf" \
+            8408c5c222111cec253682b49eece2a02ed641ded68490001ec4ee160e71098e
+          fetch Qwen3-Embedding-0.6B-Q8_0.gguf \
+            "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf" \
+            06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439
+          fetch qwen3-reranker-0.6b-q8_0.gguf \
+            "https://huggingface.co/ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/resolve/main/qwen3-reranker-0.6b-q8_0.gguf" \
+            22c9979ce4fbcdc5acdc310c6641c32797eff1aa980b8f7a2db8a8ea23429a48
+      # The test is `#[ignore]`d in the suite (it loads real GGUFs), and
+      # sovereign-test.sh has no `--ignored` passthrough — so this names the
+      # binary directly, which is the same argv the queue's ROUTER-E2E check
+      # runs. The guard after it is the queue's: a run that collected zero
+      # tests exits 0 under cargo, and "0 passed" must read never-ran, not
+      # green (ARCH §5; sovereign-test.sh's own exit 4 is the same rule).
+      - name: Router e2e on the shipped server
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p sovereign-stock --test llama_server_router_e2e \
+            -- --ignored --nocapture 2>&1 | tee target/router-e2e.log
+          grep -q '^test result: ok\. [1-9]' target/router-e2e.log \
+            || { echo "::error::the router e2e did not run — never-ran, not passed" >&2; exit 4; }
+      - name: Upload the e2e log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: router-e2e-log
+          path: |
+            target/router-e2e.log
+            target/sovereign-test/latest/
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Resource state at failure
+        if: failure()
+        run: df -h; echo; free -h; echo; du -sh target 2>/dev/null || true
+
+  # ---------------------------------------------------------------
   # The single check to require in branch protection.
   # ---------------------------------------------------------------
   #
@@ -556,10 +719,15 @@ jobs:
   # `cancelled` is NOT success: a cancelled run has proven nothing. (The
   # concurrency block cancels superseded runs, but those belong to a
   # superseded commit, whose ci-ok result nothing is waiting on.)
+  #
+  # `router-e2e` is here because it is the only job that runs the shipped
+  # llama-server; the `test` job compiles the crates around it but never
+  # starts it (the e2e is `#[ignore]`d there). A `server`-filtered diff that
+  # left this job skipped keeps ci-ok green: the pin did not move.
   ci-ok:
     name: CI OK
     if: always()
-    needs: [changes, fmt, gates, suites, desktop, test]
+    needs: [changes, fmt, gates, suites, desktop, test, router-e2e]
     runs-on: ubuntu-latest
     steps:
       - name: Verify every gate passed or was legitimately skipped
@@ -579,6 +747,7 @@ jobs:
           check suites  '${{ needs.suites.result }}'
           check desktop '${{ needs.desktop.result }}'
           check test    '${{ needs.test.result }}'
+          check router-e2e '${{ needs.router-e2e.result }}'
           exit "$fail"
 
   # ===================================================================
