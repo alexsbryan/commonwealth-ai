@@ -50,31 +50,53 @@ say() { echo "cargo-target: $*" >&2; }
 mode=$1
 shift
 
+# What setup runs besides git and cp. prepare checks it first, so a machine
+# missing one fails its prepare (which `eutropia doctor` reports and which
+# claims nothing) before any lane exists, not in a claimed row's setup.
+needs_python() {
+    python3 -I -c 'import os; os.stat(".").st_mtime_ns' 2>/dev/null || {
+        say "python3 is not on PATH here (or has no st_mtime_ns): setup gives the lane's files their template's mtimes with it"
+        exit 2
+    }
+}
+
 # Gives each tracked file the lane holds unchanged from the template its
-# template twin's mtime, in one perl process (Time::HiRes keeps the
-# nanoseconds cargo compares).
+# template twin's mtime, in one python process, in integer nanoseconds,
+# which is what cargo compares (a float second loses them).
 stamp() {
     template_at=$(git -C "$EUTROPIA_TEMPLATE" rev-parse HEAD)
     lane_at=$(git -C "$EUTROPIA_LANE_TREE" rev-parse HEAD)
     changed=$EUTROPIA_LANE_DIR/.changed-since-template
+    listed=$EUTROPIA_LANE_DIR/.tracked
     git -C "$EUTROPIA_LANE_TREE" diff --name-only -z --no-renames "$template_at" "$lane_at" >"$changed"
-    stamped=$(git -C "$EUTROPIA_LANE_TREE" ls-files -z | perl -e '
-        use strict; use warnings; use Time::HiRes qw(lstat utime);
-        my ($template, $lane, $changed) = @ARGV;
-        local $/ = "\0";
-        open(my $c, "<", $changed) or die "$changed: $!";
-        my %changed = map { chomp; ($_ => 1) } <$c>;
-        my ($done, $kept) = (0, 0);
-        while (my $path = <STDIN>) {
-            chomp $path;
-            if ($changed{$path}) { $kept++; next; }
-            my @was = lstat("$template/$path") or next;
-            next if -l _;
-            utime($was[8], $was[9], "$lane/$path") and $done++;
-        }
-        print "$done $kept\n";
-    ' "$EUTROPIA_TEMPLATE" "$EUTROPIA_LANE_TREE" "$changed")
-    rm -f "$changed"
+    git -C "$EUTROPIA_LANE_TREE" ls-files -z >"$listed"
+    stamped=$(python3 -I - "$EUTROPIA_TEMPLATE" "$EUTROPIA_LANE_TREE" "$changed" "$listed" <<'PY'
+import os, stat, sys
+template, lane, changed, listed = (os.fsencode(a) for a in sys.argv[1:5])
+def paths(name):
+    with open(name, "rb") as f:
+        return [p for p in f.read().split(b"\0") if p]
+changed = set(paths(changed))
+done = kept = 0
+for path in paths(listed):
+    if path in changed:
+        kept += 1
+        continue
+    try:
+        was = os.lstat(os.path.join(template, path))
+    except FileNotFoundError:
+        continue
+    if stat.S_ISLNK(was.st_mode):
+        continue
+    try:
+        os.utime(os.path.join(lane, path), ns=(was.st_atime_ns, was.st_mtime_ns))
+    except FileNotFoundError:
+        continue
+    done += 1
+print(done, kept)
+PY
+)
+    rm -f "$changed" "$listed"
     set -- $stamped
     say "setup: $1 file(s) given the template's mtime; $2 changed since the template ($template_at..$lane_at) keep their checkout's"
 }
@@ -89,6 +111,7 @@ prepare)
     else
         set -- cargo check --workspace --all-targets
     fi
+    needs_python
     say "prepare: $* in $EUTROPIA_TEMPLATE"
     exec "$@"
     ;;
@@ -114,18 +137,29 @@ setup)
         say "setup: $dst already exists; left as it is"
         exit 0
     fi
+    needs_python
     if [ "$(uname -s)" = Darwin ]; then
         cow=-c
     else
         cow=--reflink=always
     fi
-    if why=$(cp -a "$cow" "$src" "$dst" 2>&1); then
-        say "setup: $src cloned copy-on-write to $dst"
+    # The clone is made beside its place and moved there only once the
+    # lane's files are stamped, so `target/` exists only for a whole setup:
+    # one that failed leaves nothing a retry would take as done (2026-10-23,
+    # a failed stamp left a clone the retry kept, unstamped, and so cold).
+    partial=$dst.partial
+    rm -rf "$partial"
+    if why=$(cp -a "$cow" "$src" "$partial" 2>&1); then
+        say "setup: $src cloned copy-on-write beside $dst"
+        trap 'rm -rf "$partial"; say "setup: stamping the lane failed, so its clone is removed and a retry starts clean"' EXIT
         stamp
+        mv "$partial" "$dst"
+        trap - EXIT
+        say "setup: the clone is in place at $dst"
         exit 0
     fi
     # A half-made clone is not a target cargo should trust.
-    rm -rf "$dst"
+    rm -rf "$partial"
     shared=$(dirname "$EUTROPIA_LANE_DIR")/.shared-target
     mkdir -p "$shared" "$(dirname "$shared_config")"
     printf '[build]\ntarget-dir = "%s"\n' "$shared" >"$shared_config"
