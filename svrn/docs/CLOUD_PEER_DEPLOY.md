@@ -81,7 +81,10 @@ has capacity for that day:
 
 Both produce the same operator-facing surface — same env vars, same
 entrypoint, same mesh shape. The only difference is the inference
-backend baked in.
+backend baked in: the daemon's own llama.cpp, and the pinned
+`llama-server` + `ggml-rpc-server` pair the image installs beside it for
+`kind = "llama-server"` (each flavor builds its own with
+`serve/crates/sovereign-compute/llama-server/build.sh`).
 
 For Containerfile-internal details (which apt packages each stage
 needs and why), see [`serve/container/README.md`](../../serve/container/README.md).

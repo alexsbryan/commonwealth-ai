@@ -310,14 +310,14 @@ note = "10 cited, 0 outside."
 [[row]]
 id = "decode.tool-choice-required"
 layer = "decode"
-covers = ["tool_choice", "tools", "cmd_prefix"]
-callers = "recipe_author.rs:227-231; Responses API grammar lock routes_responses.rs:570; frontdoor cmd_prefix (opt-in, frontdoor.rs:1294)"
+covers = ["tool_choice", "tools"]
+callers = "recipe_author.rs:227-231; Responses API grammar lock routes_responses.rs:570; a caller's own tool_choice on /v1/chat/completions (passthrough inference_adapter.rs)"
 check = "exactly one tool call returned, parsed calls equal"
 judge = [{ kind = "tool-calls" }]
 when = [{ kind = "complete", tool_choice = "=\"required\"" }]
 predict = "fail:differs"
 basis = "unverified"
-note = "The Hermes path installs the envelope as structured_output (inference_adapter.rs:546); the client then sends response_format beside tools, and the Qwen3 template path lets response_format win over tools (LS chat.cpp:1199-1247), so the server constrains to the envelope schema and parses no tool call. cmd_prefix lives inside that schema as a pattern."
+note = "The embedded engine still installs the envelope as structured_output (inference_adapter.rs, tool_choice = required); the client then sends response_format beside tools, and the Qwen3 template path lets response_format win over tools (LS chat.cpp:1199-1247), so the engine constrains to the envelope schema and parses no tool call. The frontdoor cmd_prefix pattern that used to live inside that schema went with the Hermes path (es-t5, 2026-10-23)."
 
 [[row]]
 id = "decode.tool-choice-named"

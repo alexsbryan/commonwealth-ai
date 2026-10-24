@@ -1082,40 +1082,6 @@ pub struct DaemonSection {
     #[serde(default = "default_freshness_watchers_enabled")]
     pub freshness_watchers_enabled: bool,
 
-    /// When true, the inference adapter treats every tools-using
-    /// request with `tool_choice: "auto"` (or unset) as if the caller
-    /// had sent `tool_choice: "required"`, so the JSON-Schema
-    /// tool-envelope grammar engages. Identical to setting the env var
-    /// `SOVEREIGN_FORCE_TOOL_CALLS=1` — env wins when both are set,
-    /// otherwise this config flag drives the same code path. Empirically
-    /// (2026-05-08 measurement) the grammar pass eliminates Qwopus and
-    /// FINAL-Bench native-markup parse failures (`<tool_call>{...}` with
-    /// arguments-as-string-of-json) at zero per-call cost — the
-    /// `JsonConstraint` path is already optimised for these short
-    /// envelopes.
-    ///
-    /// Defaults to `false` so the disabled-default keeps existing
-    /// non-tools-using callers unaffected. Set to `true` in
-    /// `setup_config.toml` for daemons that primarily host opencode /
-    /// Aider / autonomous-loop traffic.
-    #[serde(default = "default_force_tool_calls")]
-    pub force_tool_calls: bool,
-    /// Engage the llguidance alternation grammar for tools-using
-    /// requests (`start: text | tool_envelope`). When set, the daemon
-    /// installs a JSON-Schema-driven tool envelope via llguidance's
-    /// canonical `TopLevelGrammar::from_json_schema` path; the
-    /// schema-driven mask is the structural fix for empty-args /
-    /// content-as-envelope failures observed under the prior
-    /// JsonConstraint mask. Propagated to process env at daemon boot
-    /// (mirrors the `force_tool_calls` propagation) — the inference
-    /// adapter reads `SOVEREIGN_ALTERNATION_GRAMMAR` per request.
-    ///
-    /// Defaults to `false` because the canonical path is still
-    /// landing; flip to `true` per-host once the bench shows clean
-    /// tool emissions on the agent-bench's from-scratch tier.
-    #[serde(default = "default_alternation_grammar")]
-    pub alternation_grammar: bool,
-
     /// Address the client API (`:9741`) binds to. Defaults to
     /// `127.0.0.1` — **secure by default**: the OpenAI-compatible
     /// surface (inference, knowledge, apps, Ollama shim) is reachable
@@ -1264,8 +1230,6 @@ impl Default for DaemonSection {
             max_peer_inflight: default_max_peer_inflight(),
             max_peer_knowledge_reads: default_max_peer_knowledge_reads(),
             freshness_watchers_enabled: default_freshness_watchers_enabled(),
-            force_tool_calls: default_force_tool_calls(),
-            alternation_grammar: default_alternation_grammar(),
             client_bind: default_client_bind(),
             client_token: None,
             guest_bind: None,
@@ -1564,14 +1528,6 @@ fn default_max_peer_knowledge_reads() -> usize {
 }
 fn default_freshness_watchers_enabled() -> bool {
     true
-}
-
-fn default_force_tool_calls() -> bool {
-    false
-}
-
-fn default_alternation_grammar() -> bool {
-    false
 }
 
 /// `~/.svrnmesh/`. Previously lived in `sovereign-cli::util::dirs`;

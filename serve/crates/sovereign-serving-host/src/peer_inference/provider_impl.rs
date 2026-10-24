@@ -734,6 +734,10 @@ impl InferenceProvider for InferenceRouter {
         self.local.count_tokens_exact(text).await
     }
 
+    fn conversation_keeps_call_and_budget(&self) -> bool {
+        self.local.conversation_keeps_call_and_budget()
+    }
+
     fn capabilities(&self) -> ProviderCapabilities {
         self.local.capabilities()
     }

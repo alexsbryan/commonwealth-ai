@@ -77,7 +77,7 @@ curl -fsSL https://svrnme.sh/install.sh | sh
 svrn setup
 ```
 
-That drops the CLI into `~/.local/bin`. You'll want 8 GB of RAM to start — 16 is comfortable, 32 runs the best open models. Building from source instead, or setting up unusual hardware: [start the daemon](../docs/START_THE_DAEMON.md) has the full recipe.
+That drops the CLI into `~/.local/bin`, together with everything its verbs exec — the daemon, its loader, and the pinned `llama-server` + `ggml-rpc-server` + manifest the daemon runs (and verifies at startup) on `kind = "llama-server"`. Nothing else needs installing for the model engine. You'll want 8 GB of RAM to start — 16 is comfortable, 32 runs the best open models. `svrn update` re-runs the same installer, so an existing install gains those files on its next update. Building from source instead, or setting up unusual hardware: [start the daemon](../docs/START_THE_DAEMON.md) has the full recipe.
 
 ### Staying current
 

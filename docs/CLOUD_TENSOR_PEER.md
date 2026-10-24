@@ -16,8 +16,12 @@ on the pod and is bridged by the iroh acceptor (THREAT_MODEL.md).
 
 - Image `ghcr.io/alexsbryan/sovereign-cuda:<tag>` built from the SAME HEAD as
   the host (`Containerfile.cuda`). ggml-RPC is wire-version-sensitive:
-  host↔worker llama.cpp must be same-tree. The daemon logs its build SHA at
-  boot (`SOVEREIGN_GIT_SHA` build-arg) — verify it matches host HEAD.
+  host↔worker llama.cpp must be the same pin
+  (`serve/crates/sovereign-compute/llama-server/PIN.toml`, which the image's
+  `build.sh` builds `ggml-rpc-server` from in its CUDA mode). The daemon logs
+  its build SHA at boot (`SOVEREIGN_GIT_SHA` build-arg) — verify it matches
+  host HEAD; the rpc-server's own manifest records the pin, and
+  `build_pin::verify` refuses a mismatch rather than half-loading.
 - Vast account with credit (**read the `credit` field, not `balance`**) and an
   SSH key registered (`vastai show ssh-keys`; register with
   `vastai create ssh-key "$(cat ~/.ssh/id_ed25519.pub)"`).

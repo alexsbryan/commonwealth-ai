@@ -16,8 +16,10 @@ Prebuilt binaries for macOS (Apple Silicon) and Linux (x86_64):
 curl -fsSL https://svrnme.sh/install.sh | sh
 ```
 
-That drops the CLI into `~/.local/bin`. You'll want 8 GB of RAM to start —
-16 is comfortable, 32 runs the best open models.
+That drops the CLI into `~/.local/bin`, with the daemon it execs and the
+pinned `llama-server`, `ggml-rpc-server` and manifest beside it — the model
+engine ships in the same tarball, so nothing else needs installing. You'll
+want 8 GB of RAM to start — 16 is comfortable, 32 runs the best open models.
 
 Already installed? `svrn update --check` says whether a newer release
 exists; `svrn update` installs it in place, through the same

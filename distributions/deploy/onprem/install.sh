@@ -183,11 +183,15 @@ install -d -m 0750 "${etc_own[@]}" "$ETC"
 # by exact filename next to its own path, so all of them land in the
 # same directory and keep their names.
 say "binaries → $PREFIX/bin"
-for b in sovereign-onprem svrn sovereign-cli-daemon svrn-ingest; do
+for b in sovereign-onprem svrn sovereign-cli-daemon svrn-ingest llama-server ggml-rpc-server; do
     [ -f "$KIT_DIR/bin/$b" ] || die "kit is missing bin/$b"
     install -m 0755 "$KIT_DIR/bin/$b" "$PREFIX/bin/$b"
     echo "    $b"
 done
+# The daemon refuses the server without the manifest beside it.
+[ -f "$KIT_DIR/bin/llama-server.manifest.toml" ] || die "kit is missing bin/llama-server.manifest.toml"
+install -m 0644 "$KIT_DIR/bin/llama-server.manifest.toml" "$PREFIX/bin/llama-server.manifest.toml"
+echo "    llama-server.manifest.toml"
 
 # ── 4. Models ────────────────────────────────────────────────────────
 say "models → $DATA/models"

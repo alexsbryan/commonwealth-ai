@@ -53,12 +53,17 @@ ENV DEBIAN_FRONTEND=noninteractive
 # need to resolve at link time. `libnccl-dev` provides headers + the
 # static archive for the build stage; the runtime stage adds
 # `libnccl2` for the dlopen path.
+#
+# The webkit/appindicator/rsvg dev packages: workspace-hack pulls tauri (gtk,
+# glib-sys) into every member's build since the hakari move; as in
+# .github/workflows/cli-release.yml "Linux build deps".
 RUN apt-get update && apt-get install -y --no-install-recommends \
       --allow-change-held-packages \
       build-essential cmake git curl ca-certificates pkg-config libssl-dev \
       protobuf-compiler libprotobuf-dev \
       clang libclang-dev llvm-dev lld python3 \
       libnccl-dev libnccl2 \
+      libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
  && rm -rf /var/lib/apt/lists/*
 
 # sccache caches rustc + nvcc + cc/c++ output keyed by content hash.
@@ -206,37 +211,15 @@ COPY vendor/              ./vendor/
 # read it (sovereign-cli main.rs), and a worker pod runs none of them.
 ENV SOVEREIGN_CLI_CONTRACT=/workspace/svrn/docs/cli-contract.toml
 
-# Swap the linux llama-cpp-2 backend feature (whichever of "rocm" or
+# Swap the linux llama-cpp-4 backend feature (whichever of "rocm" or
 # "vulkan" is currently checked in — the repo default has flipped over
 # time) to "cuda" for this image. We do it in-image rather than via a
 # Cargo feature flag because the choice lives inside a target-conditional
-# dependency declaration, not in the workspace features table.
-#
-# Tolerant of:
-#   - either "rocm" or "vulkan" as the source feature
-#   - comment / blank lines between the [target...] header and the
-#     llama-cpp-2 line (the in-repo comment block explaining the ROCm
-#     SEGV workaround is one such block).
-#
-# Mirrors swap_inference_backend() in scripts/bootstrap-linux.sh.
-RUN python3 <<'PY'
-import re, pathlib
-p = pathlib.Path('/workspace/serve/crates/sovereign-inference/Cargo.toml')
-src = p.read_text()
-header = '[target.\'cfg(target_os = "linux")\'.dependencies]'
-pattern = (
-    re.escape(header)
-    + r'(?:[ \t]*\n(?:[ \t]*#[^\n]*\n|[ \t]*\n)*)'
-    + r'(llama-cpp-4\s*=\s*\{[^\n]*\})'
-)
-m = re.search(pattern, src)
-assert m, "couldn't find Linux llama-cpp-4 line under " + header
-line = m.group(1)
-new_line, n = re.subn(r'"(rocm|vulkan)"', '"cuda"', line, count=1)
-assert n == 1, f"expected one rocm/vulkan token to swap, found {n}: {line!r}"
-p.write_text(src[:m.start(1)] + new_line + src[m.end(1):])
-print("Patched:", new_line.strip())
-PY
+# dependency declaration, not in the workspace features table. The ROCm
+# image runs the same script with its own target argument, so the two
+# cannot drift apart.
+COPY serve/container/swap-inference-backend.py /usr/local/bin/swap-inference-backend.py
+RUN python3 /usr/local/bin/swap-inference-backend.py /workspace cuda
 
 WORKDIR /workspace
 # Pre-fetch dependencies so the llama.cpp source lands on disk in the
@@ -284,6 +267,21 @@ RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
  && echo "$CMAKE_LISTS" \
     | xargs sed -i 's|option(GGML_CUDA_NCCL\s*"[^"]*"\s*ON)|option(GGML_CUDA_NCCL "" OFF)|' \
  && echo "$CMAKE_LISTS" | xargs grep -n GGML_CUDA_NCCL
+
+# The llama-server the daemon ships for kind = "llama-server", built from the
+# pin by build.sh in its CUDA mode (CMAKE_CUDA_ARCHITECTURES above, NCCL off),
+# with ggml-rpc-server and llama-server.manifest.toml, into /usr/local/bin: the
+# daemon looks beside its own executable and verifies the manifest against the
+# pin it was compiled with (sovereign-compute llama_router/live.rs,
+# resolve_binary).
+# RUSTFLAGS is the daemon's link flags; unset here, since llguidance's own
+# cargo build would apply them to every artifact it links, proc-macros
+# included (the ROCm image's -no-pie broke exactly that way).
+RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
+    --mount=type=cache,target=/root/.cargo/git,sharing=locked \
+    --mount=type=cache,target=/root/.cache/sccache,sharing=locked \
+    --mount=type=cache,target=/workspace/target \
+    env -u RUSTFLAGS serve/crates/sovereign-compute/llama-server/build.sh --backend cuda --install-dir /usr/local/bin
 
 # THE `rm -rf` IS LOAD-BEARING — DO NOT DROP IT AS A TIDY-UP (2026-08-28).
 # /workspace/target is a persistent cache mount, and build.rs extracts
@@ -400,6 +398,8 @@ COPY --from=build /usr/local/bin/sovereign-cli-llm    /usr/local/bin/sovereign-c
 COPY --from=build /usr/local/bin/sovereign-stock      /usr/local/bin/sovereign-stock
 COPY --from=build /usr/local/bin/sovereign-pod-worker /usr/local/bin/sovereign-pod-worker
 COPY --from=build /usr/local/bin/cuda-preflight /usr/local/bin/cuda-preflight
+COPY --from=build /usr/local/bin/llama-server /usr/local/bin/ggml-rpc-server \
+                  /usr/local/bin/llama-server.manifest.toml /usr/local/bin/
 # NOTE: no llama.cpp shared-lib copy here anymore. The vendored
 # llama-cpp-4 dropped `dynamic-link` from its default features
 # (vendor/llama-cpp-4/Cargo.toml — "sovereign vendor divergence"), so

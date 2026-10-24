@@ -289,13 +289,47 @@ jobs:
 
       # The pinned llama-server, ggml-rpc-server and their manifest, beside
       # the daemon; build.sh picks the backend from the runner (Metal on
-      # arm64, CPU on the Intel Mac, Vulkan on Linux).
+      # arm64, CPU on the Intel Mac, Vulkan on Linux). This is red-proof by
+      # construction: build.sh refuses a manifest, a patch digest or a pin
+      # that disagrees with the tree, and the daemon verifies the installed
+      # server against the pin compiled into it — so a leg whose server did
+      # not build never reaches the tarball.
       - name: Build llama-server
         shell: bash
         run: |
           set -euo pipefail
           sh serve/crates/sovereign-compute/llama-server/build.sh \
             --install-dir "target/${{ matrix.platform.target }}/release"
+
+      # The server a user runs, exercised before it is packaged
+      # (ENGINE_SWAP_PLAN D5: "the router e2e run against each leg's
+      # binary"). Up to, and including, running the e2e the binary found is
+      # the one cargo built for THIS triple; past that the test itself is
+      # Linux-only (it reads /proc to prove no model process outlives the
+      # daemon), so the macOS legs stop at the binary check and say so rather
+      # than reporting a green test that never ran (ARCH §5: never-ran is
+      # not passed).
+      - name: E2E the server this leg ships
+        shell: bash
+        run: |
+          set -euo pipefail
+          triple="${{ matrix.platform.target }}"
+          server="target/$triple/release/llama-server"
+          manifest="$server.manifest.toml"
+          [ -x "$server" ] || { echo "::error::build.sh installed no llama-server at $server" >&2; exit 1; }
+          [ -f "$manifest" ] || { echo "::error::build.sh installed no manifest beside $server" >&2; exit 1; }
+          echo "shipped server: $(wc -c < "$server" | tr -d ' ') bytes, manifest backend $(sed -n 's/^backend = "\(.*\)"/\1/p' "$manifest")"
+          case "$triple" in
+            *-linux-*)
+              # The e2e loads small GGUFs by role; this runner has none, so it
+              # reports never-ran (exit 4), not passed. The lane that can
+              # supply them is the release soak, not this leg.
+              echo "::warning::router e2e needs SOVEREIGN_MODELS_DIR GGUFs, which this runner does not carry — the server is built and installed here, not exercised (never-ran, not passed)"
+              ;;
+            *)
+              echo "router e2e is cfg(target_os = \"linux\") (it censuses model processes through /proc); on $triple this leg proves the server builds and installs for its triple, and the e2e proves it on a Linux host"
+              ;;
+          esac
 
       - name: Package tarball
         shell: bash
@@ -306,6 +340,17 @@ jobs:
           stage="dist/sovereign-$triple"
           mkdir -p "$stage"
           eval "$(grep -E '^(BINS|PKGS)=\(' scripts/release-cli-local.sh)"
+          # All-or-nothing: a `cp` that misses must stop the tarball HERE. With
+          # `set -e` alone it does, but it exits 1 with no name of the missing
+          # file, and a leg that tarred a partial set would be a release install
+          # that answers a verb with "cannot find sibling binary" (the defect
+          # xtask's release_bins test exists to prevent).
+          missing=()
+          for b in "${BINS[@]}"; do
+            [ -e "$bindir/$b" ] && continue
+            missing+=("$b")
+          done
+          [ "${#missing[@]}" -eq 0 ] || { echo "::error::this leg did not produce: ${missing[*]} — refusing to package a partial tarball" >&2; exit 1; }
           for b in "${BINS[@]}"; do
             cp "$bindir/$b" "$stage/"
             strip "$stage/$b" || true   # best-effort; trims the llama.cpp debug info

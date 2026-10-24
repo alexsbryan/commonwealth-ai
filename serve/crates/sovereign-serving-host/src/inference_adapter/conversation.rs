@@ -15,20 +15,33 @@
 use futures::{Stream, StreamExt};
 use oicp_types::chat_turn::{parse_assistant_turn, AssistantTurn, TurnDelta, TurnStream};
 use oicp_types::openai_types::{self as wire, ChatCompletionRequest, FunctionCall, ToolCall};
+use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::{CompletionRequest, PromptShape};
 
 use super::{
     translate_finish_reason, translate_stream_frame, translate_stream_usage, CoreStreamFrame,
 };
 
-/// Why `request` keeps the single-turn Hermes path, or `None` when it is
-/// an external client's conversation for the model's own template.
-pub(crate) fn hermes_path_reason(request: &ChatCompletionRequest) -> Option<&'static str> {
-    let forced_tool_choice = match &request.tool_choice {
+/// Whether `request` forces a tool call (`required`, or a named tool).
+fn forces_a_call(request: &ChatCompletionRequest) -> bool {
+    match &request.tool_choice {
         Some(serde_json::Value::String(s)) => s == "required",
         Some(serde_json::Value::Object(_)) => true,
         _ => false,
-    };
+    }
+}
+
+/// Why `request` keeps the single-turn Hermes path, or `None` when it is
+/// an external client's conversation for the model's own template. On a
+/// `host` whose conversation keeps a forced call and a think budget (the
+/// router), neither is a reason: a Codex or opencode turn from
+/// `/v1/responses` carries both and goes as a conversation.
+pub(crate) fn hermes_path_reason(
+    request: &ChatCompletionRequest,
+    host: &dyn InferenceProvider,
+) -> Option<&'static str> {
+    let host_keeps = host.conversation_keeps_call_and_budget();
+    let forced_tool_choice = forces_a_call(request) && !host_keeps;
     if request.oicp.is_some() {
         Some("oicp envelope (in-repo caller)")
     } else if request.lark_grammar.is_some() {
@@ -39,27 +52,29 @@ pub(crate) fn hermes_path_reason(request: &ChatCompletionRequest) -> Option<&'st
         Some("cmd_prefix")
     } else if request.sampling_mode.is_some() {
         Some("sampling_mode")
-    } else if request.think_budget.is_some() {
+    } else if request.think_budget.is_some() && !host_keeps {
         Some("think_budget")
     } else if request.stable_prefix_len.is_some() {
         Some("stable_prefix_len")
     } else if forced_tool_choice {
-        // A forced call is enforced by the Hermes envelope grammar; the
-        // model-native equivalent (a lazy grammar) does not exist yet.
+        // A forced call on the embedded engine is enforced by the Hermes
+        // envelope grammar; the model-native equivalent (a lazy grammar)
+        // does not exist there yet.
         Some("tool_choice forces a call")
-    } else if super::force_tool_calls_env() {
-        Some("SOVEREIGN_FORCE_TOOL_CALLS")
-    } else if super::alternation_grammar_enabled() {
-        Some("SOVEREIGN_ALTERNATION_GRAMMAR")
     } else {
         None
     }
 }
 
 /// Make `req` a conversation: the client's messages go to the engine whole
-/// and none of the Hermes path's settings apply. `req.prompt` keeps the
-/// flattened text for token estimators and peers that predate the shape.
-pub(crate) fn into_conversation(req: &mut CompletionRequest, request: &ChatCompletionRequest) {
+/// and none of the Hermes path's settings apply, but for a think budget on
+/// a `host` that keeps it. `req.prompt` keeps the flattened text for token
+/// estimators and peers that predate the shape.
+pub(crate) fn into_conversation(
+    req: &mut CompletionRequest,
+    request: &ChatCompletionRequest,
+    host: &dyn InferenceProvider,
+) {
     let messages = request
         .messages
         .iter()
@@ -67,7 +82,28 @@ pub(crate) fn into_conversation(req: &mut CompletionRequest, request: &ChatCompl
         .map(|m| serde_json::to_value(m).expect("a ChatMessage serializes to JSON"))
         .collect();
     req.prompt_shape = Some(PromptShape::Conversation { messages });
-    req.think_budget = None;
+    if !host.conversation_keeps_call_and_budget() {
+        req.think_budget = None;
+    }
+}
+
+/// Whether a tools turn runs whole before it streams (replayed as SSE):
+/// the Hermes path parses its envelope after generation, and a forced call
+/// is checked only on a whole reply (`oicp_client::call_check`).
+pub(crate) fn runs_whole_before_streaming(
+    request: &ChatCompletionRequest,
+    host: &dyn InferenceProvider,
+) -> bool {
+    let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
+    let whole =
+        tools_present && (hermes_path_reason(request, host).is_some() || forces_a_call(request));
+    tracing::debug!(
+        tools_present,
+        forced = forces_a_call(request),
+        whole,
+        "inference_adapter: tools turn streams live or runs whole"
+    );
+    whole
 }
 
 /// Whether `req` was made a conversation by [`into_conversation`].
@@ -200,13 +236,103 @@ mod tests {
         serde_json::from_value(body).unwrap()
     }
 
+    /// A host that answers only whether its conversation keeps a forced
+    /// call and a think budget: `Host(true)` is the router.
+    struct Host(bool);
+    #[async_trait::async_trait]
+    impl InferenceProvider for Host {
+        async fn complete(
+            &self,
+            _r: &CompletionRequest,
+        ) -> sovereign_contracts::Result<sovereign_contracts::types::CompletionResponse> {
+            unimplemented!()
+        }
+        async fn complete_stream(
+            &self,
+            _r: &CompletionRequest,
+        ) -> sovereign_contracts::Result<
+            std::pin::Pin<Box<dyn Stream<Item = sovereign_contracts::Result<String>> + Send>>,
+        > {
+            unimplemented!()
+        }
+        async fn embed(&self, _t: &str) -> sovereign_contracts::Result<Vec<f32>> {
+            unimplemented!()
+        }
+        fn capabilities(&self) -> sovereign_contracts::types::ProviderCapabilities {
+            unimplemented!()
+        }
+        fn conversation_keeps_call_and_budget(&self) -> bool {
+            self.0
+        }
+    }
+
+    /// A Codex turn as `/v1/responses` translates it (`routes_responses::
+    /// translate_request`): the grammar lock's `required` and a zero budget.
+    fn responses_turn(tool_choice: &str) -> ChatCompletionRequest {
+        request(serde_json::json!({
+            "tools": [{"type": "function", "function": {"name": "exec_command", "parameters": {}}}],
+            "tool_choice": tool_choice,
+            "think_budget": 0,
+            "chat_template_kwargs": {"enable_thinking": false}
+        }))
+    }
+
+    #[test]
+    fn a_responses_turn_is_a_conversation_on_the_router_and_hermes_on_the_engine() {
+        let r = responses_turn("required");
+        assert_eq!(hermes_path_reason(&r, &Host(true)), None);
+        assert_eq!(hermes_path_reason(&r, &Host(false)), Some("think_budget"));
+        let mut no_budget = r.clone();
+        no_budget.think_budget = None;
+        assert_eq!(
+            hermes_path_reason(&no_budget, &Host(false)),
+            Some("tool_choice forces a call")
+        );
+        // The router lifts only those two: an in-repo caller stays Hermes.
+        let mut in_repo = r;
+        in_repo.lark_grammar = Some("start: x".into());
+        assert_eq!(
+            hermes_path_reason(&in_repo, &Host(true)),
+            Some("lark_grammar")
+        );
+    }
+
+    #[test]
+    fn the_router_keeps_the_think_budget_on_a_conversation() {
+        let mut req = CompletionRequest::new("flattened");
+        req.think_budget = Some(0);
+        into_conversation(&mut req, &responses_turn("required"), &Host(true));
+        assert!(is_conversation(&req));
+        assert_eq!(req.think_budget, Some(0));
+    }
+
+    /// A forced call on the router is checked on the whole reply
+    /// (`oicp_client::call_check`), so it does not stream live.
+    #[test]
+    fn a_forced_call_runs_whole_before_streaming() {
+        assert!(runs_whole_before_streaming(
+            &responses_turn("required"),
+            &Host(true)
+        ));
+        assert!(runs_whole_before_streaming(
+            &responses_turn("required"),
+            &Host(false)
+        ));
+        assert!(!runs_whole_before_streaming(
+            &request(serde_json::json!({
+                "tools": [{"type": "function", "function": {"name": "read", "parameters": {}}}]
+            })),
+            &Host(true)
+        ));
+    }
+
     #[test]
     fn an_external_client_conversation_takes_the_template_path() {
         let r = request(serde_json::json!({
             "tools": [{"type": "function", "function": {"name": "read", "parameters": {}}}],
             "max_tokens": 16384
         }));
-        assert_eq!(hermes_path_reason(&r), None);
+        assert_eq!(hermes_path_reason(&r, &Host(false)), None);
     }
 
     #[test]
@@ -226,7 +352,7 @@ mod tests {
                 "tool_choice forces a call",
             ),
         ] {
-            assert_eq!(hermes_path_reason(&request(extra)), Some(why));
+            assert_eq!(hermes_path_reason(&request(extra), &Host(false)), Some(why));
         }
     }
 
@@ -242,7 +368,7 @@ mod tests {
         }));
         let mut req = CompletionRequest::new("flattened");
         req.think_budget = Some(0);
-        into_conversation(&mut req, &r);
+        into_conversation(&mut req, &r, &Host(false));
         let Some(PromptShape::Conversation { messages }) = &req.prompt_shape else {
             panic!("not a conversation: {:?}", req.prompt_shape);
         };
@@ -260,7 +386,7 @@ mod tests {
             serde_json::json!({})
         });
         let mut req = CompletionRequest::new("flattened");
-        into_conversation(&mut req, &r);
+        into_conversation(&mut req, &r, &Host(false));
         if tools {
             req.tools = Some(vec![sovereign_contracts::types::ToolSchema {
                 name: "read".into(),

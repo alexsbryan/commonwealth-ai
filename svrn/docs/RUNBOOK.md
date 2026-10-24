@@ -244,6 +244,19 @@ The full verb map lives in [`CLI_REFERENCE.md`](./CLI_REFERENCE.md).
 Rule of thumb: after touching daemon-side code, the change is live only
 after `cargo build -p sovereign-cli-daemon && sovereign daemon restart`.
 
+A sixth binary is not cargo's at all: on `kind = "llama-server"` the daemon
+runs the pinned **`llama-server`** (with `ggml-rpc-server` beside it and
+`llama-server.manifest.toml` it verifies at startup), found beside the
+daemon's own executable. It is built and installed by
+`serve/crates/sovereign-compute/llama-server/build.sh` (about three minutes
+cold; `--install-dir target/debug` is the default, `target/release` matches a
+release install, and `scripts/dev-release.sh` runs it into `target/release`
+for you). Rebuild it when `PIN.toml` changes, and rebuild the daemon too:
+`build_pin::verify` compares the manifest with the pin compiled into the
+daemon, so a pin bump and a stale daemon refuse each other with both builds
+named. A release tarball, a desktop bundle and the on-prem kit all carry the
+server already installed, so this rule is for a source checkout.
+
 ## 9. Rolling back Phase B's moves
 
 `svrn mesh up` and the first daemon boot move a main-era node's files to

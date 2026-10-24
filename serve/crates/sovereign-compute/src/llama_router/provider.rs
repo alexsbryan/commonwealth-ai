@@ -304,6 +304,12 @@ impl InferenceProvider for RouterProvider {
         self.inner.effective_context_size()
     }
 
+    /// The remote half is a `GrammarSupport::Llguidance` client, which checks
+    /// a `required` reply for the call (`llama_router.rs` sets the grammar).
+    fn conversation_keeps_call_and_budget(&self) -> bool {
+        true
+    }
+
     /// The primary GGUF's `<arch>.context_length`, read at build.
     fn n_ctx_train_for_primary(&self) -> Option<u32> {
         self.n_ctx_train

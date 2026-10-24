@@ -2192,6 +2192,16 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: the row and acceptance stay as engine-swap-3 left them; the one missing act, putting the two lines on the queue branch, is a push, which the charter leaves to the operator. Parked with a package: `control/queue-needs-linux.patch` makes the queue tip's es-f1 row and MACHINES.md line byte-identical to the lane's, so the landing merge stays clean (checked with `git merge-tree` against ff522a675). Parking also stops the Mac re-claiming the row and burning a worker and a director each round.
 - Because: `continue` would release the row to the same Mac under the same queue tip and loop. The decision itself is the charter's and already made; only the push is the operator's.
 
+**engine-swap-5 · 2026-10-23 · es-p4-ship-onprem-and-pods · director** — this commit
+- Needed: the row's fix (build ggml position-independent, or `-no-pie` on the binaries alone) assumed the ROCm daemon links ggml-hip. It links ggml-vulkan: the linux llama-cpp-4 feature has been `"vulkan"` since 0de1ac115 (2026-05-18), no crate enables `hip`, and the ROCm Containerfile has no feature swap. The build image has no Vulkan SDK, so clearing `-no-pie` only moves the failure to llama-cpp-sys-4.
+- Chose: the ROCm image restores hip, in this row: the CUDA image's feature swap (reused) to `"hip"`, the HIP link libs in RUSTFLAGS, `HIPFLAGS=-fPIC` so `-no-pie` goes, and `AMDGPU_TARGETS` into the HIP compile. Acceptance unchanged.
+- Because: hip is the image's documented backend (serve/container/README.md ROCm tables, `GGML_HIP=ON`), so this repairs a regression, not a change of engine; embedded stays the default until es-e2. Vulkan SDK in the image would serve MI300X-class parts on CPU, and CPU-only would too (ARCH 6). A split row would carry the same proof, so it moves the work without letting p4 finish.
+
+**es-p4-ship-onprem-and-pods-1 · 2026-10-23 · es-p4-ship-onprem-and-pods · worker** — this commit
+- Needed: whether the row was still owed its outcome after d18d2ee22 closed it
+- Chose: no; the row has no deliverable left, so the session closes it and commits no code
+- Because: the staged target/debug once carried HOME's absolute path (targets are moved to PROMOTE_HOME before landing), so a missing target/debug/llama-server reads "this lane never built", not "the tree lost it"; and no kernel is visible in the container, so the daemon cannot boot there. The remaining image check is manifest-vs-PIN.toml, which d18d2ee22's `[build]` table shows is already in the image
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -14056,5 +14066,91 @@ its lane, but every field dispatch reads (`needs`, `depends`, heavy) takes
 effect only at landing. A `needs` correction for a row that cannot land on
 the machine holding it has no path except the operator's push. That is
 eutropia's to settle, not this queue's.
+
+</details>
+
+## engine-swap-5 · 2026-10-23 — es-p4's ROCm daemon links ggml-vulkan, not ggml-hip; the image restores hip
+
+<details><summary>reasoning, evidence, package</summary>
+
+Reproduced in the lane at 0d1802ab7:
+
+- `serve/crates/sovereign-inference/Cargo.toml:163` is
+  `llama-cpp-4 = { version = "0.5.1", features = ["vulkan"] }` under
+  `cfg(target_os = "linux")`; `git grep '"hip"' -- '*Cargo.toml'` finds only the
+  feature definitions (`vendor/llama-cpp-4/Cargo.toml:66`,
+  `vendor/llama-cpp-sys-4/Cargo.toml:112`).
+- `serve/container/Containerfile.cuda` rewrites that token to `"cuda"` in-image
+  and passes `-lcudart -lcublas -lcublasLt -lcuda` in RUSTFLAGS (`:142`); the ROCm
+  Containerfile does neither, and its `-no-pie` comment (`:107`) is about ggml-hip.
+- `vendor/llama-cpp-sys-4/build.rs:2220` defines `GGML_HIP` from the feature and
+  emits no HIP `rustc-link-lib`; the only PIC switch in ggml is under
+  `BUILD_SHARED_LIBS` (`ggml/src/CMakeLists.txt:626-628`).
+- `ggml-hip/CMakeLists.txt:35-40` reads `AMDGPU_TARGETS`/`GPU_TARGETS` as CMake
+  variables, so the image's `ENV GPU_TARGETS` does not reach it.
+- Build-stage image 0084f970915a (2026-10-12): cmake 3.22.1, no
+  `/usr/include/vulkan`, zero vulkan packages.
+
+Not chosen: install the LunarG Vulkan SDK (builds, but the package reports no Vulkan
+driver for MI300X-class parts, not verified here; if so the engine falls to CPU
+on the image's gfx942 default without saying so); embedded CPU-only (the same substitution, and
+it moves what a pod serves ahead of es-e2-flip-default); a split row
+`es-p4-...-rocm-daemon` (p4's proof is the ROCm image building, so the split
+would hold the same proof and p4 could not close without it). A GPU_TARGETS
+passthrough in the vendored build.rs works too, but adds a third vendor
+divergence; HIPFLAGS needs none.
+
+Package: `~/.local/share/eutropia/lanes/engine-swap/es-p4-ship-onprem-and-pods/needs-director.md`.
+
+</details>
+
+## es-p4-ship-onprem-and-pods-1 · 2026-10-23 — es-p4 was done at d18d2ee22; the row owes nothing and the image's remaining verification is the manifest match, already in the image
+
+<details><summary>reasoning, evidence, package</summary>
+
+**The row is marked done and landed on the queue branch.** `ralph/next/engine-swap/STATE.md:54`
+reads `- [x] es-p4-ship-onprem-and-pods d18d2ee22`, and `origin/eutropia/engine-swap`
+(`3a85af9c2`) contains its lane (`git merge-base --is-ancestor` on `origin/landed/es-portable`
+holding `5ed8251b7`). The session was handed a row that is already closed; the lane worktree
+is at `5ed8251b7` with a clean tree.
+
+The row's three deliverables (`git show --stat d18d2ee22`):
+
+- the on-prem kit's loop names `llama-server ggml-rpc-server`
+  (`distributions/deploy/onprem/install.sh:186`), plus the manifest at `:192-193`;
+  `package.sh:125` stages both binaries into `$KIT/bin` via `build.sh --install-dir`;
+- the ROCm `Containerfile:199-215,265-266` swaps the backend to `hip` and runs `build.sh
+  --backend rocm --install-dir /usr/local/bin`, copying the two binaries and the manifest
+  into the runtime stage;
+- the `Containerfile.cuda` sibling runs the same `swap-inference-backend.py cuda`.
+
+**The image, inspected on this host** (`flatpak-spawn --host podman run ... 00c08bb964d0`,
+`ghcr.io/alexsbryan/sovereign-rocm:es-p4`, built 2026-10-24T01:16Z):
+
+- `/usr/local/bin` holds `llama-server`, `ggml-rpc-server`, `llama-server.manifest.toml`;
+- `ldd /usr/local/bin/llama-server` resolves `libamdhip64.so.7`, `libhipblas.so.3`,
+  `librocblas.so.5` under `/opt/rocm-7.2.0/lib`;
+- `strings -a llama-server | grep -c gfx942` = 270 and a `gfx942` token survives;
+- the manifest's `[build]` table says `backend = "rocm"`.
+
+**Why the daemon was not booted in the image.** `podman run` on this host reports
+`no ROCm-capable device is detected` and `Available devices: (none)` (the runner is unprivileged,
+so no kernel device node exists inside the container), so no model can load and the daemon cannot
+reach `/health`. A lane-local boot is no substitute either: this lane's `target/debug/` carries no
+`llama-server` at all.
+
+The consequence, decided here: `d18d2ee22` credited "finds a verified server" to a host-side
+comparison (the image's manifest diffed against `PIN.toml`, the two binaries present). The
+inference-free half of that bar is exactly the manifest match, and nothing in the container can
+serve a model on this host, so the bar's *boot* half is not runnable here — the row's acceptance
+should read the manifest match plus the binaries, not a `/health` in the image.
+
+The check that stands in its place reproduces `llama_router::build_pin::verify`'s comparison
+(commit, llguidance, binary names, every patch digest; `[build]` excluded, as `verify` excludes
+it). It:
+`manifest_matches_pin.py` reproduces `llama_router::build_pin::verify`'s comparison (commit,
+llguidance, binary names, every patch digest; `[build]` excluded, as `verify` excludes it).
+PASSES on the image's manifest against the kit's `PIN.toml`, REFUSES on a one-character commit
+change, and names an absent `ggml-rpc-server` as absent.
 
 </details>

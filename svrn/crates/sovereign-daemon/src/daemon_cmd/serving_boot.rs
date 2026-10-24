@@ -73,48 +73,6 @@ pub(super) async fn boot_serving(
         tracing::info!(target: "serving_path", serving = %path.status_line(), "boot: a terminal forwards to its entry node; the distribution's serve composition is not run");
     }
 
-    // ── Force-tool-calls config → process env ─────────────────────
-    //
-    // The inference adapter reads `SOVEREIGN_FORCE_TOOL_CALLS` per
-    // request to decide whether to upgrade `tool_choice="auto"` to
-    // `"required"` (which engages the JSON-Schema tool-envelope
-    // grammar). When the operator sets `[daemon] force_tool_calls =
-    // true` in setup_config.toml, we propagate that into the process
-    // env at boot so the existing per-request lookup picks it up.
-    // Caller-supplied env wins — `std::env::set_var` only overrides
-    // when nothing was set on the CLI invocation. Operators who want
-    // a one-shot test (`SOVEREIGN_FORCE_TOOL_CALLS=0 svrn daemon
-    // run`) can still do so without editing the config file.
-    if config.daemon.force_tool_calls && std::env::var("SOVEREIGN_FORCE_TOOL_CALLS").is_err() {
-        std::env::set_var("SOVEREIGN_FORCE_TOOL_CALLS", "1");
-        tracing::info!(
-            "daemon: force_tool_calls=true — grammar engaged on every \
-             tools-using request (set via setup_config.toml)"
-        );
-    }
-
-    // ── Alternation-grammar config → process env ──────────────────
-    //
-    // Same propagation pattern as force_tool_calls. The inference
-    // adapter reads `SOVEREIGN_ALTERNATION_GRAMMAR` per request to
-    // route tool-envelope requests through llguidance's canonical
-    // `TopLevelGrammar::from_json_schema` path instead of the
-    // in-house `JsonConstraint` mask. Caller-supplied env wins so
-    // operators can A/B test (`SOVEREIGN_ALTERNATION_GRAMMAR=0
-    // svrn daemon run` ignores the config).
-    //
-    // launchd-spawned daemons don't inherit caller env, so flipping
-    // this in setup_config.toml is the load-bearing path on macOS
-    // hosts running the daemon via `svrn daemon start`.
-    if config.daemon.alternation_grammar && std::env::var("SOVEREIGN_ALTERNATION_GRAMMAR").is_err()
-    {
-        std::env::set_var("SOVEREIGN_ALTERNATION_GRAMMAR", "1");
-        tracing::info!(
-            "daemon: alternation_grammar=true — llguidance schema path \
-             engaged on tools-using requests (set via setup_config.toml)"
-        );
-    }
-
     // A terminal holds no weights: its provider forwards to its entry node;
     // full rationale on `crate::build::inference::terminal_provider`.
     //

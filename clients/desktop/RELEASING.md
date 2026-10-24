@@ -71,8 +71,9 @@ step, so a tag whose three files disagree fails in seconds instead of
 after a 30-minute build matrix.
 
 Tag format: `desktop-v<MAJOR>.<MINOR>.<PATCH>`. The CLI ships under its own
-prefix (`cli-vX.Y.Z`, whose tarball bundles the dispatcher + daemon + llm
-binaries) so it releases independently from the desktop app — see the
+prefix (`cli-vX.Y.Z`, whose tarball bundles the dispatcher, the daemon and
+every sibling it execs — the pinned `llama-server`, `ggml-rpc-server` and
+manifest included) so it releases independently from the desktop app — see the
 top-level [`RELEASING.md`](../../RELEASING.md). There is no separate
 `daemon-v*` stream; the daemon binary ships inside the CLI tarball.
 
@@ -291,6 +292,8 @@ missing the OCR button hides itself and ingest is unaffected.
 | `pdfium/libpdfium.dylib` / `pdfium.dll` / `libpdfium.so` | PDF page → image rasterization (engine-independent) | `bblanchon/pdfium-binaries` releases | ~7 MB |
 | `sovereign-cli-daemon-<triple>[.exe]` | **The daemon's verbs**, as a Tauri sidecar | built from this workspace | ~200 MB |
 | `sovereign-stock-<triple>[.exe]` | **The loader** the sidecar execs (`daemon run`, setup's probe) | built from this workspace | not measured |
+| `llama-server-<triple>[.exe]` | **The inference server** a `kind = "llama-server"` daemon runs, verified against its manifest at startup | `serve/crates/sovereign-compute/llama-server/build.sh`, run by `scripts/stage-daemon-sidecar.sh` in the triple's backend (Metal on arm64, CPU on the Intel Mac, Vulkan on Linux) | ~95 MB (a debug build; a stripped release build is smaller) |
+| `ggml-rpc-server-<triple>[.exe]` | The server a peer runs to lend its tensors to another node's router (pinned beside `llama-server`) | the same `build.sh` | ~55 MB (a debug build) |
 
 PaddleOCR runs **in-process** through `ort` (no second ML runtime —
 it reuses GLiNER's onnxruntime) and needs **no platform install**,
@@ -318,19 +321,35 @@ Three names have to agree, and only two of them are checked by the compiler:
 
 | Where | Spelling |
 |---|---|
-| `src-tauri/src/daemon_binary.rs` | `SIDECAR_BINARY = "sovereign-cli-daemon"`, `LOADER_SIDECAR = "sovereign-stock"` |
-| `src-tauri/tauri.release.conf.json` | `bundle.externalBin: ["binaries/sovereign-cli-daemon", "binaries/sovereign-stock"]` |
+| `src-tauri/src/daemon_binary.rs` | `SIDECAR_BINARY = "sovereign-cli-daemon"`, `LOADER_SIDECAR = "sovereign-stock"`, `SERVER_SIDECARS = ["llama-server", "ggml-rpc-server"]`, `SERVER_MANIFEST = "llama-server.manifest.toml"` |
+| `src-tauri/tauri.release.conf.json` | `bundle.externalBin: ["binaries/sovereign-cli-daemon", "binaries/sovereign-stock", "binaries/llama-server", "binaries/ggml-rpc-server"]`, and the manifest under `bundle.resources` |
 | `scripts/stage-daemon-sidecar.sh` | `SIDECAR_NAME="sovereign-cli-daemon"`, `LOADER_NAME="sovereign-stock"` |
 
 The second binary is the loader the sidecar execs for `daemon run` and for
 first-run setup's probe, found beside the sidecar; it carries the Windows GPU
 features (`SOVEREIGN_SIDECAR_FEATURES`). Until pb-distribution-setup the bundle
-carried no binary `daemon run` could exec.
+carried no binary `daemon run` could exec. The other three entries are the
+inference server and its RPC sibling (a third and fourth `externalBin`) and the
+manifest (a `bundle.resources` entry, not an executable), which
+`stage-daemon-sidecar.sh` builds and stages so that a shipped app can run
+`kind = "llama-server"` without a separately installed CLI.
 
 `daemon_binary::tests::packaging::the_sidecar_name_matches_the_release_config`
-reads the JSON and asserts the first two agree; the script fails loudly if its
-build produces nothing. Nothing else would notice a rename — the app would
-simply resolve no binary and lose the ability to bring a backend up, silently.
+reads the JSON and asserts the first two agree, and
+`…::the_release_config_ships_the_pinned_server_and_its_manifest` holds
+`PIN.toml`'s binaries and `build_pin::MANIFEST` equal to what the release
+config ships; the script fails loudly if its build produces nothing. Nothing
+else would notice a rename — the app would simply resolve no binary and lose
+the ability to bring a backend up, silently.
+
+`stage-daemon-sidecar.sh` runs `build.sh` in the triple's backend, copies the
+binaries `PIN.toml` names under the `-<triple>` suffix, and copies
+`llama-server.manifest.toml` untripled (it is a resource, not an executable).
+At install, `daemon_binary::stable_daemon_binary` copies the servers and the
+manifest beside the stable sidecar in `~/.svrnmesh/bin`, which is the layout
+`build_pin::verify` checks. A bundle whose server is absent does NOT stop the
+loader installing: the default engine needs no server, and
+`kind = "llama-server"` names the absence (there is a test for both).
 
 The same test asserts the entry is NOT in the base `tauri.conf.json`: see
 "Tauri config split" below — `tauri-build` errors when `externalBin` names
@@ -974,8 +993,8 @@ the per-arch matrix entries on macOS. Bigger DMG, simpler matrix.
 
 - **CLI / daemon releases**: documented in the top-level
   [`RELEASING.md`](../../RELEASING.md) — the `cli-v*` stream bundles the
-  dispatcher + daemon + llm binaries and is consumed by the `curl | sh`
-  installer.
+  dispatcher, the daemon and its siblings with the pinned server and its
+  manifest, and is consumed by the `curl | sh` installer.
 - **Internal pre-release dogfooding builds**: the CI workflow only
   fires on `desktop-v*` tags. For nightly-style internal builds, use
   `workflow_dispatch` from the Actions UI.

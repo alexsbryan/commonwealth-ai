@@ -300,3 +300,66 @@ fn release_lists_carry_every_exec_d_binary() {
         missing.join("\n  ")
     );
 }
+
+/// The server is BUILT and EXERCISED by CI as well as packaged: a leg that
+/// installs it but never runs the e2e ships a binary nothing watched start
+/// (ENGINE_SWAP_PLAN D5). Two facts, both mechanical:
+///
+/// - `cli-release.yml` builds it with `build.sh` before it packages it —
+///   otherwise the package step's BINS loop `cp`s a file cargo never made.
+/// - `ci.yml` has a job that builds it and runs `llama_server_router_e2e`,
+///   and `ci-ok` needs that job — a job nobody waits on is not a gate.
+#[test]
+fn ci_builds_and_exercises_the_shipped_server() {
+    let root = repo_root();
+    let release = std::fs::read_to_string(root.join(".github/workflows/cli-release.yml")).unwrap();
+    let build = workflow_step(&release, "Build llama-server");
+    assert!(
+        build.contains("llama-server/build.sh"),
+        "cli-release.yml's Build llama-server step no longer runs build.sh:\n{build}"
+    );
+    assert!(
+        build.contains("--install-dir"),
+        "cli-release.yml's Build llama-server step installs nowhere:\n{build}"
+    );
+
+    let ci = std::fs::read_to_string(root.join(".github/workflows/ci.yml")).unwrap();
+    let e2e = ci
+        .find("router-e2e:")
+        .expect("ci.yml has no `router-e2e:` job — the shipped server is never started in CI");
+    let after = &ci[e2e..];
+    // The job ends at the next top-level job key (two-space indent).
+    let mut job_end = after.len();
+    let mut at = 0;
+    for line in after.split_inclusive('\n').skip(1) {
+        at += line.len();
+        let bare = line.trim_end();
+        if bare.starts_with("  ") && !bare.starts_with("   ") && bare.ends_with(':') {
+            job_end = at - line.len();
+            break;
+        }
+    }
+    let job = &after[..job_end];
+    for (needle, why) in [
+        (
+            "llama-server/build.sh",
+            "the router-e2e job does not build the server it e2es",
+        ),
+        (
+            "--test llama_server_router_e2e",
+            "the router-e2e job does not run llama_server_router_e2e",
+        ),
+        (
+            "--nocapture",
+            "the router e2e is #[ignore]d; without a libtest passthrough the job runs zero tests and exits 0",
+        ),
+    ] {
+        assert!(job.contains(needle), "{why}:\n{job}");
+    }
+    let ok = ci.find("ci-ok:").expect("ci.yml has no ci-ok aggregator");
+    let ok_job = &ci[ok..];
+    assert!(
+        ok_job.contains("needs: [changes, fmt, gates, suites, desktop, test, router-e2e]"),
+        "ci-ok does not need router-e2e — a green run would not wait on the server e2e"
+    );
+}
