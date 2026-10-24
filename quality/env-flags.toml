@@ -1338,6 +1338,13 @@ status = "guard"
 purpose = "The rerank GGUF the ignored router e2e (distributions/crates/sovereign-stock/tests/llama_server_router_e2e.rs) loads as `[models.kinds] rerank`, by role: any cross-encoder GGUF llama-server serves with --reranking, an absolute path or a file in SOVEREIGN_MODELS_DIR. Its file stem is the id the router serves it under, and the id the daemon's /v1/rerank must answer to. Read only by that test."
 
 [[flag]]
+name = "SOVEREIGN_E2E_DIST_CHAT_MODEL"
+cluster = "dev-gates"
+default = "Qwen3.5-9B-UD-MTP-Q6_K_XL.gguf"
+status = "guard"
+purpose = "The chat GGUF the ignored distributed-router e2e (distributions/crates/sovereign-stock/tests/router_rpc_split_e2e.rs) splits across a peer, by role: any chat model big enough that a split is worth measuring (the D2 model), an absolute path or a file in SOVEREIGN_MODELS_DIR. Read only by that test, so a host without the default file can still run the kill-and-restart half."
+
+[[flag]]
 name = "SOVEREIGN_TOOL_STOP_TEST_GGUF"
 cluster = "dev-gates"
 default = "unset (the test prints SKIP and returns)"
