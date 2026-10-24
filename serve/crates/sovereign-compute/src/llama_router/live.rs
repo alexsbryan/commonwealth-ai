@@ -7,6 +7,7 @@
 //! process: the supervisor gives every child `PR_SET_PDEATHSIG` and kills
 //! its process group, which holds the router's one process per model.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
@@ -52,6 +53,44 @@ pub struct LiveRouter {
     supervisor: Arc<Supervisor>,
     state: Arc<Mutex<SupervisorState>>,
     models: Arc<Mutex<Vec<(String, String)>>>,
+    /// The repair each model was owed the moment it was first seen in a
+    /// terminal state, by model name: the first `/models` value read after a
+    /// model died, and the time the repair loop acted on it. Empty for a
+    /// healthy router.
+    repairs: Arc<Mutex<BTreeMap<String, ModelRepair>>>,
+}
+
+/// What happened to one router model, as `/status` reports it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelRepair {
+    /// The `/models` status that demanded the repair (`failed (exit N)`,
+    /// `unloaded` after a load).
+    pub observed: String,
+    /// When the repair loop re-issued `/models/load`.
+    pub reload_at: Option<Instant>,
+    /// The last reload's error, when it did not reach `loaded`.
+    pub error: Option<String>,
+}
+
+/// How often the repair loop reads `/models` and reloads a dead model.
+const REPAIR_POLL: Duration = Duration::from_secs(5);
+
+/// Backoff between reload attempts for one model: the first retry is
+/// immediate enough to be a restart, the last never floods a crash-looping
+/// model with load requests.
+const REPAIR_BACKOFF: [Duration; 4] = [
+    Duration::from_secs(0),
+    Duration::from_secs(2),
+    Duration::from_secs(10),
+    Duration::from_secs(60),
+];
+
+/// A `/models` status that means the model's process is GONE, not merely
+/// idle: llama.cpp marks a load that failed `failed (exit N)` and leaves a
+/// model it unloaded `unloaded`. `sleeping` is not one of these — its
+/// process is alive and a request wakes it.
+fn demands_repair(status: &str) -> bool {
+    status.starts_with("failed") || status == "unloaded"
 }
 
 impl std::fmt::Debug for LiveRouter {
@@ -219,6 +258,7 @@ impl LiveRouter {
             supervisor: Arc::clone(&supervisor),
             state: Arc::new(Mutex::new(SupervisorState::Starting)),
             models: Arc::new(Mutex::new(Vec::new())),
+            repairs: Arc::new(Mutex::new(BTreeMap::new())),
         });
         let mut states = supervisor.subscribe();
         runtime.spawn({
@@ -236,7 +276,8 @@ impl LiveRouter {
                 dir.join("router.log").display()
             ));
         }
-        live.follow(states, warm, &runtime);
+        live.follow(states, warm.clone(), &runtime);
+        live.repair_loop(&runtime);
         Ok(live)
     }
 
@@ -391,6 +432,97 @@ impl LiveRouter {
         });
     }
 
+    /// Reload a model whose process died (ENGINE_SWAP_PLAN A7: the router
+    /// replaces the generate and embed compute children, so it owns their
+    /// restart). llama.cpp runs each model in a child its parent supervises
+    /// for a clean unload only: a SIGKILLed or aborted model process leaves
+    /// `/models` reporting `failed (exit N)` for good. This loop reads
+    /// `/models` on [`REPAIR_POLL`], and for every model in a terminal state
+    /// re-issues `/models/load` on [`REPAIR_BACKOFF`], recording each attempt
+    /// in [`Self::repairs`] so `/status` reports the death AND the repair
+    /// rather than the death alone.
+    ///
+    /// The loop is per model, not per router: one dead model does not stop
+    /// another from serving, and it does not restart the router — which
+    /// would drop every model. A model that keeps failing is retried at the
+    /// floor of [`REPAIR_BACKOFF`], never in a tight loop, and each attempt
+    /// is an event at `llama_router`.
+    fn repair_loop(self: &Arc<Self>, runtime: &tokio::runtime::Handle) {
+        let weak = Arc::downgrade(self);
+        runtime.spawn(async move {
+            let http = reqwest::Client::new();
+            let mut attempts: BTreeMap<String, u32> = BTreeMap::new();
+            let mut next_try: BTreeMap<String, Instant> = BTreeMap::new();
+            loop {
+                tokio::time::sleep(REPAIR_POLL).await;
+                let Some(live) = weak.upgrade() else { return };
+                let models = live
+                    .models
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .clone();
+                let now = Instant::now();
+                for (name, status) in models {
+                    if !demands_repair(&status) {
+                        attempts.remove(&name);
+                        next_try.remove(&name);
+                        continue;
+                    }
+                    if next_try.get(&name).is_some_and(|at| *at > now) {
+                        continue;
+                    }
+                    let attempt = attempts.entry(name.clone()).or_insert(0);
+                    *attempt += 1;
+                    let backoff = REPAIR_BACKOFF[(*attempt as usize - 1).min(REPAIR_BACKOFF.len() - 1)];
+                    next_try.insert(name.clone(), now + backoff);
+                    {
+                        let mut repairs =
+                            live.repairs.lock().unwrap_or_else(PoisonError::into_inner);
+                        let entry = repairs.entry(name.clone()).or_insert_with(|| ModelRepair {
+                            observed: status.clone(),
+                            reload_at: None,
+                            error: None,
+                        });
+                        entry.observed = status.clone();
+                        entry.reload_at = Some(now);
+                        entry.error = None;
+                    }
+                    tracing::warn!(
+                        target: "llama_router",
+                        model = %name,
+                        status = %status,
+                        attempt = *attempt,
+                        ?backoff,
+                        "router model died; asking the router to load it again"
+                    );
+                    let sent = http
+                        .post(format!("http://127.0.0.1:{}/models/load", live.port))
+                        .json(&json!({ "model": name }))
+                        .send()
+                        .await;
+                    let error = match sent {
+                        Ok(resp) if resp.status().is_success() => None,
+                        Ok(resp) => Some(format!("POST /models/load: HTTP {}", resp.status())),
+                        Err(e) => Some(format!("POST /models/load: {e}")),
+                    };
+                    if let Some(error) = error {
+                        tracing::warn!(target: "llama_router", model = %name, %error, "router model reload failed");
+                        if let Some(entry) = live
+                            .repairs
+                            .lock()
+                            .unwrap_or_else(PoisonError::into_inner)
+                            .get_mut(&name)
+                        {
+                            entry.error = Some(error);
+                        }
+                    } else {
+                        tracing::info!(target: "llama_router", model = %name, "router model reload requested");
+                    }
+                }
+            }
+        });
+    }
+
     /// `model`'s status as the router last listed it in `GET /models`
     /// (`loaded`, `loading`, `unloaded`, `sleeping`, `failed (exit N)`), or
     /// `None` before the first listing names it. Never asks the router: the
@@ -463,14 +595,42 @@ impl LiveRouter {
             .unwrap_or_else(PoisonError::into_inner)
             .iter()
         {
+            // A model whose process died is `failed`; `/status` also says
+            // what is being done about it, so the death is not the last word
+            // (the repair loop reloads it, `Self::repair_loop`).
+            let repair = self
+                .repairs
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .get(name)
+                .cloned();
+            let (lifecycle, reason) = match &repair {
+                Some(ModelRepair {
+                    reload_at: Some(_),
+                    error: None,
+                    ..
+                }) => (
+                    "restarting".to_string(),
+                    format!("{status}; reload requested, waiting for /models"),
+                ),
+                Some(ModelRepair {
+                    reload_at: Some(_),
+                    error: Some(e),
+                    ..
+                }) => (
+                    "restarting".to_string(),
+                    format!("{status}; reload failed: {e}"),
+                ),
+                _ => (status.clone(), format!("GET /models: {status}")),
+            };
             out.push(ComputeChildStatus {
                 name: name.clone(),
                 role: "router-model".into(),
                 model_id: name.clone(),
-                lifecycle: status.clone(),
+                lifecycle,
                 port: Some(self.port),
-                restarts: 0,
-                last_transition_reason: format!("GET /models: {status}"),
+                restarts: repair.map_or(0, |r| u32::from(r.reload_at.is_some())),
+                last_transition_reason: reason,
                 last_exit: None,
             });
         }

@@ -626,6 +626,111 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
         rerank = rerank.id,
     );
 
+    // One model process dies under the router (ENGINE_SWAP_PLAN A7): the
+    // router OWNS the generate and embed children now, so a SIGKILLed model
+    // is the router's to report and reload. The daemon must stay up, /status
+    // must say the model is not serving, and the model must answer again
+    // without a daemon restart.
+    // The chat model's status through /status, the same view the idle check
+    // reads (this one has to be declared before the kill below).
+    let model_lifecycle = |model: &str| -> String {
+        client()
+            .get(format!("http://127.0.0.1:{svrn}/status"))
+            .send()
+            .and_then(|r| r.json::<Value>())
+            .ok()
+            .and_then(|s| {
+                s["inference"]["compute_children"]
+                    .as_array()?
+                    .iter()
+                    .find(|c| c["role"] == "router-model" && c["name"] == model)
+                    .map(|c| c["lifecycle"].as_str().unwrap_or_default().to_string())
+            })
+            .unwrap_or_default()
+    };
+    let before = llama_servers_under(daemon);
+    let chat_server = *before
+        .keys()
+        .find(|pid| {
+            // The model process whose command line names the chat GGUF.
+            std::fs::read_to_string(format!("/proc/{pid}/cmdline"))
+                .is_ok_and(|cmd| cmd.contains(&chat))
+        })
+        .unwrap_or_else(|| {
+            panic!("no llama-server process is serving {}: {before:?}", chat)
+        });
+    let _ = Command::new("kill")
+        .args(["-9", &chat_server.to_string()])
+        .status();
+    eprintln!("router e2e: SIGKILLed the chat model's process ({chat_server})");
+
+    // Failing input is this very check: before the repair loop, llama.cpp
+    // left a killed model `failed (exit -9)` for good and /status kept
+    // reporting it. The status must name the death...
+    wait_until(
+        "/status and the router reporting the killed model as failed",
+        Duration::from_secs(30),
+        &data.join("llama-server/router.log"),
+        || {
+            let status = client()
+                .get(format!("http://127.0.0.1:{svrn}/status"))
+                .send()
+                .and_then(|r| r.json::<Value>())
+                .ok();
+            let listed = status
+                .as_ref()
+                .and_then(|s| s["inference"]["compute_children"].as_array().cloned())
+                .unwrap_or_default()
+                .into_iter()
+                .find(|c| c["role"] == "router-model" && c["name"] == chat)
+                .unwrap_or_default();
+            let router_failed = listed["lifecycle"]
+                .as_str()
+                .is_some_and(|l| l.starts_with("failed"));
+            // The router's own `/models` is the source of truth for a killed
+            // model; /status polls it every 5s.
+            let direct: Value = client()
+                .get(format!("http://127.0.0.1:{router_port}/models"))
+                .send()
+                .and_then(|r| r.json())
+                .unwrap_or(Value::Null);
+            let failed = direct["data"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|m| m["id"] == chat && m["status"]["failed"] == true);
+            eprintln!(
+                "router e2e: after the kill — /status {:?}, /models failed {failed}",
+                listed["lifecycle"]
+            );
+            failed || router_failed
+        },
+    );
+
+    // ...and then the repair: the router loads it again, and a completion
+    // through the daemon answers, with no daemon restart.
+    wait_until(
+        "/status listing the reloaded chat model",
+        Duration::from_secs(120),
+        &data.join("llama-server/router.log"),
+        || model_lifecycle(chat) == "loaded",
+    );
+    let after = post_json(
+        &format!("http://127.0.0.1:{serve}/v1/chat/completions"),
+        serde_json::json!({
+            "messages": [{ "role": "user", "content": "Say the word ready." }],
+            "max_tokens": 32,
+            "temperature": 0.0
+        }),
+    )
+    .unwrap_or_else(|e| panic!("{e}\n{}", log_tail(&log)));
+    let recovered = after["usage"]["completion_tokens"].as_u64().unwrap_or(0);
+    assert!(
+        recovered > 0,
+        "the reloaded chat model generated nothing: {after}"
+    );
+    eprintln!("router e2e: the killed chat model was reloaded by the router and answered {recovered} tokens");
+
     // SIGKILL the daemon: nothing it started may outlive it.
     stock.0.kill().expect("SIGKILL the daemon");
     stock.0.wait().expect("reap the daemon");
