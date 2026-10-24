@@ -106,10 +106,12 @@ async fn a_native_call_to_the_router_is_not_asked_again() {
         assert_eq!(body["messages"][0]["role"], "system", "{body}");
         assert_eq!(body["think_budget"], 0, "{body}");
         async {
-            axum::Json(json!({"choices": [{"message": {"content": "", "tool_calls": [
+            axum::Json(
+                json!({"choices": [{"message": {"content": "", "tool_calls": [
                 {"id": "c", "type": "function", "function": {
                     "name": "bash", "arguments": "{\"cmd\":\"ls\"}"}}]},
-                "finish_reason": "tool_calls"}]}))
+                "finish_reason": "tool_calls"}]}),
+            )
         }
     };
     let provider = RemoteApiProvider::new(&serve(chat).await, None, "m", 8192)
@@ -121,7 +123,11 @@ async fn a_native_call_to_the_router_is_not_asked_again() {
         messages: vec![json!({"role": "system", "content": "You are a coding agent."})],
     });
     let reply = provider.complete(&request).await.unwrap();
-    assert_eq!(hits.load(SeqCst), 1, "the call stood, so nothing was re-asked");
+    assert_eq!(
+        hits.load(SeqCst),
+        1,
+        "the call stood, so nothing was re-asked"
+    );
     assert!(reply.text.contains("<tool_call>"), "{}", reply.text);
     assert!(reply.text.contains("\"bash\""), "{}", reply.text);
 }
