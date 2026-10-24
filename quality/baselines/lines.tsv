@@ -76,7 +76,7 @@
 74	distributions/crates/sovereign-onprem
 302	distributions/crates/sovereign-onprem::tests
 142	distributions/crates/sovereign-stock
-5721	distributions/crates/sovereign-stock::tests
+7226	distributions/crates/sovereign-stock::tests
 89491	ingest/crates/corpus-engine
 52144	ingest/crates/corpus-engine::tests
 723	ingest/crates/sovereign-authoring-harness
@@ -101,7 +101,7 @@
 63553	scripts
 2	serve/crates/serving-policy
 8876	serve/crates/sovereign-compute
-1942	serve/crates/sovereign-compute::tests
+2644	serve/crates/sovereign-compute::tests
 787	serve/crates/sovereign-gliner
 1340	serve/crates/sovereign-gliner::tests
 11168	serve/crates/sovereign-inference
