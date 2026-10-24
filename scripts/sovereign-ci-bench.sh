@@ -673,15 +673,11 @@ run_lane "knowledge-gym-gate" HARD \
 # DAEMON CONFIG (2026-06-22): with AGENT_RUNNER=search (the default) this lane
 # uses the sovereign-tdd solver, which ORCHESTRATES its own red-green loop
 # over the chat backend — it does NOT depend on the model emitting tool calls,
-# so it needs NO SOVEREIGN_FORCE_TOOL_CALLS and runs inline on the SAME clean
-# (force-off) daemon as every other lane. No separate daemon pass.
-#   The force-tool-calls dance is ONLY for AGENT_RUNNER=pi (the external agent),
-#   whose zero-tool-call exit otherwise floors it (~3/27; see
-#   inference_adapter.rs:722). FORCE_TOOL_CALLS is DAEMON-GLOBAL and regresses
-#   the gyms' "don't search unless needed" judiciousness, so if you A/B `pi`,
-#   run it in its OWN pass apart from the gym/chaos lanes:
-#     sovereign daemon stop && SOVEREIGN_FORCE_TOOL_CALLS=1 \
-#       SOVEREIGN_DISABLE_AUTO_RESUME=1 sovereign daemon start
+# so it runs inline on the SAME clean daemon as every other lane.
+#   The daemon-global "force a tool call" switch this comment used to describe
+#   went with the Hermes path (es-t5, 2026-10-23): a forced call is now the
+#   caller's `tool_choice` reaching the model as a conversation, enforced by
+#   oicp_client::call_check, not a daemon-wide grammar.
 if [[ -x "$AGENT_BIN" ]]; then
   run_lane "agent-coding" TRACKED \
     "$AGENT_BIN" run --agent "$AGENT_RUNNER" --problems "$AGENT_PROBLEMS" --judge-trials 1 \

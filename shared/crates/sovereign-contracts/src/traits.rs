@@ -549,6 +549,13 @@ pub trait InferenceProvider: Send + Sync {
         ServingLocus::OwnWeights
     }
 
+    /// Whether a conversation sent to [`Self::complete`] keeps a forced call
+    /// (`oicp_client::call_check`) and a think budget: the router, yes; the
+    /// embedded engine, no (Hermes path). Wrappers forward it.
+    fn conversation_keeps_call_and_budget(&self) -> bool {
+        false
+    }
+
     /// The actual context window size the chat slots are currently
     /// configured with, after any llama.cpp-side padding /
     /// `n_ctx_train` capping. This is the value the runtime should

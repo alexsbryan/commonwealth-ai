@@ -337,7 +337,7 @@ impl SovereignInferenceAdapter {
         // An external client's conversation goes to the model's own
         // template whole (llama-server parity); in-repo callers keep the
         // flattened Hermes path below. One decider: `conversation`.
-        let hermes_reason = conversation::hermes_path_reason(request);
+        let hermes_reason = conversation::hermes_path_reason(request, self.provider.as_ref());
         tracing::debug!(
             conversation = hermes_reason.is_none(),
             hermes_reason = hermes_reason.unwrap_or(""),
@@ -459,17 +459,6 @@ impl SovereignInferenceAdapter {
         // schema, including ones that would make `arguments`
         // malformed). Caller-set response_format wins — we only
         // populate when nothing else has.
-        //
-        // `SOVEREIGN_FORCE_TOOL_CALLS=1` env-var override:
-        // tools-using clients that don't pass tool_choice (opencode,
-        // Aider, the Anthropic SDK's openai-compat shim, …) can opt
-        // into the grammar by setting this env var on the daemon.
-        // When set, any request with non-empty tools is treated as
-        // if `tool_choice = "required"` for grammar-installation
-        // purposes. The original tool_choice is left intact on `req`
-        // so downstream tooling (chat-template selection,
-        // tools-on-fast-slot guard, telemetry) sees what the caller
-        // actually sent.
         // debug!, not info!: per-request internal detail. Fired once per
         // request; the request is summarised at INFO by `inference.complete:
         // done`. `RUST_LOG=sovereign_serving_host=debug` to see it.
@@ -478,7 +467,6 @@ impl SovereignInferenceAdapter {
             assistant_prefix = request.assistant_prefix.is_some(),
             tools_count = request.tools.as_ref().map(|t| t.len()).unwrap_or(0),
             tool_choice = ?request.tool_choice,
-            alternation_env = alternation_grammar_enabled(),
             "inference_adapter: pre-envelope-check"
         );
         if req.structured_output.is_none()
@@ -490,61 +478,8 @@ impl SovereignInferenceAdapter {
             // mask starts fresh on the first generated token expecting
             // a JSON-object opener. When R1 fires, the prefix IS the
             // structural commitment.
-            //
-            // R2 (cmd_prefix) DOES compose: the grammar walks from
-            // token 0 normally and the prefix appears as a `pattern`
-            // on the cmd field, enforced by the existing string-body
-            // walker. So we only suppress envelope install for R1.
-            if let Some(envelope) = tool_envelope_schema_for_with_env_and_cmd_prefix(
-                request,
-                request.cmd_prefix.as_deref(),
-            ) {
-                // **Alternation grammar path (2026-05-21).** When
-                // `SOVEREIGN_ALTERNATION_GRAMMAR` is on, route the
-                // envelope schema through llguidance's Lark grammar
-                // with a top-level `text | tool_envelope` rule so
-                // the model can emit either a parseable tool call
-                // OR plain text. Closes the agent-bench scanner's
-                // `parse_failed_envelope` + `loop_trap` classes.
-                // Behind an env-var so we can A/B against the
-                // existing `structured_output` JSON-mask path.
-                if alternation_grammar_enabled() {
-                    // Canonical first-principles path (2026-05-21):
-                    // attach the tool-envelope JSON Schema directly
-                    // and route through llguidance's
-                    // `TopLevelGrammar::from_json_schema`. Strict
-                    // schema closure is enforced upstream (proven
-                    // by `from_json_schema_rejects_incomplete_envelope`
-                    // unit test in llguidance_constraint.rs).
-                    //
-                    // The Lark+%json wrapper was the previous
-                    // attempt; it accepted partial JSON
-                    // (model emitting `{...]}` without outer `}`),
-                    // leaving the daemon parser to recover via the
-                    // leniency chain. The schema route closes that
-                    // gap structurally.
-                    //
-                    // To preserve the model's escape into plain text
-                    // (the "I'm done" turn), the envelope is
-                    // augmented with a `done` virtual tool that
-                    // accepts a free-form `reason` string. Pi /
-                    // bench harness treats `done` as the
-                    // termination signal instead of a real tool
-                    // execution.
-                    let envelope_with_done = inject_done_tool(&envelope);
-                    let schema_json =
-                        serde_json::to_string(&envelope_with_done).unwrap_or_default();
-                    tracing::info!(
-                        schema_bytes = schema_json.len(),
-                        "inference_adapter: llguidance schema installed (canonical, with done)"
-                    );
-                    // Re-uses the `lark_grammar` field but the
-                    // LlguidanceConstraint constructor detects JSON
-                    // schema input by leading `{`.
-                    req.lark_grammar = Some(schema_json);
-                } else {
-                    req.structured_output = Some(envelope);
-                }
+            if let Some(envelope) = tool_envelope_schema_for(request) {
+                req.structured_output = Some(envelope);
             }
         }
         // Per-request `enable_thinking` toggle. The OpenAI extension
@@ -556,7 +491,7 @@ impl SovereignInferenceAdapter {
         // `enable_thinking: false` in `apply_chat_template_oaicompat`.
         req.enable_thinking = extract_enable_thinking(request.chat_template_kwargs.as_ref());
         if hermes_reason.is_none() {
-            conversation::into_conversation(&mut req, request);
+            conversation::into_conversation(&mut req, request, self.provider.as_ref());
         }
         // After the conversation, which clears the budget this may set.
         vendor_fields::thinking_for_a_vendor(&mut req, request, self.provider.serving_locus());
@@ -671,20 +606,6 @@ fn parse_first_json_value(text: &str) -> Option<serde_json::Value> {
     }
 }
 
-/// True when the `SOVEREIGN_FORCE_TOOL_CALLS` env-var is set to a
-/// truthy value (`1` / `true`, case-insensitive). Tools-using
-/// clients that don't pass `tool_choice` (opencode, Aider, the
-/// Anthropic SDK's openai-compat shim, …) can opt into the
-/// tool-envelope grammar by exporting this on the daemon. Read
-/// per-call (not cached) so flipping it at runtime is enough — no
-/// daemon restart required for the env var to take effect on the
-/// next request.
-fn force_tool_calls_env() -> bool {
-    std::env::var("SOVEREIGN_FORCE_TOOL_CALLS")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
-}
-
 /// Strip `<think>` and `</think>` tags from text, KEEPING the
 /// content between them. Under llguidance schema-driven grammar,
 /// the chat template's `<think>` opener gets prepended to the
@@ -716,176 +637,6 @@ fn strip_leading_think_block(text: &str) -> std::borrow::Cow<'_, str> {
 fn strip_trailing_tool_call_close(text: &str) -> &str {
     let trimmed = text.trim_end();
     trimmed.strip_suffix("</tool_call>").unwrap_or(text)
-}
-
-/// Inject a `done` virtual tool into the tool-envelope `anyOf`.
-/// The done tool's only field is `reason: string`. Pi/bench recognise
-/// `name="done"` as the model's termination signal instead of a real
-/// tool execution. Replaces the Lark `text | tool_envelope`
-/// alternation hack — the model now has a structured exit via a
-/// regular tool call. Under llguidance's `from_json_schema` the
-/// schema enforces strict closure; the model can't emit malformed
-/// envelopes regardless of which variant it picks.
-fn inject_done_tool(envelope: &serde_json::Value) -> serde_json::Value {
-    let mut envelope = envelope.clone();
-    let done_variant = serde_json::json!({
-        "type": "object",
-        "properties": {
-            "name": {"type": "string", "enum": ["done"]},
-            "arguments": {
-                "type": "object",
-                "properties": {
-                    "reason": {"type": "string"},
-                },
-                "required": ["reason"],
-                "additionalProperties": false,
-            },
-        },
-        "required": ["name", "arguments"],
-        "additionalProperties": false,
-    });
-    if let Some(variants) = envelope.get_mut("oneOf").and_then(|v| v.as_array_mut()) {
-        variants.push(done_variant);
-    } else if let Some(variants) = envelope.get_mut("anyOf").and_then(|v| v.as_array_mut()) {
-        variants.push(done_variant);
-    }
-    envelope
-}
-
-/// True when `SOVEREIGN_ALTERNATION_GRAMMAR` is set to a truthy
-/// value. When on, `build_completion_request` builds a Lark
-/// `text | tool_envelope` alternation grammar via llguidance and
-/// sets `request.lark_grammar` instead of `request.structured_output`.
-/// Off by default during rollout so existing JsonConstraint paths
-/// stay unchanged; flip on per-daemon-process to A/B the alternation
-/// path against the in-house mask.
-fn alternation_grammar_enabled() -> bool {
-    std::env::var("SOVEREIGN_ALTERNATION_GRAMMAR")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
-}
-
-/// `tool_envelope_schema_for` plus the `SOVEREIGN_FORCE_TOOL_CALLS`
-/// env-var override. When the env var is set and `tools` is
-/// non-empty but `tool_choice` was omitted, we synthesize a
-/// `"required"` tool_choice for the schema-builder. The original
-/// request is left untouched — only the schema decision sees the
-/// override. Used in both:
-///   - `build_completion_request` (decide whether to install the
-///     grammar in `structured_output`),
-///   - `chat_completion` parse-mode dispatch (decide between the
-///     direct-envelope parser and the marker-based parser).
-pub(crate) fn tool_envelope_schema_for_with_env(
-    request: &ChatCompletionRequest,
-) -> Option<serde_json::Value> {
-    tool_envelope_schema_for_with_env_and_cmd_prefix(request, None)
-}
-
-/// Same as `tool_envelope_schema_for_with_env`, but also decorates the
-/// `cmd` parameter of `exec_command` tools with a `pattern` that pins
-/// the literal prefix. `JsonConstraint` consumes `pattern` (prefix
-/// subset only — see `compile_schema`) and masks any byte that
-/// wouldn't extend the prefix until the prefix is fully emitted.
-/// Family-agnostic; called from `build_completion_request` when
-/// `request.cmd_prefix.is_some()`.
-pub(crate) fn tool_envelope_schema_for_with_env_and_cmd_prefix(
-    request: &ChatCompletionRequest,
-    cmd_prefix: Option<&str>,
-) -> Option<serde_json::Value> {
-    let mut envelope = tool_envelope_schema_for(request).or_else(|| {
-        // Two env-var paths can synthesize an envelope when the
-        // caller passed `tool_choice=auto` (or omitted it):
-        //
-        //   * `SOVEREIGN_FORCE_TOOL_CALLS=1` — original behaviour.
-        //     Overrides to "required" so the model is grammar-
-        //     locked to a tool call.
-        //   * `SOVEREIGN_ALTERNATION_GRAMMAR=1` — alternation path.
-        //     We still need the envelope schema (it gets embedded
-        //     in the Lark grammar's `tool_envelope` rule) but the
-        //     grammar's `start: text | tool_envelope` rule lets
-        //     the model escape into plain text when no tool call
-        //     is appropriate, so we don't induce a loop trap by
-        //     synthesizing the envelope here.
-        //
-        // `tool_choice="none"` opts out of both paths — caller
-        // explicitly asked for no tool calls, honour it.
-        if force_tool_calls_env() || alternation_grammar_enabled() {
-            let tc = request.tool_choice.as_ref().and_then(|v| v.as_str());
-            if tc == Some("none") {
-                return None;
-            }
-            let mut overridden = request.clone();
-            overridden.tool_choice = Some(serde_json::json!("required"));
-            tool_envelope_schema_for(&overridden)
-        } else {
-            None
-        }
-    })?;
-    if let Some(prefix) = cmd_prefix.filter(|s| !s.is_empty()) {
-        inject_cmd_pattern(&mut envelope, prefix);
-    }
-    Some(envelope)
-}
-
-/// Walk an envelope schema, find any `exec_command` variant in `oneOf`,
-/// and inject a `pattern` on its `arguments.cmd` string field. The
-/// pattern is the literal prefix anchored at start (`^literal...`).
-/// `JsonConstraint`'s string-body walker recognises this subset and
-/// enforces it as a forced-prefix on the cmd field.
-fn inject_cmd_pattern(schema: &mut serde_json::Value, prefix: &str) {
-    let Some(variants) = schema.get_mut("oneOf").and_then(|v| v.as_array_mut()) else {
-        return;
-    };
-    let pattern = format!("^{}", regex_escape_literal(prefix));
-    for variant in variants {
-        // Variants are `{type:"object", properties:{name:{enum:["X"]}, arguments:{...}}}`.
-        let name_const = variant
-            .get("properties")
-            .and_then(|p| p.get("name"))
-            .and_then(|n| n.get("enum"))
-            .and_then(|e| e.as_array())
-            .and_then(|a| a.first())
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        if name_const.as_deref() != Some("exec_command") {
-            continue;
-        }
-        let Some(args) = variant
-            .get_mut("properties")
-            .and_then(|p| p.get_mut("arguments"))
-        else {
-            continue;
-        };
-        let Some(cmd) = args.get_mut("properties").and_then(|p| p.get_mut("cmd")) else {
-            continue;
-        };
-        let Some(cmd_obj) = cmd.as_object_mut() else {
-            continue;
-        };
-        cmd_obj.insert(
-            "pattern".to_string(),
-            serde_json::Value::String(pattern.clone()),
-        );
-    }
-}
-
-/// Escape regex metacharacters in `s` so it matches as a literal.
-/// JsonConstraint's pattern parser only accepts the literal-prefix
-/// subset (see `compile_schema`), so this escapes both standard
-/// metacharacters and the chars the parser would refuse to treat as
-/// literal. Idempotent.
-fn regex_escape_literal(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() * 2);
-    for ch in s.chars() {
-        if matches!(
-            ch,
-            '\\' | '^' | '$' | '.' | '|' | '?' | '*' | '+' | '(' | ')' | '[' | ']' | '{' | '}'
-        ) {
-            out.push('\\');
-        }
-        out.push(ch);
-    }
-    out
 }
 
 /// When the request has `tool_choice = "required"` (OpenAI semantics
@@ -1171,13 +922,12 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         //     markup the chat template emits when no grammar is set.
         // Two grammar paths produce bare-JSON tool envelopes:
         //   * `structured_output` (in-house JsonConstraint) — Phase
-        //     1 enrichment and the historical force-tool-calls path.
-        //   * `lark_grammar` (llguidance, canonical from_json_schema)
-        //     — the 2026-05-21 alternation-grammar adoption.
+        //     1 enrichment, and this adapter for a `required` choice.
+        //   * `lark_grammar` (llguidance) — a caller's own grammar.
         // Either one means the model emitted a `{"name":...,
         // "arguments":...}` envelope without `<tool_call>` markers.
         let grammar_constrained = (req.structured_output.is_some() || req.lark_grammar.is_some())
-            && tool_envelope_schema_for_with_env(&request).is_some();
+            && tool_envelope_schema_for(&request).is_some();
         if tools_present {
             tracing::debug!(grammar_constrained, "inference_adapter:tool_parse_mode");
         }
@@ -1368,10 +1118,10 @@ impl LocalInferenceService for SovereignInferenceAdapter {
 
         // A conversation streams live, tools or not
         // (`conversation::stream_turn`). The Hermes path's tool turns
-        // (in-repo callers) parse their envelope after generation, so
-        // they run the non-streaming `chat_completion` and replay it as
+        // (in-repo callers) parse their envelope after generation, and a
+        // forced call is checked on a whole reply, so both run whole and replay as
         // an OpenAI-shaped stream.
-        if tools_present && conversation::hermes_path_reason(&request).is_some() {
+        if conversation::runs_whole_before_streaming(&request, self.provider.as_ref()) {
             // Tools path delegates to chat_completion; the compactor
             // runs there. Don't compact twice.
             let resp = self.chat_completion(request).await?;
@@ -1539,6 +1289,10 @@ impl InferenceProvider for SovereignInferenceAdapter {
 
     fn serving_locus(&self) -> ServingLocus {
         self.provider.serving_locus()
+    }
+
+    fn conversation_keeps_call_and_budget(&self) -> bool {
+        self.provider.conversation_keeps_call_and_budget()
     }
 
     fn effective_context_size(&self) -> Option<u32> {

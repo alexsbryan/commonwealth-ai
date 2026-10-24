@@ -4,22 +4,19 @@
 # `sovereign-agent-bench aggregate` over the resulting artifact tree
 # to print a failure-class histogram.
 #
-# v0 scope: one model (commonwealth/coder), two configs (force=0 and
-# force=1), one or more problems (passed via $PROBLEMS, comma-sep,
-# default "1.1,3.2"). Each cell is a separate daemon restart so the
-# `SOVEREIGN_FORCE_TOOL_CALLS` env can be toggled.
+# v0 scope: one model (commonwealth/coder), one or more problems
+# (passed via $PROBLEMS, comma-sep, default "1.1,3.2"). Each cell is a
+# separate daemon restart.
 #
 # Output layout:
 #   /tmp/agent-bench-sweep-<utc-date>/
-#     coder-force0/
+#     coder/
 #       1.1-reverse-string/
 #         agent.json
 #         witness.json
 #         ...
 #       3.2-lights-out/
 #         ...
-#     coder-force1/
-#       ...
 #
 # Usage:
 #   scripts/sweep-bench.sh                       # defaults
@@ -68,14 +65,12 @@ fi
 
 run_cell() {
   local cell_name="$1"
-  local force_flag="$2"      # "0" or "1"
 
-  echo "==== cell $cell_name (force_tool_calls=$force_flag) ===="
+  echo "==== cell $cell_name ===="
   echo "sweep-bench: restarting daemon ..."
   "$DAEMON_BIN" daemon stop || true
   # Daemon picks up env vars from its own process environment.
-  SOVEREIGN_FORCE_TOOL_CALLS="$force_flag" \
-    SOVEREIGN_DISABLE_AUTO_RESUME=1 \
+  SOVEREIGN_DISABLE_AUTO_RESUME=1 \
     "$DAEMON_BIN" daemon start
 
   # Wait briefly for the daemon listener to come up. `daemon start`
@@ -102,11 +97,9 @@ run_cell() {
   return $rc
 }
 
-# Two cells: force=0 (no grammar lock) and force=1 (grammar lock).
-# Extend by adding more invocations of `run_cell <name> <force>`.
+# One cell. Extend by adding more invocations of `run_cell <name>`.
 CELL_FAILED=0
-run_cell "coder-force0" "0" || CELL_FAILED=1
-run_cell "coder-force1" "1" || CELL_FAILED=1
+run_cell "coder" || CELL_FAILED=1
 
 echo "==== aggregate ===="
 "$BENCH_BIN" aggregate --root "$SWEEP_ROOT" --list-paths \
