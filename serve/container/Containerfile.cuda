@@ -211,37 +211,15 @@ COPY vendor/              ./vendor/
 # read it (sovereign-cli main.rs), and a worker pod runs none of them.
 ENV SOVEREIGN_CLI_CONTRACT=/workspace/svrn/docs/cli-contract.toml
 
-# Swap the linux llama-cpp-2 backend feature (whichever of "rocm" or
+# Swap the linux llama-cpp-4 backend feature (whichever of "rocm" or
 # "vulkan" is currently checked in — the repo default has flipped over
 # time) to "cuda" for this image. We do it in-image rather than via a
 # Cargo feature flag because the choice lives inside a target-conditional
-# dependency declaration, not in the workspace features table.
-#
-# Tolerant of:
-#   - either "rocm" or "vulkan" as the source feature
-#   - comment / blank lines between the [target...] header and the
-#     llama-cpp-2 line (the in-repo comment block explaining the ROCm
-#     SEGV workaround is one such block).
-#
-# Mirrors swap_inference_backend() in scripts/bootstrap-linux.sh.
-RUN python3 <<'PY'
-import re, pathlib
-p = pathlib.Path('/workspace/serve/crates/sovereign-inference/Cargo.toml')
-src = p.read_text()
-header = '[target.\'cfg(target_os = "linux")\'.dependencies]'
-pattern = (
-    re.escape(header)
-    + r'(?:[ \t]*\n(?:[ \t]*#[^\n]*\n|[ \t]*\n)*)'
-    + r'(llama-cpp-4\s*=\s*\{[^\n]*\})'
-)
-m = re.search(pattern, src)
-assert m, "couldn't find Linux llama-cpp-4 line under " + header
-line = m.group(1)
-new_line, n = re.subn(r'"(rocm|vulkan)"', '"cuda"', line, count=1)
-assert n == 1, f"expected one rocm/vulkan token to swap, found {n}: {line!r}"
-p.write_text(src[:m.start(1)] + new_line + src[m.end(1):])
-print("Patched:", new_line.strip())
-PY
+# dependency declaration, not in the workspace features table. The ROCm
+# image runs the same script with its own target argument, so the two
+# cannot drift apart.
+COPY serve/container/swap-inference-backend.py /usr/local/bin/swap-inference-backend.py
+RUN python3 /usr/local/bin/swap-inference-backend.py /workspace cuda
 
 WORKDIR /workspace
 # Pre-fetch dependencies so the llama.cpp source lands on disk in the

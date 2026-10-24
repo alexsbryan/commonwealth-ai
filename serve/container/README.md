@@ -15,6 +15,7 @@ to extend the image.
 |---|---|
 | `Containerfile`       | ROCm flavor (AMD MI300X / MI250X / MI100). Repo default. |
 | `Containerfile.cuda`  | CUDA flavor (NVIDIA H100 / A100 / L40S / RTX 4090). |
+| `swap-inference-backend.py` | Rewrites the linux `llama-cpp-4` backend feature in `sovereign-inference/Cargo.toml` (`"cuda"` or `"hip"`). Both flavors run it; it refuses loudly if the line is absent or already swapped. |
 | `entrypoint.sh`       | Runtime: tailscale up → rclone sync GGUFs → write `config.toml` → exec daemon. Same script for both flavors. |
 
 ## Build
@@ -57,7 +58,7 @@ Common to both:
 | `protobuf-compiler`                     | `protoc` for `prost-build` |
 | `libprotobuf-dev`                       | well-known protos used by `lance-encoding` / `lance-table` |
 | `clang`, `libclang-dev`, `llvm-dev`     | `bindgen` (llama-cpp-rs etc.) |
-| `python3`                               | build helpers in llama.cpp + the Cargo.toml feature swap in `Containerfile.cuda` |
+| `python3`                               | build helpers in llama.cpp + `swap-inference-backend.py`, the Cargo.toml feature swap both flavors run |
 | `rustfmt` (via rustup component)        | llama-cpp-sys-2's bindgen pipes through `rustfmt`; without it the build errors with `'rustfmt' is not installed for the toolchain` |
 
 ROCm-only:
@@ -88,6 +89,8 @@ ROCm:
 | `ROCM_PATH=/opt/rocm`, `HIP_PATH=/opt/rocm` | base location |
 | `<pkg>_ROOT=/opt/rocm` (hip / hipblas / rocblas / hipblaslt) | replaces `CMAKE_PREFIX_PATH` because `cmake-rs` (the build-script crate llama-cpp-sys-2 uses) hard-overrides `CMAKE_PREFIX_PATH=""` regardless of what we set in env. CMake 3.12+ honors `<Pkg>_ROOT` for `find_package()` and `cmake-rs` leaves it alone |
 | `AMDGPU_TARGETS=gfx942` (default), `GPU_TARGETS=...` | GPU ISA at compile time; override with `--build-arg AMDGPU_TARGETS=gfx90a` for MI250X etc. |
+| `HIPFLAGS="-fPIC --offload-arch=${AMDGPU_TARGETS}"` | `-fPIC` makes ggml-hip's static archive PIC, so the final link needs no `-no-pie`; `--offload-arch` carries the ISA into the HIP compile, where no `-D` reaches (ggml-hip reads `GPU_TARGETS` as a CMake variable). `grep offload-arch` on the build log shows which ISA was baked. |
+| `RUSTFLAGS="-L/opt/rocm/lib -lamdhip64 -lhipblas -lrocblas -fuse-ld=lld"` | the HIP math libs cmake adds to ggml-hip's target but the vendored build.rs never emits into the Rust link line (CUDA passes `-lcudart -lcublas` the same way); `-fuse-ld=lld` for a faster final link |
 
 CUDA:
 
@@ -97,13 +100,13 @@ CUDA:
 | `CMAKE_CUDA_ARCHITECTURES="80;86;89;90"` (default)         | SM gencodes baked into the image; multi-arch covers Ampere → Hopper |
 | `RUSTFLAGS="-C link-arg=-lnccl"`                           | injects `-lnccl` into rustc's final link because llama-cpp-sys-2's build.rs doesn't emit `cargo:rustc-link-lib=nccl` despite the static archive having unresolved NCCL refs |
 
-CUDA also runs an in-image Python sed-style patch on
-`crates/sovereign-inference/Cargo.toml` to flip the linux
-`llama-cpp-2` feature from `"rocm"` (repo default) to `"cuda"`. This
-mirrors what `scripts/bootstrap-linux.sh` does for local Vulkan
-swaps. The patch is in `Containerfile.cuda` itself; if the regex
-ever stops matching the layout of that Cargo.toml line, the build
-will fail loudly with `'linux llama-cpp-2 line not found'`.
+Both flavors rewrite the linux `llama-cpp-4` backend feature in
+`crates/sovereign-inference/Cargo.toml` through `swap-inference-backend.py`:
+CUDA flips it to `"cuda"`, ROCm to `"hip"`. The repo default is `"vulkan"`,
+which neither image can build (the CUDA image carries no Vulkan SDK, and the
+ROCm image's daemon then links ggml-vulkan instead of ggml-hip). The script
+refuses when the line is absent or already swapped, so a layout change fails
+the build rather than shipping an image whose daemon links the wrong backend.
 
 ## Runtime stage
 

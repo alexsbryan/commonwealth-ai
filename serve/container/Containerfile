@@ -90,12 +90,25 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 #    gfx942 = MI300X. Override at build time for other AMD parts:
 #        --build-arg AMDGPU_TARGETS=gfx90a   # MI250X
 #        --build-arg AMDGPU_TARGETS=gfx908   # MI100
+#
+#    ggml-hip reads the architecture as the CMake variable GPU_TARGETS
+#    (ggml-hip/CMakeLists.txt:35-41 forwards AMDGPU_TARGETS, then
+#    GPU_TARGETS, into CMAKE_HIP_ARCHITECTURES), and cmake-rs does not
+#    forward env into -D. HIPFLAGS is what reaches the HIP compiler, so
+#    the arch travels there as --offload-arch: bake one ISA in, and
+#    `grep offload-arch` on the build log shows which.
 ARG AMDGPU_TARGETS=gfx942
 ENV ROCM_PATH=/opt/rocm
 ENV HIP_PATH=/opt/rocm
 ENV PATH=/opt/rocm/bin:${PATH}
 ENV AMDGPU_TARGETS=${AMDGPU_TARGETS}
 ENV GPU_TARGETS=${AMDGPU_TARGETS}
+# ggml-hip compiles through HIP (hipcc / clang++ --offload-arch). HIPFLAGS
+# is the env CMake >= 3.21 reads for CMAKE_HIP_FLAGS:
+#   -fPIC  the static archive then carries PIC relocations, so the final
+#          link needs no -no-pie (see RUSTFLAGS below);
+#   --offload-arch  the AMDGPU_TARGETS ISA, since no -D reaches here.
+ENV HIPFLAGS="-fPIC --offload-arch=${AMDGPU_TARGETS}"
 # CMake find_package(<Pkg>) honors <Pkg>_ROOT env. Point at /opt/rocm
 # so llama.cpp's ggml-hip CMakeLists locates each math-lib's config
 # file (hipblas-config.cmake etc. under /opt/rocm/lib/cmake/<pkg>/).
@@ -104,18 +117,25 @@ ENV hipblas_ROOT=/opt/rocm
 ENV rocblas_ROOT=/opt/rocm
 ENV hipblaslt_ROOT=/opt/rocm
 
-# ggml-hip's static archive uses 32-bit absolute relocations
-# (`R_X86_64_32`), which the default linux x86_64 PIE link rejects with
-# "recompile with -fPIC". Drop PIE for this binary — analogous to the
-# `-lnccl` link-arg in Containerfile.cuda.
+# The daemon's link flags. Two jobs:
 #
-# `-fuse-ld=lld` swaps the slow GNU bfd linker for LLVM lld on the
-# final sovereign-cli link.
+# 1. The HIP math libs. cmake adds hip::host / roc::hipblas / roc::rocblas
+#    to ggml-hip's own target, but the vendored llama-cpp-sys-4 build.rs
+#    emits the Rust link line and does not know about them (it emits only
+#    vulkan, gomp, and the Apple frameworks). Without this the final
+#    sovereign-cli link fails on undefined hipblas/rocblas symbols. The
+#    CUDA image passes its equivalents (-lcudart -lcublas) the same way.
+# 2. `-fuse-ld=lld` swaps the slow GNU bfd linker for LLVM lld.
+#
+# No -no-pie: with HIPFLAGS=-fPIC above, ggml-hip's archive is PIC and the
+# default PIE link is correct. (Historically it was not PIC, and -no-pie was
+# the workaround — which then broke proc-macro links in the llama-server
+# build's nested cargo.)
 # Same stamp as Containerfile.cuda: `sovereign-pods`'s worker daemon logs it at
 # startup. Pass: --build-arg GIT_SHA=$(git rev-parse --short HEAD)
 ARG GIT_SHA=unknown
 ENV SOVEREIGN_GIT_SHA=${GIT_SHA}
-ENV RUSTFLAGS="-C link-arg=-no-pie -C link-arg=-fuse-ld=lld"
+ENV RUSTFLAGS="-C link-arg=-L/opt/rocm/lib -C link-arg=-lamdhip64 -C link-arg=-lhipblas -C link-arg=-lrocblas -C link-arg=-fuse-ld=lld"
 
 # sccache wiring. CARGO_INCREMENTAL=0 mandatory — see Containerfile.cuda.
 # CMAKE_HIP_COMPILER_LAUNCHER routes ggml-hip's hipcc compiles through
@@ -171,11 +191,20 @@ COPY vendor/              ./vendor/
 # read it (sovereign-cli main.rs), and a worker pod runs none of them.
 ENV SOVEREIGN_CLI_CONTRACT=/workspace/svrn/docs/cli-contract.toml
 
+# Swap the linux llama-cpp-4 backend feature from the repo default (currently
+# "vulkan") to "hip". Without it the daemon's embedded engine links ggml-vulkan,
+# and this image carries no Vulkan SDK (ggml-vulkan/CMakeLists.txt needs glslc),
+# so the build dies in llama-cpp-sys-4 instead of linking a ROCm backend. The
+# CUDA image runs the same script with "cuda"; one implementation, two targets.
+COPY serve/container/swap-inference-backend.py /usr/local/bin/swap-inference-backend.py
+RUN python3 /usr/local/bin/swap-inference-backend.py /workspace hip
+
 # The llama-server the daemon ships for kind = "llama-server", built from the
-# pin by build.sh in its ROCm mode (GPU_TARGETS above), with ggml-rpc-server
-# and llama-server.manifest.toml, into /usr/local/bin: the daemon looks beside
-# its own executable and verifies the manifest against the pin it was compiled
-# with (sovereign-compute llama_router/live.rs, resolve_binary).
+# pin by build.sh in its ROCm mode (HIPFLAGS above carry the ISA as
+# --offload-arch), with ggml-rpc-server and llama-server.manifest.toml, into
+# /usr/local/bin: the daemon looks beside its own executable and verifies the
+# manifest against the pin it was compiled with (sovereign-compute
+# llama_router/live.rs, resolve_binary).
 # RUSTFLAGS is the daemon's link flags; unset here, since llguidance's own
 # cargo build would apply them to its proc-macros (with -no-pie a -shared
 # proc-macro fails to link: rust-lld, undefined symbol main).
@@ -187,12 +216,15 @@ RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
 
 # BuildKit cache mounts persist the cargo registry, git checkouts,
 # target dir, and sccache across rebuilds. See Containerfile.cuda for
-# the full explanation. The explicit --target keeps RUSTFLAGS (-no-pie) off
-# proc-macros and build scripts: a -shared proc-macro linked -no-pie fails
-# (rust-lld: undefined symbol main, `paste` and `time-macros` on stable rustc,
-# 2026-10-12). Binary copied out of the cached target dir into
-# /usr/local/bin so the runtime stage's COPY --from=build pulls from a
-# real image layer (cache mounts don't survive across stages).
+# the full explanation. The explicit --target keeps RUSTFLAGS' link-args
+# off proc-macros and build scripts: a -shared proc-macro linked with the
+# daemon's flags fails (rust-lld: undefined symbol main, `paste` and
+# `time-macros` on stable rustc, 2026-10-12) — the -no-pie that used to
+# break this is gone now that HIPFLAGS=-fPIC makes the archive PIC, but the
+# -L/-l HIP libs are equally wrong on a proc-macro. Binary copied out of the
+# cached target dir into /usr/local/bin so the runtime stage's COPY
+# --from=build pulls from a real image layer (cache mounts don't survive
+# across stages).
 RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
     --mount=type=cache,target=/root/.cache/sccache,sharing=locked \
