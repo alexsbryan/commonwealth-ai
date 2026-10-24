@@ -57,13 +57,10 @@ pub(crate) fn hermes_path_reason(
     } else if request.stable_prefix_len.is_some() {
         Some("stable_prefix_len")
     } else if forced_tool_choice {
-        // A forced call is enforced by the Hermes envelope grammar; the
-        // model-native equivalent (a lazy grammar) does not exist yet.
+        // A forced call on the embedded engine is enforced by the Hermes
+        // envelope grammar; the model-native equivalent (a lazy grammar)
+        // does not exist there yet.
         Some("tool_choice forces a call")
-    } else if super::force_tool_calls_env() {
-        Some("SOVEREIGN_FORCE_TOOL_CALLS")
-    } else if super::alternation_grammar_enabled() {
-        Some("SOVEREIGN_ALTERNATION_GRAMMAR")
     } else {
         None
     }

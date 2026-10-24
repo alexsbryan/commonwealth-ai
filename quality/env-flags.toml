@@ -694,22 +694,6 @@ status = "guard"
 purpose = "Unicode-crash denylist: block non-Latin scripts in generation."
 
 [[flag]]
-name = "SOVEREIGN_ALTERNATION_GRAMMAR"
-cluster = "inference"
-default = "unset"
-status = "guard"
-shadows = "daemon.alternation_grammar"
-purpose = "Grammar-constraint alternation mode — breaks tool-calling if wrong; do not change casually."
-
-[[flag]]
-name = "SOVEREIGN_FORCE_TOOL_CALLS"
-cluster = "inference"
-default = "unset"
-status = "guard"
-shadows = "daemon.force_tool_calls"
-purpose = "Force the tool-call constraint path."
-
-[[flag]]
 name = "SOVEREIGN_EXACTVAL_FIX"
 cluster = "inference"
 default = "on"
