@@ -49,8 +49,8 @@ enum Role {
 impl Role {
     fn as_str(self) -> &'static str {
         match self {
-            Role::Generate => "generate",
-            Role::Embed => "embed",
+            Role::Generate => crate::compute_roles::GENERATE_ROLE,
+            Role::Embed => crate::compute_roles::EMBED_ROLE,
             Role::Mock => "mock",
             Role::Kind(kind) => kind.child_role().unwrap_or(kind.role),
         }
@@ -107,8 +107,8 @@ impl ChildArgs {
             match arg.as_str() {
                 "--role" => {
                     role = Some(match take_value(&mut it, "--role")?.as_str() {
-                        "generate" => Role::Generate,
-                        "embed" => Role::Embed,
+                        crate::compute_roles::GENERATE_ROLE => Role::Generate,
+                        crate::compute_roles::EMBED_ROLE => Role::Embed,
                         "mock" => Role::Mock,
                         other => match served_kind::kind_for_child_role(other) {
                             Some(kind) => Role::Kind(kind),

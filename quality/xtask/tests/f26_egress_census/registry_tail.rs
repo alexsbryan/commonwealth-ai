@@ -255,6 +255,12 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     // it posts to serve's /v1/ner at the base the daemon dials (53153e1b1) —
     // serve's loopback port on this host.
     ("shared/crates/oicp-client/src/ner.rs", Class::LocalDaemon, 1),
+    // NEW ROW (REVIEW-audit-es-auto-3): es-r3-fim's raw prompt on
+    // llama-server's `/completion` (62723e079). Its one caller,
+    // `RouterProvider` (llama_router/provider.rs), passes
+    // `LiveRouter::base_url`, `http://127.0.0.1:{port}` of the supervised
+    // router child. Loopback, as live.rs above.
+    ("shared/crates/oicp-client/src/llama_completion.rs", Class::LocalDaemon, 1),
 
     // ---- corpus-engine ----
     // testing.rs: the deterministic test-fixture module (never

@@ -4874,6 +4874,65 @@ Instruments, as run:
   name with `commonwealth_rails::ledger::Model` (ledger.rs:175), a different
   concept in a test binary; converge excludes tests, so it reports 1.
 
+## REVIEW-audit-es-auto-3 (2026-10-24, range a88ed8c24..4bded8b80, on the Mac)
+
+63 non-merge commits, all the queue's (no main merge in range: the merge base
+with origin/main is still b72728322); eight units, es-r3, es-r4, es-r5, es-t4,
+es-t5, es-p4, es-p5, es-f1. The 13 merges are lane merges of engine-swap and
+two of a unit's own origin branch (ad5086cc6, 0d1802ab7). One resolution
+changes a file's content: 558f0b446 took engine-swap's `lines.tsv` over
+es-r5's (#5).
+
+| # | principle | path:line | fixed in | finding |
+|---|---|---|---|---|
+| 1 | 5 | shared/crates/oicp-client/src/llama_completion.rs:118; quality/xtask/tests/f26_egress_census/registry_tail.rs:263 | b7b7f2f97 | es-r3 (62723e079) added a reqwest client with no census row, so `f26_egress_boundary_census` has been red since. es-r5's bodies list it as "pre-existing, reproduces with this diff stashed", which is true of the row but not of the queue. The client's one caller passes `LiveRouter::base_url` (127.0.0.1): LocalDaemon, 1. Red before, 2 passed after |
+| 2 | 8 | serve/crates/sovereign-compute/src/compute_roles.rs:18, :21; child_main.rs:52, :110; manager.rs:150 | 2bb148605 | es-r5 minted `GENERATE_ROLE`/`EMBED_ROLE` beside the literals the child's `--role` parser and the manager use, so the retirement check and the parser shared the ids by convention. The eight production sites now read the constants. TEST(sovereign-compute) 213/0 |
+| 3 | 8 | serve/crates/sovereign-compute/src/rpc_peer.rs:75, :113; serve/crates/sovereign-compute/src/llama_router/live.rs:109, :133 | not fixed | es-f1 decides override-vs-shipped and verify-vs-log a second time, for `ggml-rpc-server`, beside `live::resolve_binary`/`check_build` for `llama-server`. Calling `live::resolve_binary` and taking the sibling would add a refusal (it requires llama-server itself to be present), so it is not behaviour-preserving. One `server_dir(config) -> (dir, source)` plus a `check_build(binary, source, target)` both call is a sovereign-compute decision |
+| 4 | 12, 6 | serve/crates/sovereign-compute/src/llama_router.rs:470; llama_router/live.rs:93, :169 | not fixed | `warm_within_memory`, the only production caller, calls `vram_if_every_section_loaded` first (es-r5), so `models_that_fit` only ever sees a card that holds every section. Its truncate branch, and with it the `--models-max` eviction its doc describes, runs only in llama_router_tests.rs. The two are coupled through the repair loop's `demands_repair`, which treats `unloaded` as a dead process and reloads it on backoff. That is right only while nothing is LRU-evicted. If es-f2 relaxes the whole-preset refusal, the loop will reload whatever the router evicts, every 5 s. Whichever row changes either side owns both |
+| 5 | 4, 5 | quality/baselines/lines.tsv; commit 9f1fe512d | not fixed | 9f1fe512d's body says the size-gate baseline was "re-pinned at HEAD's tree". It raised 52 keys by 11,879 lines, including crates the queue never touched (corpus-engine +2070, oicp-types +620, understanding-atlas +540, quote-align +248). That is the working-tree absorb AGENTS.md rules out. The merge 558f0b446 resolved `lines.tsv` back to es-t5's d63538d9e, so HEAD carries none of it and the body's claim is stale against HEAD. size-gate at HEAD: 51 keys grew (advisory), mixing the queue's (sovereign-stock::tests +863, sovereign-compute::tests +699, sovereign-serving-host::tests +284, sovereign-contracts::tests +247) with main's arrears. Owed: a re-pin at origin/main, then `--accept` on the queue's own keys |
+| 6 | 8 | distributions/crates/sovereign-stock/tests/rpc_peer_child_e2e.rs:42, :66 | not fixed | audit-1 #3 grows: `struct Killed(Child)` is now 12 copies (es-f1 added one), and `reserved_port` 3 (this one takes an ip). Same cross-crate test-support decision |
+
+Audit-2's open findings: #5 narrowed, because es-r5's
+`sections_in_preflight_order` is now the one list `models_that_fit` and the
+whole-preset check share, edit section included. capacity.rs
+`build_slots_from_config` still mirrors it by hand. #6 and #7 stand. Audit-1's
+#3 grows (#6 above). #4 is not repeated: es-f1's e2e reserves its ports. #5
+stands (`count_tokens_exact` is still reached only through forwards and the
+engine-replay route). #6 and #12 stand (`docs/internal/FIVE_PROGRAMS.md` is
+still absent here).
+
+Gates: LINT exit=0 (`sovereign-lint.sh --human`, WORKSPACE, --all-targets, 0
+errors). F26 census exit=0 after #1. TEST(sovereign-compute) 213 pass, 0 fail
+after #2. clone-gate 14032 lines / 405 families against a baseline of 14032,
+which es-r5 re-pinned from origin/main's tree (14094, against main's own 13776)
+and then tightened. size-gate as in #5.
+
+Instruments, as run:
+
+- **per-unit net lines** (`git log --no-merges --numstat`; src is non-test
+  `.rs`/`.sh`/`.py` with inline `#[cfg(test)]` counted as src, other is
+  docs/data/config): es-r3-fim src +565 test +99 · es-r4-rerank src +389
+  test +104 other +1197 (1106 of it rerank-result-a4.json, the R1-R3 data) ·
+  es-r5-router-owns-model-processes src +663 test +518 · es-t4-responses-native
+  src +459 test +40 (301 of the src is t4_measure.py/.sh) · es-t5-delete-hermes
+  src -450 test -81 · es-p4-ship-onprem-and-pods src +69 other +325 ·
+  es-p5-ci-and-docs test +63 other +325 · es-f1-rpc-peer-child src +329 test
+  +562 (setup_config.rs -73 against setup_config_compute.rs +98 is the
+  `[compute]` move) · engine-swap src 0 other +36. Range total src +2024, test
+  +1305.
+- **dry-report: could-not-judge**, as at audits 1 and 2: every one of the 12
+  crate dirs the range touched refuses (no corpus built from this worktree),
+  and `--corpus-id commonwealth-ai` finds no `chunks.lance`. The substitute,
+  named: clone-gate at HEAD, clean against its baseline ("no new clone").
+- **converge noun** with `--corpus-id commonwealth-ai`, from an index that
+  predates the range: `ModelRepair`, `RpcPeerChild`, `FrameError` have 0
+  definitions (new). `ComputeSection` has 1, at its pre-move home
+  (setup_config.rs; es-f1 moved it, re-exported). `Probe` (supervisor/child.rs,
+  `pub(super)`) shares its name with 6 private enums elsewhere, and `Frame`
+  (llama_completion.rs, private) with `sovereign_contracts::frame::Frame`;
+  both are module-local wire shapes, not the concept. `Killed`/`Stat` and
+  conversation.rs's test `Host(bool)` are test-only, which converge excludes.
+
 ## REVIEW-audit-ek-verify (2026-10-15, range 60eeeb73c..b4a033039, the every-kind-finish queue)
 
 Three units (ek-waves-reasoned, ek-window-refs, ek-reader-voices), 13 commits,
