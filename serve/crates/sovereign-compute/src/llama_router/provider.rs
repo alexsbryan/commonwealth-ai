@@ -441,8 +441,16 @@ impl InferenceProvider for RouterProvider {
 mod tests {
     /// The host facts the router answers itself instead of the remote half
     /// (ENGINE_SWAP_PLAN A1, A4, A5), in trait order.
-    const ANSWERED_HERE: [&str; 9] = [
+    ///
+    /// `conversation_keeps_call_and_budget` is answered, not forwarded: the
+    /// remote half is an HTTP client that cannot know, and the router does
+    /// keep a forced call (its llguidance grammar checks the reply,
+    /// `hermes_path_reason`). Forwarding it would ask a provider with no
+    /// grammar support and get the trait default `false` — the embedded
+    /// engine's answer, on the engine whose whole point is the opposite.
+    const ANSWERED_HERE: [&str; 10] = [
         "rerank_model_id",
+        "conversation_keeps_call_and_budget",
         "n_ctx_train_for_primary",
         "count_tokens_exact",
         "code_model_id",

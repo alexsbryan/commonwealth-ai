@@ -477,6 +477,10 @@ impl InferenceProvider for OpenAiPassthrough {
         self.local.serving_locus()
     }
 
+    fn conversation_keeps_call_and_budget(&self) -> bool {
+        self.local.conversation_keeps_call_and_budget()
+    }
+
     fn effective_context_size(&self) -> Option<u32> {
         self.local.effective_context_size()
     }
