@@ -1,13 +1,13 @@
 <!-- ledger -->
 
-**engine-swap-4 · 2026-10-23 · es-p4-ship-onprem-and-pods · director** — this commit
+**engine-swap-5 · 2026-10-23 · es-p4-ship-onprem-and-pods · director** — this commit
 - Needed: the row's fix (build ggml position-independent, or `-no-pie` on the binaries alone) assumed the ROCm daemon links ggml-hip. It links ggml-vulkan: the linux llama-cpp-4 feature has been `"vulkan"` since 0de1ac115 (2026-05-18), no crate enables `hip`, and the ROCm Containerfile has no feature swap. The build image has no Vulkan SDK, so clearing `-no-pie` only moves the failure to llama-cpp-sys-4.
 - Chose: the ROCm image restores hip, in this row: the CUDA image's feature swap (reused) to `"hip"`, the HIP link libs in RUSTFLAGS, `HIPFLAGS=-fPIC` so `-no-pie` goes, and `AMDGPU_TARGETS` into the HIP compile. Acceptance unchanged.
 - Because: hip is the image's documented backend (serve/container/README.md ROCm tables, `GGML_HIP=ON`), so this repairs a regression, not a change of engine; embedded stays the default until es-e2. Vulkan SDK in the image would serve MI300X-class parts on CPU, and CPU-only would too (ARCH 6). A split row would carry the same proof, so it moves the work without letting p4 finish.
 
 <!-- appendix -->
 
-## engine-swap-4 · 2026-10-23 — es-p4's ROCm daemon links ggml-vulkan, not ggml-hip; the image restores hip
+## engine-swap-5 · 2026-10-23 — es-p4's ROCm daemon links ggml-vulkan, not ggml-hip; the image restores hip
 
 <details><summary>reasoning, evidence, package</summary>
 
