@@ -25,6 +25,7 @@ pub mod live;
 pub mod provider;
 use sovereign_contracts::engine_config::{EmbedInputs, EngineKind, EngineSection, GrammarSupport};
 use sovereign_contracts::setup_config::{DaemonSection, ModelsSection};
+use sovereign_inference::capacity::SlotPlan;
 
 /// Draft tokens per MTP step: the embedded engine's default
 /// (`mtp_draft_max_decide`), the value every battery pass ran.
@@ -395,18 +396,11 @@ impl RouterPreset {
         self.entries.keys().map(String::as_str).collect()
     }
 
-    /// The models that fit together, to warm and to set `--models-max` by:
-    /// the longest run, in the order the embedded preflight sizes its slots
-    /// (primary, fast, embed, code, then the reranker), whose working sets
-    /// `fits` admits (`capacity::check_fit` in production, so the router is
-    /// sized by the one verdict the preflight uses). The rest load on
-    /// demand, the router evicting the least recently used. Never empty: a
-    /// primary too big on its own is still tried, as the embedded engine
-    /// starts on an advisory overcommit.
-    pub fn models_that_fit(
-        &self,
-        fits: impl Fn(&[sovereign_inference::capacity::SlotPlan]) -> bool,
-    ) -> Vec<&str> {
+    /// The sections the embedded preflight sizes, in the order it sizes them
+    /// (primary, fast, embed, code, then the reranker), each once however many
+    /// roles name it. [`Self::models_that_fit`] and
+    /// [`Self::vram_if_every_section_loaded`] share this one list.
+    fn sections_in_preflight_order(&self) -> Vec<&str> {
         let mut order: Vec<&str> = Vec::new();
         for name in [
             self.primary.as_ref(),
@@ -423,17 +417,62 @@ impl RouterPreset {
                 order.push(name);
             }
         }
+        order
+    }
+
+    fn slot_plan(&self, name: &str) -> SlotPlan {
+        let e = &self.entries[name];
+        SlotPlan {
+            role: name.to_string(),
+            path: e.path.clone(),
+            // One KV pool per section (kv-unified), `ctx-size` long.
+            n_seq_max: 1,
+            n_ctx: e.ctx,
+        }
+    }
+
+    /// What the router asks of the card if EVERY section is warm at once.
+    ///
+    /// This is not [`Self::models_that_fit`], which answers what the card
+    /// holds together and is what `--models-max` is set by. It is the bound
+    /// on the whole preset: a router configured so one card no longer holds
+    /// its models answers with `Err` naming what it needs, rather than
+    /// warming what fits and serving the rest through eviction nobody chose.
+    pub fn vram_if_every_section_loaded(
+        &self,
+        fits: impl Fn(&[SlotPlan]) -> bool,
+    ) -> Result<(), String> {
+        let slots: Vec<_> = self
+            .sections_in_preflight_order()
+            .into_iter()
+            .map(|name| self.slot_plan(name))
+            .collect();
+        if slots.is_empty() || fits(&slots) {
+            return Ok(());
+        }
+        Err(format!(
+            "[models] asks for {} models at once, which one card no longer holds together. \
+             A 9B-class primary plus the embedder, the reranker and a code model is the \
+             two-box case the router's RPC split serves (es-f2), not one node's \
+             preset.\nhint: drop a section, or move the primary to the peer's card.",
+            slots.len()
+        ))
+    }
+
+    /// The models that fit together, to warm and to set `--models-max` by:
+    /// the longest run, in the order the embedded preflight sizes its slots
+    /// ([`Self::sections_in_preflight_order`]), whose working sets `fits`
+    /// admits (`capacity::check_fit` in production, so the router is sized by
+    /// the one verdict the preflight uses). The rest load on demand, the
+    /// router evicting the least recently used. Never empty: a primary too
+    /// big on its own is still tried, as the embedded engine starts on an
+    /// advisory overcommit.
+    pub fn models_that_fit(&self, fits: impl Fn(&[SlotPlan]) -> bool) -> Vec<&str> {
+        let mut order = self.sections_in_preflight_order();
         let mut slots = Vec::new();
         let mut fitting = 0;
         for name in &order {
-            let e = &self.entries[*name];
-            slots.push(sovereign_inference::capacity::SlotPlan {
-                role: name.to_string(),
-                path: e.path.clone(),
-                // One KV pool per section (kv-unified), `ctx-size` long.
-                n_seq_max: 1,
-                n_ctx: e.ctx,
-            });
+            slots.push(self.slot_plan(name));
             if !fits(&slots) {
                 break;
             }

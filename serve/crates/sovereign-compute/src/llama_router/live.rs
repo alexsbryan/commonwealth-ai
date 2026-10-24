@@ -149,17 +149,25 @@ fn check_build(binary: &Path, source: &BinarySource) -> Result<(), String> {
 }
 
 /// The preset's models that fit this machine's GPU together
-/// ([`RouterPreset::models_that_fit`]). With no GPU budget to size against
-/// (none, or the probe could not read one) every model is warmed, as
-/// before, and the log says the count was not sized.
-fn warm_within_memory(preset: &RouterPreset) -> Vec<&str> {
+/// ([`RouterPreset::models_that_fit`]), or the refusal
+/// [`RouterPreset::vram_if_every_section_loaded`] returns when one card no
+/// longer holds the whole preset. With no GPU budget to size against (none,
+/// or the probe could not read one) every model is warmed, as before, and the
+/// log says the count was not sized.
+///
+/// The whole-preset check comes first because the repair loop reloads each
+/// section after a death with no eviction to make room for it
+/// (ENGINE_SWAP_PLAN A7): a preset the card cannot hold is a configuration
+/// this node cannot serve, refused by name instead of warmed in part.
+fn warm_within_memory(preset: &RouterPreset) -> Result<Vec<&str>, String> {
     let hw = sovereign_inference::hardware::detect_hardware();
     if !hw.gpu_available && !hw.is_unified_memory {
         tracing::info!(target: "llama_router", "router: no GPU budget to size --models-max against; warming every model");
-        return preset.warm_models();
+        return Ok(preset.warm_models());
     }
-    let warm =
-        preset.models_that_fit(|slots| sovereign_inference::capacity::check_fit(slots, &hw).fits);
+    let fits = |slots: &[_]| sovereign_inference::capacity::check_fit(slots, &hw).fits;
+    preset.vram_if_every_section_loaded(fits)?;
+    let warm = preset.models_that_fit(fits);
     if warm.len() < preset.warm_models().len() {
         tracing::warn!(
             target: "llama_router",
@@ -169,7 +177,7 @@ fn warm_within_memory(preset: &RouterPreset) -> Vec<&str> {
             "router: not every model fits together; the rest load on demand, evicting the least recently used"
         );
     }
-    warm
+    Ok(warm)
 }
 
 fn free_port() -> Result<u16, String> {
@@ -196,7 +204,10 @@ impl LiveRouter {
         std::fs::write(&preset_path, preset.render())
             .map_err(|e| format!("writing {}: {e}", preset_path.display()))?;
         let port = free_port()?;
-        let warm: Vec<String> = warm_within_memory(preset)
+        // The card must hold the whole preset (the repair loop reloads every
+        // section, `warm_within_memory`), so an overcommitted one refuses here
+        // — before anything is written or spawned — naming what it asked.
+        let warm: Vec<String> = warm_within_memory(preset)?
             .iter()
             .map(|m| m.to_string())
             .collect();

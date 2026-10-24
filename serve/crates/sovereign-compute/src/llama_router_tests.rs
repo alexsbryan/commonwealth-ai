@@ -429,3 +429,38 @@ fn an_embed_only_preset_serves_the_embedder_and_no_chat_model() {
     assert_eq!(section.context_size, 8192);
     assert_eq!(section.embed_inputs, Some(EmbedInputs::Client));
 }
+
+/// A preset one card no longer holds is refused by name, not warmed in part
+/// (ENGINE_SWAP_PLAN A7): the repair loop reloads a dead section with no
+/// eviction to make room for it, so a model that loads on demand at boot is
+/// a model whose death this node cannot repair.
+///
+/// Failing input: a bar that admits the run `models_that_fit` warms but not
+/// every section — the old behaviour, which returned the shortened run and
+/// left the rest to eviction.
+#[test]
+fn a_preset_one_card_cannot_hold_is_refused_rather_than_warmed_in_part() {
+    let mut m = models();
+    m.code = Some("/m/Qwen3-Coder-30B-A3B-Q6_K.gguf".into());
+    let preset = RouterPreset::from_models(
+        &m,
+        Some(PathBuf::from("/m/Qwen3-Reranker-0.6B.gguf")),
+        &idle(),
+        layers,
+    )
+    .unwrap();
+    // Five sections: primary, fast, embed, code, rerank.
+    let sections = preset.sections_in_preflight_order();
+    assert_eq!(sections.len(), 5, "{sections:?}");
+    let two_fit = |s: &[SlotPlan]| s.len() <= 2;
+    assert!(
+        preset.models_that_fit(two_fit).len() < sections.len(),
+        "the failing input must admit less than the whole preset here"
+    );
+    let err = preset.vram_if_every_section_loaded(two_fit).unwrap_err();
+    assert!(
+        err.contains("5 models at once") && err.contains("no longer holds"),
+        "{err}"
+    );
+    assert!(preset.vram_if_every_section_loaded(|_| true).is_ok());
+}
