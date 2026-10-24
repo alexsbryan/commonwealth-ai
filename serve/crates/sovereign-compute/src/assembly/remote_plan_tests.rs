@@ -1,17 +1,28 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! A hosted engine's plan: no `[models]`, and an embed slot only when it
-//! embeds in this process.
+//! A hosted engine's plan: no `[models]`, and no slot in this process — an
+//! embed server holds the embedder, and a hosted PAIR (`embed_path`) is the
+//! router's one section.
 use super::*;
 use sovereign_contracts::engine_config::EngineSection;
 
-fn hosted(embed_path: Option<&str>) -> SetupConfig {
+/// A hosted node: a vendor chat and no `[models]`. `embed_server` names an
+/// embed ENDPOINT; the pair's own `embed_path` is set by the test that wants
+/// it, so the two routes are never confused.
+fn hosted(embed_server: Option<&str>) -> SetupConfig {
     let mut config = SetupConfig::unconfigured();
     config.models = None;
     config.engine = EngineSection {
+        // An embed SERVER, not `embed_path`: every client hosts its own
+        // embedder, so `remote` + `embed_path` is a hosted PAIR now — the
+        // router's one section (`a_hosted_pair_is_served_by_a_one_section_router`).
         kind: EngineKind::Remote,
         endpoint: Some("https://api.example.com/v1".to_string()),
         model_id: Some("vendor-model".to_string()),
-        embed_path: embed_path.map(Into::into),
+        // 0 as `svrn setup --hosted` writes it: no chat model here, so no
+        // chat context — which is also what marks the pair for the router.
+        context_size: 0,
+        embed_endpoint: embed_server.map(|_| "http://127.0.0.1:8001/v1".to_string()),
+        embed_model_id: embed_server.map(|_| "Qwen3-Embedding-0.6B-Q8_0".to_string()),
         ..Default::default()
     };
     config
@@ -21,18 +32,17 @@ fn hosted(embed_path: Option<&str>) -> SetupConfig {
 /// engine, so a hosted node had to carry placeholder model paths to start.
 #[test]
 fn a_hosted_engine_plans_without_models() {
-    let plan = plan_serving(&hosted(Some("/models/Qwen3-Embedding-0.6B-Q8_0.gguf"))).unwrap();
+    let plan = plan_serving(&hosted(Some("Qwen3-Embedding-0.6B-Q8_0"))).unwrap();
     assert_eq!(plan.engine, EngineKind::Remote);
-    assert_eq!(
-        plan.in_process,
-        BTreeSet::from([PlannedSlot::Embed]),
-        "the local embed model is the one slot in this process"
+    assert!(
+        plan.in_process.is_empty(),
+        "a hosted engine holds no weights: its embedder is the server named: {plan:?}"
     );
 
     let plan = plan_serving(&hosted(None)).unwrap();
     assert!(
         plan.in_process.is_empty(),
-        "no embed_path, no slot: {plan:?}"
+        "no embedder at all, no slot: {plan:?}"
     );
 }
 
@@ -48,11 +58,13 @@ fn llama_without_models_still_refuses() {
 /// and no `[models]` at all, so its router serves the embedder as its one
 /// section. Before this, `plan_serving` read `[models]` on every engine but
 /// `remote`, so the shape `svrn setup --hosted` writes could not boot here.
+/// The pair's own `remote` form of the same file takes the same route (see
+/// `a_hosted_pair_is_served_by_a_one_section_router`).
 #[test]
 fn a_hosted_router_plans_the_embedder_as_its_one_section() {
-    let mut config = hosted(Some("/models/Qwen3-Embedding-0.6B-Q8_0.gguf"));
+    let mut config = hosted(None);
     config.engine.kind = EngineKind::LlamaServer;
-    config.engine.endpoint = None;
+    config.engine.embed_path = Some("/models/Qwen3-Embedding-0.6B-Q8_0.gguf".into());
     let plan = plan_serving(&config).unwrap();
     assert_eq!(plan.engine, EngineKind::LlamaServer);
     assert!(
@@ -72,33 +84,67 @@ fn a_hosted_router_plans_the_embedder_as_its_one_section() {
 /// A router node with no `[models]` and no `embed_path` serves nothing: no
 /// preset, no slots, and a build that says so rather than loading weights.
 #[test]
-fn a_hosted_router_without_an_embed_path_serves_nothing() {
+fn a_router_without_an_embed_path_serves_nothing() {
     let mut config = hosted(None);
     config.engine.kind = EngineKind::LlamaServer;
-    config.engine.endpoint = None;
     let plan = plan_serving(&config).unwrap();
     assert!(plan.in_process.is_empty(), "{plan:?}");
     assert!(plan.router.is_none(), "{plan:?}");
 }
 
 /// THE FAILING INPUT (ENGINE_SWAP_PLAN A6): the shape `svrn setup --hosted`
-/// writes — a vendor chat and an embed_path — under the engine that
-/// replaced the in-process loader. It was served by loading the embedder in
-/// this process, which the router now owns; and the router cannot serve it
-/// at all, because a hosted pair names no `[models]` to build a preset from.
-/// Named at plan time, so the boot says why instead of reporting the node
-/// unconfigured (`svrn setup`) or starting a daemon that answers no model.
+/// writes — a vendor chat and an `embed_path` — used to be served by loading
+/// the embedding GGUF in THIS process (`EngineEmbed::Local`), which is the
+/// process A6 retires: every model is the router's. Before this the pair was
+/// refused (the preset is built from `[models]`, and a hosted pair names
+/// none); now it is served, by the one-section router the pair is moved to,
+/// so the boot and the plan agree.
 #[test]
-fn a_hosted_pair_cannot_be_assembled_on_the_router() {
-    let mut config = hosted(Some("/models/Qwen3-Embedding-0.6B-Q8_0.gguf"));
-    config.engine.kind = EngineKind::LlamaServer;
+fn a_hosted_pair_is_served_by_a_one_section_router() {
+    let mut config = hosted(None);
+    config.engine.embed_path = Some("/models/Qwen3-Embedding-0.6B-Q8_0.gguf".into());
+    assert!(is_hosted_pair(&config), "the fixture must be the pair");
+    let plan = plan_serving(&config).expect("the pair is served, not refused");
+    assert_eq!(plan.engine, EngineKind::LlamaServer);
+    assert!(
+        plan.in_process.is_empty(),
+        "the router runs the embedder, not this process: {plan:?}"
+    );
+    let preset = plan.router.as_ref().expect("a one-section preset");
+    assert_eq!(preset.primary(), None, "the chat stays at the vendor");
+    assert_eq!(
+        preset.roles(),
+        vec![("embed", "Qwen3-Embedding-0.6B-Q8_0")],
+        "{preset:?}"
+    );
+}
+
+/// The pair's boot follows its plan: `assemble_serving` moves once, before
+/// anything is planned or spawned, so the build cannot load the embedder
+/// here. The move is what the router then serves; a file with a missing GGUF
+/// still fails, naming the path.
+#[test]
+fn a_hosted_pair_boots_toward_the_router_not_the_loader_it_replaced() {
+    let mut config = hosted(None);
+    config.engine.embed_path = Some("/models/Qwen3-Embedding-0.6B-Q8_0.gguf".into());
+    assert!(is_hosted_pair(&config));
+    let plan = plan_serving(&config).expect("the pair is served, not refused");
+    assert_eq!(plan.engine, EngineKind::LlamaServer);
+    assert!(
+        plan.router.is_some() && plan.in_process.is_empty(),
+        "the router runs the embedder, this process nothing: {plan:?}"
+    );
+    // And the boot answers the same way: it stops at the shipped-server
+    // check of the router it planned, never at a `remote` loader or at the
+    // class refusal the moved section no longer trips.
     let err = match assemble_serving(&config) {
-        Ok(_) => panic!("nothing to serve must refuse"),
-        Err(e) => e,
+        Ok(_) => panic!("a router with no server binary must refuse"),
+        Err(e) => e.reason,
     };
     assert!(
-        err.reason.contains("embed_path") && err.reason.contains("llama-server"),
-        "the refusal names the key and the engine: {}",
-        err.reason
+        !err.contains("not served by kind")
+            && !err.contains("names no route")
+            && !err.contains("embed_path"),
+        "the boot planned the pair's router, not a refusal: {err}"
     );
 }

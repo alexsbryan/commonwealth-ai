@@ -18,6 +18,12 @@ use sovereign_contracts::traits::ServingLocus;
 
 use crate::{RemoteApiProvider, SplitInferenceProvider};
 
+/// The chat id a hosted engine carries when it names no chat model: a pair
+/// whose chat is at a vendor and whose embedder the router runs. A LABEL —
+/// the wire carries no `model` field for it (`with_placeholder_model_id`),
+/// so the vendor's default answers.
+pub const HOSTED_DEFAULT_MODEL_ID: &str = "hosted-default";
+
 /// Who answers this provider's requests. It decides how the OICP envelope
 /// crosses and whether a request may be sent at all.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -379,10 +385,17 @@ impl SplitInferenceProvider {
             };
             Ok(provider.waiting_out_sheds())
         };
-        let chat = half(chat_endpoint_v1, &chat_model_id)?
+        // `hosted-default` is a LABEL for a pair that names no chat model
+        // (`[engine] embed_path` only): there is no such model at the vendor,
+        // so it must not go on the wire as the `model` field. Every other id
+        // is a name the endpoint resolves and is pinned as before.
+        let mut chat = half(chat_endpoint_v1, &chat_model_id)?
             .with_extra_params(extra_params)
             .with_structured_output_mode(structured_output)
             .with_grammar(grammar);
+        if chat_model_id == HOSTED_DEFAULT_MODEL_ID {
+            chat = chat.with_placeholder_model_id();
+        }
         let local_embed = matches!(embed, EngineEmbed::Local { .. });
         let (embed, embed_model_id, embed_at): (
             std::sync::Arc<dyn sovereign_contracts::traits::InferenceProvider>,

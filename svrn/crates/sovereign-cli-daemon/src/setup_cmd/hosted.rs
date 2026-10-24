@@ -196,7 +196,13 @@ async fn hosted_setup(raw: &str, opts: &Opts) -> Result<(), String> {
 }
 
 /// The config this command writes: no `[models]`, the vendor as a remote
-/// `[engine]` that embeds from `embed_path` in this process.
+/// `[engine]` whose embedding GGUF the router runs as its one preset section
+/// (`EngineSection::hosted_router_section`, ENGINE_SWAP_PLAN A6).
+///
+/// `context_size = 0`: the vendor's window is not a context this node
+/// serves, and since the pair is a one-section router (no chat model here),
+/// 0 is what says so — the key [`EngineSection::unhostable_on_router`]
+/// reads as "a preset", not "a chat model beside an embedder".
 fn hosted_config(
     vendor: Vendor,
     model: String,
@@ -214,7 +220,7 @@ fn hosted_config(
         api_key: Some(key),
         model_id: Some(model),
         fast_model_id: fast_model,
-        context_size: vendor.context_size,
+        context_size: 0,
         embed_path: Some(embed_path),
         extra_params: vendor.extra_params,
         structured_output: vendor.structured_output,
@@ -300,6 +306,48 @@ mod tests {
         assert_eq!(
             loaded.advertised_embed_model_id().as_deref(),
             Some("Qwen3-Embedding-0.6B-Q8_0")
+        );
+    }
+
+    /// What `svrn setup --hosted` writes is the hosted PAIR the router
+    /// serves (ENGINE_SWAP_PLAN A6): its chat stays at the vendor, its
+    /// embedding GGUF becomes the router's one section. The file says so
+    /// with `context_size = 0` (no chat model here), which is the shape the
+    /// plan, the boot and the class check all read as that section.
+    #[test]
+    fn the_written_config_is_the_pair_the_router_serves() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cfg = hosted_config(
+            vendor("deepseek").unwrap(),
+            "deepseek-flash".into(),
+            "not-a-key".into(),
+            None,
+            dir.path().join("models/Qwen3-Embedding-0.6B-Q8_0.gguf"),
+            dir.path().to_path_buf(),
+            19751,
+        );
+        assert_eq!(cfg.engine.context_size, 0, "no chat model on this node");
+        assert_eq!(
+            cfg.engine.unhostable_on_router(),
+            None,
+            "the pair is servable, as the router's one-section preset"
+        );
+        let moved = cfg
+            .engine
+            .hosted_router_section()
+            .expect("the pair moves to the router");
+        assert_eq!(moved.kind, EngineKind::LlamaServer);
+        assert_eq!(
+            moved.endpoint.as_deref(),
+            Some("https://api.deepseek.com/v1")
+        );
+        assert_eq!(
+            moved.embed_path.as_deref(),
+            Some(
+                dir.path()
+                    .join("models/Qwen3-Embedding-0.6B-Q8_0.gguf")
+                    .as_path()
+            )
         );
     }
 

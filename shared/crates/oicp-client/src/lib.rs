@@ -1428,7 +1428,7 @@ mod chat_wire;
 mod forced_choice;
 mod outbound;
 mod response_wire;
-pub use outbound::{EngineEmbed, FarEnd, Payload, ThirdPartyRefusal};
+pub use outbound::{EngineEmbed, FarEnd, Payload, ThirdPartyRefusal, HOSTED_DEFAULT_MODEL_ID};
 mod shed;
 pub use chat_wire::{openai_function_name, titled_schema, write_constraints, StructuredOutputMode};
 mod loopback;
@@ -1848,8 +1848,16 @@ impl InferenceProvider for SplitInferenceProvider {
         serve_loopback::compute_children(&self.served)
     }
 
+    /// The preset's embed section names it outright. With no id at all — a
+    /// hosted pair, whose chat is at the vendor and whose embedder is the
+    /// router's — the answer is the trait's own sentinel; `""` would read
+    /// downstream as a real model named empty-string (§18.3).
     fn embed_model_id(&self) -> String {
-        self.embed_model_id.clone()
+        if self.embed_model_id.is_empty() {
+            "unknown".to_string()
+        } else {
+            self.embed_model_id.clone()
+        }
     }
 
     /// Forwarding, and WHERE to matters.

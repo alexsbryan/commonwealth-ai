@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use sovereign_contracts::model_family::ModelFamily;
-use sovereign_contracts::setup_config::{EngineKind, ModelsSection, SetupConfig};
+use sovereign_contracts::setup_config::{EngineKind, EngineSection, ModelsSection, SetupConfig};
 use sovereign_contracts::types::NextEditFormat;
 use sovereign_contracts::InferenceProvider;
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
@@ -123,32 +123,67 @@ fn next_edit_fallback_enabled() -> bool {
     )
 }
 
+/// Is this config the hosted pair `svrn setup --hosted` writes — a vendor
+/// chat with an `embed_path` GGUF and no `[models]`, on an engine that does
+/// not hold chat weights?
+///
+/// The one test for the config SHAPE, beside the one mover
+/// ([`EngineSection::hosted_router_section`], which decides the section): its
+/// no-`[models]` half is what makes the pair a one-section router rather
+/// than a preset beside a vendor chat, so the two questions are asked in
+/// their own places (ARCH 8).
+fn is_hosted_pair(config: &SetupConfig) -> bool {
+    config.engine.hosted_router_section().is_some() && config.models.is_none()
+}
+
+/// The `[engine]` section this node is PLANNED and SERVED with: the pair's
+/// moved one when `config` is a hosted pair, else its own.
+///
+/// Every caller that asks "which engine is this" reads this rather than
+/// `config.engine.kind`, so the plan, the boot and the reload cannot
+/// disagree about a file nobody rewrote (ARCH 8).
+fn hosted_pair_plan(config: &SetupConfig) -> EngineSection {
+    match is_hosted_pair(config) {
+        true => config
+            .engine
+            .hosted_router_section()
+            .expect("is_hosted_pair asked the same decider"),
+        false => config.engine.clone(),
+    }
+}
+
 /// The slot set `config` asks for. Pure apart from its env reads (the
 /// fallback above, the served kind's path) and, for a router, the GGUF
 /// headers its preset reads.
+///
+/// A hosted pair — `kind = "remote"` with `[engine] embed_path`, no
+/// `[models]` — is planned as the router node it is moved to
+/// (`EngineSection::hosted_router_section`, ENGINE_SWAP_PLAN A6), so this
+/// function's answer and the boot's agree on a file nobody has rewritten.
 pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
     // Through the accessor, not the field: the refusal it returns names WHY
     // there are no slots (a terminal routes instead; an unconfigured node
-    // runs `svrn setup`).
-    let engine = config.engine.kind.clone();
+    // runs `svrn setup`). The ENGINE is the one `hosted_pair_plan` answers:
+    // a hosted pair is planned as the one-section router it is served by.
+    let engine = hosted_pair_plan(config);
     // A remote engine holds no chat slots, so it needs no `[models]`. Neither
-    // does a router node: its models are the preset's, and a hosted node on
-    // `kind = "llama-server"` has none at all (its chat is at the vendor and
-    // its embedder is the one section [`RouterPreset::embed_only`] builds).
-    let models_may_be_absent = !engine.needs_models() || engine == EngineKind::LlamaServer;
+    // does a router node: its models are the preset's, and a hosted node has
+    // none at all (its chat is at the vendor and its embedder is the one
+    // section [`RouterPreset::embed_only`] builds).
+    let models_may_be_absent =
+        !engine.kind.needs_models() || engine.kind == EngineKind::LlamaServer;
     let models = if models_may_be_absent {
-        // A hosted pair — a vendor chat (`endpoint`) with an embedding GGUF
-        // — is a refusal, not a plan with nothing in it. `config.models()`
-        // below would refuse this node as an unconfigured one and name
-        // `svrn setup`, which is the wrong advice for a file that is
-        // configured. `EngineSection::unhostable_on_router` is the one
-        // decider; the class check already refused it at load, and this
-        // answers a config built in memory (ARCH 6, 8).
-        if let Some(key) = config.engine.unhostable_on_router() {
+        // A vendor chat with an `embed_path` anyway (so `hosted_pair_plan`
+        // did not move it, `embed_endpoint` is taken, and there is no
+        // `[models]`) names no route: the router's preset is `[models]`.
+        // Refused by name, so the boot never answers for a file it dropped a
+        // key from (ARCH 6).
+        if let Some(key) = engine.unhostable_on_router() {
             return Err(format!(
-                "[engine] `{key}` beside `embed_path` is not served by kind = \"llama-server\": \
-                 the router owns the embedding GGUF and a hosted pair names no `[models]` for \
-                 its preset. Name `embed_endpoint`, add `[models]`, or run kind = \"remote\"."
+                "[engine] `{key}` beside `embed_path` names no route: the router builds its \
+                 preset from `[models]`, and a node whose chat is at a vendor names none. \
+                 Name `embed_endpoint`, name `[models]`, or name both `endpoint` and \
+                 `embed_path` (which is served as the router's one section)."
             ));
         }
         config.models().ok()
@@ -156,10 +191,11 @@ pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
         Some(config.models()?)
     };
     let mut in_process = BTreeSet::new();
-    // Llama holds its slots here. A remote engine holds one only when it
-    // embeds in this process (`[engine] embed_path`); any other engine embeds
-    // remotely and reports `Unknown` (`BuiltEngine::external`).
-    let embed_family = if let (EngineKind::Llama, Some(models)) = (&engine, models) {
+    // Llama holds its slots here. Every other engine holds none: a remote
+    // engine embeds on the server it names (`embed_endpoint`, or the vendor),
+    // and a router node's embedder is the preset's section. Their family is
+    // `Unknown` where nothing loads locally (`BuiltEngine::external`).
+    let embed_family = if let (EngineKind::Llama, Some(models)) = (&engine.kind, models) {
         in_process.insert(PlannedSlot::Fast);
         if !engine_factory::child_owns_primary(config) {
             in_process.insert(PlannedSlot::Primary);
@@ -178,19 +214,18 @@ pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
             in_process.insert(PlannedSlot::Rerank);
         }
         engine_factory::embed_family_for(&models.embed)
-    } else if let (EngineKind::LlamaServer, Some(models)) = (&engine, models) {
+    } else if let (EngineKind::LlamaServer, Some(models)) = (&engine.kind, models) {
         engine_factory::embed_family_for(&models.embed)
     } else if let (EngineKind::LlamaServer, None, Some(_)) =
-        (&engine, models, config.engine.own_embed_path())
+        (&engine.kind, models, engine.own_embed_path())
     {
         // A router node with no `[models]` embeds from `[engine] embed_path`,
         // when it names one; the router serves it as its only section, so
         // the slot is NOT this process's.
-        config
-            .engine
+        engine
             .own_embed_path()
             .map_or(ModelFamily::Unknown, engine_factory::embed_family_for)
-    } else if let Some(path) = config.engine.own_embed_path() {
+    } else if let Some(path) = engine.own_embed_path() {
         in_process.insert(PlannedSlot::Embed);
         engine_factory::embed_family_for(path)
     } else {
@@ -209,7 +244,7 @@ pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
             children.insert((spec.name, spec.model));
         }
     }
-    let router = match (&engine, models) {
+    let router = match (&engine.kind, models) {
         (EngineKind::LlamaServer, Some(models)) => Some(RouterPreset::from_models(
             models,
             served_kind::RERANK.model_path(Some(models)),
@@ -217,15 +252,14 @@ pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
             sovereign_inference::gguf_meta::read_mtp_draft_layers,
         )?),
         // No `[models]`: a hosted node's router serves only its embedder.
-        (EngineKind::LlamaServer, None) => config
-            .engine
+        (EngineKind::LlamaServer, None) => engine
             .own_embed_path()
             .map(|path| RouterPreset::embed_only(path, &config.daemon))
             .transpose()?,
         _ => None,
     };
     Ok(ServingPlan {
-        engine,
+        engine: engine.kind,
         in_process,
         children,
         embed_family,
@@ -271,6 +305,27 @@ impl ReloadFactory {
     /// Plan, admit and build. The containment refusal prints its own block
     /// before returning.
     pub fn build(self: &Arc<Self>, config: &SetupConfig) -> Result<ServingParts, AssemblyError> {
+        // A hosted pair is SERVED, by the router: every model process is the
+        // router's now (ENGINE_SWAP_PLAN A6), so the vendor chat stays remote
+        // and the embedding GGUF becomes its one preset section. Moved here,
+        // once, before anything is planned or built — by the same accessor
+        // `plan_serving` and the class check read.
+        let moved;
+        let config = if is_hosted_pair(config) {
+            let mut moved_config = config.clone();
+            moved_config.engine = hosted_pair_plan(config);
+            tracing::info!(
+                target: "serving_assembly",
+                endpoint = ?config.engine.endpoint,
+                embed_path = ?config.engine.embed_path,
+                "a hosted pair is served by a one-section router: its embedder is the section, \
+                 its chat stays at the vendor"
+            );
+            moved = moved_config;
+            &moved
+        } else {
+            config
+        };
         let plan = plan_serving(config).map_err(|reason| AssemblyError { plan: None, reason })?;
         tracing::info!(target: "serving_assembly", plan = ?plan, "assembling the serving provider");
         let fail = |reason: String| AssemblyError {
@@ -449,6 +504,15 @@ impl ReloadFactory {
                 let capture = derived.engine.capture.take();
                 derived.engine = preset.engine_section(&live_router.endpoint_v1());
                 derived.engine.capture = capture;
+                // A one-section preset serves no chat model, so its
+                // `context_size` (the encoder's fallback) would be reported
+                // as the daemon's window. 0 is "no chat context here" — the
+                // same key that tells `unhostable_on_router` this is a
+                // served one-section preset and not a vendor chat beside an
+                // `embed_path`.
+                if preset.primary().is_none() {
+                    derived.engine.context_size = 0;
+                }
                 Some(derived)
             }
             _ => None,

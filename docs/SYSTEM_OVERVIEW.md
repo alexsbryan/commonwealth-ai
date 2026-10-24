@@ -1291,16 +1291,20 @@ decides each half's `FarEnd`: a loopback endpoint is a server on this box
 end is released by the operator's config: completions go to it, without our
 OICP envelope, and texts to embed or rerank never do (`FarEnd::admit`, the
 one rule, applied by `RemoteApiProvider::outbound`, the only way to build a
-request). A hosted engine therefore embeds on this machine: on
-`kind = "remote"`, `[engine] embed_path` loads the embedding GGUF in this
-process as an `EmbedOnlyProvider` (`EngineEmbed::Local`) and reports the
-family it loaded with, which serve's self report and the mesh embed
-advertisement carry. On `kind = "llama-server"` that load is the router's
-(one supervised process per preset section, ENGINE_SWAP_PLAN A6), so a
-hosted pair — a vendor `endpoint` with `embed_path`, and no `[models]` for
-the preset — is refused by name at load and at plan time
-(`EngineSection::unhostable_on_router`, `ASSEMBLY` §the router owns the model
-processes), where the router's route for it is `embed_endpoint`.
+request). A hosted engine therefore embeds on this machine, and the ROUTER runs that
+model: the hosted pair — a vendor `endpoint` with `[engine] embed_path` and
+no `[models]` — is a one-section `LiveRouter` (`RouterPreset::embed_only`,
+ENGINE_SWAP_PLAN A6), its embedder the section and its chat still the
+vendor's. `EngineSection::hosted_router_section` is the one mover (it keeps
+every key, writes `context_size = 0`, and is read by the plan, the boot, the
+reload and the class check), so `svrn setup --hosted`'s file is served as
+written. Nothing loads a GGUF in the daemon's own process any more:
+`kind = "remote"` with `embed_path` refuses by name (`build_remote`), and the
+one remaining refusal, a vendor chat beside an `embed_path` that also names
+an `embed_endpoint`, is `EngineSection::unhostable_on_router` (`ASSEMBLY`
+§the router owns the model processes). A no-`model_id` pair sends no `model`
+on the wire (`HOSTED_DEFAULT_MODEL_ID` is a placeholder label) and reports
+`embed_model_id` as the trait's `"unknown"`.
 `EngineKind::needs_models` (every engine but remote) is the one answer to
 whether `[models]` is read — by the load-time class check, `node_class()`,
 `plan_serving` and the reload — so a hosted node needs none. The engine

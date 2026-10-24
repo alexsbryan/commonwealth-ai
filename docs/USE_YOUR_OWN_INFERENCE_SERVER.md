@@ -173,17 +173,18 @@ node's chat turns and enrichment calls to it. Our OICP envelope is not sent;
 a vendor does not speak it.
 
 **Embeddings stay on this machine.** Text is never sent to a vendor to be
-embedded. Name the embedding GGUF in `embed_path` and this process loads it
-(Qwen3-Embedding-0.6B is about 600 MB and runs on CPU), so no `[models]`
-section and no second server are needed. A llama-server on this machine,
-named in `embed_endpoint`, also works. With no GPU it runs on the CPU and the
-daemon's log says so.
+embedded. Name the embedding GGUF in `embed_path` and the router runs it, in
+a supervised process of its own beside your vendor chat (Qwen3-Embedding-0.6B
+is about 600 MB and runs on CPU), so no `[models]` section and no second
+server are needed. A llama-server on this machine, named in `embed_endpoint`,
+also works. With no GPU it runs on the CPU and the daemon's log says so.
 
-`embed_path` belongs to `kind = "remote"`, which loads the GGUF itself. On
-`kind = "llama-server"` every model runs in a supervised process the router
-owns, and the preset is built from `[models]`; a hosted pair names none, so
-`endpoint` beside `embed_path` is refused there — name `embed_endpoint` if
-you want a hosted chat on the router. If it will not run on your machine at all, `svrn doctor`
+That is the hosted pair: a vendor `endpoint`, `embed_path`, and no
+`[models]`. It is served the same way on `kind = "remote"` and on
+`kind = "llama-server"` — the pair is moved to a one-section router, so the
+file `svrn setup --hosted` writes needs no edit when the default engine
+changes. Name `embed_endpoint` instead if you would rather point at an
+embedding server you already run. If it will not run on your machine at all, `svrn doctor`
 says which check failed and names the machine; open an issue with
 `svrn doctor --json` attached.
 
@@ -242,7 +243,7 @@ the built-in engine. Retrieval falls back to un-reranked results, which is a
 quality step down, not a failure.
 
 **`svrn status` lists the remote models as resident**, the chat model and any
-`fast_model_id`, plus the embedding model when `embed_path` loads it here.
+`fast_model_id`, plus the embedding model the router runs from `embed_path`.
 Resident means this node can serve them, not that their weights are in its
 memory; ask your own server what it's holding.
 

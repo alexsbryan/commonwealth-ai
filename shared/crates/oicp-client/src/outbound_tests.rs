@@ -8,8 +8,49 @@ use sovereign_contracts::oicp::{InferenceRequirements, ShardingPrivacy};
 use sovereign_contracts::traits::{InferenceProvider, ServingLocus};
 use sovereign_contracts::types::{CompletionRequest, Speed};
 
-use super::{EngineEmbed, FarEnd};
+use super::{EngineEmbed, FarEnd, HOSTED_DEFAULT_MODEL_ID};
 use crate::{RemoteApiProvider, SplitInferenceProvider};
+
+/// A hosted pair names no chat model, and [`HOSTED_DEFAULT_MODEL_ID`] is a
+/// LABEL: the wire must carry no `model` field for it, or the vendor is sent
+/// the name of a model it has never heard of. Measured the other way, on the
+/// mesh's `"mesh-peer"`: sending a label's id put a healthy peer on its
+/// explicit-name path and quarantined it in three strikes.
+#[test]
+fn a_hosted_pairs_label_is_never_put_on_the_wire() {
+    let pair = SplitInferenceProvider::engine(
+        "https://api.example.com/v1",
+        EngineEmbed::Remote {
+            endpoint_v1: "https://api.example.com/v1".to_string(),
+            model_id: String::new(),
+            input_prep: None,
+        },
+        None,
+        HOSTED_DEFAULT_MODEL_ID.to_string(),
+        None,
+        0,
+        None,
+        Default::default(),
+        Default::default(),
+    )
+    .expect("the pair builds");
+    let body = pair
+        .chat
+        .build_request(&CompletionRequest {
+            preferred_speed: Speed::Medium,
+            ..Default::default()
+        })
+        .expect("a request renders");
+    assert_eq!(
+        body["model"], "",
+        "the label must not reach the wire: {body}"
+    );
+    assert_eq!(
+        pair.embed_model_id(),
+        "unknown",
+        "no embed model either: the trait sentinel, never an empty claim"
+    );
+}
 
 /// A vendor in miniature: answers chat, embeddings and rerank, counts every
 /// request that reaches it, and keeps the chat bodies.

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use super::*;
-use sovereign_contracts::setup_config::ModelsSection;
+use sovereign_contracts::setup_config::{EngineSection, ModelsSection};
 
 /// The default must stay `Llama`: an existing `config.toml` names no
 /// engine, and `#[serde(default)]` on the section must therefore
@@ -115,8 +115,12 @@ fn a_manifest_embed_file_keeps_its_family() {
 /// `remote` must refuse rather than invent a default endpoint. A
 /// defaulted `localhost:8000` would make a misconfigured node look
 /// healthy until the first request.
+///
+/// A missing `model_id` is NOT refused: a hosted pair names no chat model,
+/// and "no id" is "the vendor's default" — the id it carries is a label the
+/// wire never sees (`HOSTED_DEFAULT_MODEL_ID`, the placeholder arm).
 #[test]
-fn remote_refuses_without_an_endpoint_or_model_id() {
+fn remote_refuses_without_an_endpoint_and_sends_no_model_id_rather_than_inventing_one() {
     let mut section = EngineSection {
         kind: EngineKind::Remote,
         ..Default::default()
@@ -125,8 +129,15 @@ fn remote_refuses_without_an_endpoint_or_model_id() {
     assert!(err.contains("endpoint"), "got: {err}");
 
     section.endpoint = Some("http://localhost:8000/v1".to_string());
-    let err = build_remote(&section).expect_err("no model_id must refuse");
-    assert!(err.contains("model_id"), "got: {err}");
+    let built = build_remote(&section).expect("a pair with no chat id builds");
+    // No chat id: the pick-up is made with no `model` on the wire (the
+    // placeholder arm), which is asserted at the wire in `outbound`; here the
+    // label it carries is checked to be one, not a name.
+    let carried = built.provider.embed_model_id();
+    assert_eq!(
+        carried, "unknown",
+        "with no embed model either, the id is the trait sentinel, not a claim"
+    );
 }
 
 /// A hosted engine that embeds in process reports the family it loaded
@@ -157,41 +168,66 @@ fn a_hosted_engine_reports_the_embed_family_it_loaded() {
 }
 
 /// THE FAILING INPUT (ENGINE_SWAP_PLAN A6): a hosted pair — a vendor chat
-/// and an embedding GGUF — cannot be served on the engine that replaced the
-/// in-process loader. Before this, `kind = "llama-server"` with that section
-/// planned no preset at all (`plan_serving` needed `[models]` or an
-/// `embed_path` the router could read) and the daemon booted serving nothing,
-/// while `kind = "remote"` still loaded the GGUF in this process — the
-/// process A6 moves into the router. It is refused by name, at the file.
+/// and an embedding GGUF — used to load that GGUF in THIS process
+/// (`EmbeddedLlamaCpp`'s embed slot, `EngineEmbed::Local`), the process A6
+/// retires. Every model process is the router's now, so:
+///
+/// - the pair is MOVED to a one-section router by `hosted_router_section`,
+///   and the moved section is a servable `llama-server` one;
+/// - a `kind = "remote"` build that still names `embed_path` refuses by
+///   path instead of embedding here (ARCH 6).
 #[test]
-fn a_hosted_router_refuses_an_embed_path_it_cannot_serve() {
-    let section = |kind| EngineSection {
-        kind,
+fn a_hosted_pair_is_moved_to_the_router_and_never_embedded_here() {
+    let pair = EngineSection {
+        kind: EngineKind::Remote,
         endpoint: Some("https://api.example.com/v1".to_string()),
         model_id: Some("vendor-model".to_string()),
         embed_path: Some("/models/Qwen3-Embedding-0.6B-Q8_0.gguf".into()),
+        context_size: 0,
         ..Default::default()
     };
-    let refusal = section(EngineKind::LlamaServer)
-        .unhostable_on_router()
-        .expect("endpoint beside embed_path is unservable on the router");
-    assert_eq!(refusal, "endpoint");
-    let err = build_engine_of(&section(EngineKind::LlamaServer))
-        .expect_err("the router's half must refuse the pair, not load it here");
-    assert!(
-        err.contains("embed_path") && err.contains("llama-server"),
-        "the refusal names the pair and the engine: {err}"
+    let moved = pair
+        .hosted_router_section()
+        .expect("the pair moves to the router");
+    assert_eq!(moved.kind, EngineKind::LlamaServer);
+    assert_eq!(moved.embed_path, pair.embed_path, "the GGUF is kept");
+    assert_eq!(moved.endpoint, pair.endpoint, "the vendor chat is kept");
+    assert_eq!(
+        moved.unhostable_on_router(),
+        None,
+        "the moved section is what the router serves"
     );
-    // The embed SERVER route hosts nothing, so it is servable: the router
-    // reaches it the way `remote` does.
-    let mut served = section(EngineKind::LlamaServer);
+
+    // Unmoved, the pair has nothing to serve here: `build_engine` answers it
+    // with the `llama-server` arm, which names the embed GGUF the router
+    // runs — never a loader in this process (ARCH 6).
+    let err = build_engine_of(&pair).expect_err("remote must not load the GGUF in this process");
+    assert!(
+        err.contains("embed_path")
+            && err.contains("/models/Qwen3-Embedding-0.6B-Q8_0.gguf")
+            && err.contains("llama-server"),
+        "the refusal names the path, the engine and where it is served: {err}"
+    );
+    assert!(
+        !err.contains("This binary can serve"),
+        "the pair is refused by what it is, not as an unknown engine: {err}"
+    );
+
+    // A section that is not the pair is returned untouched: a `remote`
+    // engine with an embed SERVER hosts nothing and moves nowhere.
+    let mut served = pair.clone();
     served.embed_path = None;
     served.embed_endpoint = Some("http://127.0.0.1:8001/v1".to_string());
     served.embed_model_id = Some("e".to_string());
-    assert_eq!(served.unhostable_on_router(), None);
+    assert_eq!(
+        served.hosted_router_section().map(|s| s.kind),
+        None,
+        "an embed SERVER hosts nothing"
+    );
     // A local chat model is what the router serves anyway; `embed_path` on it
-    // is the inert key `own_embed_path` already answers `None` for.
-    let mut local = section(EngineKind::LlamaServer);
+    // is still inert.
+    let mut local = pair.clone();
+    local.kind = EngineKind::LlamaServer;
     local.endpoint = None;
     assert_eq!(local.unhostable_on_router(), None);
 }

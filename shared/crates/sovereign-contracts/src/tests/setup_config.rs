@@ -640,31 +640,34 @@ fn roundtrip_preserves_mcp_servers() {
     assert!(parsed.mcp_servers.is_empty());
 }
 
-/// The file's class check refuses an `[engine]` pair no engine can serve:
-/// a vendor chat (`endpoint`) beside an embedding GGUF this process would
-/// load (`embed_path`). On `kind = "llama-server"` the router owns that
-/// GGUF and a hosted pair names no `[models]` for the preset, so the pair is
-/// refused where the file is read, naming both keys, rather than booting a
-/// node that serves nothing (ENGINE_SWAP_PLAN A6). The pair stays loadable
-/// on `kind = "remote"` until the default flips.
+/// The file's class check, on the hosted pair (ENGINE_SWAP_PLAN A6): a
+/// vendor chat (`endpoint`) with an embedding GGUF (`embed_path`) loads on
+/// both engines, because the router serves that GGUF in a supervised process
+/// of its own (`hosted_router_section` moves the pair there). What is still
+/// refused is the pair with no `embed_endpoint`, no `endpoint` and no
+/// `model_id`: nothing says where its chat is, so the moved node has no
+/// route for it.
 #[test]
-fn an_engine_section_the_router_cannot_serve_is_refused_at_load() {
-    let hosted = |kind: &str| {
+fn the_hosted_pair_loads_on_both_engines_and_its_voiceless_form_is_refused() {
+    let pair = |kind: &str| {
         format!(
             "[engine]\nkind = \"{kind}\"\nendpoint = \"https://api.example.com/v1\"\n\
-             model_id = \"vendor-model\"\nembed_path = \"/m/Qwen3-Embedding-0.6B-Q8_0.gguf\"\n"
+             model_id = \"vendor-model\"\ncontext_size = 0\n\
+             embed_path = \"/m/Qwen3-Embedding-0.6B-Q8_0.gguf\"\n"
         )
     };
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("config.toml");
 
-    std::fs::write(&path, hosted("llama-server")).unwrap();
-    let err = SetupConfig::load_from(&path).expect_err("the router cannot serve the pair");
-    assert!(
-        err.contains("endpoint") && err.contains("embed_path") && err.contains("llama-server"),
-        "the refusal names both keys and the engine: {err}"
-    );
+    std::fs::write(&path, pair("remote")).unwrap();
+    SetupConfig::load_from(&path).expect("kind = \"remote\" loads the pair");
 
-    std::fs::write(&path, hosted("remote")).unwrap();
-    SetupConfig::load_from(&path).expect("kind = \"remote\" still loads it until the flip");
+    std::fs::write(&path, pair("llama-server")).unwrap();
+    let loaded = SetupConfig::load_from(&path)
+        .expect("the router serves the pair as its one-section preset");
+    assert_eq!(loaded.engine.kind, EngineKind::LlamaServer);
+    assert_eq!(
+        loaded.engine.embed_path.as_deref(),
+        Some(std::path::Path::new("/m/Qwen3-Embedding-0.6B-Q8_0.gguf"))
+    );
 }

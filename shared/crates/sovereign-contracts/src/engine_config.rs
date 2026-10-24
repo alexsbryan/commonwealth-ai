@@ -286,17 +286,53 @@ impl EngineSection {
         }
     }
 
-    /// The key that makes this section unservable on `kind = "llama-server"`
-    /// — `endpoint` beside `embed_path` — or `None` when the section can be
-    /// served there.
+    /// The section the router is started with, when `self` is the hosted
+    /// PAIR `svrn setup --hosted` writes — a vendor chat (`endpoint`), an
+    /// `embed_path` GGUF, and no `embed_endpoint`.
     ///
-    /// On `kind = "remote"` `embed_path` meant "embed in THIS process": the
-    /// daemon loaded the GGUF itself, one of the two things ENGINE_SWAP_PLAN
-    /// A6 moved into the router. A node whose chat model is at a vendor has
-    /// no router to move the embedder to, so the pair cannot be served on
-    /// `kind = "llama-server"` at all — which makes it a by-name refusal, not
-    /// a silently dropped embedder (ARCH 6). The server route is
-    /// `embed_endpoint`, which hosts nothing here.
+    /// The pair's route is the router: `embed_path` is one GGUF the router
+    /// runs in a supervised process of its own (ENGINE_SWAP_PLAN A6), and
+    /// the vendor chat is reached over `endpoint` regardless, since a router
+    /// node keeps no chat weights. So the section becomes
+    /// `kind = "llama-server"` with `context_size = 0` — that key is the
+    /// preset's chat ctx, and a one-section preset has no chat model — which
+    /// is the mark [`Self::unhostable_on_router`] reads.
+    ///
+    /// `None` for every other section: a `remote` with an embed SERVER hosts
+    /// nothing, and a caller that builds the preset AROUND an `embed_endpoint`
+    /// sets `context_size = 0` itself (sovereign-compute's assembly), which
+    /// is a servable router and not this pair.
+    pub fn hosted_router_section(&self) -> Option<EngineSection> {
+        let hosted = match self.kind {
+            EngineKind::Remote | EngineKind::LlamaServer => {
+                self.embed_path.is_some()
+                    && self.endpoint.is_some()
+                    && self.embed_endpoint.is_none()
+                    // `context_size` 0 is the mark a one-section preset
+                    // carries (`RouterPreset::engine_section`); a file that
+                    // sets one asks for a chat model beside the embedder.
+                    && self.context_size == 0
+            }
+            _ => false,
+        };
+        hosted.then(|| EngineSection {
+            kind: EngineKind::LlamaServer,
+            context_size: 0,
+            ..self.clone()
+        })
+    }
+
+    /// The key that makes this section unservable on `kind = "llama-server"`
+    /// — a vendor `endpoint` beside an `embed_path` — or `None` when the
+    /// section can be served there.
+    ///
+    /// An `embed_path` GGUF is always loaded by the router (ENGINE_SWAP_PLAN
+    /// A6), from the preset `[models]` builds. A node whose chat model is at
+    /// a vendor names no `[models]`, so that one GGUF has no preset to be a
+    /// section of. The server route is `embed_endpoint`, which hosts nothing
+    /// here; the pair's own route is `hosted_router_section` (sovereign
+    /// inference's `engine_factory`), which moves `kind = "remote"` +
+    /// `embed_path` onto a one-section router.
     ///
     /// One implementation, read by both the startup class check
     /// ([`crate::setup_config::SetupConfig::validate_class`]) and the boot
@@ -306,8 +342,14 @@ impl EngineSection {
         (self.kind == EngineKind::LlamaServer
             && self.embed_path.is_some()
             && self.embed_endpoint.is_none()
-            && self.endpoint.is_some())
-        .then_some("endpoint")
+            && (self.endpoint.is_some() || self.model_id.is_some())
+            // A hosted pair is SERVED, as a one-section preset — that is
+            // what `hosted_router_section` produces, and it keeps the
+            // vendor chat for the remote half. `context_size` 0 is the mark
+            // it writes; a file that sets one is a CHAT preset beside an
+            // embed_path, the shape no preset can hold.
+            && self.context_size != 0)
+            .then_some("endpoint")
     }
 }
 

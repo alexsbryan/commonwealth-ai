@@ -367,18 +367,18 @@ fn remote_embed_input_prep(
 ///
 /// A second SPELLING, not a second decider: the one implementation is
 /// [`EngineSection::unhostable_on_router`] (sovereign-contracts), and this
-/// only words its answer for an operator reading the boot error. The hosted
-/// `kind = "remote"` build below reaches it, and so does
-/// `SetupConfig::validate_class` before a daemon starts.
+/// only words its answer for an operator reading the boot error. A
+/// `llama-server` section reaches it here, and
+/// `SetupConfig::validate_class` asks the same decider before a daemon
+/// starts. A hosted `kind = "remote"` pair never reaches it: it is MOVED to
+/// the router by `EngineSection::hosted_router_section`.
 fn unhostable_embed_path(section: &EngineSection) -> Option<String> {
     let excluded = section.unhostable_on_router()?;
     Some(format!(
-        "[engine] `{excluded}` with `embed_path` loads the embedding GGUF in this process, \
-         which kind = \"llama-server\" does not do: the router serves the embedder in a \
-         supervised process of its own (ENGINE_SWAP_PLAN A6), and a node whose chat is at a \
-         vendor names no `[models]` to build that preset from. Point `{excluded}` at the \
-         vendor to keep the pair, name `embed_endpoint` to embed on a server, or run \
-         kind = \"llama\"."
+        "[engine] `{excluded}` beside `embed_path`: the embedding GGUF runs in the router's \
+         supervised process (ENGINE_SWAP_PLAN A6), and that preset is built from `[models]`, \
+         which a node with a vendor chat does not name. Name `embed_endpoint` to embed on a \
+         server, add `[models]`, or drop `{excluded}`."
     ))
 }
 
@@ -389,11 +389,16 @@ fn build_remote(section: &EngineSection) -> Result<BuiltEngine, String> {
          endpoint = \"http://localhost:8000/v1\")"
             .to_string()
     })?;
-    let model_id = section.model_id.as_deref().ok_or_else(|| {
-        "[engine] kind = \"remote\" requires `model_id` — the name the remote serves. \
-         It is sent on the wire, so a wrong value is a routing bug, not a label."
-            .to_string()
-    })?;
+    // A hosted pair with no `model_id` sends NO model name (a placeholder),
+    // so the vendor's default answers. It used to refuse, because a pair that
+    // embedded here was a complete node; now the pair's embedder is the
+    // router's and this half serves only the vendor chat, where "no id" is
+    // "no preference" — an id invented here would be a routing bug (ARCH 6).
+    let placeholder = section.model_id.is_none();
+    let model_id = section
+        .model_id
+        .as_deref()
+        .unwrap_or(crate::remote::HOSTED_DEFAULT_MODEL_ID);
     // Chat and embeddings are ONE model id on ONE endpoint unless the
     // operator says otherwise. That default is correct against a Sovereign
     // daemon, which routes embeddings to its own embed slot whatever id it
@@ -429,55 +434,48 @@ fn build_remote(section: &EngineSection) -> Result<BuiltEngine, String> {
     // is handed, and wrong against vLLM / SGLang / TGI, which serve one
     // model per process and return a non-embedding shape (or an error) when
     // a chat model reaches `/embeddings`. So an embed endpoint must name its
-    // model. A vendor is never sent texts at all, so a hosted engine names
-    // `embed_path` instead: the small embedding GGUF, in this process.
-    let (embed, embed_family) = match section.embed_path.as_deref() {
-        Some(path) => {
-            let family = embed_family_for(path);
-            let model_id = path
-                .file_stem()
-                .map(|s| s.to_string_lossy().into_owned())
-                .ok_or_else(|| format!("[engine] embed_path {} names no file", path.display()))?;
-            // llama-cpp-4 panics on a missing file (`model.rs`: "does not
-            // exist"); refuse first, naming the path, so a typo is a message
-            // and not a dead daemon.
-            if !path.is_file() {
-                return Err(format!(
-                    "[engine] embed_path {} is not a file. Point it at the embedding GGUF \
-                     (`svrn setup --hosted` downloads one).",
-                    path.display()
-                ));
-            }
-            let provider = crate::embedded::EmbedOnlyProvider::load(path, family.clone())
-                .map_err(|e| format!("[engine] embed_path {}: {e}", path.display()))?;
-            tracing::info!(
-                target: "engine_factory",
-                path = %path.display(),
-                ?family,
-                %model_id,
-                "remote engine: embeddings run in this process"
-            );
-            let embed = EngineEmbed::Local {
-                provider: Arc::new(provider),
-                model_id,
-            };
-            (embed, family)
-        }
-        None => {
-            let embed_model_id = section.embed_model_id.as_deref().unwrap_or(model_id);
-            let input_prep = remote_embed_input_prep(section, embed_model_id)?;
-            let embed = EngineEmbed::Remote {
-                endpoint_v1: section
-                    .embed_endpoint
-                    .as_deref()
-                    .unwrap_or(endpoint)
-                    .to_string(),
-                model_id: embed_model_id.to_string(),
-                input_prep,
-            };
-            (embed, ModelFamily::Unknown)
-        }
+    // model.
+    //
+    // `embed_path` is no longer a source here. A hosted engine used to load
+    // that GGUF in this process (`EmbeddedLlamaCpp`'s embed slot); the router
+    // owns every model process now (ENGINE_SWAP_PLAN A6), so a hosted pair is
+    // moved to `kind = "llama-server"` by `hosted_router_section` before it
+    // reaches this function. A `remote` build that still names one is refused
+    // by name rather than embedding here (ARCH 6).
+    if let Some(path) = section.embed_path.as_deref() {
+        tracing::error!(
+            target: "engine_factory",
+            path = %path.display(),
+            "refused: kind = \"remote\" cannot load embed_path in this process"
+        );
+        return Err(format!(
+            "[engine] embed_path {} is not loaded by kind = \"remote\" any more: the router \
+             owns every model process (ENGINE_SWAP_PLAN A6), so the hosted pair runs on \
+             kind = \"llama-server\", where the embedder is its one preset section \
+             (`hosted_router_section` moves it there). Name `embed_endpoint` to embed on a \
+             server, or name `[models]` and run kind = \"llama-server\".",
+            path.display()
+        ));
+    }
+    // An embed SERVER is named; there is no embed model here to name. With
+    // no id either, the pair's label is not an embed model (the trait's
+    // `"unknown"` sentinel is what "nothing to say" answers).
+    let embed_model_id =
+        section
+            .embed_model_id
+            .as_deref()
+            .unwrap_or(if placeholder { "" } else { model_id });
+    let input_prep = remote_embed_input_prep(section, embed_model_id)?;
+    let embed = EngineEmbed::Remote {
+        endpoint_v1: section
+            .embed_endpoint
+            .as_deref()
+            .unwrap_or(endpoint)
+            .to_string(),
+        model_id: embed_model_id.to_string(),
+        input_prep,
     };
+    let embed_family = ModelFamily::Unknown;
     // One shape for every remote engine. The pair decides each half's far
     // end (an endpoint off this machine is a third party, never sent texts)
     // and the locus the router reads.
@@ -493,6 +491,13 @@ fn build_remote(section: &EngineSection) -> Result<BuiltEngine, String> {
         section.grammar.unwrap_or_default(),
     )
     .map_err(|e| format!("[engine] kind = \"remote\": {e}"))?;
+    if placeholder {
+        tracing::info!(
+            target: "engine_factory",
+            endpoint = %endpoint,
+            "hosted engine: no `model_id`, so no model name goes on the wire; the vendor's default answers"
+        );
+    }
     tracing::info!(
         target: "engine_factory",
         endpoint = %endpoint,

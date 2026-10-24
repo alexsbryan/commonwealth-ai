@@ -1697,17 +1697,21 @@ impl SetupConfig {
                 path.display(),
             ));
         }
-        let serves = self.models.is_some() || !self.engine.kind.needs_models();
+        // A hosted pair — a vendor `endpoint` and an `embed_path` GGUF — is
+        // SERVED, by the router: `hosted_router_section` moves it to
+        // `kind = "llama-server"`, whose preset is that one GGUF in a
+        // supervised process (ENGINE_SWAP_PLAN A6). So the class is judged
+        // on the moved section rather than refused. No `[models]` is needed
+        // either way; `needs_models` is what says so.
+        let serves = self.models.is_some()
+            || !self.engine.kind.needs_models()
+            || self.engine.hosted_router_section().is_some();
         if let Some(key) = self.engine.unhostable_on_router() {
             return Err(format!(
-                "{} sets `[engine] {key}` beside `embed_path`, and every engine that could \
-                 serve that pair holds the embedding GGUF in this process, which \
-                 kind = \"{}\" does not do: its router serves the embedder in a supervised \
-                 process of its own, and a node whose chat is at a vendor has no `[models]` \
-                 to build that preset from. Name `embed_endpoint` instead, or run \
-                 kind = \"remote\".",
+                "{} sets `[engine] {key}` beside `embed_path`, and the router that serves \
+                 that pair builds its preset from `[models]`, which a node whose chat is at \
+                 a vendor does not name. Name `embed_endpoint` instead, or add `[models]`.",
                 path.display(),
-                self.engine.kind,
             ));
         }
         match serves || self.node.binding().is_some() {
