@@ -1271,7 +1271,6 @@ pub fn apply_read_attractor_nudge_chat(req: &mut crate::openai_types::ChatComple
         tool_calls: None,
         reasoning_content: None,
     });
-
 }
 
 /// Pull the task seed (what the user originally asked for) out of a
