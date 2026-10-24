@@ -1259,6 +1259,34 @@ startup, because rpc-server authenticates nothing. The supervisor watches it
 by connect until it first listens (`HealthTarget::TcpListening`), then by its
 exit alone, since rpc-server serves one client on a backlog of 1. A head on
 another build is refused by upstream's HELLO. Proof: `rpc_peer_child_e2e`.
+A HEAD of such a peer names it in `[compute] rpc_peers = ["ip:port", …]`,
+and the router's preset then loads across it with upstream's own split
+(`sovereign_compute::llama_router::placement`): every preset section carries
+`rpc` (the endpoints as llama.cpp's comma list), written before anything
+that indexes a device, since a preset's options are a map keyed by each
+option's first spelling and `--rpc` registers the devices `--tensor-split`
+indexes (`arg.cpp:2598` names the same order for `-mmdev`). With no `-ts`
+llama.cpp divides the model by each device's free memory, the peer's
+queried over RPC, so the split is upstream's and nothing is planned here —
+no `-ot` (that is D4's question). A peer's `[compute] rpc_peer` bind rule is
+applied to the head's list too: loopback and every-interface endpoints are
+refused by name, and one peer named twice is refused rather than loaded as
+two devices. On peer loss the abort is upstream's and uncatchable
+(`ggml-rpc.cpp:30`, `RPC_STATUS_ASSERT` — upstream never reconnects), so it
+is contained by where the RPC client lives: only the supervised router child
+holds the peer's buffers, the daemon and `/status` survive, the child's
+supervisor restarts it, `RouterPlacement::wait_for_peers` holds that restart
+until every peer answers again (backoff, never a spin against a dead socket),
+`/status`'s router line names the lost peer and the reload, and the route
+answers again once both halves are back. A distributed preset is never
+loaded on the head's card alone: the recovered router's `router.ini` is
+byte-identical to the one it was started with, and the digest that covers it
+is what a reload is refused against.
+Proof: `sovereign-stock`'s ignored e2e `router_rpc_split_e2e` — Qwen3.5-9B
+split across a peer on loopback, decode at 90% or more of the same model on
+one device (D2), a SIGKILLed peer child named by `/status` and answered
+again after both supervisors restarted, and no orphan after the daemons are
+SIGKILLed.
 `BuiltEngine.llama` is `None` for every non-llama engine, and the VRAM
 preflight is llama's own question, skipped for engines holding no weights.
 The contracts are executable: `engine_conformance::{check_sync, check_serving}`.

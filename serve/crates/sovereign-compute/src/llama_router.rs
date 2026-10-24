@@ -22,9 +22,12 @@ use sha2::{Digest, Sha256};
 pub mod build_pin;
 mod edit;
 pub mod live;
+pub mod placement;
 pub mod provider;
 use sovereign_contracts::engine_config::{EmbedInputs, EngineKind, EngineSection, GrammarSupport};
 use sovereign_contracts::setup_config::{DaemonSection, ModelsSection};
+
+use self::placement::RouterPlacement;
 use sovereign_inference::capacity::SlotPlan;
 
 /// Draft tokens per MTP step: the embedded engine's default
@@ -107,6 +110,12 @@ pub struct RouterPreset {
     edit: Option<String>,
     embed: Option<String>,
     rerank: Option<String>,
+    /// Where its models run: [`RouterPlacement::Local`] for every preset
+    /// until serving assembly attaches the config's peers
+    /// ([`Self::with_placement`]), so a preset built on its own — every
+    /// unit test, the hosted pair's one section — renders the one-device
+    /// server it always did.
+    placement: RouterPlacement,
 }
 
 fn stem(path: &Path) -> Result<String, String> {
@@ -265,6 +274,7 @@ impl RouterPreset {
             edit,
             embed,
             rerank,
+            placement: RouterPlacement::Local,
         })
     }
 
@@ -293,6 +303,7 @@ impl RouterPreset {
             edit: None,
             embed: Some(name),
             rerank: None,
+            placement: RouterPlacement::Local,
         })
     }
 
@@ -321,6 +332,22 @@ impl RouterPreset {
         self.edit.as_deref()
     }
 
+    /// Where this preset's models run. [`RouterPlacement::Local`] is the
+    /// single-card server; a distributed one carries `[compute] rpc_peers`
+    /// and writes them into every section (es-f2).
+    pub fn placement(&self) -> &RouterPlacement {
+        &self.placement
+    }
+
+    /// `self` with `[compute] rpc_peers` as the placement — the one way a
+    /// preset becomes distributed. Serving assembly calls it on the planned
+    /// preset, so the digest, the render and the router's argv all come from
+    /// one preset (and a reload asking for other peers is a different
+    /// digest, refused by name like any other preset change).
+    pub fn with_placement(self, placement: RouterPlacement) -> Self {
+        Self { placement, ..self }
+    }
+
     /// The model that fills the primary role. `None` on an embed-only router
     /// ([`Self::embed_only`]), which serves no chat model.
     pub fn primary(&self) -> Option<&str> {
@@ -342,6 +369,17 @@ impl RouterPreset {
                 e.path.display(),
                 e.ctx
             );
+            // A distributed section names its peers BEFORE anything that
+            // indexes a device. llama.cpp keeps a preset's options in a map
+            // keyed by each option's first spelling, so it applies `--rpc`
+            // (registering the RPC devices) before `--tensor-split` on
+            // `-t` alone; `arg.cpp:2598` states the same ordering contract
+            // for `-mmdev`, which sorts between them. Written here in that
+            // order so a reader of the file reads it in the order it takes
+            // effect, and so `-ts`'s index 0 is the first peer.
+            if let Some(rpc) = self.placement.rpc_list() {
+                let _ = writeln!(out, "rpc = {rpc}");
+            }
             if let Some(secs) = e.sleep_idle_secs {
                 let _ = writeln!(out, "sleep-idle-seconds = {secs}");
             }

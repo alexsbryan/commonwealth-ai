@@ -265,9 +265,63 @@ fn the_digest_names_the_rendered_preset() {
     assert_ne!(a.digest(), c.digest());
 }
 
+/// es-f2: a distributed preset writes its peers into every section as
+/// `rpc`, and writes it BEFORE `-ts` would be written — llama.cpp keeps a
+/// preset's options in a map keyed by each option's first spelling, so
+/// `--rpc` (which registers the devices) applies before `--tensor-split`
+/// (`arg.cpp:2598` states the same ordering for `-mmdev`). Failing input:
+/// a preset with no peers must render exactly what it rendered before this
+/// row (no `rpc` line anywhere), and a preset WITH peers must differ in its
+/// digest, or a reload naming other peers would be accepted in silence.
+#[test]
+fn a_distributed_preset_names_its_peers_on_every_section_before_any_split() {
+    use crate::llama_router::placement::RouterPlacement;
+    let local = RouterPreset::from_models(&models(), None, &idle(), layers).unwrap();
+    assert!(
+        !local.render().contains("rpc ="),
+        "a single-card preset wrote an rpc key:\n{}",
+        local.render()
+    );
+    let placement = RouterPlacement::from_endpoints(["192.168.1.20:50052", "10.1.2.3:50052"])
+        .expect("two peers");
+    let distributed = local.clone().with_placement(placement.clone());
+    assert_eq!(distributed.placement().peers().len(), 2);
+    let ini = distributed.render();
+    let rpc = "rpc = 192.168.1.20:50052,10.1.2.3:50052";
+    // Every section the router loads: the chat models and the embedder.
+    for section in ["Qwen3.6-35B-A3B-MTP-UD-Q6_K", "Qwen3.5-4B-UD-MTP-Q6_K_XL"] {
+        let start = ini
+            .find(&format!("[{section}]"))
+            .unwrap_or_else(|| panic!("{section} is not a section of\n{ini}"));
+        assert!(
+            ini[start..].starts_with(&format!("[{section}]\nmodel = ")),
+            "{ini}"
+        );
+        // index 0 is the header, 1 the model, 2 the ctx, 3 the peers.
+        let line = ini[start..].lines().nth(3).unwrap_or_default();
+        assert_eq!(line, rpc, "{section}: {ini}");
+    }
+    assert_eq!(
+        ini.matches("rpc =").count(),
+        distributed_warm_count(&distributed),
+        "{ini}"
+    );
+    // A reload naming another split is a different router.
+    let other = local
+        .clone()
+        .with_placement(RouterPlacement::from_endpoints(["192.168.1.21:50052"]).expect("one peer"));
+    assert_ne!(distributed.digest(), other.digest());
+    assert_ne!(local.digest(), distributed.digest());
+}
+
+/// The sections a preset warms, i.e. how many `rpc` lines it writes.
+fn distributed_warm_count(preset: &RouterPreset) -> usize {
+    preset.warm_models().len()
+}
+
 #[test]
 fn the_router_models_listing_reads_status_value_and_a_failed_load() {
-    // The shape `get_router_models` writes (llama.cpp server-models.cpp).
+    // The shape `get_router_models` writes (llama.cpp server-models.cpp)..
     let body = serde_json::json!({"data": [
         {"id": "Qwen3.6-35B-A3B-MTP-UD-Q6_K", "status": {"value": "loaded"}},
         {"id": "Qwen3-Embedding-0.6B-Q8_0", "status": {"value": "loading"}},

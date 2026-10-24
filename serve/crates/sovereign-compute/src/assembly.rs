@@ -21,6 +21,7 @@ use sovereign_inference::engine_factory;
 use sovereign_inference::served_kind;
 
 use crate::llama_router::live::LiveRouter;
+use crate::llama_router::placement::RouterPlacement;
 use crate::llama_router::provider::RouterProvider;
 use crate::llama_router::RouterPreset;
 use crate::manager::{ComputeChildManager, ComputeRoutedProvider, DynamicChildSlot};
@@ -245,12 +246,22 @@ pub fn plan_serving(config: &SetupConfig) -> Result<ServingPlan, String> {
         }
     }
     let router = match (&engine.kind, models) {
-        (EngineKind::LlamaServer, Some(models)) => Some(RouterPreset::from_models(
-            models,
-            served_kind::RERANK.model_path(Some(models)),
-            &config.daemon,
-            sovereign_inference::gguf_meta::read_mtp_draft_layers,
-        )?),
+        (EngineKind::LlamaServer, Some(models)) => Some(
+            RouterPreset::from_models(
+                models,
+                served_kind::RERANK.model_path(Some(models)),
+                &config.daemon,
+                sovereign_inference::gguf_meta::read_mtp_draft_layers,
+            )?
+            // The split is `[compute] rpc_peers`'s, and every section of a
+            // distributed preset names the same peers (ENGINE_SWAP_PLAN F,
+            // f2): the section that loads across them is the one that
+            // carries `rpc`, and a preset whose sections disagreed would
+            // make `-ts` mean two things. Attached here, once, so the digest
+            // (`with_placement` is part of the render) sees it and a reload
+            // naming other peers is refused like any other preset change.
+            .with_placement(RouterPlacement::from_config(config)?),
+        ),
         // No `[models]`: a hosted node's router serves only its embedder.
         (EngineKind::LlamaServer, None) => engine
             .own_embed_path()

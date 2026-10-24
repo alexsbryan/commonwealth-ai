@@ -17,6 +17,7 @@ use sovereign_contracts::oicp::ComputeChildStatus;
 use sovereign_contracts::setup_config::SetupConfig;
 
 use super::build_pin::{self, BuildPin};
+use super::placement::RouterPlacement;
 use super::RouterPreset;
 use crate::supervisor::{HealthTarget, Supervisor, SupervisorConfig, SupervisorState};
 
@@ -25,6 +26,13 @@ pub use sovereign_inference::gpu_probe::SERVER_BINARY;
 
 /// The router answers `/health` once it is listening; the models load after.
 const ROUTER_READY: Duration = Duration::from_secs(60);
+
+/// How long a distributed router waits for its peers before refusing to
+/// spawn. A peer whose supervisor is restarting `ggml-rpc-server` comes back
+/// in about a second (es-f1 measured its readiness as the bind); the budget
+/// is generous because the cost of giving up early is a refused boot, and
+/// the cost of waiting is a boot that is late rather than wrong.
+const PEER_READY: Duration = Duration::from_secs(120);
 
 /// One model's load, the 35B MTP being the slowest (the battery allowed 600s
 /// per forced load and never needed it).
@@ -58,6 +66,10 @@ pub struct LiveRouter {
     /// model died, and the time the repair loop acted on it. Empty for a
     /// healthy router.
     repairs: Arc<Mutex<BTreeMap<String, ModelRepair>>>,
+    /// Where this router's models run (es-f2). [`RouterPlacement::Local`] on
+    /// every single-card node; a distributed one is what lets `/status` name
+    /// a peer that is gone rather than only the child it aborted.
+    placement: RouterPlacement,
 }
 
 /// What happened to one router model, as `/status` reports it.
@@ -200,6 +212,23 @@ impl LiveRouter {
         check_build(&binary, &source)?;
         let dir = config.data.dir.join("llama-server");
         std::fs::create_dir_all(&dir).map_err(|e| format!("creating {}: {e}", dir.display()))?;
+        // A distributed section is never spawned against a peer that is not
+        // there: its model loads across the peers, and llama.cpp has no
+        // reconnect, so a load into a dead endpoint spends the crash budget
+        // on a socket that is not answering yet. The wait is the head's
+        // half of restart-on-peer-loss (upstream's is "abort, never
+        // reconnect"); the peer's half is its own supervisor restarting
+        // `ggml-rpc-server` (`rpc_peer::RpcPeerChild`). Before the preset is
+        // written, so a refusal writes nothing and spawns nothing.
+        let placement = preset.placement();
+        if !placement.peers().is_empty() {
+            tracing::info!(
+                target: "llama_router",
+                placement = %placement,
+                "router: a distributed preset; waiting for its peers before the child is spawned"
+            );
+            placement.wait_for_peers(PEER_READY)?;
+        }
         let preset_path = dir.join("router.ini");
         std::fs::write(&preset_path, preset.render())
             .map_err(|e| format!("writing {}: {e}", preset_path.display()))?;
@@ -235,6 +264,7 @@ impl LiveRouter {
             preset = %preset_path.display(),
             digest = %preset.digest(),
             models_max = %models_max,
+            placement = %placement,
             ?warm,
             "starting the llama-server router"
         );
@@ -270,6 +300,7 @@ impl LiveRouter {
             state: Arc::new(Mutex::new(SupervisorState::Starting)),
             models: Arc::new(Mutex::new(Vec::new())),
             repairs: Arc::new(Mutex::new(BTreeMap::new())),
+            placement: placement.clone(),
         });
         let mut states = supervisor.subscribe();
         runtime.spawn({
@@ -585,6 +616,18 @@ impl LiveRouter {
         let source = match self.source {
             BinarySource::Shipped => "shipped, build verified",
             BinarySource::Override => "override, build unchecked",
+        };
+        // A distributed router's reason names a peer that is not answering
+        // BEFORE the supervisor's own text, so `/status` says WHY the child
+        // restarted as well as that it did (es-f2: upstream never
+        // reconnects, so a dead peer aborts the child and this is the only
+        // surface that names which one).
+        let reason = match self
+            .placement
+            .peer_loss(&format!("preset {}", self.digest), &reason)
+        {
+            Some(lost) => lost,
+            None => reason,
         };
         let mut out = vec![ComputeChildStatus {
             name: SERVER_BINARY.into(),

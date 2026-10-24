@@ -54,6 +54,19 @@ pub struct ComputeSection {
     /// nothing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rpc_peer: Option<String>,
+    /// `ip:port` endpoints of peers whose `[compute] rpc_peer` this node's
+    /// router loads across: written into every preset section as `rpc`, so
+    /// llama.cpp registers each as an RPC device before the section loads
+    /// (`arg.cpp:2598`: `--rpc` must sort before `-mmdev` for the same
+    /// reason). The head's own list; the peers run es-f1's supervised child
+    /// and name this head in nothing (es-f2). With none, the router is a
+    /// one-device server, as before. With some, the split is upstream's:
+    /// every RPC device comes first in the device order, so the preset's
+    /// `-ts` (when one is set) indexes peers first and this card last, and
+    /// with no `-ts` llama.cpp splits by each device's own free memory —
+    /// queried over RPC for the peer.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rpc_peers: Vec<String>,
     /// `[compute.work_offer]` as a config written before pb-work-donor holds
     /// it: the donor and its section moved to cw-rails (`rails.toml`
     /// `[work_offer]`), and `svrn mesh up` hands this table over before it

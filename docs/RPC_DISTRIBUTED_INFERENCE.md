@@ -27,6 +27,34 @@ that binary beside the daemon, so neither is anything to build.)
 A node may be both (set both vars). Unset = ordinary single-node local inference,
 byte-for-byte unchanged.
 
+### The router shape (`kind = "llama-server"`)
+
+Everything under "Rung 1" and beyond describes the EMBEDDED engine's in-process
+worker, which `es-g2-delete-engine` removes. A `kind = "llama-server"` node
+splits by upstream's mechanism instead, with two config keys and no env:
+
+- the PEER sets `[compute] rpc_peer = "<ip>:port"` (es-f1's supervised
+  `ggml-rpc-server -c`, described above);
+- the HEAD sets `[compute] rpc_peers = ["<ip>:port", …]`, the endpoints its
+  router loads across. The router's preset writes them into every section as
+  `rpc` (`sovereign_compute::llama_router::placement`), and llama.cpp divides
+  the model by each device's free memory — the peer's queried over RPC — with
+  the RPC devices FIRST in the device order (`llama.cpp` inserts them ahead of
+  the local GPUs, and `arg.cpp:2598` notes the same ordering contract for
+  `-mmdev`). No planner and no `-ot`: with none chosen, upstream's free-memory
+  split is what runs.
+
+Both keys take one LAN or tunnel `ip:port` per entry and apply the same bind
+rule: loopback and every-interface addresses are refused at startup, because
+rpc-server authenticates nothing. A peer that dies mid-load or mid-decode
+aborts the head's router child — uncatchable, and upstream never reconnects —
+so the head's supervisor waits for the peer with backoff before spawning the
+router again, `/status` names the lost peer on the router's line, and the
+route answers once the peer's own supervisor has restarted its child. Without
+a local fallback: a config that says the model is distributed never loads it
+whole on the head. Proof: `router_rpc_split_e2e` (Qwen3.5-9B split on
+loopback, D2's 90% of one device, the kill and the restart, no orphans).
+
 > Mechanism: the worker calls `ggml_backend_rpc_start_server`; the
 > host calls `ggml_backend_rpc_add_server` + `ggml_backend_register`, after which
 > llama.cpp's loader treats each worker as a GPU device named `RPC` and splits
