@@ -147,7 +147,7 @@ impl ComputeChildManager {
                 role = %slot_cfg.role,
                 "compute child spawned"
             );
-            if slot_cfg.role == "embed" && slot_cfg.capture_embed {
+            if slot_cfg.role == crate::compute_roles::EMBED_ROLE && slot_cfg.capture_embed {
                 embed_child = Some(Arc::clone(&provider));
             }
             if Some(slot_cfg.role.as_str()) == served_kind::RERANK.child_role() {
@@ -369,7 +369,7 @@ impl ChildSpec {
         let mut args = vec![
             sovereign_contracts::launch::COMPUTE_CHILD_FLAG.to_string(),
             "--role".to_string(),
-            "generate".to_string(),
+            crate::compute_roles::GENERATE_ROLE.to_string(),
             "--name".to_string(),
             name.to_string(),
             "--bind".to_string(),
@@ -389,7 +389,7 @@ impl ChildSpec {
         }
         Self {
             name: name.to_string(),
-            role: "generate".to_string(),
+            role: crate::compute_roles::GENERATE_ROLE.to_string(),
             model_id: name.to_string(),
             args,
             env: vec![("SOVEREIGN_RPC_ASSUME_WARMED".to_string(), "1".to_string())],
@@ -782,7 +782,7 @@ impl DynamicChildSlot {
         let provider = Arc::new(ChildProvider::new(spec.name.clone(), rx));
         Arc::new(Self {
             name: spec.name.clone(),
-            role: "generate".to_string(),
+            role: crate::compute_roles::GENERATE_ROLE.to_string(),
             model_id: spec.name.clone(),
             spec,
             binary,
