@@ -36,17 +36,24 @@ The row's three deliverables (`git show --stat d18d2ee22`):
 - `strings -a llama-server | grep -c gfx942` = 270 and a `gfx942` token survives;
 - the manifest's `[build]` table says `backend = "rocm"`.
 
-**Why the daemon was not booted in the image, and the corrected premise.** The lane's first
-attempt to stand the shipped server on a lane-local path failed because `target/debug/` holds no
-`llama-server`: staged targets are moved to `PROMOTE_HOME` before landing (engine-swap's
-preparation), so that absence says the lane never built the server, not that the tree lost it.
-Keeping the check inside the image is the honest alternative, but `podman run` here reports
-`no ROCm-capable device is detected` and `Available devices: (none)`, so no model can load and the
-daemon cannot reach `/health` — the user in the image is root and no kernel device is present.
-The one shippable check left inside the container inference-free is the manifest match:
+**Why the daemon was not booted in the image.** `podman run` on this host reports
+`no ROCm-capable device is detected` and `Available devices: (none)` (the runner is unprivileged,
+so no kernel device node exists inside the container), so no model can load and the daemon cannot
+reach `/health`. A lane-local boot is no substitute either: this lane's `target/debug/` carries no
+`llama-server` at all.
+
+The consequence, decided here: `d18d2ee22` credited "finds a verified server" to a host-side
+comparison (the image's manifest diffed against `PIN.toml`, the two binaries present). The
+inference-free half of that bar is exactly the manifest match, and nothing in the container can
+serve a model on this host, so the bar's *boot* half is not runnable here — the row's acceptance
+should read the manifest match plus the binaries, not a `/health` in the image.
+
+The check that stands in its place reproduces `llama_router::build_pin::verify`'s comparison
+(commit, llguidance, binary names, every patch digest; `[build]` excluded, as `verify` excludes
+it). It:
 `manifest_matches_pin.py` reproduces `llama_router::build_pin::verify`'s comparison (commit,
 llguidance, binary names, every patch digest; `[build]` excluded, as `verify` excludes it).
-It PASSES on the image's manifest against the kit's `PIN.toml`, and REFUSES on a one-character
-commit change — the plant the row's "finds a verified server" bar names.
+PASSES on the image's manifest against the kit's `PIN.toml`, REFUSES on a one-character commit
+change, and names an absent `ggml-rpc-server` as absent.
 
 </details>
