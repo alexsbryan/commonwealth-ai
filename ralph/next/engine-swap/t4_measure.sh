@@ -8,13 +8,13 @@
 #                (es-t4's change): a conversation on the model's own
 #                template; the daemon checks the forced call (`oicp_client::
 #                call_check`, es-t1).
-#   hermes       the shape every Codex turn took before es-t4: a flattened
-#                single turn with the tool-envelope grammar. Codex turns
-#                cannot be asked for it on the router any more (es-t4 lifts
-#                exactly their two reasons), so the arm is the caller shape
-#                it stands in for: the same turn with no `think_budget`,
-#                and an EXTERNAL caller's forced `tool_choice` that the
-#                envelope grammar holds (`SOVEREIGN_FORCE_TOOL_CALLS=1`).
+#   hermes       the shape every Codex turn took before es-t4: the same
+#                turn with no `think_budget`. Codex turns cannot be asked
+#                for the envelope grammar on the router any more (es-t4
+#                lifts their two reasons, and es-t5 deleted the daemon-wide
+#                switch that could force it), so this arm is only the
+#                no-budget shape; es-t5's claim is that it now reports the
+#                SAME prompt path as passthrough on the router.
 #                The daemon reports which path each turn took
 #                (`inference_adapter: prompt path chosen`, debug).
 #
@@ -71,13 +71,10 @@ rails_base = "http://127.0.0.1:$RAILS"
 dir = "$root/data"
 EOF
 
-FORCE_TOOL_CALLS=0
-
 boot() {
   log=$1
   shift
   env HOME="$root/home" \
-    SOVEREIGN_FORCE_TOOL_CALLS="$FORCE_TOOL_CALLS" \
     SVRNMESH_DATA_DIR="$root/svrnmesh" \
     CW_RAILS_DIR="$root/rails" \
     CW_RAILS_BIN="$root/no-cw-rails" \
@@ -109,8 +106,7 @@ kill -9 "$pid" 2>/dev/null || true
 wait "$pid" 2>/dev/null || true
 pid=
 
-echo "== hermes arm: the pre-es-t4 shape, the envelope grammar holding the call =="
-FORCE_TOOL_CALLS=1
+echo "== hermes arm: the pre-es-t4 no-budget shape =="
 boot "$root/hermes.log"
 python3 "$HERE/t4_measure.py" "$SVRN" hermes "$MODEL" --no-budget | tee "$root/hermes.txt"
 echo "-- prompt path chosen --"
