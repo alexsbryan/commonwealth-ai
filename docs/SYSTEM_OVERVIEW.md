@@ -1272,16 +1272,19 @@ no `-ot` (that is D4's question). A peer's `[compute] rpc_peer` bind rule is
 applied to the head's list too: loopback and every-interface endpoints are
 refused by name, and one peer named twice is refused rather than loaded as
 two devices. On peer loss the abort is upstream's and uncatchable
-(`ggml-rpc.cpp:30`, `RPC_STATUS_ASSERT` — upstream never reconnects), so it
-is contained by where the RPC client lives: only the supervised router child
-holds the peer's buffers, the daemon and `/status` survive, the child's
-supervisor restarts it, `RouterPlacement::wait_for_peers` holds that restart
-until every peer answers again (backoff, never a spin against a dead socket),
-`/status`'s router line names the lost peer and the reload, and the route
-answers again once both halves are back. A distributed preset is never
-loaded on the head's card alone: the recovered router's `router.ini` is
-byte-identical to the one it was started with, and the digest that covers it
-is what a reload is refused against.
+(`ggml-rpc.cpp:30`, `RPC_STATUS_ASSERT` — upstream never reconnects), and it
+lands on the MODEL child, not the router: the router loads no tensors, so it
+keeps answering and only the model's process exits (`instance name=<m> exited
+with status N` in its `--log-file`, `/models` `failed (exit N)`, measured
+2026-10-24). The repair loop already reloads that model with backoff, which
+IS the head's half of the restart; the peer's half is its own supervisor
+starting another `ggml-rpc-server`. `/status` names the lost peer on the
+MODEL's line (`RouterPlacement::peer_loss`, keyed on the logged exit — never
+on a TCP probe: a peer's rpc-server has a backlog of one and the head's model
+holds it, so a probe times out on a peer that is serving). A distributed
+preset is never loaded on the head's card alone: the recovered router's
+`router.ini` is byte-identical to the one it was started with, and the digest
+that covers it is what a reload is refused against.
 Proof: `sovereign-stock`'s ignored e2e `router_rpc_split_e2e` — Qwen3.5-9B
 split across a peer on loopback, decode at 90% or more of the same model on
 one device (D2), a SIGKILLed peer child named by `/status` and answered

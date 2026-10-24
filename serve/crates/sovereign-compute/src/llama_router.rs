@@ -377,7 +377,20 @@ impl RouterPreset {
             // for `-mmdev`, which sorts between them. Written here in that
             // order so a reader of the file reads it in the order it takes
             // effect, and so `-ts`'s index 0 is the first peer.
-            if let Some(rpc) = self.placement.rpc_list() {
+            //
+            // Only a CHAT section is distributed. The row's subject is "the
+            // model's preset section" — the GGUF too big for this card — and
+            // an encoder is neither: the embedder and reranker are small,
+            // they are what every request of their lane needs locally, and
+            // a peer that already holds a chat shard has no memory left for
+            // them (measured in `router_rpc_split_e2e`'s first run: the peer
+            // OOM'd loading the embedder beside the 9B's share). A peer
+            // serves the shard, not this node's encoder lane.
+            if let Some(rpc) = self
+                .placement
+                .rpc_list()
+                .filter(|_| matches!(e.kind, EntryKind::Chat { .. }))
+            {
                 let _ = writeln!(out, "rpc = {rpc}");
             }
             if let Some(secs) = e.sleep_idle_secs {

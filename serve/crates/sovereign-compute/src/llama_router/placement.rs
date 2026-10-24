@@ -1,54 +1,46 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Where a distributed router puts a model (ENGINE_SWAP_PLAN F, f2): the
-//! peer endpoints `[compute] rpc_peers` names, the preset key that sends them
-//! to llama.cpp (`rpc`, the static endpoints as one comma list), and the
-//! split upstream computes from what each device reports.
+//! peer endpoints `[compute] rpc_peers` names and the preset key that sends
+//! them to llama.cpp (`rpc`, the static endpoints as one comma list).
 //!
-//! The placement is upstream's, verbatim: the peers go in the section's
-//! `rpc` key, written before anything that indexes a device (llama.cpp keeps
+//! The placement is upstream's, verbatim. The peers go in each CHAT section's
+//! `rpc` key, written before anything that indexes a device — llama.cpp keeps
 //! a preset's options in a `std::map` keyed by each option's first spelling,
-//! so `--rpc` registers the devices before `--tensor-split` reads them —
-//! the order `arg.cpp:2598` requires for `-mmdev`, which sorts between
-//! them), and with no `-ts` llama.cpp divides the model by the free memory
-//! each device advertises — the peer's over RPC, this card's from the
-//! shipped binary. No planner and no `-ot` here: that is D4's question, and
-//! its answer decides whether the planner earns a place beside this.
+//! so `--rpc` registers the devices before `--tensor-split` reads them, the
+//! order `arg.cpp:2598` requires for `-mmdev`, which sorts between them. With
+//! no `-ts` written, llama.cpp divides the model by the free memory each
+//! device advertises — the peer's queried over RPC, this card's from the
+//! shipped binary — and puts the RPC devices first in the device order
+//! (`llama-model.cpp`: "add RPC servers at the front of the list to minimize
+//! network transfers"). No planner and no `-ot` here: that is D4's question,
+//! and its answer decides whether the planner earns a place beside this.
 //!
-//! # Restart on peer loss
+//! # What a peer loss looks like, and what this module does about it
 //!
 //! Upstream never reconnects: any later RPC touch of a dead peer is
-//! `GGML_ABORT` (`ggml-rpc.cpp:30`, `RPC_STATUS_ASSERT`), so a peer that
-//! dies while its tensors are loaded aborts the router child. That abort is
-//! contained here — the router is the only process that holds the peer's
-//! buffers (`llama_router::live::LiveRouter`, started by serving assembly on
-//! `spawn_blocking`), so the daemon and its `/status` survive. The router's
-//! supervisor restarts the child; [`RouterPlacement::wait_for_peers`] holds
-//! that restart until every peer answers, so a peer that is down is waited
-//! out rather than spinning the child against a socket that is not there,
-//! and [`RouterPlacement::peer_loss`] names which peer is gone on `/status`.
-//! Never a fall back to this card alone: this node's config says the model is
-//! distributed, and loading it whole would be the host-starving load the
-//! split exists to prevent (ARCH 6).
+//! `GGML_ABORT` (`ggml-rpc.cpp:30`, `RPC_STATUS_ASSERT`; measured: the model
+//! child dies at `ggml-rpc.cpp:647`, "Remote RPC server crashed", and
+//! `/models` reports it `failed (exit 1)`). What dies is the MODEL child, not
+//! the router: the router loads no tensors itself, so the daemon and
+//! `/status` survive, and `live::LiveRouter`'s repair loop re-issues the load
+//! with backoff (`REPAIR_BACKOFF`) until the peer answers — the head's half
+//! of the restart, the peer's half being its own supervisor restarting
+//! `ggml-rpc-server` (`rpc_peer::RpcPeerChild`). This module only names the
+//! peers on that line ([`RouterPlacement::peer_loss`]); it holds no probe.
+//!
+//! No reachability probe gates the spawn, and this is deliberate: a peer's
+//! `ggml-rpc-server` accepts ONE client (`transport.cpp:677`, `listen(sock,
+//! 1)`, a single accept loop), so the head's own model holds the only slot
+//! and a probe by anyone else sits in an empty backlog and times out. A
+//! connect is therefore not an instrument for "is the peer there" — measured
+//! 2026-10-24: every probe timed out while the head was serving across that
+//! very peer.
 
 use std::fmt;
-use std::net::{IpAddr, SocketAddr, TcpStream};
-use std::time::{Duration, Instant};
+use std::net::SocketAddr;
 
 use serde::Serialize;
 use sovereign_contracts::setup_config::SetupConfig;
-
-/// Connecting time for one peer probe: a peer is on a LAN or a tunnel, and a
-/// route that takes longer than this is not answering.
-const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
-
-/// How often the supervisor re-probes a peer that is not answering, between
-/// the backoff schedule's attempts.
-pub const PROBE_BACKOFF: [Duration; 4] = [
-    Duration::from_secs(1),
-    Duration::from_secs(2),
-    Duration::from_secs(10),
-    Duration::from_secs(30),
-];
 
 /// Where a router's models run: this card alone, or across peers too.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -127,78 +119,22 @@ impl RouterPlacement {
         }
     }
 
-    /// Wait until every peer accepts a TCP connection, at most `budget`, and
-    /// say which did not. Called before the router's child is spawned for a
-    /// distributed section: a peer that is coming back up (its own
-    /// supervisor restarted `ggml-rpc-server`) is waited out here instead of
-    /// spawning a child that loads nothing and dies, spending the crash
-    /// budget on a socket that is not there yet.
+    /// The reason `/status` gives for a distributed model that is not
+    /// `loaded`: `reason` followed by the peers it is split across, and what
+    /// happens next. `None` for a single-card router, which adds nothing.
     ///
-    /// `Ok(())` for [`Self::Local`] at once — nothing to wait on.
-    pub fn wait_for_peers(&self, budget: Duration) -> Result<(), String> {
-        let deadline = Instant::now() + budget;
-        let mut attempt = 0usize;
-        loop {
-            let unready = self.unanswered();
-            if unready.is_empty() {
-                tracing::info!(
-                    target: "llama_router",
-                    peers = ?self.peers(),
-                    "placement: every peer answers"
-                );
-                return Ok(());
-            }
-            if Instant::now() >= deadline {
-                tracing::warn!(
-                    target: "llama_router",
-                    unready = ?unready,
-                    "placement: a peer never answered; the router is not spawned against it"
-                );
-                return Err(format!(
-                    "the peers this node's router loads across are not answering: {unready:?}. \
-                     A distributed section is never loaded on this card alone — the peers run \
-                     the shipped ggml-rpc-server at the addresses [compute] rpc_peers names \
-                     (es-f1's supervised child), and a head waits for them with backoff rather \
-                     than spin a model load against a socket that is not there."
-                ));
-            }
-            let backoff = PROBE_BACKOFF[attempt.min(PROBE_BACKOFF.len() - 1)];
-            attempt += 1;
-            tracing::debug!(
-                target: "llama_router",
-                unready = ?unready,
-                ?backoff,
-                "placement: waiting for a peer"
-            );
-            std::thread::sleep(backoff.min(deadline.saturating_duration_since(Instant::now())));
-        }
-    }
-
-    /// The peers that do not accept a TCP connection now, in `rpc` order.
-    pub fn unanswered(&self) -> Vec<SocketAddr> {
-        self.peers()
-            .iter()
-            .copied()
-            .filter(|addr| TcpStream::connect_timeout(addr, PROBE_TIMEOUT).is_err())
-            .collect()
-    }
-
-    /// The router line `/status` reports when a peer is gone: the supervisor's
-    /// own reason, then the peers that are not answering, named. `None` while
-    /// every peer answers, so a healthy distributed router adds nothing.
-    ///
-    /// The abort needs no probe to be seen — a dead peer's next touch is
-    /// `GGML_ABORT`, the child exits, and its `failed` status is the
-    /// listing's — but the probe names WHICH peer, and puts it on the
-    /// router's line rather than in the child's stderr ring.
-    pub fn peer_loss(&self, what: &str, reason: &str) -> Option<String> {
-        let unready = self.unanswered();
-        match unready.is_empty() {
-            true => None,
-            false => Some(format!(
-                "{reason}; peer loss: the split device(s) {unready:?} behind {what} are not \
-                 answering, so an RPC touch of one aborts this child (ggml-rpc.cpp:30, upstream \
-                 never reconnects); its supervisor restarts it once they answer"
+    /// This only FORMATS. Whether a peer is actually gone is the caller's,
+    /// from the router's own log (`live::LiveRouter::peer_loss_from_log`):
+    /// a probe is not an instrument here (see the module doc), and this
+    /// function never blocks.
+    pub fn peer_loss(&self, model: &str, reason: &str) -> Option<String> {
+        match self.peers() {
+            [] => None,
+            peers => Some(format!(
+                "{reason}; peer loss: {model} is distributed across {peers:?}, and an RPC touch \
+                 of a peer that has stopped answering aborts this model's process \
+                 (ggml-rpc.cpp:30, upstream never reconnects); the router reloads it with \
+                 backoff once the peer's supervisor has restarted ggml-rpc-server"
             )),
         }
     }
@@ -224,7 +160,7 @@ fn parse_peer(raw: &str) -> Result<SocketAddr, String> {
         .trim()
         .parse()
         .map_err(|e| format!("[compute] rpc_peers: {raw:?} is not an ip:port ({e})\n{hint}"))?;
-    if addr.ip().is_unspecified() || addr.ip() == IpAddr::from([0, 0, 0, 0]) {
+    if addr.ip().is_unspecified() {
         return Err(format!(
             "[compute] rpc_peers: {raw:?} names every interface, and a head needs one address\n{hint}"
         ));

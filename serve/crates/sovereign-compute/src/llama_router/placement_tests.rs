@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-use std::net::{SocketAddr, TcpListener};
-use std::time::{Duration, Instant};
+use std::net::SocketAddr;
 
 use sovereign_contracts::setup_config::SetupConfig;
 
@@ -85,52 +84,24 @@ fn the_configs_peer_list_is_the_rpc_key() {
     );
 }
 
+/// The line `/status` adds for a distributed model that is not loaded names
+/// the peers it is split across and what happens next; a single-card router
+/// adds nothing (there is no peer to lose).
 #[test]
-fn a_peer_that_answers_waits_for_nothing_and_reports_no_loss() {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("a port");
-    let live = listener.local_addr().expect("its address");
-    let p = RouterPlacement::Peers { peers: vec![live] };
-    assert!(p.wait_for_peers(Duration::from_millis(50)).is_ok());
-    assert_eq!(p.unanswered(), Vec::new());
-    assert_eq!(p.peer_loss("the 9B", "loaded"), None);
-}
-
-#[test]
-fn a_peer_that_is_not_listening_is_reported_gone_and_waited_out() {
-    // Loopback is refused as a CONFIG value; the probe's own contract is
-    // about a peer that was reachable once and is not now, so this drives it
-    // directly rather than through `from_endpoints`.
-    let gone = {
-        let l = TcpListener::bind("127.0.0.1:0").expect("a port");
-        l.local_addr().expect("its address")
-    };
-    let p = RouterPlacement::Peers { peers: vec![gone] };
-    assert_eq!(p.unanswered(), vec![gone]);
-    let started = Instant::now();
-    let e = p
-        .wait_for_peers(Duration::from_millis(150))
-        .expect_err("a peer that never answers");
-    assert!(e.contains(&gone.to_string()), "{e}");
-    assert!(e.contains("not answering"), "{e}");
-    // It waited the budget rather than returning at once.
-    assert!(
-        started.elapsed() >= Duration::from_millis(140),
-        "{:?}",
-        started.elapsed()
-    );
+fn peer_loss_names_the_peers_on_a_distributed_router_only() {
+    let p = placement(&["192.168.1.20:50052"]);
     let lost = p
-        .peer_loss("the 9B", "failed (exit 134)")
-        .expect("a dead peer is named");
+        .peer_loss("Qwen3.5-9B", "failed (exit 1)")
+        .expect("a distributed model that failed");
     assert!(
-        lost.contains("failed (exit 134)") && lost.contains("peer loss") && lost.contains("the 9B"),
+        lost.contains("failed (exit 1)")
+            && lost.contains("peer loss")
+            && lost.contains("192.168.1.20:50052")
+            && lost.contains("Qwen3.5-9B"),
         "{lost}"
     );
-}
-
-#[test]
-fn one_card_has_nothing_to_wait_for_and_never_reports_loss() {
-    assert!(RouterPlacement::Local
-        .wait_for_peers(Duration::from_millis(1))
-        .is_ok());
-    assert_eq!(RouterPlacement::Local.peer_loss("the 9B", "loaded"), None);
+    assert_eq!(
+        RouterPlacement::Local.peer_loss("Qwen3.5-9B", "loaded"),
+        None
+    );
 }

@@ -47,13 +47,16 @@ splits by upstream's mechanism instead, with two config keys and no env:
 Both keys take one LAN or tunnel `ip:port` per entry and apply the same bind
 rule: loopback and every-interface addresses are refused at startup, because
 rpc-server authenticates nothing. A peer that dies mid-load or mid-decode
-aborts the head's router child — uncatchable, and upstream never reconnects —
-so the head's supervisor waits for the peer with backoff before spawning the
-router again, `/status` names the lost peer on the router's line, and the
-route answers once the peer's own supervisor has restarted its child. Without
-a local fallback: a config that says the model is distributed never loads it
-whole on the head. Proof: `router_rpc_split_e2e` (Qwen3.5-9B split on
-loopback, D2's 90% of one device, the kill and the restart, no orphans).
+aborts the model's child process — uncatchable, and upstream never reconnects — while
+the router, which loads no tensors, keeps serving. The router's repair loop
+reloads that model with backoff until the peer's own supervisor has started
+another `ggml-rpc-server`, and `/status` names the lost peer on the model's
+line (from the logged `instance name=<m> exited with status N`, not from a
+connect: a peer's rpc-server accepts one client, so a probe times out on a
+peer that is serving fine). Without a local fallback: a config that says the
+model is distributed never loads it whole on the head. Proof:
+`router_rpc_split_e2e` (Qwen3.5-9B split on loopback, D2's 90% of one device,
+the kill and the restart, no orphans).
 
 > Mechanism: the worker calls `ggml_backend_rpc_start_server`; the
 > host calls `ggml_backend_rpc_add_server` + `ggml_backend_register`, after which

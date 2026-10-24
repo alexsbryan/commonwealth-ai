@@ -27,13 +27,6 @@ pub use sovereign_inference::gpu_probe::SERVER_BINARY;
 /// The router answers `/health` once it is listening; the models load after.
 const ROUTER_READY: Duration = Duration::from_secs(60);
 
-/// How long a distributed router waits for its peers before refusing to
-/// spawn. A peer whose supervisor is restarting `ggml-rpc-server` comes back
-/// in about a second (es-f1 measured its readiness as the bind); the budget
-/// is generous because the cost of giving up early is a refused boot, and
-/// the cost of waiting is a boot that is late rather than wrong.
-const PEER_READY: Duration = Duration::from_secs(120);
-
 /// One model's load, the 35B MTP being the slowest (the battery allowed 600s
 /// per forced load and never needed it).
 const MODEL_LOAD: Duration = Duration::from_secs(600);
@@ -70,6 +63,11 @@ pub struct LiveRouter {
     /// every single-card node; a distributed one is what lets `/status` name
     /// a peer that is gone rather than only the child it aborted.
     placement: RouterPlacement,
+    /// The router's own log (`--log-file`), where each model child's output
+    /// lands. `/status` reads its tail for the RPC abort marker a peer loss
+    /// leaves, so naming the peer costs a local file read and never a
+    /// network connect (ARCH 1: a status field may not block).
+    log_path: Arc<PathBuf>,
 }
 
 /// What happened to one router model, as `/status` reports it.
@@ -86,6 +84,9 @@ pub struct ModelRepair {
 
 /// How often the repair loop reads `/models` and reloads a dead model.
 const REPAIR_POLL: Duration = Duration::from_secs(5);
+
+/// How often the follow poller re-reads `/models` and re-probes the peers.
+const PEER_POLL: Duration = Duration::from_secs(5);
 
 /// Backoff between reload attempts for one model: the first retry is
 /// immediate enough to be a restart, the last never floods a crash-looping
@@ -212,22 +213,24 @@ impl LiveRouter {
         check_build(&binary, &source)?;
         let dir = config.data.dir.join("llama-server");
         std::fs::create_dir_all(&dir).map_err(|e| format!("creating {}: {e}", dir.display()))?;
-        // A distributed section is never spawned against a peer that is not
-        // there: its model loads across the peers, and llama.cpp has no
-        // reconnect, so a load into a dead endpoint spends the crash budget
-        // on a socket that is not answering yet. The wait is the head's
-        // half of restart-on-peer-loss (upstream's is "abort, never
-        // reconnect"); the peer's half is its own supervisor restarting
-        // `ggml-rpc-server` (`rpc_peer::RpcPeerChild`). Before the preset is
-        // written, so a refusal writes nothing and spawns nothing.
+        // A distributed preset is started exactly as a single-card one is:
+        // the router comes up (it loads nothing itself), `warm` asks it to
+        // load each model, and a model that cannot reach a peer fails —
+        // `/models` says `failed (exit N)` and the repair loop re-issues the
+        // load with backoff until the peer answers. That loop IS the head's
+        // half of restart-on-peer-loss; the peer's half is its own supervisor
+        // restarting `ggml-rpc-server` (`rpc_peer::RpcPeerChild`). No probe
+        // gates the spawn: a TCP connect to a peer that is busy says nothing
+        // (its accept loop has a backlog of 1, `transport.cpp:677`, so the
+        // head's own model holds the only slot), and a connect that times
+        // out would refuse a boot the repair loop can recover on its own.
         let placement = preset.placement();
         if !placement.peers().is_empty() {
             tracing::info!(
                 target: "llama_router",
                 placement = %placement,
-                "router: a distributed preset; waiting for its peers before the child is spawned"
+                "router: a distributed preset; its models load across these peers"
             );
-            placement.wait_for_peers(PEER_READY)?;
         }
         let preset_path = dir.join("router.ini");
         std::fs::write(&preset_path, preset.render())
@@ -301,6 +304,7 @@ impl LiveRouter {
             models: Arc::new(Mutex::new(Vec::new())),
             repairs: Arc::new(Mutex::new(BTreeMap::new())),
             placement: placement.clone(),
+            log_path: Arc::new(dir.join("router.log")),
         });
         let mut states = supervisor.subscribe();
         runtime.spawn({
@@ -463,7 +467,7 @@ impl LiveRouter {
         runtime.spawn(async move {
             let http = reqwest::Client::new();
             loop {
-                tokio::time::sleep(Duration::from_secs(5)).await;
+                tokio::time::sleep(PEER_POLL).await;
                 let Some(live) = weak.upgrade() else { return };
                 let base = format!("http://127.0.0.1:{}", live.port);
                 match list_models(&http, &base).await {
@@ -605,6 +609,38 @@ impl LiveRouter {
         Ok(tokens.len() as u32)
     }
 
+    /// `reason` prefixed with the peer loss, when the router's log shows this
+    /// model's process EXITING (`instance name=<model> exited with status N`,
+    /// llama.cpp `server-models.cpp`) on a distributed preset. `None`
+    /// otherwise, so a model that failed some other way keeps its own
+    /// reason and the line never claims a peer loss it cannot see.
+    ///
+    /// The exit is the whole of the evidence a peer loss leaves here: the
+    /// child aborts on the dead peer's next RPC touch (`ggml-rpc.cpp:30`
+    /// through `:647`, "Remote RPC server crashed"), and llama.cpp's router
+    /// records the exit, not the abort — measured 2026-10-24, the abort text
+    /// goes to the child's inherited stdout and the log carries only
+    /// `exited with status 1`. A distributed model cannot exit without its
+    /// peer behind it, which is why the preset's peers are named with it.
+    fn peer_loss_from_log(&self, model: &str, reason: &str) -> Option<String> {
+        if self.placement.peers().is_empty() {
+            return None;
+        }
+        let log = std::fs::read_to_string(self.log_path.as_path()).ok()?;
+        let exited = format!("instance name={model} exited with status");
+        log.lines().find(|l| l.contains(&exited)).map(|line| {
+            let status = line.rsplit_once("status ").map_or("?", |(_, s)| s.trim());
+            format!(
+                "{reason}; peer loss: {model} is distributed across {:?}, and its process \
+                     exited (status {status}) — an RPC touch of a peer that has stopped \
+                     answering aborts it (ggml-rpc.cpp:30, upstream never reconnects); the repair \
+                     loop reloads it with backoff once the peer's supervisor has restarted \
+                     ggml-rpc-server",
+                self.placement.peers()
+            )
+        })
+    }
+
     /// The router and each of its models, as `/status` lists compute children.
     pub fn statuses(&self) -> Vec<ComputeChildStatus> {
         let state = self
@@ -617,18 +653,9 @@ impl LiveRouter {
             BinarySource::Shipped => "shipped, build verified",
             BinarySource::Override => "override, build unchecked",
         };
-        // A distributed router's reason names a peer that is not answering
-        // BEFORE the supervisor's own text, so `/status` says WHY the child
-        // restarted as well as that it did (es-f2: upstream never
-        // reconnects, so a dead peer aborts the child and this is the only
-        // surface that names which one).
-        let reason = match self
-            .placement
-            .peer_loss(&format!("preset {}", self.digest), &reason)
-        {
-            Some(lost) => lost,
-            None => reason,
-        };
+        // `self.digest` is part of the model_id below, so the router line
+        // already names the preset; peer loss is named on the MODEL's line
+        // (`peer_loss` in the loop), where the failed child is.
         let mut out = vec![ComputeChildStatus {
             name: SERVER_BINARY.into(),
             role: "router".into(),
@@ -658,7 +685,7 @@ impl LiveRouter {
                 .unwrap_or_else(PoisonError::into_inner)
                 .get(name)
                 .cloned();
-            let (lifecycle, reason) = match &repair {
+            let (lifecycle, mut reason) = match &repair {
                 Some(ModelRepair {
                     reload_at: Some(_),
                     error: None,
@@ -677,6 +704,15 @@ impl LiveRouter {
                 ),
                 _ => (status.clone(), format!("GET /models: {status}")),
             };
+            // Peer loss (es-f2): a distributed section whose model process
+            // exited names its peers, because upstream never reconnects and
+            // the child's death is otherwise only "exit N". Reported whether
+            // or not the model has since been reloaded — the exit HAPPENED,
+            // and the repair loop reloading it does not un-happen the peer
+            // that went away. Read from the router's own log, a local file.
+            if let Some(lost) = self.peer_loss_from_log(name, &reason) {
+                reason = lost;
+            }
             out.push(ComputeChildStatus {
                 name: name.clone(),
                 role: "router-model".into(),
