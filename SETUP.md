@@ -83,6 +83,22 @@ builds after that are quick. (A full release build carries thin-LTO and is slow
 per change; when you're iterating on the daemon, `scripts/dev-release.sh`
 overrides those knobs so you don't pay it every time.)
 
+`cargo build` builds the Rust binaries. The **inference server** the daemon
+runs on `kind = "llama-server"` is llama.cpp's own binary, built from the pin
+in `serve/crates/sovereign-compute/llama-server/PIN.toml` and installed
+beside the daemon with the manifest it verifies at startup:
+
+```sh
+sh serve/crates/sovereign-compute/llama-server/build.sh            # -> target/debug
+sh serve/crates/sovereign-compute/llama-server/build.sh --install-dir target/release
+```
+
+`build.sh` picks the backend from the host (`metal` on an Apple Silicon Mac,
+`cpu` on an Intel one, `vulkan` on Linux) and takes about three minutes cold.
+`scripts/dev-release.sh` runs it for you into `target/release`, and a release
+tarball or desktop bundle carries it already installed — this step is for a
+source checkout only.
+
 The binary lands at `target/release/sovereign-cli`. Put it on your PATH so you
 can type `svrn`:
 

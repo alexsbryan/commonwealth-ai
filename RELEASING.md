@@ -7,7 +7,7 @@ one does not build the others.
 
 | Artifact | Tag prefix | Built by | Output | How users get it |
 |---|---|---|---|---|
-| **CLI** (`sovereign`) | `cli-v*` | `.github/workflows/cli-release.yml` | `sovereign-<target>.tar.gz` (3 binaries) + `SHA256SUMS` | `curl -fsSL https://svrnme.sh/install.sh \| sh` |
+| **CLI** (`sovereign`) | `cli-v*` | `.github/workflows/cli-release.yml` | `sovereign-<target>.tar.gz` (the dispatcher and the siblings its verbs exec, **including the pinned `llama-server`, `ggml-rpc-server` and their manifest**) + `SHA256SUMS` | `curl -fsSL https://svrnme.sh/install.sh \| sh` |
 | **Desktop app** | `desktop-v*` | `.github/workflows/desktop-release.yml` | `.dmg` / `.AppImage` / `.deb` (/ `.msi`) | download + double-click |
 | **VS Code extension** (`svrn fim`) | `vscode-v*` | `scripts/release-vsix-local.sh` | `sovereign-fim-<ver>.vsix` + `.sha256` | `svrn setup --fim`, or install the `.vsix` by hand |
 
@@ -41,10 +41,17 @@ existing resolvers — verify that before publishing, and publish with
 `--latest=false` so the repo's "Latest" badge keeps pointing humans at the
 desktop app rather than following whatever shipped most recently.
 
-The CLI tarball contains all three product binaries the dispatcher needs —
-`sovereign-cli` (the `sovereign` dispatcher), `sovereign-cli-daemon`, and
-`sovereign-cli-llm`. There is **no separate daemon release**; the daemon ships
-inside the CLI tarball.
+The CLI tarball contains every binary the dispatcher's verbs exec —
+`sovereign-cli` (the `sovereign` dispatcher), `sovereign-cli-daemon`,
+`sovereign-cli-llm`, the dev, mesh and bench siblings, `sovereign-stock`,
+`sovereign-cli-llm-stock`, `sovereign-serve`, `svrn-ingest`,
+`sovereign-pod-worker` and `cw-rails` — and the pinned `llama-server`,
+`ggml-rpc-server` and `llama-server.manifest.toml` that a
+`kind = "llama-server"` daemon runs and verifies at startup. The list is `BINS` in `scripts/release-cli-local.sh`,
+read by both release paths and pinned to the exec sites by
+`quality/xtask/tests/release_bins.rs`; a leg that cannot produce one of them
+refuses to package a partial tarball. There is **no separate daemon
+release**; the daemon and its server ship inside the CLI tarball.
 
 ---
 
@@ -208,11 +215,24 @@ git push origin main "cli-v$v"
 > worth doing first — `release-all.sh` refuses to build unless both tags exist
 > and point at HEAD.
 
-Once dispatched, `cli-release.yml` builds the three binaries per
-platform (`cargo build --release -p sovereign-cli -p sovereign-cli-daemon
--p sovereign-cli-llm`), packages `sovereign-<target>.tar.gz` + a per-file
-`.sha256`, and uploads them to a **draft** release named `cli-v$v` along with a
-combined `SHA256SUMS`.
+Once dispatched, `cli-release.yml` builds the cargo binaries per platform
+(the packages `scripts/release-cli-local.sh` lists in `PKGS`), then runs
+`serve/crates/sovereign-compute/llama-server/build.sh` to install the pinned
+server, its RPC server and their manifest into the same bindir (`build.sh`
+picks the backend from the runner: Metal on arm64, CPU on the Intel Mac,
+Vulkan on Linux). It then checks the server and manifest are there, packages
+`sovereign-<target>.tar.gz` + a per-file `.sha256`, and uploads them to a
+**draft** release named `cli-v$v` along with a combined `SHA256SUMS`.
+
+`llama_server_router_e2e` (the router end to end) is the part of this leg that
+*runs* the server, and it is `cfg(target_os = "linux")` — it censuses model
+processes through `/proc` — so on the two macOS legs the workflow proves the
+server builds and installs for its triple, and says so in the log instead of
+reporting a green test that never ran. The Linux leg cannot run it either
+without small GGUFs, which that runner does not carry; the router e2e for the
+shipped binary runs in `ci.yml`'s `router-e2e` job (ubuntu, CPU, three
+SHA-256-verified GGUFs fetched at run time) and on every lane host through the
+engine-swap queue's `ROUTER-E2E` check.
 
 **Platform matrix:** Linux x86_64 and **native macOS Intel (x86_64)** are
 enabled on a tag. Intel builds on the **self-hosted Intel-Mac runner** (labels
@@ -222,8 +242,8 @@ desktop [`RELEASING.md`](clients/desktop/RELEASING.md) under
 *"macOS Intel (x86_64) — self-hosted runner"*. The `release` job is decoupled
 (`if: !cancelled()`), so a down runner can't block the Linux tarball. macOS
 arm64 is ready to uncomment in `cli-release.yml` once a local
-`cargo build --release --target aarch64-apple-darwin` of the three binaries is
-validated. (GitHub's hosted Intel `macos-13` runner stays avoided — it hangs on
+`cargo build --release --target aarch64-apple-darwin` of the whole `BINS` set
+(and `build.sh --backend metal`) is validated. (GitHub's hosted Intel `macos-13` runner stays avoided — it hangs on
 "Waiting for a runner" and drains the Actions budget.)
 
 **No CI / no runner?** All three CLI targets (mac aarch64, mac x86_64 cross,
@@ -262,9 +282,13 @@ regardless of which stream published most recently. The unauthenticated
 `/releases` list excludes drafts, so the installer only ever picks a *published*
 CLI release. To pin a specific version: `SOVEREIGN_VERSION=cli-v0.1.18`.
 
-The installer downloads the three binaries into `~/.local/bin` (override with
+The installer downloads every `BINS` entry — the CLI siblings, the daemon,
+its loader, and the pinned `llama-server`, `ggml-rpc-server` and
+`llama-server.manifest.toml` — into `~/.local/bin` (override with
 `SVRNMESH_INSTALL_DIR`), symlinks `sovereign` → `sovereign-cli`, verifies the
 checksum against `SHA256SUMS`, and prints `svrn setup` as the next step.
+`svrn update` re-runs this same installer, so an existing install gains the
+server on its next update.
 
 ---
 

@@ -59,10 +59,12 @@ svrn mesh join <key>    # on each machine you're pooling in
 
 ## Bring your own inference server
 
-Sovereign runs models itself, with llama.cpp built in. If you already have a
-serving stack — vLLM, SGLang, TGI, or one you tuned — point Sovereign at it and
-keep everything above the model: corpora, citations, the mesh, editor
-completion.
+Sovereign runs models itself, with llama.cpp built in — and the release you
+install carries llama.cpp's own `llama-server` (with its RPC server and a
+manifest the daemon verifies) beside the daemon, so `kind = "llama-server"`
+works with nothing else to fetch or build. If you already have a serving
+stack — vLLM, SGLang, TGI, or one you tuned — point Sovereign at it and keep
+everything above the model: corpora, citations, the mesh, editor completion.
 
 ```toml
 [engine]

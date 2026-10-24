@@ -127,8 +127,23 @@ image for the same GPU surface.
 
 The entrypoint expects the daemon binary at
 `/usr/local/bin/sovereign-cli` — copied from `--from=build`'s
-`target/release/sovereign-cli`. That's it; nothing else from the
-build stage is preserved.
+`target/release/sovereign-cli`, with `sovereign-cli-daemon`,
+`sovereign-stock` (the loader `daemon run` execs) and
+`sovereign-pod-worker` beside it on the same chain.
+
+The image also carries the **inference server**: the build stage runs
+`serve/crates/sovereign-compute/llama-server/build.sh` in the flavor's own
+backend (`--backend rocm`, reading the ROCm table's `GPU_TARGETS` and
+`HIPFLAGS` so the binary is PIE-friendly and the ISA is the same one
+`AMDGPU_TARGETS` names; or `--backend cuda`, reading
+`CMAKE_CUDA_ARCHITECTURES`), and the runtime stage copies `llama-server`,
+`ggml-rpc-server` and `llama-server.manifest.toml` into `/usr/local/bin`
+beside the daemon, where `kind = "llama-server"` finds them by looking next to
+its own executable and verifies them against the pin compiled into it. A pod
+whose daemon runs `kind = "llama"` simply never execs them. Unlike the
+daemon's cargo build, `build.sh` unsets `RUSTFLAGS` in that step: its own
+llguidance pass would otherwise apply the daemon's link flags (and a
+`-no-pie`) to every artifact it links, proc-macros included.
 
 ## Customising
 

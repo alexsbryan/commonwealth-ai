@@ -6,8 +6,14 @@ Lets a node serve a model larger than any single node's VRAM, or pool capacity.
 
 ## Two roles, both just the daemon + one env var
 
-The daemon already links ggml with `GGML_RPC=ON`, so **no separate `rpc-server`
-binary is built or run** — a node takes a role purely by environment:
+The daemon already links ggml with `GGML_RPC=ON`, so the worker side needs no
+separate `rpc-server` build for the in-process shape below — a node takes a
+role purely by environment. (Two exceptions, both a shipped binary rather than
+a separate build: `SOVEREIGN_RPC_WORKER_PROCESS=1` re-execs the daemon as a
+supervised child, and `[compute] rpc_peer` runs the pinned `ggml-rpc-server
+-c` under the same supervisor so another node's router can lend this GPU —
+`serve/crates/sovereign-compute/src/rpc_peer.rs`. Every release path installs
+that binary beside the daemon, so neither is anything to build.)
 
 | Role | Env var | What it does |
 |---|---|---|
@@ -193,9 +199,13 @@ distributes the big primary → workers seed their shards → tokens.
 ## Notes & limits
 
 - **Protocol match:** host and worker must run the **same llama.cpp version**
-  (pinned 94a220cd6, via llama-cpp-4 0.3.1). Both built from this workspace ⇒
-  automatically matched. Distro/
-  Homebrew llama.cpp usually lacks `-DGGML_RPC=ON` and won't work.
+  — the pin `035e22731a`, named by both
+  `serve/crates/sovereign-compute/llama-server/PIN.toml` and
+  `vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT` (the two are held equal; see
+  `build.sh`). Both built from this workspace ⇒ automatically matched, and
+  `build_pin::verify` refuses a peer binary whose manifest names another pin. Distro/Homebrew
+  llama.cpp is a different version: a 5.x client rejects a 3.x HELLO outright,
+  so it will not work.
 - **Loopback on one machine:** a worker serving the *same physical GPU* the host
   uses (Metal↔Metal / Vulkan↔Vulkan on one box) aborts (buffer aliasing). Fine
   across two nodes; for a single-box test point the worker at a CPU device.

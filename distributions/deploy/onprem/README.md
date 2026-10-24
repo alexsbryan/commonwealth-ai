@@ -217,7 +217,7 @@ The kit used to run a second process, `sovereign-server`, with its own
 | `[retrieval] corpora` | `[retrieval] corpora` in `daemon-config.toml`, written by install.sh with the ids it installed |
 | `[server] bind` | `[daemon] client_bind` / `client_port` (`install.sh --port`) |
 | `[store] path` | `/var/lib/firm-rag/sovereign.db`, under `[data] dir` |
-| `[inference]`, `[[inference.backends]]` | dropped: one process owns the weights (`[models]`) |
+| `[inference]`, `[[inference.backends]]` | dropped: one process owns the weights (`[models]`); on `kind = "llama-server"` that process supervises the pinned `llama-server` child, which the kit ships and install.sh installs beside the daemon |
 | `[server] max_concurrent_turns`, `max_per_user`, `max_queue_depth`, `retry_after_secs` | dropped: the daemon has no such keys |
 | `[server] cors`, `allow_unauthenticated_remote` | dropped: no daemon equivalent; nginx is the only remote door |
 | `[knowledge_view] enabled` | dropped: the daemon has no such key |
@@ -327,7 +327,7 @@ In the order we would build it, each tied to a limit above:
 
 | Path | What |
 |---|---|
-| `/opt/firm-rag/bin/` | `sovereign-onprem`, and the `svrn` CLI with the two siblings its install verbs run |
+| `/opt/firm-rag/bin/` | `sovereign-onprem`, the `svrn` CLI with the two siblings its install verbs run, and the pinned `llama-server` + `ggml-rpc-server` + `llama-server.manifest.toml` the daemon runs on `kind = "llama-server"` (the binary verifies the manifest against the pin compiled into it, and looks for the server beside its own executable) |
 | `/var/lib/firm-rag/` | models, OCR assets, search index, keys, **conversations** |
 | `/var/lib/firm-rag/config.toml` | a link to the config, the path the `svrn` verbs read |
 | `/etc/firm-rag/daemon-config.toml` | model paths, ports, retrieval scope, network switches |
