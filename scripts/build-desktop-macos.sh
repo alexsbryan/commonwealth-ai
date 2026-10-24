@@ -189,7 +189,8 @@ if (( UNIVERSAL )); then
     # The server pair too (Metal on arm64, CPU on x86_64). The one manifest
     # staged is the last arch's; its [build] backend is a record the daemon
     # does not compare, and the pin both halves were built from is the same.
-    for bin in llama-server ggml-rpc-server; do
+    # The names are PIN.toml's `binaries`, read as stage-daemon-sidecar.sh does.
+    for bin in $(sed -n 's/^binaries *= *\[\(.*\)\]/\1/p' serve/crates/sovereign-compute/llama-server/PIN.toml | tr -d '",'); do
         lipo -create -output "$BIN_DIR/${bin}-universal-apple-darwin" \
             "$BIN_DIR/${bin}-aarch64-apple-darwin" "$BIN_DIR/${bin}-x86_64-apple-darwin"
     done

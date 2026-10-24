@@ -234,8 +234,11 @@ fn serve_rerank(
                 "rerank request: `documents` must be a non-empty array".to_string(),
             ));
         }
+        // The kind's route serves the one reranker this process loaded, so
+        // the request's id is an echo, not a selector (the registry loads
+        // one slot per kind).
         let scores = provider
-            .rerank_batch(&request.query, &request.documents)
+            .rerank_batch(None, &request.query, &request.documents)
             .await
             .map_err(|e| KindServeError::Backend(format!("rerank failed: {e}")))?;
         if scores.len() != request.documents.len() {
@@ -548,6 +551,7 @@ mod tests {
             }
             async fn rerank_batch(
                 &self,
+                _: Option<&str>,
                 _: &str,
                 docs: &[String],
             ) -> sovereign_contracts::error::Result<Vec<f32>> {

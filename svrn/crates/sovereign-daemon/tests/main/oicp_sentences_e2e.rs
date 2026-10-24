@@ -111,6 +111,7 @@ impl InferenceProvider for WordHash {
     /// visibly not cosine's.
     async fn rerank_batch(
         &self,
+        _model: Option<&str>,
         _q: &str,
         docs: &[String],
     ) -> sovereign_core::error::Result<Vec<f32>> {

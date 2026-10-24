@@ -4,14 +4,19 @@
 //! the router's owner can give: whose weights these are, the router's own
 //! lifecycle for `/status`, and the host facts the remote half could only
 //! assume (each model's residency, the code model, the trained context;
-//! svrn-docs ENGINE_SWAP_PLAN.md A1).
+//! svrn-docs ENGINE_SWAP_PLAN.md A1), and the edit slot with a raw prompt's
+//! own route (A3).
 
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Instant;
 
 use async_trait::async_trait;
 use futures::Stream;
-use sovereign_contracts::traits::{InferenceProvider, ResidentSlot, ServingLocus};
+use sovereign_contracts::setup_config::EditSection;
+use sovereign_contracts::traits::{
+    frames_to_text_stream, InferenceProvider, ResidentSlot, ServingLocus,
+};
 use sovereign_contracts::types::*;
 use sovereign_contracts::{oicp, Result};
 
@@ -25,16 +30,24 @@ pub struct RouterProvider {
     router: Arc<LiveRouter>,
     preset: RouterPreset,
     n_ctx_train: Option<u32>,
+    edit_slot: Option<EditSlotInfo>,
 }
+
+/// A typed completion stream.
+type Frames = Pin<Box<dyn Stream<Item = StreamFrame> + Send>>;
 
 impl RouterProvider {
     /// Wrap `inner`, the remote provider built from `preset`'s section of
     /// `router`. Reads the primary GGUF's trained context from its header;
-    /// one that cannot be read is reported as unknown, never guessed.
+    /// one that cannot be read is reported as unknown, never guessed. With
+    /// `edit` (`[models.edit]`), asks the router for the editing model's FIM
+    /// style; blocking, so call it off the async workers, as
+    /// [`LiveRouter::start`].
     pub fn new(
         inner: Arc<dyn InferenceProvider>,
         router: Arc<LiveRouter>,
         preset: RouterPreset,
+        edit: Option<&EditSection>,
     ) -> Self {
         let primary = preset.primary().to_string();
         let n_ctx_train = match preset.path_of(&primary) {
@@ -48,12 +61,63 @@ impl RouterProvider {
             None => None,
         };
         tracing::debug!(target: "llama_router", model = %primary, ?n_ctx_train, "router provider: primary's trained context");
+        let edit_slot = edit.zip(preset.edit()).map(|(section, model)| {
+            // The fast turn's model: the fast role, else the primary, as
+            // `ModelsSection::fast_path` resolves it for the embedded alias.
+            let roles = preset.roles();
+            let fast_model = roles
+                .iter()
+                .find(|(role, _)| *role == "fast")
+                .map_or(preset.primary(), |(_, m)| *m);
+            let fast = fast_model == model;
+            super::edit::edit_slot(&router, model, section, fast)
+        });
         Self {
             inner,
             router,
             preset,
             n_ctx_train,
+            edit_slot,
         }
+    }
+
+    /// Where a Raw request goes: the router model it names (else the one its
+    /// speed selects) as a raw `/completion`, with the stop strings of the
+    /// edit slot's FIM family when it is the editing model. `None` for a
+    /// request that is not Raw, or names a model outside the preset, which
+    /// the inner provider routes.
+    fn raw_route(&self, request: &CompletionRequest) -> Option<(String, &'static [&'static str])> {
+        if request.prompt_shape != Some(PromptShape::Raw) {
+            return None;
+        }
+        let model = match &request.model_id {
+            Some(m) if self.preset.path_of(m).is_some() => m.clone(),
+            Some(m) => {
+                tracing::debug!(target: "llama_router", model = %m, "raw request for a model outside the preset: forwarded");
+                return None;
+            }
+            None => self.inner.model_id_for(request.preferred_speed),
+        };
+        let stops = self
+            .edit_slot
+            .as_ref()
+            .filter(|e| e.model_id == model)
+            .and_then(|e| e.fim.as_ref())
+            .map_or(&[][..], |f| {
+                sovereign_contracts::fim::markers_for(f.style).stop_strings
+            });
+        tracing::debug!(target: "llama_router", %model, stops = stops.len(), "raw request: verbatim to /completion");
+        Some((model, stops))
+    }
+
+    async fn raw(
+        &self,
+        model: &str,
+        stops: &[&str],
+        request: &CompletionRequest,
+    ) -> Result<Frames> {
+        oicp_client::llama_server_raw_completion(&self.router.base_url(), model, request, stops)
+            .await
     }
 
     /// The router loads only the models its preset names, and the slots
@@ -66,6 +130,12 @@ impl RouterProvider {
              preset ({}); add the GGUF to [models] and restart the daemon",
             self.preset.warm_models().join(", ")
         ))
+    }
+
+    /// The served kind's role name for the cross-encoder, so the preset's
+    /// role lookup and the kind registry cannot disagree about it.
+    fn rerank_role(&self) -> &'static str {
+        sovereign_inference::served_kind::RERANK.role
     }
 
     fn model_for(&self, role: &str) -> Option<&str> {
@@ -82,35 +152,56 @@ impl RouterProvider {
 #[async_trait]
 impl InferenceProvider for RouterProvider {
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
-        self.inner.complete(request).await
+        match self.raw_route(request) {
+            Some((model, stops)) => {
+                let started = Instant::now();
+                let frames = self.raw(&model, stops, request).await?;
+                super::edit::collect(frames, model, started).await
+            }
+            None => self.inner.complete(request).await,
+        }
     }
 
     async fn complete_stream(
         &self,
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
-        self.inner.complete_stream(request).await
+        match self.raw_route(request) {
+            Some((model, stops)) => Ok(frames_to_text_stream(
+                self.raw(&model, stops, request).await?,
+            )),
+            None => self.inner.complete_stream(request).await,
+        }
     }
 
     async fn complete_stream_with_id(
         &self,
         request: &CompletionRequest,
     ) -> Result<(Pin<Box<dyn Stream<Item = Result<String>> + Send>>, String)> {
-        self.inner.complete_stream_with_id(request).await
+        match self.raw_route(request) {
+            Some((model, stops)) => {
+                let frames = self.raw(&model, stops, request).await?;
+                Ok((frames_to_text_stream(frames), model))
+            }
+            None => self.inner.complete_stream_with_id(request).await,
+        }
     }
 
-    async fn complete_stream_with_finish(
-        &self,
-        request: &CompletionRequest,
-    ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>> {
-        self.inner.complete_stream_with_finish(request).await
+    async fn complete_stream_with_finish(&self, request: &CompletionRequest) -> Result<Frames> {
+        match self.raw_route(request) {
+            Some((model, stops)) => self.raw(&model, stops, request).await,
+            None => self.inner.complete_stream_with_finish(request).await,
+        }
     }
 
     async fn complete_stream_with_id_and_finish(
         &self,
         request: &CompletionRequest,
-    ) -> Result<(Pin<Box<dyn Stream<Item = StreamFrame> + Send>>, String)> {
-        self.inner.complete_stream_with_id_and_finish(request).await
+    ) -> Result<(Frames, String)> {
+        match self.raw_route(request) {
+            Some((model, stops)) => Ok((self.raw(&model, stops, request).await?, model)),
+            None => self.inner.complete_stream_with_id_and_finish(request).await,
+        }
     }
 
     async fn embed(&self, text: &str) -> Result<Vec<f32>> {
@@ -121,19 +212,72 @@ impl InferenceProvider for RouterProvider {
         self.inner.embed_batch(texts).await
     }
 
+    /// A batch holding a Raw request runs one by one, each by its own route.
     async fn complete_batch(
         &self,
         requests: &[CompletionRequest],
     ) -> Result<Vec<CompletionResponse>> {
-        self.inner.complete_batch(requests).await
+        if !requests.iter().any(|r| self.raw_route(r).is_some()) {
+            return self.inner.complete_batch(requests).await;
+        }
+        let mut out = Vec::with_capacity(requests.len());
+        for request in requests {
+            out.push(self.complete(request).await?);
+        }
+        Ok(out)
     }
 
     async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
         self.inner.embed_query(query).await
     }
 
-    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
-        self.inner.rerank_batch(query, docs).await
+    /// The preset's rerank section, named to the route (A4): the router's
+    /// `/v1/rerank` serves one model per preset entry, so a request must name
+    /// the rerank section; an id outside the preset is a chat model on a
+    /// route that does not know it. No rerank section means the route
+    /// refuses and the caller falls back to un-reranked fusion, the trait's
+    /// contract for an engine without a reranker.
+    async fn rerank_batch(
+        &self,
+        model: Option<&str>,
+        query: &str,
+        docs: &[String],
+    ) -> Result<Vec<f32>> {
+        let Some(section) = self.model_for(self.rerank_role()) else {
+            tracing::debug!(
+                target: "llama_router",
+                docs = docs.len(),
+                "rerank: the preset has no rerank section; the route refuses and fusion carries the search"
+            );
+            return Err(sovereign_contracts::Error::NotImplemented(
+                "this router's preset has no rerank section; add [models.kinds] rerank".to_string(),
+            ));
+        };
+        let model = match model {
+            Some(m) if m == section => m,
+            Some(m) => {
+                tracing::warn!(
+                    target: "llama_router",
+                    named = %m,
+                    rerank = %section,
+                    "rerank: a model id outside the rerank section was named; sending the section"
+                );
+                section
+            }
+            None => section,
+        };
+        tracing::debug!(
+            target: "llama_router",
+            model,
+            docs = docs.len(),
+            "rerank: on the preset's rerank section"
+        );
+        self.inner.rerank_batch(Some(model), query, docs).await
+    }
+
+    /// The rerank section's model id, which is the id its route answers to.
+    fn rerank_model_id(&self) -> Option<String> {
+        self.model_for(self.rerank_role()).map(str::to_string)
     }
 
     fn model_id_for(&self, speed: Speed) -> String {
@@ -187,8 +331,9 @@ impl InferenceProvider for RouterProvider {
         self.model_for("code").map(str::to_string)
     }
 
+    /// `[models.edit]`'s section on the router, probed at build.
     fn edit_slot_info(&self) -> Option<EditSlotInfo> {
-        self.inner.edit_slot_info()
+        self.edit_slot.clone()
     }
 
     /// Load the primary through the router's `POST /models/load` and wait
@@ -281,11 +426,13 @@ impl InferenceProvider for RouterProvider {
 #[cfg(test)]
 mod tests {
     /// The host facts the router answers itself instead of the remote half
-    /// (ENGINE_SWAP_PLAN A1, A5), in trait order.
-    const ANSWERED_HERE: [&str; 7] = [
+    /// (ENGINE_SWAP_PLAN A1, A4, A5), in trait order.
+    const ANSWERED_HERE: [&str; 9] = [
+        "rerank_model_id",
         "n_ctx_train_for_primary",
         "count_tokens_exact",
         "code_model_id",
+        "edit_slot_info",
         "warmup_primary",
         "load_extra_slot",
         "unload_extra_slot",

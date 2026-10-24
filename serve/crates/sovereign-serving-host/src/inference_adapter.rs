@@ -1516,8 +1516,17 @@ impl InferenceProvider for SovereignInferenceAdapter {
         self.provider.embed_query(query).await
     }
 
-    async fn rerank_batch(&self, query: &str, docs: &[String]) -> CoreResult<Vec<f32>> {
-        self.provider.rerank_batch(query, docs).await
+    async fn rerank_batch(
+        &self,
+        model: Option<&str>,
+        query: &str,
+        docs: &[String],
+    ) -> CoreResult<Vec<f32>> {
+        self.provider.rerank_batch(model, query, docs).await
+    }
+
+    fn rerank_model_id(&self) -> Option<String> {
+        self.provider.rerank_model_id()
     }
 
     fn model_id_for(&self, speed: Speed) -> String {

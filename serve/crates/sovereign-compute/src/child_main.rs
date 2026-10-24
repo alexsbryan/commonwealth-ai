@@ -446,9 +446,14 @@ impl InferenceProvider for LazyProvider {
         }
     }
 
-    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+    async fn rerank_batch(
+        &self,
+        model: Option<&str>,
+        query: &str,
+        docs: &[String],
+    ) -> Result<Vec<f32>> {
         match self.current() {
-            Some(p) => p.rerank_batch(query, docs).await,
+            Some(p) => p.rerank_batch(model, query, docs).await,
             None => Err(self.unavailable()),
         }
     }

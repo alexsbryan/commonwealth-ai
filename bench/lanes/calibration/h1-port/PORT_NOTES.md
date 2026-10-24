@@ -83,3 +83,37 @@ best-balanced-accuracy point recomputed from the scores lands at
    If a future re-fit needs that, it needs the unrounded scores, which
    were not committed — that is a note for whoever recalibrates, not a
    defect in this port.
+
+## 2026-10-23: the router's rerank margin, checked against this calibration
+
+ENGINE_SWAP_PLAN A4 asks for "the H1 Platt calibration refit once on the
+server (telemetry only); the median margin moved 0.29". What the artifacts
+here can and cannot answer, and what was measured:
+
+- **The fit itself refuses to move.** `fit_admission_calibration.py` is
+  pinned to the kill-gate score file (`h1_scores.jsonl`, sha256 asserted),
+  and re-running it on 2026-10-23 writes a byte-identical
+  `h1_admission_calibration.json` (sha256 `b1cde118…`). That is the port's
+  guarantee working — one Platt fit — not evidence the server agrees.
+- **The server's shift, measured on the rerank spike's own pairs.** 320
+  (query, document) pairs through the embedded slot and through
+  `kind = "llama-server"`'s `/v1/rerank` (`rerank-through-daemon.py`,
+  `bench/lanes/engine-swap/derisk-20261012/rerank-result-a4.json`): the
+  daemon's median margin is **0.169 below** the embedded slot's
+  (mean 0.144 below; p10 -0.645, p90 +0.374, so it is a tight shift, not a
+  rescale). Spearman 0.9906 over the pairs. The plan's "0.29" is the
+  spike's median ABSOLUTE margin difference (0.2955 here), a different
+  statistic; the signed shift is what moves a pair across a threshold.
+- **What that costs the band.** Applying the committed Platt map to both
+  arms, 31 of 320 pairs (9.7%) change band. The committed operating point
+  is not re-derived from a 320-pair spike — a fit on this set would be a
+  second calibration, and the whole point of the pinned fit is that there
+  is one. This is recorded because a 0.17 shift moves pairs across a band
+  whose edges are 0.80 margins apart, so the router's rerank is NOT
+  margin-identical to the embedded slot and H1's telemetry on a
+  `llama-server` node reads ~0.17 low.
+- A re-fit that means it needs a score file of the same kind
+  (answerable/absent labels over a real corpus), through the server, and a
+  new pinned sha — the runtime already says `NoInstrument` rather than
+  defaulting when the margin is absent, and H1 is telemetry-only (P1), so
+  no decision currently rests on the un-refit map.

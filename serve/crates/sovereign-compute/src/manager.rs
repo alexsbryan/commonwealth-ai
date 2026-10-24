@@ -1234,16 +1234,30 @@ impl InferenceProvider for ComputeRoutedProvider {
         self.inner.embed_query(query).await
     }
 
-    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+    async fn rerank_batch(
+        &self,
+        model: Option<&str>,
+        query: &str,
+        docs: &[String],
+    ) -> Result<Vec<f32>> {
         // A rerank child takes every rerank while serving; else the
         // in-process slot, as before.
         if let Some(child) = &self.rerank_child {
             if child.is_serving() {
-                return child.rerank_batch(query, docs).await;
+                return child.rerank_batch(model, query, docs).await;
             }
             tracing::warn!(target: "compute_child", "rerank child not serving; falling back to the in-process slot");
         }
-        self.inner.rerank_batch(query, docs).await
+        self.inner.rerank_batch(model, query, docs).await
+    }
+
+    /// A rerank child serves its own one reranker; the in-process slot, when
+    /// the child is gone, is the one it names.
+    fn rerank_model_id(&self) -> Option<String> {
+        match &self.rerank_child {
+            Some(child) if child.is_serving() => None,
+            _ => self.inner.rerank_model_id(),
+        }
     }
 
     fn capabilities(&self) -> ProviderCapabilities {

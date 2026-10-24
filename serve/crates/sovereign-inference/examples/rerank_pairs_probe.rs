@@ -78,7 +78,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .chain(IRRELEVANT.iter())
         .map(|s| s.to_string())
         .collect();
-    let scores = reranker.rerank_batch(QUERY, &curated).await?;
+    let scores = reranker.rerank_batch(None, QUERY, &curated).await?;
     let mean_rel: f32 = scores[..4].iter().sum::<f32>() / 4.0;
     let mean_irr: f32 = scores[4..].iter().sum::<f32>() / 4.0;
     let separation = mean_rel - mean_irr;
@@ -116,10 +116,10 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("timing over {n} (query, chunk) pairs…");
 
     // Warm (allocation + shader compilation excluded from timing).
-    let _ = reranker.rerank_batch(QUERY, &docs).await?;
+    let _ = reranker.rerank_batch(None, QUERY, &docs).await?;
 
     let t0 = Instant::now();
-    let batched = reranker.rerank_batch(QUERY, &docs).await?;
+    let batched = reranker.rerank_batch(None, QUERY, &docs).await?;
     let batched_ms = t0.elapsed().as_secs_f64() * 1e3;
 
     let t1 = Instant::now();

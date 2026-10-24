@@ -29,7 +29,7 @@ use sovereign_contracts::error::Error;
 use sovereign_contracts::model_family::{
     EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
 };
-use sovereign_contracts::setup_config::{fim_defaults, EditSection};
+use sovereign_contracts::setup_config::EditSection;
 use sovereign_contracts::traits::{frames_to_text_stream, InferenceProvider, ResidentSlot};
 use sovereign_contracts::types::*;
 use sovereign_contracts::Result;
@@ -63,45 +63,6 @@ const PINNED_SLOT_NAMES: [&str; 2] = [EDIT_SLOT_NAME, LEGACY_EDIT_SLOT_NAME];
 /// eviction may drop it.
 pub fn extras_slot_is_evictable(slot_name: &str) -> bool {
     !PINNED_SLOT_NAMES.contains(&slot_name)
-}
-
-/// Decide which lanes an editing slot can serve.
-///
-/// The single answer to that question. All three install paths (alias,
-/// dedicated, fallback) route through here so none of them can decide
-/// it differently — two deciders for one capability is exactly the
-/// drift ARCH §10.6 exists to stop.
-///
-/// - **Next-edit** needs nothing but a prompt dialect, so it is always
-///   available once a model is loaded.
-/// - **FIM** needs marker tokens in the vocabulary. No probe hit, no
-///   lane — and callers must refuse rather than guess a convention,
-///   because a wrong marker set yields confident garbage, not an error.
-///
-/// `section` is `None` for the automatic fallback, which has no
-/// `[models.edit]` to read and takes the shared defaults.
-fn edit_lanes(
-    style: Option<FimStyle>,
-    format: NextEditFormat,
-    section: Option<&EditSection>,
-) -> (Option<NextEditLane>, Option<FimLane>) {
-    let fim = style.map(|style| match section {
-        Some(s) => FimLane {
-            style,
-            max_tokens: s.effective_max_tokens(),
-            temperature: s.effective_temperature(),
-            max_prefix_chars: s.effective_max_prefix_chars(),
-            max_suffix_chars: s.effective_max_suffix_chars(),
-        },
-        None => FimLane {
-            style,
-            max_tokens: fim_defaults::MAX_TOKENS,
-            temperature: fim_defaults::TEMPERATURE,
-            max_prefix_chars: fim_defaults::MAX_PREFIX_CHARS,
-            max_suffix_chars: fim_defaults::MAX_SUFFIX_CHARS,
-        },
-    });
-    (Some(NextEditLane { format }), fim)
 }
 
 /// Announce an editing-slot install, naming both lanes.
@@ -1601,7 +1562,7 @@ impl EmbeddedLlamaCpp {
         // the edit slot's bytes count toward `max_extras_memory_gb`
         // (decision D2: pinned, but accounted).
         let budget = self.extras.read().map(|g| g.budget_bytes).unwrap_or(None);
-        let ctx = section.context_size.unwrap_or(4096);
+        let ctx = section.effective_context_size();
         let model_id = self.load_extra_with_budget(
             EDIT_SLOT_NAME.to_string(),
             section.path.clone(),
@@ -4055,7 +4016,12 @@ impl InferenceProvider for EmbeddedLlamaCpp {
     /// present; returns `Error::NotImplemented` otherwise so the caller
     /// (corpus-engine `search_with_rerank`) falls back to the un-reranked
     /// fusion result without surfacing a hard error.
-    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+    async fn rerank_batch(
+        &self,
+        _model: Option<&str>,
+        query: &str,
+        docs: &[String],
+    ) -> Result<Vec<f32>> {
         let reranker = {
             let guard = self
                 .rerank_slot
@@ -4070,7 +4036,17 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     .to_string(),
             )
         })?;
-        reranker.rerank_batch(query, docs).await
+        reranker.rerank_batch(None, query, docs).await
+    }
+
+    /// The installed rerank slot's model id, as `[models.kinds] rerank`
+    /// named it; `None` with no slot installed.
+    fn rerank_model_id(&self) -> Option<String> {
+        self.rerank_slot
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map(|(id, _)| id.clone())
     }
 
     fn model_id_for(&self, speed: Speed) -> String {

@@ -275,7 +275,12 @@ impl InferenceProvider for StandaloneReranker {
         ))
     }
 
-    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+    async fn rerank_batch(
+        &self,
+        _model: Option<&str>,
+        query: &str,
+        docs: &[String],
+    ) -> Result<Vec<f32>> {
         let slot = Arc::clone(&self.slot);
         let query = query.to_string();
         let docs = docs.to_vec();

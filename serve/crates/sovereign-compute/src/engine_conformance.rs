@@ -230,7 +230,7 @@ pub async fn check_serving(p: &dyn InferenceProvider) -> Vec<String> {
     // Rerank must refuse rather than fabricate. `NotImplemented` is a
     // correct answer; a wrong-length score vector is not.
     let docs = vec!["first".to_string(), "second".to_string()];
-    if let Ok(scores) = p.rerank_batch("query", &docs).await {
+    if let Ok(scores) = p.rerank_batch(None, "query", &docs).await {
         if scores.len() != docs.len() {
             v.push(format!(
                 "rerank_batch() returned {} scores for {} docs. Callers map scores back by \
@@ -362,7 +362,7 @@ mod tests {
             Ok(vec![vec![0.1]])
         }
         // Fabricates a score rather than refusing.
-        async fn rerank_batch(&self, _: &str, _: &[String]) -> Result<Vec<f32>> {
+        async fn rerank_batch(&self, _: Option<&str>, _: &str, _: &[String]) -> Result<Vec<f32>> {
             Ok(vec![1.0])
         }
         // The silent-truncation shape, and the ONLY way to produce it:

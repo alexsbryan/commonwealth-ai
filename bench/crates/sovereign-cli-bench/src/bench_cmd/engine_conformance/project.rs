@@ -157,6 +157,8 @@ fn answer_facets(case: &Case, method: ReplayMethod, answer: &Value, f: &mut Face
         ReplayMethod::RerankBatch => {
             f.rerank_scores = serde_json::from_value(answer.clone()).ok();
         }
+        // The model a rerank must name: a fact about the far end, no facet.
+        ReplayMethod::RerankModelId => {}
         ReplayMethod::CountTokens => f.token_count = answer.as_u64(),
         ReplayMethod::Host => {
             if let Value::Object(map) = answer {

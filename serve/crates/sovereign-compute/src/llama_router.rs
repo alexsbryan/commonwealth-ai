@@ -20,6 +20,7 @@ use std::path::{Path, PathBuf};
 use sha2::{Digest, Sha256};
 
 pub mod build_pin;
+mod edit;
 pub mod live;
 pub mod provider;
 use sovereign_contracts::engine_config::{EmbedInputs, EngineKind, EngineSection, GrammarSupport};
@@ -38,6 +39,13 @@ const FAST_PARALLEL: u32 = 8;
 /// encoder needs a whole input in one micro-batch; 8192 is the battery's
 /// configuration (compute.embeddings 9/9).
 const ENCODER_CTX: u32 = 8192;
+
+/// Server slots on the rerank section. The spike scored its pairs on a server
+/// with `-np 1` and took 2x the embedded engine's wall time (R4, 2026-10-12):
+/// the embedded slot fans a shared prefix out to 16 document sequences, while
+/// a one-slot server runs every document alone. Slots that can overlap are
+/// what recovers that fan-out (A4; R4 re-measured 2026-10-23).
+const RERANK_PARALLEL: u32 = 4;
 
 /// What one router entry serves.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,6 +98,8 @@ pub struct RouterPreset {
     primary: String,
     fast: Option<String>,
     code: Option<String>,
+    /// `[models.edit]`'s model.
+    edit: Option<String>,
     embed: Option<String>,
     rerank: Option<String>,
 }
@@ -121,13 +131,6 @@ impl RouterPreset {
                  remove it or run kind = \"llama\"",
                 models.extra.keys().cloned().collect::<Vec<_>>().join(", ")
             ));
-        }
-        if models.edit.is_some() {
-            return Err(
-                "[models.edit] is not served by kind = \"llama-server\" yet (its route \
-                        is step 4 of the engine swap); remove it or run kind = \"llama\""
-                    .into(),
-            );
         }
         let mut entries: BTreeMap<String, RouterEntry> = BTreeMap::new();
         let mut chat = |path: &Path,
@@ -180,12 +183,13 @@ impl RouterPreset {
             None,
             primary_sleep,
         )?;
+        let fast_sleep = idle_window(idle.fast_idle_secs);
         let fast = match models.has_explicit_fast() {
             true => Some(chat(
                 models.fast_path(),
                 models.effective_fast_context_size(),
                 Some(FAST_PARALLEL),
-                idle_window(idle.fast_idle_secs),
+                fast_sleep,
             )?),
             false => None,
         };
@@ -196,6 +200,27 @@ impl RouterPreset {
                 None,
                 primary_sleep,
             )?),
+            None => None,
+        };
+        // The editing model is a chat section at its own context, pinned as
+        // the embedded engine pins its edit slot; on a GGUF another role
+        // already serves it shares that section and its window, as the
+        // embedded engine aliases the fast slot.
+        let edit = match &models.edit {
+            Some(section) => {
+                let name = Some(stem(&section.path)?);
+                let sleep = match () {
+                    _ if name == fast => fast_sleep,
+                    _ if name.as_ref() == Some(&primary) || name == code => primary_sleep,
+                    _ => None,
+                };
+                Some(chat(
+                    &section.path,
+                    section.effective_context_size(),
+                    None,
+                    sleep,
+                )?)
+            }
             None => None,
         };
         let mut encoder =
@@ -232,6 +257,7 @@ impl RouterPreset {
             primary,
             fast,
             code,
+            edit,
             embed,
             rerank,
         })
@@ -255,6 +281,11 @@ impl RouterPreset {
         .into_iter()
         .filter_map(|(role, name)| name.map(|n| (role, n.as_str())))
         .collect()
+    }
+
+    /// `[models.edit]`'s model, when one is configured.
+    pub fn edit(&self) -> Option<&str> {
+        self.edit.as_deref()
     }
 
     /// The model that fills the primary role.
@@ -308,6 +339,11 @@ impl RouterPreset {
                         out,
                         "{flag} = true\nbatch-size = {ENCODER_CTX}\nubatch-size = {ENCODER_CTX}\n"
                     );
+                    // A rerank request is one task per document, so the
+                    // section's slots are what let them overlap (R4).
+                    if matches!(e.kind, EntryKind::Rerank) {
+                        let _ = writeln!(out, "parallel = {RERANK_PARALLEL}");
+                    }
                 }
             }
         }
@@ -344,6 +380,7 @@ impl RouterPreset {
             self.fast.as_ref(),
             self.embed.as_ref(),
             self.code.as_ref(),
+            self.edit.as_ref(),
             self.rerank.as_ref(),
         ]
         .into_iter()

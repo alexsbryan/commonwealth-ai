@@ -24,6 +24,7 @@ use crate::llama_router::live::LiveRouter;
 use crate::llama_router::provider::RouterProvider;
 use crate::llama_router::RouterPreset;
 use crate::manager::{ComputeChildManager, ComputeRoutedProvider, DynamicChildSlot};
+use crate::rpc_peer::{self, RpcPeerChild};
 
 /// What a serving process installs, plus the concrete handles its host keeps.
 pub struct ServingParts {
@@ -209,6 +210,8 @@ struct LiveCompute {
     manager: Option<Arc<ComputeChildManager>>,
     /// The llama-server router the first build started, for a router engine.
     router: Option<Arc<LiveRouter>>,
+    /// The `ggml-rpc-server` the first build started, under `[compute] rpc_peer`.
+    rpc_peer: Option<Arc<RpcPeerChild>>,
 }
 
 /// Builds a serving process's provider, at cold start and again on every
@@ -247,6 +250,7 @@ impl ReloadFactory {
         } else {
             Some(config.models().map_err(fail)?)
         };
+        let peer_bind = rpc_peer::configured_bind(config).map_err(fail)?;
 
         // `[compute] distributed_primary` — the primary lives in a supervised
         // child, so this process must NOT also hold it.
@@ -320,9 +324,33 @@ impl ReloadFactory {
                     .to_string(),
             ));
         }
+        // The peer child likewise: kept across reloads, never restarted by one.
+        let running_peer = live
+            .as_ref()
+            .and_then(|r| r.rpc_peer.as_ref().map(|p| p.bind()));
+        if live.is_some() && running_peer != peer_bind {
+            tracing::warn!(target: "rpc_peer", running = ?running_peer, asked = ?peer_bind, "reload refused: the config asks for another rpc peer bind");
+            return Err(fail(format!(
+                "the running rpc peer child serves {running_peer:?}, and this config asks for \
+                 {peer_bind:?}. A reload never restarts it — restart the daemon to apply a \
+                 change to [compute] rpc_peer."
+            )));
+        }
         let started_router = match (&plan.router, &running_router) {
             (Some(preset), None) => Some(LiveRouter::start(preset, config).map_err(fail)?),
             _ => None,
+        };
+        let started_peer = match peer_bind.filter(|_| live.is_none()) {
+            Some(bind) => match RpcPeerChild::start(bind, config) {
+                Ok(child) => Some(child),
+                Err(e) => {
+                    if let Some(r) = &started_router {
+                        r.terminate();
+                    }
+                    return Err(fail(e));
+                }
+            },
+            None => None,
         };
         let router = running_router.or_else(|| started_router.clone());
         // The remote half is built from the live router's section; capture,
@@ -345,6 +373,9 @@ impl ReloadFactory {
                 // that failed; the next one would start another.
                 if let Some(r) = &started_router {
                     r.terminate();
+                }
+                if let Some(p) = &started_peer {
+                    p.terminate();
                 }
                 return Err(fail(reason));
             }
@@ -378,15 +409,19 @@ impl ReloadFactory {
                     children: plan.children.clone(),
                     manager,
                     router: router.clone(),
+                    rpc_peer: started_peer,
                 });
                 provider
             }
         };
 
         let provider: Arc<dyn InferenceProvider> = match (&router, &plan.router) {
-            (Some(r), Some(preset)) => {
-                Arc::new(RouterProvider::new(provider, Arc::clone(r), preset.clone()))
-            }
+            (Some(r), Some(preset)) => Arc::new(RouterProvider::new(
+                provider,
+                Arc::clone(r),
+                preset.clone(),
+                models.and_then(|m| m.edit.as_ref()),
+            )),
             _ => provider,
         };
 

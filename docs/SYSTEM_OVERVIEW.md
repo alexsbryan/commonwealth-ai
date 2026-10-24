@@ -1214,6 +1214,27 @@ rest load on demand) until `GET /models` reports `loaded`, and re-wraps it on ev
 host facts from the router rather than the remote half's assumptions: each
 preset role's residency (embed and rerank included) from the polled
 `GET /models`, the code model, and `n_ctx_train` from the primary GGUF's header.
+`[models.edit]` is a section too (pinned; on a GGUF another role serves, that
+role's section): `RouterProvider` reports its edit slot with the FIM style
+read from the router's `/tokenize` over the marker table
+(`sovereign_contracts::fim::fim_style_from`), and sends every `PromptShape::Raw`
+request for a preset model to the router's native `/completion` verbatim with
+that family's stop strings (`oicp_client::llama_server_raw_completion`), so a
+raw prompt is never chat-templated.
+`[models.kinds] rerank` is a section too (`reranking = true`, `parallel = 4`:
+the route scores one task per document, so its slots are what let documents
+overlap). `RouterProvider` names that section on every rerank
+(`rerank_model_id`), because the route serves a model per preset entry and
+the remote half would name the chat model; a preset with no rerank section
+answers `NotImplemented` and retrieval falls back to un-reranked fusion. The
+route's `relevance_score` is a probability, and `oicp_client`'s
+`rerank_over_route` returns `ln(p/(1-p))` so every caller keeps its
+`margin > 0` bar (PPR admission, the rerank/fusion blend, H1's fitted Platt
+map) — the ruler the embedded engine's `YesNoLogit` reads. The whole path is
+`sovereign-stock`'s ignored e2e `llama_server_router_e2e`: boot on the
+shipped binary, serve a completion and an embedding, and rerank through the
+route (the rerank model id named, an answering document above 0 and an
+unrelated one below it).
 The binary is `llama-server` beside the daemon's executable, built by
 `serve/crates/sovereign-compute/llama-server/build.sh` from `PIN.toml` there
 (llama.cpp commit, llguidance, each patch by sha256, the binaries), per
@@ -1225,7 +1246,19 @@ refuses a shipped binary whose manifest disagrees or names a binary not there
 binary and skips the check, and `/status` says which ran. The whole path is
 `sovereign-stock`'s ignored e2e `llama_server_router_e2e`: boot on the
 shipped binary, serve a completion and an embedding, SIGKILL the daemon, no
-llama-server left.
+llama-server left (the rerank call is described above).
+A node lends its GPU to another node's router with `[compute] rpc_peer =
+"ip:port"`, under any engine: serving assembly's first build starts the
+shipped `ggml-rpc-server -c` there as a supervised child
+(`sovereign_compute::rpc_peer`, kept across reloads like the router), its
+build verified against the same pin, `LLAMA_CACHE` set to
+`<data>/rpc-peer` so its tensor cache is one the daemon names. The address is
+static, with no discovery and no mesh registration, and must be this host's
+LAN or tunnel address: loopback and every-interface binds are refused at
+startup, because rpc-server authenticates nothing. The supervisor watches it
+by connect until it first listens (`HealthTarget::TcpListening`), then by its
+exit alone, since rpc-server serves one client on a backlog of 1. A head on
+another build is refused by upstream's HELLO. Proof: `rpc_peer_child_e2e`.
 `BuiltEngine.llama` is `None` for every non-llama engine, and the VRAM
 preflight is llama's own question, skipped for engines holding no weights.
 The contracts are executable: `engine_conformance::{check_sync, check_serving}`.

@@ -136,10 +136,10 @@ async fn run_scenario(
 
     // Warm once so the timing comparison isn't polluted by first-call
     // allocation / GPU shader compilation.
-    let _ = reranker.rerank_batch(query, docs).await?;
+    let _ = reranker.rerank_batch(None, query, docs).await?;
 
     let t0 = Instant::now();
-    let batched = reranker.rerank_batch(query, docs).await?;
+    let batched = reranker.rerank_batch(None, query, docs).await?;
     let batched_ms = t0.elapsed().as_secs_f64() * 1e3;
 
     let t1 = Instant::now();

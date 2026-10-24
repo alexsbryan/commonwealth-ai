@@ -4,9 +4,11 @@
 //! build, serves a completion and an embedding through the router, names it
 //! in `/status`, reports the router's facts as its own (context size against
 //! the server's slot, the code model, embed among the resident, an exact token
-//! count from `/tokenize`), lets the embedder sleep on its idle window and
-//! wakes it with a request, and when the daemon is SIGKILLed no llama-server
-//! outlives it.
+//! count from `/tokenize`), serves a FIM completion from its `[models.edit]`
+//! section, reranks through `[models.kinds] rerank`'s section (the route
+//! named the rerank model, the scores returned as margins), lets the embedder
+//! sleep on its idle window and wakes it with a request, and when the daemon
+//! is SIGKILLed no llama-server outlives it.
 //!
 //! Boots `sovereign-stock` with the argv the sovereign-daemon binary takes
 //! (`run --config <path>`) on a temp root: its own ports, data dir and HOME,
@@ -22,8 +24,9 @@
 //!   SOVEREIGN_MODELS_DIR=$PWD/sovereign/models cargo test -p sovereign-stock \
 //!     --test llama_server_router_e2e -- --ignored --nocapture
 //!
-//! `SOVEREIGN_E2E_CHAT_MODEL` and `SOVEREIGN_E2E_EMBED_MODEL` pick the two
-//! models by role where the defaults are not on the host (`ROLES`).
+//! `SOVEREIGN_E2E_CHAT_MODEL`, `SOVEREIGN_E2E_EMBED_MODEL` and
+//! `SOVEREIGN_E2E_RERANK_MODEL` pick the three models by role where the
+//! defaults are not on the host (`ROLES`).
 //!
 //! Linux only: the process census reads `/proc`.
 #![cfg(target_os = "linux")]
@@ -44,11 +47,15 @@ const BIN: &str = env!("CARGO_BIN_EXE_sovereign-stock");
 /// insists on, because the test is about the router's lifecycle, not about
 /// what the model says. Unset, each is the smallest of its role in the
 /// Halo's `sovereign/models/`.
-const ROLES: [(&str, &str); 2] = [
+const ROLES: [(&str, &str); 3] = [
     ("SOVEREIGN_E2E_CHAT_MODEL", "Qwen3.5-0.8B-UD-Q6_K_XL.gguf"),
     (
         "SOVEREIGN_E2E_EMBED_MODEL",
         "Qwen3-Embedding-0.6B-Q8_0.gguf",
+    ),
+    (
+        "SOVEREIGN_E2E_RERANK_MODEL",
+        "qwen3-reranker-0.6b-q8_0.gguf",
     ),
 ];
 
@@ -86,14 +93,14 @@ struct Model {
     id: String,
 }
 
-/// The chat and embedding models (`ROLES`), each an absolute path or a file
-/// in `SOVEREIGN_MODELS_DIR` (quality/env-flags.toml): never resolved from
-/// the crate's own path, which escapes the package root.
-fn models() -> (Model, Model) {
+/// The chat, embedding and rerank models (`ROLES`), each an absolute path or
+/// a file in `SOVEREIGN_MODELS_DIR` (quality/env-flags.toml): never resolved
+/// from the crate's own path, which escapes the package root.
+fn models() -> (Model, Model, Model) {
     let dir = std::env::var_os("SOVEREIGN_MODELS_DIR")
         .map(PathBuf::from)
         .expect("SOVEREIGN_MODELS_DIR names the GGUF directory, absolute");
-    let [chat, embed] = ROLES.map(|(var, default)| {
+    let [chat, embed, rerank] = ROLES.map(|(var, default)| {
         let named = std::env::var_os(var);
         let path = dir.join(named.as_deref().unwrap_or(default.as_ref()));
         let source = named.as_ref().map_or("its default", |_| var);
@@ -111,7 +118,7 @@ fn models() -> (Model, Model) {
         eprintln!("router e2e: {var} = {} (from {source})", path.display());
         Model { path, id }
     });
-    (chat, embed)
+    (chat, embed, rerank)
 }
 
 fn client() -> reqwest::blocking::Client {
@@ -222,7 +229,7 @@ fn still_running(procs: &BTreeMap<u32, u64>) -> BTreeSet<u32> {
 #[test]
 #[ignore = "loads real GGUFs and needs the shipped llama-server: see the module doc"]
 fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
-    let (chat, embed) = models();
+    let (chat, embed, rerank) = models();
     let shipped = Path::new(BIN).with_file_name("llama-server");
     assert!(
         shipped.is_file(),
@@ -257,11 +264,14 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
         &config,
         format!(
             "[engine]\nkind = \"llama-server\"\n\n[models]\nprimary = \"{c}\"\n\
-             code = \"{c}\"\nembed = \"{e}\"\ncontext_size = 4096\n\n[daemon]\n\
+             code = \"{c}\"\nembed = \"{e}\"\ncontext_size = 4096\n\n\
+             [models.edit]\npath = \"{c}\"\ntemperature = 0.0\n\n\
+             [models.kinds]\nrerank = \"{r}\"\n\n[daemon]\n\
              client_port = {svrn}\ninternal_port = {internal}\nembed_idle_secs = {EMBED_IDLE_SECS}\n\
              rails_base = \"http://127.0.0.1:{dead_rails}\"\n\n[data]\ndir = \"{d}\"\n",
             c = chat.path.display(),
             e = embed.path.display(),
+            r = rerank.path.display(),
             d = data.display()
         ),
     )
@@ -290,7 +300,7 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
     // may already have slept on its short window.
     let mut children = Vec::new();
     wait_until(
-        "/status listing the router and both models loaded (or the embedder asleep)",
+        "/status listing the router and all three models loaded (or the embedder asleep)",
         Duration::from_secs(300),
         &log,
         || {
@@ -318,7 +328,7 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
                         && (c["lifecycle"] == "loaded" || c["lifecycle"] == "sleeping")
                 })
                 .count();
-            loaded == 2
+            loaded == 3
         },
     );
     let router = children
@@ -357,6 +367,79 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
         .map_or(0, Vec::len);
     assert!(dims > 0, "the embedding is empty: {embedded}");
 
+    // Rerank (ENGINE_SWAP_PLAN A4): `[models.kinds] rerank` is a section on
+    // the router, the daemon's /v1/rerank answers it under the RERANK model's
+    // id (not the chat model's), and the scores it hands back are margins
+    // `ln(p/(1-p))` on the embedded engine's ruler: a document that answers
+    // the query above 0, one that does not below it. Failing input: name the
+    // chat id (the route does not know it) or return the probabilities
+    // untouched (0.5 is not above the relevance par).
+    let reranked = post_json(
+        &format!("http://127.0.0.1:{serve}/v1/rerank"),
+        serde_json::json!({
+            "model": rerank.id,
+            "query": "What is the capital of France?",
+            "documents": [
+                "Paris is the capital and largest city of France.",
+                "The mitochondria is the powerhouse of the cell."
+            ]
+        }),
+    )
+    .unwrap_or_else(|e| panic!("{e}\n{}", log_tail(&log)));
+    let mut scores: Vec<f32> = reranked["results"]
+        .as_array()
+        .map(|rs| {
+            rs.iter()
+                .map(|r| r["relevance_score"].as_f64().unwrap_or(f64::NAN) as f32)
+                .collect()
+        })
+        .unwrap_or_default();
+    assert_eq!(scores.len(), 2, "one score per document: {reranked}");
+    assert!(
+        scores.iter().all(|s| s.is_finite()),
+        "a rerank score is not finite: {scores:?}"
+    );
+
+    // FIM (ENGINE_SWAP_PLAN A3): `[models.edit]` on the chat GGUF is the
+    // edit slot, its style asked of the router's tokenizer, and a completion
+    // through the daemon's /v1/completions is a raw prompt on the router's
+    // /completion, ended by the family's stop strings.
+    let status: Value = client()
+        .get(format!("http://127.0.0.1:{svrn}/status"))
+        .send()
+        .and_then(|r| r.json())
+        .expect("/status");
+    let edit = &status["inference"]["edit"];
+    let fim_style = edit["fim_style"]
+        .as_str()
+        .unwrap_or_else(|| panic!("the edit slot reports no FIM style: {edit}"))
+        .to_string();
+    assert_eq!(edit["model_id"], chat.id.as_str(), "{edit}");
+    let fim = post_json(
+        &format!("http://127.0.0.1:{svrn}/v1/completions"),
+        serde_json::json!({
+            // The F2 spike's prompt: a block opener, so multi-line mode.
+            // After `return ` the 0.8B model's first token is a newline,
+            // which single-line mode stops on with nothing emitted.
+            "prefix": "def add(a, b):",
+            "suffix": "\n\nprint(add(1, 2))\n",
+            "debug": true
+        }),
+    )
+    .unwrap_or_else(|e| panic!("{e}\n{}", log_tail(&log)));
+    let infill = fim["choices"][0]["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string();
+    assert!(
+        !infill.trim().is_empty(),
+        "the FIM completion is empty: {fim}"
+    );
+    assert!(
+        !infill.contains("<|") && !infill.contains("<think>"),
+        "the FIM prompt was templated, or a marker leaked: {infill:?}"
+    );
+
     // Host truth (ENGINE_SWAP_PLAN A1, A5): what the daemon reports about
     // its engine is what the router says, asked through the replay route the
     // conformance battery uses.
@@ -382,6 +465,38 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
         host["effective_context_size"], slot_ctx,
         "the context the daemon budgets against is not the server's slot: {host} / {props}"
     );
+    // Host truth asks the provider the same, through the replay route: the
+    // id the daemon would name is the rerank section's, and it is not the
+    // chat model's.
+    let named_model = replay("rerank_model_id", serde_json::json!({}));
+    assert_eq!(
+        named_model.as_str(),
+        Some(rerank.id.as_str()),
+        "the rerank model the daemon names: {named_model}"
+    );
+    let replay_scores = replay(
+        "rerank_batch",
+        serde_json::json!({
+            "model": rerank.id,
+            "query": "What is the capital of France?",
+            "docs": [
+                "Paris is the capital and largest city of France.",
+                "The mitochondria is the powerhouse of the cell."
+            ]
+        }),
+    );
+    let replay_scores: Vec<f32> = serde_json::from_value(replay_scores).unwrap_or_default();
+    assert_eq!(
+        replay_scores.len(),
+        2,
+        "the replay route's rerank: {replay_scores:?}"
+    );
+    scores.sort_by(|a, b| a.partial_cmp(b).expect("finite"));
+    assert!(
+        scores[0] < 0.0 && scores[1] > 0.0,
+        "the answering document is not above the relevance par (0) and the other below it: {scores:?}"
+    );
+
     let trained = host["n_ctx_train"].as_u64().unwrap_or(0);
     assert!(
         trained >= slot_ctx.as_u64().unwrap_or(u64::MAX),
@@ -491,20 +606,24 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
         || lifecycle_of(embed) == "loaded",
     );
 
-    // The processes: the router and one child per loaded model, all under
-    // the daemon.
+    // The processes: the router and one child per loaded model (chat,
+    // embedding, rerank), all under the daemon.
     let servers = llama_servers_under(daemon);
     assert_eq!(
         servers.len(),
-        3,
-        "expected the router and two model processes under the daemon, found {servers:?}"
+        4,
+        "expected the router and three model processes under the daemon, found {servers:?}"
     );
     eprintln!(
-        "booted: {generated} tokens generated, {dims}-dim embedding, ctx {slot_ctx} of \
-         n_ctx_train {trained}, code {chat}, resident {resident:?}, {truth} tokens exact \
+        "booted: {generated} tokens generated, {dims}-dim embedding, rerank {rerank_scores:?} \
+         on {rerank}, ctx {slot_ctx} of \
+         n_ctx_train {trained}, code {chat}, FIM {fim_style} {infill:?}, resident {resident:?}, \
+         {truth} tokens exact \
          (estimate {estimate}), embedder slept within {slept_after}s of {EMBED_IDLE_SECS}s idle \
          and answered again, llama-servers {:?}",
-        servers.keys()
+        servers.keys(),
+        rerank_scores = scores,
+        rerank = rerank.id,
     );
 
     // SIGKILL the daemon: nothing it started may outlive it.

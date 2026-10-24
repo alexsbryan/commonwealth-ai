@@ -337,9 +337,14 @@ impl InferenceProvider for MeteredInference {
         result
     }
 
-    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+    async fn rerank_batch(
+        &self,
+        model: Option<&str>,
+        query: &str,
+        docs: &[String],
+    ) -> Result<Vec<f32>> {
         self.ledger.record_rerank();
-        self.inner.rerank_batch(query, docs).await
+        self.inner.rerank_batch(model, query, docs).await
     }
 
     async fn warmup_primary(&self) -> Result<()> {

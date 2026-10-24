@@ -1347,6 +1347,13 @@ status = "guard"
 purpose = "The embedding GGUF the ignored router e2e (distributions/crates/sovereign-stock/tests/llama_server_router_e2e.rs) loads, by role: any small embedding model, an absolute path or a file in SOVEREIGN_MODELS_DIR. Its file stem is the id the router serves it under. Read only by that test."
 
 [[flag]]
+name = "SOVEREIGN_E2E_RERANK_MODEL"
+cluster = "dev-gates"
+default = "qwen3-reranker-0.6b-q8_0.gguf"
+status = "guard"
+purpose = "The rerank GGUF the ignored router e2e (distributions/crates/sovereign-stock/tests/llama_server_router_e2e.rs) loads as `[models.kinds] rerank`, by role: any cross-encoder GGUF llama-server serves with --reranking, an absolute path or a file in SOVEREIGN_MODELS_DIR. Its file stem is the id the router serves it under, and the id the daemon's /v1/rerank must answer to. Read only by that test."
+
+[[flag]]
 name = "SOVEREIGN_TOOL_STOP_TEST_GGUF"
 cluster = "dev-gates"
 default = "unset (the test prints SKIP and returns)"

@@ -1,29 +1,23 @@
 #!/usr/bin/env bash
 # cloud-rpc-peer-launch.sh — run ON the Vast pod (inside the sovereign-cuda
-# container) to turn it into a mesh-member ggml-RPC tensor worker.
+# container) to lend its GPU to a head's llama-server as a ggml-RPC peer.
 #
-# Usage:  DIAL_LINK='<full join link with dial=>' bash /workspace/cloud-rpc-peer-launch.sh
+# Usage:  PEER_BIND='<pod tunnel ip>:50052' bash /workspace/cloud-rpc-peer-launch.sh
 #
 # What it does, in order:
 #   1. cuda-preflight            — GPU sanity in ~1s, before any download
 #   2. fetch a 0.5 GB stub primary (daemon refuses to boot without one;
-#      the RPC worker itself never touches it)
-#   3. sovereign-cli mesh join   — joins the operator's mesh over iroh
-#   4. daemon run with SOVEREIGN_RPC_SERVE on LOOPBACK — raw ggml-RPC is
-#      unencrypted, so it must never bind a public interface; the iroh
-#      acceptor bridges ALPN cwth/rpc/0 to this port and all tensor
-#      traffic crosses the WAN encrypted.
+#      the peer child itself never touches it)
+#   3. daemon run with `[compute] rpc_peer = PEER_BIND`: the daemon runs the
+#      shipped `ggml-rpc-server -c` there as a supervised child, its tensor
+#      cache under /workspace/svrnmesh/rpc-peer. Raw ggml-RPC authenticates
+#      and encrypts nothing, so PEER_BIND is the pod's TUNNEL address
+#      (WireGuard, Tailscale), never a public one; the daemon refuses loopback
+#      and 0.0.0.0. The head names the same address in its own config.
 set -euo pipefail
-: "${DIAL_LINK:?set DIAL_LINK to the full mesh join link (svrn mesh rotate output on the host)}"
+: "${PEER_BIND:?set PEER_BIND to the pod tunnel ip:port the head will dial}"
 
-mkdir -p /workspace/models /workspace/rpc-cache /root/.svrnmesh /root/.local/share
-
-# CLI mesh verbs persist mesh.json via mesh_data_dir() (XDG,
-# ~/.local/share/svrnmesh — shared with the desktop app) while the daemon
-# persists via svrnmesh_root() (~/.svrnmesh). Unify them or the join the CLI
-# writes is invisible to the daemon (split-brain observed on RuggedFox
-# 2026-07-27: `mesh rotate` minted keys the daemon never loaded).
-[ -e /root/.local/share/svrnmesh ] || ln -s /root/.svrnmesh /root/.local/share/svrnmesh
+mkdir -p /workspace/models /workspace/svrnmesh /root/.svrnmesh
 
 cuda-preflight
 
@@ -33,18 +27,20 @@ STUB=/workspace/models/Qwen3.5-0.8B-Q4_K_M.gguf
 
 CFG=/root/.svrnmesh/config.toml
 # `embed` is REQUIRED by the config schema (daemon refuses to parse without
-# it); the RPC worker never runs embeddings, so the stub doubles for both.
+# it); the peer never runs embeddings, so the stub doubles for both. The data
+# dir is on the volume, so the peer's tensor cache outlives the container.
 [ -f "$CFG" ] || cat > "$CFG" <<EOF
 [models]
 primary = "$STUB"
 embed = "$STUB"
 context_size = 4096
+
+[data]
+dir = "/workspace/svrnmesh"
+
+[compute]
+rpc_peer = "$PEER_BIND"
 EOF
 
-sovereign-cli mesh join "$DIAL_LINK"
-
-export SOVEREIGN_RPC_SERVE=127.0.0.1:50052
-export SOVEREIGN_RPC_CACHE_DIR=/workspace/rpc-cache
-# Deliberately no RUST_LOG override — it would blind placement/warm logs.
-
+# Deliberately no RUST_LOG override — it would blind the peer child's logs.
 exec sovereign-cli daemon run

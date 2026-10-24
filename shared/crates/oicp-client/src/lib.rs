@@ -23,6 +23,8 @@ pub use ner::RemoteNer;
 pub mod openai_passthrough;
 mod pinned_provider;
 pub use pinned_provider::provider_for_model;
+mod llama_completion;
+pub use llama_completion::raw_completion_stream as llama_server_raw_completion;
 mod rerank;
 mod serve_loopback;
 mod turn_admission;
@@ -1217,9 +1219,18 @@ impl InferenceProvider for RemoteApiProvider {
         self.embed_as_given(&self.document_input(text)).await
     }
 
-    /// The rerank kind's client method (`rerank.rs`).
-    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
-        self.rerank_over_route(query, docs).await
+    /// The rerank kind's client method (`rerank.rs`). The route is sent the
+    /// model named here, else `self.model_id` — which for a multi-model far
+    /// end is the chat section, so callers on such a far end name the
+    /// reranker (`RouterProvider::rerank_model_id`).
+    async fn rerank_batch(
+        &self,
+        model: Option<&str>,
+        query: &str,
+        docs: &[String],
+    ) -> Result<Vec<f32>> {
+        self.rerank_over_route(model.unwrap_or(&self.model_id), query, docs)
+            .await
     }
 
     /// Embed many texts with ONE request per chunk of
@@ -1788,8 +1799,13 @@ impl InferenceProvider for SplitInferenceProvider {
     }
 
     /// Rerank on the serving node, which is the chat endpoint's host.
-    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
-        self.chat.rerank_batch(query, docs).await
+    async fn rerank_batch(
+        &self,
+        model: Option<&str>,
+        query: &str,
+        docs: &[String],
+    ) -> Result<Vec<f32>> {
+        self.chat.rerank_batch(model, query, docs).await
     }
 
     fn model_id_for(&self, speed: Speed) -> String {

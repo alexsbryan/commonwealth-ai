@@ -299,7 +299,7 @@ mod tests {
         async fn embed(&self, _: &str) -> Result<Vec<f32>> {
             Err(Error::NotImplemented("rerank only".into()))
         }
-        async fn rerank_batch(&self, _: &str, _: &[String]) -> Result<Vec<f32>> {
+        async fn rerank_batch(&self, _: Option<&str>, _: &str, _: &[String]) -> Result<Vec<f32>> {
             Err(Error::Inference("the device is gone".into()))
         }
         fn capabilities(&self) -> ProviderCapabilities {

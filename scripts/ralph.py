@@ -888,6 +888,9 @@ MANIFEST_MODEL_KEYS = {"worker": "MODEL", "review": "REVIEW_MODEL",
                        "resolve": "RESOLVE_MODEL", "variant": "VARIANT"}
 MANIFEST_PATH_KEYS = {"state": "STATE.md", "prompt": "PROMPT.md", "charter": "CHARTER.md",
                       "conflicts": "conflicts.txt", "heavy": "heavy.txt", "control_dir": "ctl"}
+# eutropia's keys in a queue it runs: known by name so ralph-check.sh can still
+# run the queue's [checks], and read by nothing here.
+EUTROPIA_MANIFEST_KEYS = {"lane_prepare", "lane_setup", "push_hooks", "needs"}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -938,7 +941,8 @@ def load_manifest(workdir, name):
         return ValueError(f"{rel}: `{key}` must be {want}")
 
     known = {"label", "session_timeout", "audit_every", "dispatch_requires", "worker_bin",
-             "settings", "scope_file", "models", "checks", *MANIFEST_PATH_KEYS}
+             "settings", "scope_file", "models", "checks", *MANIFEST_PATH_KEYS,
+             *EUTROPIA_MANIFEST_KEYS}
     for key in data:
         if key not in known:
             raise ValueError(f"{rel}: unknown key `{key}` (known: {', '.join(sorted(known))})")

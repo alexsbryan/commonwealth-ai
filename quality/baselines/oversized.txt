@@ -68,7 +68,7 @@
 1289	shared/crates/corpus-index/src/index/search.rs
 1568	shared/crates/kernel-types/src/quality/instruments.rs
 2448	shared/crates/oicp-client/src/lib.rs
-2071	shared/crates/sovereign-contracts/src/setup_config.rs
+1998	shared/crates/sovereign-contracts/src/setup_config.rs
 1540	shared/crates/sovereign-contracts/src/skills.rs
 2088	shared/crates/sovereign-contracts/src/traits.rs
 1800	shared/crates/sovereign-contracts/src/types/mod.rs
