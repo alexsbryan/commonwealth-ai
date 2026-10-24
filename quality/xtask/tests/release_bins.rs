@@ -356,9 +356,7 @@ fn ci_builds_and_exercises_the_shipped_server() {
     ] {
         assert!(job.contains(needle), "{why}:\n{job}");
     }
-    let ok = ci
-        .find("ci-ok:")
-        .expect("ci.yml has no ci-ok aggregator");
+    let ok = ci.find("ci-ok:").expect("ci.yml has no ci-ok aggregator");
     let ok_job = &ci[ok..];
     assert!(
         ok_job.contains("needs: [changes, fmt, gates, suites, desktop, test, router-e2e]"),
