@@ -186,19 +186,18 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     ("serve/crates/sovereign-compute/src/client.rs", Class::LocalDaemon, 1),
     ("serve/crates/sovereign-compute/src/supervisor.rs", Class::Mesh, 1),
     // llama_router/live.rs (838734855): the warm-up `/models/load`, the
-    // 5 s `/models` poll and es-r1's `/tokenize`, all to the supervised
-    // llama-server child at `http://127.0.0.1:{port}` — spawned with
-    // `--host 127.0.0.1` in the same file. Loopback.
-    ("serve/crates/sovereign-compute/src/llama_router/live.rs", Class::LocalDaemon, 3),
+    // 5 s `/models` poll, es-r1's `/tokenize` and (3 -> 4,
+    // es-r5-router-owns-model-processes) the repair loop's `/models/load`
+    // after a model's process died, all to the supervised llama-server
+    // child at `http://127.0.0.1:{port}` — spawned with `--host
+    // 127.0.0.1` in the same file. Loopback.
+    ("serve/crates/sovereign-compute/src/llama_router/live.rs", Class::LocalDaemon, 4),
     // NEW ROW (2026-09-26, phase-b pb-serve-program d2f6e781c): the one kind
     // mount's test posts to a child router it bound on 127.0.0.1:0.
     ("serve/crates/sovereign-compute/src/server.rs", Class::TestOnly, 1),
     // setup_planner: range-resumed model downloads (InboundOnly), moved from
     // sovereign-inference at es-m3-move-agnostic.
     ("serve/crates/sovereign-compute/src/setup_planner.rs", Class::InboundOnly, 1),
-    // llama_router/live: the daemon's own llama-server router on
-    // 127.0.0.1:<port> — warm, follow, and es-r1's `/tokenize`.
-    ("serve/crates/sovereign-compute/src/llama_router/live.rs", Class::LocalDaemon, 3),
 
     // ---- serve, dialed by the svrn daemon (pb-svrn-dials-serve) ----
     // serve_client: the engine-state, served-self, forwarded-GET and reload
