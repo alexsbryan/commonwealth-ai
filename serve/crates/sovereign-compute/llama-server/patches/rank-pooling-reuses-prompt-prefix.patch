@@ -1,0 +1,41 @@
+qwen3's RANK pooling scores the last token, as LAST pooling does, so a
+rerank task may split its prompt and reuse a slot's cached prefix.
+Against llama.cpp 035e227; apply from the source root with `patch -p1`.
+
+server_slot::can_split allowed a split (and so the cache_prompt prefix
+reuse that sits behind it) only for LAST pooling. llm_graph_input_cls
+reads the last token for RANK on qwen3 and qwen3vl too, so the same holds
+there. A rerank request is one task per document behind one shared
+template-and-query prefix: with this, each task after the first decodes
+only its document (the debug log shows "cached n_tokens = 52").
+
+Measured on jina-reranker-v3 Q6_K with its rerank template (Strix Halo,
+Vulkan, -np 1), 50 docs, five concurrent requests: 18 -> 20 docs/s.
+
+--- a/tools/server/server-context.cpp
++++ b/tools/server/server-context.cpp
+@@ -397,7 +397,23 @@
+ 
+         return
+             !task->need_embd() ||
+-            (llama_get_memory(ctx_tgt) && llama_pooling_type(ctx_tgt) == LLAMA_POOLING_TYPE_LAST);
++            (llama_get_memory(ctx_tgt) && pools_last_token());
++    }
++
++    // LAST pooling, and qwen3's RANK pooling (llm_graph_input_cls::set_input
++    // reads the last token for both), score the final token alone, so the
++    // prompt may split and a cached prefix may be reused.
++    bool pools_last_token() const {
++        const auto pooling = llama_pooling_type(ctx_tgt);
++        if (pooling == LLAMA_POOLING_TYPE_LAST) {
++            return true;
++        }
++        if (pooling != LLAMA_POOLING_TYPE_RANK) {
++            return false;
++        }
++        char arch[32] = {0};
++        llama_model_meta_val_str(llama_get_model(ctx_tgt), "general.architecture", arch, sizeof(arch));
++        return strcmp(arch, "qwen3") == 0 || strcmp(arch, "qwen3vl") == 0;
+     }
+ 
+     bool can_batch_with(server_slot & other_slot) const {

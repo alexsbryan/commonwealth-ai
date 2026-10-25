@@ -117,7 +117,7 @@ fn one_gguf_in_two_roles_is_one_entry() {
     assert!(
         ini.contains(
             "[Qwen3-Reranker-0.6B]\nmodel = /m/Qwen3-Reranker-0.6B.gguf\nctx-size = 8192\n\
-         reranking = true\nbatch-size = 8192\nubatch-size = 8192\nparallel = 4\n"
+         reranking = true\nbatch-size = 8192\nubatch-size = 8192\nparallel = 1\n"
         ),
         "{ini}"
     );
@@ -565,4 +565,24 @@ fn a_hosted_pair_chats_at_the_vendor_and_embeds_at_the_router() {
         s.embed_path, None,
         "the router loads the GGUF, not this process"
     );
+}
+
+/// A decoder reranker with no classifier head is refused before the router
+/// loads it, naming the derivation; with a head, or as an encoder, it is
+/// served. Failing input: the published jina-reranker-v3 (qwen3, no
+/// `classifier.output_labels`), which llama-server scores near zero.
+#[test]
+fn a_decoder_reranker_without_a_classifier_head_is_refused() {
+    let jina = || Some(PathBuf::from("/m/jina-reranker-v3-Q6_K.gguf"));
+    let qwen3 = |_: &Path| Ok(Some("qwen3".to_string()));
+    let refused = rerank_with_head(jina(), qwen3, |_: &Path| Ok(None)).unwrap_err();
+    assert!(refused.contains("no classifier head"), "{refused}");
+    assert!(refused.contains("rerank-head-gguf.py"), "{refused}");
+    assert_eq!(
+        rerank_with_head(jina(), qwen3, |_: &Path| Ok(Some(2))).unwrap(),
+        jina()
+    );
+    let bert = |_: &Path| Ok(Some("bert".to_string()));
+    assert_eq!(rerank_with_head(jina(), bert, |_: &Path| Ok(None)).unwrap(), jina());
+    assert_eq!(rerank_with_head(None, qwen3, |_: &Path| Ok(None)).unwrap(), None);
 }

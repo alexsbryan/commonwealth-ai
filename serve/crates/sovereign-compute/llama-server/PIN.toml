@@ -23,3 +23,11 @@ binaries = ["llama-server", "ggml-rpc-server"]
 [[patches]]
 file = "ggml-vulkan-alias-dependency.patch"
 sha256 = "a39fc31da3824f9ab2ca64623e6ef81395f815077a0fcbbe1e007d9fe6445685"
+
+[[patches]]
+file = "pooled-context-skips-lm-head.patch"
+sha256 = "60e5568c9860cc8a3c8aad81e31db0445002ff6ade094ceaf77a9e74829f6e73"
+
+[[patches]]
+file = "rank-pooling-reuses-prompt-prefix.patch"
+sha256 = "0ec4a56b8f19bf868b9a10eadd634eea9b45671f8e1e9aca92b59b0fb71762af"

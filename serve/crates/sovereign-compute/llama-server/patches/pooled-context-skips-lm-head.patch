@@ -1,0 +1,41 @@
+A pooled embedding or rerank context reads t_embd and the pooled row, never
+the logits, so it neither builds the lm_head nor reserves a logits buffer.
+Against llama.cpp 035e227; apply from the source root with `patch -p1`.
+
+The server marks every prompt token of an embedding or rerank task as an
+output (pooling needs them), so a qwen3 graph ran its tied 151,936-row
+lm_head on every token and copied n_tokens x n_vocab floats to host: 5 GB
+of buffer at -b 8192. Only qwen3's graph is cut here (the embedder and the
+reranker the daemon ships are both qwen3); llama_context stops reserving
+logits for any pooled context, and decode already skips a null buffer.
+
+Measured on jina-reranker-v3 Q6_K (Strix Halo, Vulkan, -np 4), 50 docs of
+~370 tokens, five concurrent requests: 14 -> 17 docs/s, scores identical
+(max |diff| 0).
+
+--- a/src/llama-context.cpp
++++ b/src/llama-context.cpp
+@@ -2040,7 +2040,7 @@
+     const auto n_embd     = hparams.n_embd;
+     const auto n_embd_out = hparams.n_embd_out();
+ 
+-    bool has_logits     = true;
++    bool has_logits     = !(cparams.embeddings && cparams.pooling_type != LLAMA_POOLING_TYPE_NONE);
+     bool has_embd       = cparams.embeddings;
+     bool has_embd_nextn = cparams.embeddings_nextn;
+ 
+--- a/src/models/qwen3.cpp
++++ b/src/models/qwen3.cpp
+@@ -149,6 +149,12 @@
+     cb(cur, "result_norm", -1);
+     res->t_embd = cur;
+ 
++    // a pooled context reads t_embd and the pooled row, never the logits
++    if (cparams.embeddings && cparams.pooling_type != LLAMA_POOLING_TYPE_NONE) {
++        ggml_build_forward_expand(gf, cur);
++        return;
++    }
++
+     // lm_head
+     cur = build_lora_mm(model.output, cur, model.output_s);
+ 
