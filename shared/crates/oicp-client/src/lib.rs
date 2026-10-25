@@ -797,6 +797,7 @@ impl RemoteApiProvider {
             body["top_k"] = serde_json::json!(k);
         }
         chat_wire::write_logprobs(&mut body, request);
+        chat_wire::write_penalties(&mut body, request);
         self.write_turn_admission(&mut body, request);
         if let Some(mode) = request.sampling_mode {
             body["sampling_mode"] = serde_json::json!(mode);
@@ -2359,6 +2360,8 @@ mod tests {
             think_budget: None,
             top_k: None,
             top_p: None,
+            repeat_penalty: None,
+            frequency_penalty: None,
             oicp: None,
             tools: None,
             tool_choice: None,
@@ -2401,6 +2404,8 @@ mod tests {
             think_budget: None,
             top_k: None,
             top_p: None,
+            repeat_penalty: None,
+            frequency_penalty: None,
             oicp: Some(
                 InferenceRequirements::new()
                     .with_hint(CapabilityHint::code())

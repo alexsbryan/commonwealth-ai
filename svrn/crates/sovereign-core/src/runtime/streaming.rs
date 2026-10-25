@@ -2928,6 +2928,8 @@ impl Runtime {
             structured_output: None,
             top_k: self.turn_inference_config().top_k,
             top_p: None,
+            repeat_penalty: None,
+            frequency_penalty: None,
             oicp,
             tools: None,
             tool_choice: None,

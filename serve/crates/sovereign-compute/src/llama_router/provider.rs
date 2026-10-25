@@ -7,6 +7,7 @@
 //! svrn-docs ENGINE_SWAP_PLAN.md A1), and the edit slot with a raw prompt's
 //! own route (A3).
 
+use std::borrow::Cow;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
@@ -134,6 +135,14 @@ impl RouterProvider {
         ))
     }
 
+    /// [`slot_penalties`] for this router's code model.
+    fn with_slot_penalties<'a>(
+        &self,
+        request: &'a CompletionRequest,
+    ) -> Cow<'a, CompletionRequest> {
+        slot_penalties(request, self.model_for("code"))
+    }
+
     /// The served kind's role name for the cross-encoder, so the preset's
     /// role lookup and the kind registry cannot disagree about it.
     fn rerank_role(&self) -> &'static str {
@@ -149,6 +158,47 @@ impl RouterProvider {
     }
 }
 
+/// A daemon call with the penalties the embedded engine takes from the
+/// slot's quirks (`engine_factory::CHAT_SLOT_FAMILY`, `CODE_SLOT_FAMILY`
+/// for the code model). Without them llama-server's greedy pick differed
+/// from the embedded engine's on the same 2810-token prompt (chat-ask
+/// q1's citation call, 2026-10-25). A conversation with no
+/// `sampling_mode` samples as llama-server does, as the embedded engine
+/// samples it, so it passes untouched, and a caller's own value stands.
+/// DRY is not sent: llama-server's counts the prompt, and it garbled the
+/// verbatim quotes that call copies.
+fn slot_penalties<'a>(
+    request: &'a CompletionRequest,
+    code_model: Option<&str>,
+) -> Cow<'a, CompletionRequest> {
+    let conversation = matches!(request.prompt_shape, Some(PromptShape::Conversation { .. }))
+        && request.sampling_mode.is_none();
+    if conversation {
+        return Cow::Borrowed(request);
+    }
+    let code = request.model_id.is_some() && request.model_id.as_deref() == code_model;
+    let family = match code {
+        true => sovereign_inference::engine_factory::CODE_SLOT_FAMILY,
+        false => sovereign_inference::engine_factory::CHAT_SLOT_FAMILY,
+    };
+    let quirks = family.default_quirks();
+    let mut penalised = request.clone();
+    penalised.repeat_penalty = penalised
+        .repeat_penalty
+        .or(Some(quirks.default_repetition_penalty));
+    penalised.frequency_penalty = penalised
+        .frequency_penalty
+        .or(Some(quirks.default_frequency_penalty));
+    tracing::debug!(
+        target: "llama_router",
+        ?family,
+        repeat_penalty = ?penalised.repeat_penalty,
+        frequency_penalty = ?penalised.frequency_penalty,
+        "a daemon call carries its slot's penalties"
+    );
+    Cow::Owned(penalised)
+}
+
 /// Every method forwards, defaults included: a default left in place here
 /// would answer for the wrapper instead of the engine behind it.
 #[async_trait]
@@ -160,7 +210,11 @@ impl InferenceProvider for RouterProvider {
                 let frames = self.raw(&model, stops, request).await?;
                 super::edit::collect(frames, model, started).await
             }
-            None => self.inner.complete(request).await,
+            None => {
+                self.inner
+                    .complete(&self.with_slot_penalties(request))
+                    .await
+            }
         }
     }
 
@@ -172,7 +226,11 @@ impl InferenceProvider for RouterProvider {
             Some((model, stops)) => Ok(frames_to_text_stream(
                 self.raw(&model, stops, request).await?,
             )),
-            None => self.inner.complete_stream(request).await,
+            None => {
+                self.inner
+                    .complete_stream(&self.with_slot_penalties(request))
+                    .await
+            }
         }
     }
 
@@ -185,14 +243,22 @@ impl InferenceProvider for RouterProvider {
                 let frames = self.raw(&model, stops, request).await?;
                 Ok((frames_to_text_stream(frames), model))
             }
-            None => self.inner.complete_stream_with_id(request).await,
+            None => {
+                self.inner
+                    .complete_stream_with_id(&self.with_slot_penalties(request))
+                    .await
+            }
         }
     }
 
     async fn complete_stream_with_finish(&self, request: &CompletionRequest) -> Result<Frames> {
         match self.raw_route(request) {
             Some((model, stops)) => self.raw(&model, stops, request).await,
-            None => self.inner.complete_stream_with_finish(request).await,
+            None => {
+                self.inner
+                    .complete_stream_with_finish(&self.with_slot_penalties(request))
+                    .await
+            }
         }
     }
 
@@ -202,7 +268,11 @@ impl InferenceProvider for RouterProvider {
     ) -> Result<(Frames, String)> {
         match self.raw_route(request) {
             Some((model, stops)) => Ok((self.raw(&model, stops, request).await?, model)),
-            None => self.inner.complete_stream_with_id_and_finish(request).await,
+            None => {
+                self.inner
+                    .complete_stream_with_id_and_finish(&self.with_slot_penalties(request))
+                    .await
+            }
         }
     }
 
@@ -220,7 +290,11 @@ impl InferenceProvider for RouterProvider {
         requests: &[CompletionRequest],
     ) -> Result<Vec<CompletionResponse>> {
         if !requests.iter().any(|r| self.raw_route(r).is_some()) {
-            return self.inner.complete_batch(requests).await;
+            let penalised: Vec<CompletionRequest> = requests
+                .iter()
+                .map(|r| self.with_slot_penalties(r).into_owned())
+                .collect();
+            return self.inner.complete_batch(&penalised).await;
         }
         let mut out = Vec::with_capacity(requests.len());
         for request in requests {
@@ -470,6 +544,62 @@ mod tests {
         assert_eq!(
             unforwarded, ANSWERED_HERE,
             "RouterProvider leaves a default in place, or forwards a fact it should answer"
+        );
+    }
+
+    /// The daemon's own calls carry the slot's penalties; the OpenAI
+    /// passthrough and a caller's own values do not change. Failing input:
+    /// the citation call of 2026-10-25, which went out with neither penalty
+    /// and picked another quote than the embedded engine on the same prompt.
+    #[test]
+    fn a_daemon_call_carries_its_slot_penalties_and_a_conversation_does_not() {
+        use super::slot_penalties;
+        use sovereign_contracts::types::{CompletionRequest, PromptShape, SamplingMode};
+        let chat = sovereign_inference::engine_factory::CHAT_SLOT_FAMILY.default_quirks();
+        let code = sovereign_inference::engine_factory::CODE_SLOT_FAMILY.default_quirks();
+
+        let call = CompletionRequest {
+            temperature: Some(0.0),
+            ..Default::default()
+        };
+        let out = slot_penalties(&call, Some("coder"));
+        assert_eq!(out.repeat_penalty, Some(chat.default_repetition_penalty));
+        assert_eq!(out.frequency_penalty, Some(chat.default_frequency_penalty));
+        assert_eq!(
+            out.repeat_penalty,
+            Some(1.15),
+            "the embedded primary's value"
+        );
+
+        let to_code = CompletionRequest {
+            model_id: Some("coder".into()),
+            ..Default::default()
+        };
+        let out = slot_penalties(&to_code, Some("coder"));
+        assert_eq!(out.repeat_penalty, Some(code.default_repetition_penalty));
+
+        let own = CompletionRequest {
+            repeat_penalty: Some(1.0),
+            ..Default::default()
+        };
+        assert_eq!(slot_penalties(&own, None).repeat_penalty, Some(1.0));
+
+        let conversation = CompletionRequest {
+            prompt_shape: Some(PromptShape::Conversation { messages: vec![] }),
+            ..Default::default()
+        };
+        let out = slot_penalties(&conversation, None);
+        assert!(matches!(out, std::borrow::Cow::Borrowed(_)));
+        assert_eq!(out.repeat_penalty, None);
+
+        let moded = CompletionRequest {
+            sampling_mode: Some(SamplingMode::Instruct),
+            ..conversation.clone()
+        };
+        assert_eq!(
+            slot_penalties(&moded, None).repeat_penalty,
+            Some(chat.default_repetition_penalty),
+            "a conversation with a sampling mode samples from the quirks on the embedded engine too"
         );
     }
 }

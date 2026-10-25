@@ -110,6 +110,16 @@ pub struct CompletionRequest {
     /// `None` falls back to `ModelQuirks::default_top_p`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub top_p: Option<f32>,
+    /// Override the family-default repetition penalty. `None` falls back to
+    /// `ModelQuirks::default_repetition_penalty`. The router path sets it on
+    /// the daemon's own calls, so llama-server penalises them as the
+    /// embedded engine does from the slot's quirks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repeat_penalty: Option<f32>,
+    /// Override the family-default frequency penalty, as `repeat_penalty`
+    /// (`ModelQuirks::default_frequency_penalty`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frequency_penalty: Option<f32>,
     /// OICP capability requirements. Used by providers that support
     /// OICP to select the best model. Ignored by providers that don't.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -444,6 +454,8 @@ impl CompletionRequest {
             think_budget: None,
             top_k: None,
             top_p: None,
+            repeat_penalty: None,
+            frequency_penalty: None,
             oicp: None,
             tools: None,
             tool_choice: None,

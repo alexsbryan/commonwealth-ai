@@ -347,6 +347,17 @@ pub(crate) fn write_logprobs(body: &mut Value, request: &CompletionRequest) {
     }
 }
 
+/// The repetition and frequency penalties, in llama-server's and OpenAI's
+/// spelling, when the request names them. Unnamed, the host's defaults stand.
+pub(crate) fn write_penalties(body: &mut Value, request: &CompletionRequest) {
+    if let Some(p) = request.repeat_penalty {
+        body["repeat_penalty"] = json!(p);
+    }
+    if let Some(p) = request.frequency_penalty {
+        body["frequency_penalty"] = json!(p);
+    }
+}
+
 /// The host's `choices[0].logprobs` for a request that asked for them. A host
 /// that reported none is traced, so the absence is visible where it happened.
 pub(crate) fn answered_logprobs(

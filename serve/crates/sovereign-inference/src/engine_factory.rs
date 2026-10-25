@@ -176,6 +176,18 @@ pub fn available_engines() -> Vec<String> {
     names
 }
 
+/// The quirks family of the primary and fast slots. `Unknown`, so they
+/// sample with the generic llama.cpp penalties (repeat 1.15, frequency 0.1,
+/// DRY) whatever GGUF `[models]` names. The router path reads the same
+/// constant, so both engines penalise a slot's calls alike. Whether a Qwen
+/// primary should carry them is HUMAN-es-measure-sampler-pins' question.
+pub const CHAT_SLOT_FAMILY: ModelFamily = ModelFamily::Unknown;
+
+/// The code slot's family. The only code GGUF we ship is
+/// Qwen3-Coder-30B-A3B-Instruct; pinning the family picks up Qwen's sampling
+/// defaults and the SystemPromptToken thinking control.
+pub const CODE_SLOT_FAMILY: ModelFamily = ModelFamily::Qwen3;
+
 /// Construct the engine the config selects.
 ///
 /// Pure construction: the caller has already decided this node may run
@@ -273,13 +285,10 @@ fn build_llama(config: &SetupConfig) -> Result<BuiltEngine, String> {
         models.code.as_deref(),
         SlotWindows::from_models(models),
         None, // gpu_layers — auto-detect
-        ModelFamily::Unknown,
-        ModelFamily::Unknown,
+        CHAT_SLOT_FAMILY,
+        CHAT_SLOT_FAMILY,
         embed_family.clone(),
-        // The only code GGUF we ship is Qwen3-Coder-30B-A3B-Instruct;
-        // pinning the family picks up Qwen's sampling defaults and the
-        // SystemPromptToken thinking control.
-        ModelFamily::Qwen3,
+        CODE_SLOT_FAMILY,
     )
     .map_err(|e| format!("failed to load models: {e}"))?;
 

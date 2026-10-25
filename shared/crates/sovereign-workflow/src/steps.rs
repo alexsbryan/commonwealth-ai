@@ -136,6 +136,8 @@ impl Step for ModelStep {
             think_budget: None,
             top_k: None,
             top_p: None,
+            repeat_penalty: None,
+            frequency_penalty: None,
             oicp: Some(InferenceRequirements::new().with_latency_class(self.latency)),
             tools: None,
             tool_choice: None,
