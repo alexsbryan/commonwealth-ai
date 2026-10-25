@@ -567,6 +567,25 @@ impl RouterPreset {
             ..Default::default()
         }
     }
+
+    /// The remote half of a hosted pair (`svrn setup --hosted`): chat at the
+    /// vendor `[engine]` names, embeddings at this router's one section.
+    /// That is the `embed_endpoint` shape `kind = "remote"` already serves, so
+    /// the vendor's endpoint, key, model ids and knobs pass through unchanged
+    /// and only the embed keys point here. [`Self::engine_section`] alone
+    /// would send chat to the router, which holds no chat model.
+    pub fn hosted_pair_section(&self, endpoint_v1: &str, vendor: &EngineSection) -> EngineSection {
+        let router = self.engine_section(endpoint_v1);
+        EngineSection {
+            kind: EngineKind::Remote,
+            embed_path: None,
+            embed_endpoint: router.endpoint,
+            embed_model_id: router.embed_model_id,
+            embed_inputs: router.embed_inputs,
+            context_size: 0,
+            ..vendor.clone()
+        }
+    }
 }
 
 #[cfg(test)]

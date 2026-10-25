@@ -529,3 +529,31 @@ fn a_preset_one_card_cannot_hold_is_refused_rather_than_warmed_in_part() {
     );
     assert!(preset.vram_if_every_section_loaded(|_| true).is_ok());
 }
+
+/// THE FAILING INPUT (2026-10-24, the Mac's hosted daemon after the host
+/// flip merge): the pair's remote half was `engine_section`, which points
+/// CHAT at the router too, so a `primary` turn reached llama-server as
+/// `hosted-default` and came back "model 'hosted-default' not found". The
+/// chat half is the vendor's; only embeddings point at the router.
+#[test]
+fn a_hosted_pair_chats_at_the_vendor_and_embeds_at_the_router() {
+    let preset = RouterPreset::embed_only(Path::new(EMBED), &DaemonSection::default()).unwrap();
+    let vendor = EngineSection {
+        kind: EngineKind::Remote,
+        endpoint: Some("https://api.vendor.example/v1".into()),
+        api_key: Some("key".into()),
+        model_id: Some("vendor-chat".into()),
+        embed_path: Some(EMBED.into()),
+        context_size: 0,
+        ..Default::default()
+    };
+    let s = preset.hosted_pair_section("http://127.0.0.1:4242/v1", &vendor);
+    assert_eq!(s.kind, EngineKind::Remote);
+    assert_eq!(s.endpoint.as_deref(), Some("https://api.vendor.example/v1"));
+    assert_eq!(s.api_key.as_deref(), Some("key"));
+    assert_eq!(s.model_id.as_deref(), Some("vendor-chat"));
+    assert_eq!(s.embed_endpoint.as_deref(), Some("http://127.0.0.1:4242/v1"));
+    assert_eq!(s.embed_model_id.as_deref(), Some("Qwen3-Embedding-0.6B-Q8_0"));
+    assert_eq!(s.embed_inputs, Some(EmbedInputs::Client));
+    assert_eq!(s.embed_path, None, "the router loads the GGUF, not this process");
+}

@@ -364,8 +364,8 @@ impl ReloadFactory {
                     .to_string(),
             ));
         }
-        // Required by every engine but a remote one, as in `plan_serving`.
-        let models = if !config.engine.kind.needs_models() {
+        // Required by every engine but a remote one (`plan_serving`) or a hosted pair.
+        let models = if !config.engine.kind.needs_models() || is_hosted_pair(config) {
             config.models().ok()
         } else {
             Some(config.models().map_err(fail)?)
@@ -513,14 +513,13 @@ impl ReloadFactory {
             (Some(live_router), Some(preset)) => {
                 let mut derived = config.clone();
                 let capture = derived.engine.capture.take();
-                derived.engine = preset.engine_section(&live_router.endpoint_v1());
+                derived.engine = match is_hosted_pair(config) {
+                    true => preset.hosted_pair_section(&live_router.endpoint_v1(), &config.engine),
+                    false => preset.engine_section(&live_router.endpoint_v1()),
+                };
                 derived.engine.capture = capture;
-                // A one-section preset serves no chat model, so its
-                // `context_size` (the encoder's fallback) would be reported
-                // as the daemon's window. 0 is "no chat context here" — the
-                // same key that tells `unhostable_on_router` this is a
-                // served one-section preset and not a vendor chat beside an
-                // `embed_path`.
+                // A one-section preset serves no chat model: 0 is "no chat context here",
+                // the key `unhostable_on_router` reads as a served one-section preset.
                 if preset.primary().is_none() {
                     derived.engine.context_size = 0;
                 }
