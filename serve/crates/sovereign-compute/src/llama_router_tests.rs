@@ -44,7 +44,7 @@ fn the_preset_serves_each_gguf_by_its_stem_with_mtp_only_where_declared() {
     let preset = RouterPreset::from_models(&m, None, &idle(), layers).unwrap();
     let ini = preset.render();
     assert!(
-        ini.starts_with("version = 1\n\n[*]\nn-gpu-layers = 99\n"),
+        ini.starts_with("version = 1\n\n[*]\nn-gpu-layers = 99\ncache-ram = 0\n"),
         "{ini}"
     );
     assert!(ini.contains(

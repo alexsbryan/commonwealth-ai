@@ -34,6 +34,15 @@ use sovereign_inference::capacity::SlotPlan;
 /// (`mtp_draft_max_decide`), the value every battery pass ran.
 const MTP_DRAFT_N_MAX: u32 = 3;
 
+/// Host RAM for llama-server's prompt cache, per model server. The embedded
+/// engine kept no host-side cache, and the server's default (8192 MiB) is a
+/// cost nobody chose: each chat section grew toward it, and on the Halo's
+/// first flip (2026-10-24) the primary's server held 17.7 GB and the fast one
+/// 6.5 GB of host RAM when the kernel OOM-killed the daemon. Measured on the
+/// fast model, 48 distinct prompts: 9.6 GB at the default, flat 1.5 GB at 0.
+/// Whether the cache earns RAM is C2's measurement against `cost.directed-pin`.
+const CACHE_RAM_MIB: u32 = 0;
+
 /// Parallel sequences on the fast model: the fast lane's coalescer sends 8
 /// at once, and on the server's default 4 they ran in two waves (C16: 52.6
 /// tok/s against embedded 68.8; with 8, 72.6 and 74.5).
@@ -361,7 +370,8 @@ impl RouterPreset {
 
     /// The `--models-preset` file. Deterministic: sections in name order.
     pub fn render(&self) -> String {
-        let mut out = String::from("version = 1\n\n[*]\nn-gpu-layers = 99\n");
+        let mut out =
+            format!("version = 1\n\n[*]\nn-gpu-layers = 99\ncache-ram = {CACHE_RAM_MIB}\n");
         for (name, e) in &self.entries {
             let _ = write!(
                 out,

@@ -408,9 +408,12 @@ fn router_rpc_split_e2e() {
 
     // ES_F2_KEEP_TMP keeps the whole tree for diagnosis; a run that passes
     // leaves nothing behind.
+    // Under the target dir, not /tmp: the peer's rpc cache holds the shard (3 GB
+    // for the 9B), /tmp is RAM on the Halo, and a run killed before the drop
+    // left two of these behind to help OOM the first flip (2026-10-24).
     let root = match std::env::var_os("ES_F2_KEEP_TMP") {
         Some(dir) => tempfile::TempDir::new_in(dir).expect("kept tempdir"),
-        None => tempfile::tempdir().expect("tempdir"),
+        None => tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).expect("tempdir"),
     };
     if std::env::var_os("ES_F2_KEEP_TMP").is_some() {
         eprintln!("router rpc e2e: keeping {}", root.path().display());
