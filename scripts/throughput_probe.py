@@ -109,10 +109,16 @@ def one_trial(url, path, model, prompt, max_tokens, temperature, timeout):
                 "itl_ms": [], "usage": usage, "text": ""}
 
     ttft_ms = (token_times[0] - t0) * 1000.0
-    n = len(token_times)
+    # Tokens from the server's usage, not chunks: a chunk can carry several
+    # tokens (the daemon relaying the llama-server router sent 220 chunks for
+    # 256 tokens, 2026-10-24), and counting chunks read a 47.8 tok/s decode
+    # as 29. The chunk count stands only when the server sends no usage.
+    # ITL stays per chunk.
+    chunks = len(token_times)
+    n = (usage or {}).get("completion_tokens") or chunks
     gen_window = token_times[-1] - token_times[0]
     decode_tps = ((n - 1) / gen_window) if (n >= 2 and gen_window > 0) else None
-    itl_ms = [(token_times[i] - token_times[i - 1]) * 1000.0 for i in range(1, n)]
+    itl_ms = [(token_times[i] - token_times[i - 1]) * 1000.0 for i in range(1, chunks)]
     return {
         "streamed": True, "wall_s": time.perf_counter() - t0, "ttft_ms": ttft_ms,
         "decode_tps": decode_tps, "n_tokens": n, "itl_ms": itl_ms,
