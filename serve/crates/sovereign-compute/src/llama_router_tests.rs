@@ -583,6 +583,12 @@ fn a_decoder_reranker_without_a_classifier_head_is_refused() {
         jina()
     );
     let bert = |_: &Path| Ok(Some("bert".to_string()));
-    assert_eq!(rerank_with_head(jina(), bert, |_: &Path| Ok(None)).unwrap(), jina());
-    assert_eq!(rerank_with_head(None, qwen3, |_: &Path| Ok(None)).unwrap(), None);
+    assert_eq!(
+        rerank_with_head(jina(), bert, |_: &Path| Ok(None)).unwrap(),
+        jina()
+    );
+    assert_eq!(
+        rerank_with_head(None, qwen3, |_: &Path| Ok(None)).unwrap(),
+        None
+    );
 }
