@@ -60,3 +60,63 @@ R4 tracked, INCONCLUSIVE ON THIS HOST: 6.9s embedded / 33.7s daemon in the
            point, so no ratio is claimed in either direction. Rerun on a
            quiet host before treating R4 as evidence about parallel = 4.
            Detail: rerank-result-a4.json, rerank-r4-timings.json.
+
+D4 rerun, 2026-10-24 (es-f3-d4-split-on-uneven-memory): the Halo's head
+against the Mac's peer over the LAN, not loopback. d4-split.sh,
+d4_peer.py, d4_plan.py. Head 192.168.1.12 (Vulkan, Radeon 8060S), peer
+192.168.1.11:50052 (Metal, 51.8 GiB), both GPUs held. Model
+Qwen3.5-9B-UD-MTP-Q6_K_XL (qwen35 hybrid, Gated DeltaNet, 33 blocks,
+6.35 GiB of block mass, 1.01 GiB head). 128 tokens at temperature 0,
+ignore_eos. Four independent sweeps; run6 rotates the arm order each
+round. n = 20 decodes per arm.
+
+Three placements, decode tokens/s:
+            n    mean  median     sd     min     max
+a default   20   13.59   13.93   1.62   10.19   15.92   (no -ts: upstream's free-memory split)
+b hand -ts  20   12.84   12.88   1.79    9.15   15.16   (-ts 0.42,0.58 by each device's free memory)
+c planner   20   13.54   14.14   1.70   10.32   15.51   (-ot block ranges + its dev_layer_tensor_split 15.5,18.5)
+
+Every arm loaded and decoded all 128 tokens in every run; no arm failed to
+load, so the "upstream fails where the planner succeeds" half of the bar is
+not met either. Placement confirmed from each arm's own load_tensors lines:
+a and b both land 2913.86 MiB on the peer and 4408.32 on Vulkan (the hand
+-ts reproduces upstream's default exactly, as free memory predicts); c lands
+3087.64 on the peer and 4234.53 on Vulkan, 34/34 layers on GPU, no CPU
+fallback.
+
+D4 HOLDS, the planner does not earn its place. mean -0.3% against the better
+of (a) and (b), median +1.5%, +2.5% pooled against both. The bar is "clearly
+faster, about 15% or more"; a tie deletes it (operator, 2026-10-23). So
+es-g4-delete-mesh-fabric deletes the planner (`rpc_warm_cache/plan.rs`,
+`split.rs`, `ggml_type.rs`) with the rest of the fabric, and
+es-m3-move-agnostic-after-g2 does not move it.
+
+What the run caught, worth recording because it changes how arm (c) is read:
+THE PLANNER'S -ot IS NOT THE PLANNER'S CONFIGURATION WITHOUT ITS -ts.
+Measured, first `-ot` alone, then `-ot` + `-ts`: alone it decoded 2.93 and
+4.08 tok/s (runs 1-2, n=3 each) — about 4x SLOWER than upstream, a result
+that would have read as "the planner is disastrous". llama.cpp derives its
+per-layer device map from `tensor_split` ALONE (llama-model.cpp:1466,
+`upper_bound(splits, 0..n_devices)`) and never from `-ot`; an `-ot` with no
+matching `-ts` leaves the map on upstream's cut, a layer straddles the two
+placements, and on this hybrid that is the fused-GDN hazard plan.rs:583-606
+already documents. With `dev_layer_tensor_split` (15.5,18.5 over n_layer+1
+units) the same placement runs at parity. Any future comparison of `-ot`
+against a split must carry the matching `-ts` or it measures a broken
+configuration, not the planner.
+
+The link: LAN 192.168.1.11/24, no tunnel, RDMA never negotiated (TCP
+throughout, so GGML_RPC_NO_RDMA was not needed). Load 12.7-23.5 s per arm,
+run to run, with no separation between arms — load success, not load time,
+is what the row asks about and what these numbers support.
+
+The Mac's peer serves TWO devices: RPC0 with the GPU's memory and RPC1 with
+0 bytes (Metal emulates virtual devices; ggml-metal.cpp:960-995, and the
+second reports nothing — llama-server says "device RPC1 did not report
+memory"). Left in the list, llama.cpp's split hands RPC1 3.4 GiB of model and
+the first decode reads a tensor from a device holding none (ggml-rpc.cpp:522,
+"Remote RPC server crashed"), which on this link took the peer's process
+down with it. Every arm names `-dev RPC0,Vulkan0` for that reason: it is a
+property of the peer, not of any placement, and holding it fixed is what
+makes the three arms comparable. d4_peer.py reports the real/phantom split
+(devices 1/2) so the next run sees it before loading anything.
