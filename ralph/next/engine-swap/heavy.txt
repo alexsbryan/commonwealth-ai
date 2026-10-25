@@ -4,5 +4,4 @@
 # second lane's live run on the same GPU would skew the reading.
 es-r2-router-parity                       # C16 concurrency, cost.concurrent-fast
 es-f2-router-rpc-placement   # D2: decode tok/s at 90% of one device
-es-c2-battery-rejudge                     # the battery's 51 cells against the deployed router, beside no timing row
 es-f3-d4-split-on-uneven-memory   # D4: tok/s of three placements across the Mac and the Halo, both GPUs held

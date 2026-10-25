@@ -49,7 +49,9 @@ Two facts every live row on the Mac rests on, neither proved yet:
 | HUMAN-es-host-flip | halo-daemon (the seat's) | flips the deployed daemon to `kind = "llama-server"` and runs gate bars 1 and 2 on it |
 | HUMAN-es-measure-sampler-pins | halo-daemon (the seat's) | quality checks and the E1 perf check against the deployed daemon |
 | es-c1-sampler-outcome | none | a code change on P's verdict; TESTALL |
-| es-c2-battery-rejudge | halo-daemon | the battery's 51 cells against the deployed router |
+| es-c2-battery-rejudge | halo | builds the I3/I4 instruments and proves them on a battery against its own daemon and router with small GGUFs (director, 2026-10-25: split from the deployed-router run) |
+| HUMAN-es-c2-battery-rejudge-run | halo-daemon (the seat's) | `battery.sh` stops the resident and swaps its config per target, so the 51 cells run under the seat's host grant |
+| es-c2-battery-rejudge-fix | halo | fixes or retires each failed row, proved on its own cells against its own daemon and router |
 | es-e2-flip-default | none | the release default in code; TESTALL, DOCS, PREPUSH |
 | HUMAN-es-soak-signoff | (the operator's) | one release on the new default |
 | es-g1-move-factory-and-kinds | none | a move; LAYER and crate tests |
