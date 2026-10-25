@@ -552,8 +552,17 @@ fn a_hosted_pair_chats_at_the_vendor_and_embeds_at_the_router() {
     assert_eq!(s.endpoint.as_deref(), Some("https://api.vendor.example/v1"));
     assert_eq!(s.api_key.as_deref(), Some("key"));
     assert_eq!(s.model_id.as_deref(), Some("vendor-chat"));
-    assert_eq!(s.embed_endpoint.as_deref(), Some("http://127.0.0.1:4242/v1"));
-    assert_eq!(s.embed_model_id.as_deref(), Some("Qwen3-Embedding-0.6B-Q8_0"));
+    assert_eq!(
+        s.embed_endpoint.as_deref(),
+        Some("http://127.0.0.1:4242/v1")
+    );
+    assert_eq!(
+        s.embed_model_id.as_deref(),
+        Some("Qwen3-Embedding-0.6B-Q8_0")
+    );
     assert_eq!(s.embed_inputs, Some(EmbedInputs::Client));
-    assert_eq!(s.embed_path, None, "the router loads the GGUF, not this process");
+    assert_eq!(
+        s.embed_path, None,
+        "the router loads the GGUF, not this process"
+    );
 }
