@@ -3,7 +3,7 @@
 #   cargo run -p xtask -- clone-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- clone-gate --tighten
-13895	(total covered lines)
+13879	(total covered lines)
 16	bench/crates/sovereign-cli-bench/src/bench_cmd/ablate.rs <-> bench/crates/sovereign-cli-bench/src/bench_cmd/adjudicate.rs
 99	bench/crates/sovereign-cli-bench/src/bench_cmd/ablate.rs <-> bench/crates/sovereign-cli-bench/src/bench_cmd/adjudicate.rs <-> bench/crates/sovereign-cli-bench/src/bench_cmd/chaos_monkey.rs <-> bench/crates/sovereign-cli-bench/src/bench_cmd/faithfulness.rs <-> bench/crates/sovereign-cli-bench/src/bench_cmd/verifier.rs <-> svrn/crates/sovereign-cli-llm/src/judge_replay.rs
 16	bench/crates/sovereign-cli-bench/src/bench_cmd/book_report.rs <-> bench/crates/sovereign-cli-bench/src/bench_cmd/vault_report.rs
@@ -144,7 +144,7 @@
 16	code/crates/sovereign-tdd/src/tasks/make_passing.rs <-> code/crates/sovereign-tdd/src/tasks/split_file.rs
 16	code/crates/sovereign-tdd/src/tasks/make_passing.rs <-> code/crates/sovereign-tdd/src/tasks/write_failing_test.rs
 20	code/crates/sovereign-work-atlas/src/observer.rs <-> code/crates/sovereign-work-atlas/src/tools/declare_scope.rs
-24	distributions/crates/sovereign-onprem/src/main.rs <-> distributions/crates/sovereign-stock/src/main.rs
+22	distributions/crates/sovereign-onprem/src/main.rs <-> distributions/crates/sovereign-stock/src/main.rs
 18	ingest/crates/corpus-engine/src/acquirers/bulk_download.rs <-> svrn/crates/sovereign-tools/src/corpus/manager.rs
 24	ingest/crates/corpus-engine/src/chunkers/fixed.rs <-> ingest/crates/corpus-engine/src/chunkers/semantic.rs <-> ingest/crates/corpus-engine/src/chunkers/sentence.rs
 16	ingest/crates/corpus-engine/src/chunkers/mod.rs <-> svrn/crates/sovereign-tools-base/src/rag/chunk.rs
@@ -293,9 +293,8 @@
 24	serve/crates/sovereign-compute/src/llama_router/provider.rs <-> serve/crates/sovereign-inference/src/engine_capture.rs
 24	serve/crates/sovereign-compute/src/llama_router/provider.rs <-> serve/crates/sovereign-inference/src/engine_capture.rs <-> svrn/crates/sovereign-cli-llm/src/probe_cmd/resource_meter.rs
 16	serve/crates/sovereign-compute/src/manager.rs <-> serve/crates/sovereign-inference/src/engine_capture.rs
-22	serve/crates/sovereign-compute/src/manager.rs <-> svrn/crates/sovereign-cli-llm/src/probe_cmd/resource_meter.rs
+24	serve/crates/sovereign-compute/src/manager.rs <-> svrn/crates/sovereign-cli-llm/src/probe_cmd/resource_meter.rs
 28	serve/crates/sovereign-inference/src/engine_capture.rs <-> svrn/crates/sovereign-cli-llm/src/probe_cmd/resource_meter.rs
-16	serve/crates/sovereign-serve/src/mesh_plan.rs <-> serve/crates/sovereign-serve/src/mesh_plan/report.rs
 18	serve/crates/sovereign-serving-host/src/admission.rs <-> svrn/crates/sovereign-daemon/src/admission/layers.rs
 36	serve/crates/sovereign-serving-host/src/fim_http.rs <-> svrn/crates/sovereign-daemon/src/openai_http.rs
 22	serve/crates/sovereign-serving-host/src/oicp_synthesis.rs <-> svrn/crates/sovereign-daemon/src/routes_oicp.rs

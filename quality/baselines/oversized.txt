@@ -14,7 +14,7 @@
 1479	clients/desktop/src-tauri/src/commands/chat.rs
 1287	clients/desktop/src-tauri/src/commands/conversation.rs
 1316	clients/desktop/src-tauri/src/local_corpus_commands.rs
-1363	cmnwlth/crates/sovereign-cli-mesh/src/mesh_cmd.rs
+1362	cmnwlth/crates/sovereign-cli-mesh/src/mesh_cmd.rs
 2046	cmnwlth/crates/sovereign-pods/src/worker_http.rs
 1311	cmnwlth/crates/sovereign-pods/src/worker_subprocess_runner.rs
 2462	code/crates/code-next-edit/src/next_edit_model.rs
