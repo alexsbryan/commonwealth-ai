@@ -40,10 +40,12 @@ worker_bin = "scripts/ralph-claude-shim.sh"
 settings = "ralph/claude-settings.json"
 
 [models]
-# Rows run on DeepSeek V4.1 Flash (the 1017 snapshot) through DeepInfra
-# (opencode, operator 2026-10-23); a machine whose harness lacks the DeepInfra
-# key fails that probe and runs Opus. Review and resolve stay on Opus.
-worker = "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash-1017,claude-opus-5-5"
+# Rows run on Opus from milestone G (operator, 2026-10-26): DeepInfra's
+# DeepSeek V4.1 Flash stalls on opencode's system-prompt prefix in windows,
+# answering 200 and then only `: ping` keepalives, so a session hangs with
+# its lease beating (es-e2 and es-g1). DeepSeek stays second, reached when
+# Opus's probe fails. Review and resolve stay on Opus.
+worker = "claude-opus-5-5,deepinfra/deepseek-ai/DeepSeek-V4.1-Flash-1017"
 review = "claude-opus-5-5"
 resolve = "claude-opus-5-5"
 variant = "medium"
