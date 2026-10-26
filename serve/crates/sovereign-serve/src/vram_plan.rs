@@ -19,7 +19,7 @@
 //! as a path to a local GGUF (the ordinary case). Both land in the same
 //! estimator; there is no second formula here (ARCH §10.6).
 
-use sovereign_inference::capacity::{check_fit_sized, min_total_vram_mb, SizedSlot};
+use sovereign_compute::capacity::{check_fit_sized, min_total_vram_mb, SizedSlot};
 
 use sovereign_cli_base::help::{Help, HelpSection};
 

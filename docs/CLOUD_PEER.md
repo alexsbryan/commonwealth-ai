@@ -73,7 +73,7 @@ Point it at different models without editing the script:
 
 **The VRAM and disk floors of the offer search are derived from whatever
 loadout is in force**, by the same estimator the daemon runs at its own boot
-(`sovereign_inference::capacity`, reachable as `svrn daemon vram-plan`). So a
+(`sovereign_compute::capacity`, reachable as `svrn daemon vram-plan`). So a
 bigger primary searches for a bigger card on its own:
 
 ```

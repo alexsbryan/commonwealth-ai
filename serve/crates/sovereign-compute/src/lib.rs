@@ -31,6 +31,7 @@
 
 pub mod assembly;
 pub mod assets;
+pub mod capacity;
 pub mod child;
 pub mod child_main;
 pub mod client;

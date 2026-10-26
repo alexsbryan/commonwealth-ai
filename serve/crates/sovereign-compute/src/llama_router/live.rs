@@ -178,7 +178,7 @@ fn warm_within_memory(preset: &RouterPreset) -> Result<Vec<&str>, String> {
         tracing::info!(target: "llama_router", "router: no GPU budget to size --models-max against; warming every model");
         return Ok(preset.warm_models());
     }
-    let fits = |slots: &[_]| sovereign_inference::capacity::check_fit(slots, &hw).fits;
+    let fits = |slots: &[_]| crate::capacity::check_fit(slots, &hw).fits;
     preset.vram_if_every_section_loaded(fits)?;
     let warm = preset.models_that_fit(fits);
     if warm.len() < preset.warm_models().len() {

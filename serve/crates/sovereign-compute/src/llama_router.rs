@@ -28,7 +28,7 @@ use sovereign_contracts::engine_config::{EmbedInputs, EngineKind, EngineSection,
 use sovereign_contracts::setup_config::{DaemonSection, ModelsSection};
 
 use self::placement::RouterPlacement;
-use sovereign_inference::capacity::SlotPlan;
+use crate::capacity::SlotPlan;
 
 /// Draft tokens per MTP step: the embedded engine's default
 /// (`mtp_draft_max_decide`), the value every battery pass ran.

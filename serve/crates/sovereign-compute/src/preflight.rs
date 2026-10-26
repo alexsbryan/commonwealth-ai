@@ -116,13 +116,13 @@ pub fn check_vram_reporting(config: &SetupConfig, config_path: &std::path::Path)
         return true;
     }
     let hardware = crate::hardware::detect_hardware();
-    let slots = sovereign_inference::capacity::build_slots_from_config(config);
-    let report = sovereign_inference::capacity::check_fit(&slots, &hardware);
+    let slots = crate::capacity::build_slots_from_config(config);
+    let report = crate::capacity::check_fit(&slots, &hardware);
 
     let action = decide(
         report.fits,
         report.has_unreadable_slot(),
-        sovereign_inference::capacity::check_skipped_by_env(),
+        crate::capacity::check_skipped_by_env(),
         strict_vram_check(),
     );
 
