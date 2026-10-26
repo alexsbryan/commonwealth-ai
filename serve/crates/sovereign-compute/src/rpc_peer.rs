@@ -55,18 +55,39 @@ pub fn parse_bind(raw: &str) -> Result<SocketAddr, String> {
         .trim()
         .parse()
         .map_err(|e| format!("{KEY} = {raw:?} is not an ip:port ({e})\n{hint}"))?;
-    let refusal = if addr.ip().is_unspecified() {
-        Some("binds every interface, and rpc-server authenticates nothing")
-    } else if addr.ip().is_loopback() {
-        Some("is loopback, which no other host can reach")
-    } else if addr.port() == 0 {
-        Some("names port 0, which a head cannot be told")
-    } else {
-        None
-    };
+    let refusal = endpoint_refusal(&addr).map(|why| match why {
+        EndpointRefusal::EveryInterface => {
+            "binds every interface, and rpc-server authenticates nothing"
+        }
+        EndpointRefusal::Loopback => "is loopback, which no other host can reach",
+        EndpointRefusal::PortZero => "names port 0, which a head cannot be told",
+    });
     match refusal {
         Some(why) => Err(format!("{KEY} = {raw:?} {why}\n{hint}")),
         None => Ok(addr),
+    }
+}
+
+/// Why `addr` is no endpoint between a head and a peer. One rule for both
+/// ends: a peer's own bind ([`parse_bind`]) and the peers a head names
+/// (`llama_router::placement`), each refusing in its own words.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EndpointRefusal {
+    EveryInterface,
+    Loopback,
+    PortZero,
+}
+
+/// `None` when `addr` is one address another host can reach.
+pub fn endpoint_refusal(addr: &SocketAddr) -> Option<EndpointRefusal> {
+    if addr.ip().is_unspecified() {
+        Some(EndpointRefusal::EveryInterface)
+    } else if addr.ip().is_loopback() {
+        Some(EndpointRefusal::Loopback)
+    } else if addr.port() == 0 {
+        Some(EndpointRefusal::PortZero)
+    } else {
+        None
     }
 }
 

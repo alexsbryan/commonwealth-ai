@@ -42,6 +42,8 @@ use std::net::SocketAddr;
 use serde::Serialize;
 use sovereign_contracts::setup_config::SetupConfig;
 
+use crate::rpc_peer::{endpoint_refusal, EndpointRefusal};
+
 /// Where a router's models run: this card alone, or across peers too.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -70,7 +72,7 @@ impl fmt::Display for RouterPlacement {
 impl RouterPlacement {
     /// The placement `endpoints` (raw `ip:port` strings, `[compute]
     /// rpc_peers`) names. Each is refused by the same rule a peer's own
-    /// `[compute] rpc_peer` bind is (`rpc_peer::parse_bind`): rpc-server
+    /// `[compute] rpc_peer` bind is (`rpc_peer::endpoint_refusal`): rpc-server
     /// authenticates nothing, so loopback and every-interface addresses are
     /// not endpoints a head can reach, and the refusal names the key.
     pub fn from_endpoints<'a>(
@@ -160,22 +162,15 @@ fn parse_peer(raw: &str) -> Result<SocketAddr, String> {
         .trim()
         .parse()
         .map_err(|e| format!("[compute] rpc_peers: {raw:?} is not an ip:port ({e})\n{hint}"))?;
-    if addr.ip().is_unspecified() {
-        return Err(format!(
-            "[compute] rpc_peers: {raw:?} names every interface, and a head needs one address\n{hint}"
-        ));
-    }
-    if addr.ip().is_loopback() {
-        return Err(format!(
-            "[compute] rpc_peers: {raw:?} is loopback, where no peer listens\n{hint}"
-        ));
-    }
-    if addr.port() == 0 {
-        return Err(format!(
-            "[compute] rpc_peers: {raw:?} names port 0, which no peer listens on\n{hint}"
-        ));
-    }
-    Ok(addr)
+    let Some(why) = endpoint_refusal(&addr) else {
+        return Ok(addr);
+    };
+    let why = match why {
+        EndpointRefusal::EveryInterface => "names every interface, and a head needs one address",
+        EndpointRefusal::Loopback => "is loopback, where no peer listens",
+        EndpointRefusal::PortZero => "names port 0, which no peer listens on",
+    };
+    Err(format!("[compute] rpc_peers: {raw:?} {why}\n{hint}"))
 }
 
 #[cfg(test)]
