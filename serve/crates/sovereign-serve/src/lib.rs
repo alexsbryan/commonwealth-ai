@@ -246,12 +246,7 @@ pub fn child_launch(args: &[String]) -> Option<i32> {
 /// `vram-plan` is sizing, which `svrn daemon vram-plan` execs here;
 /// `pod-snapshot` records or drops the pinned-pod snapshot `svrn pod up` and
 /// `svrn pod down` ask serve for (pb-mesh-dissolve).
-pub const WEIGHT_VERBS: &[&str] = &[
-    "fetch-model",
-    "fetch-ner",
-    "vram-plan",
-    "pod-snapshot",
-];
+pub const WEIGHT_VERBS: &[&str] = &["fetch-model", "fetch-ner", "vram-plan", "pod-snapshot"];
 
 fn run_weight_verb(verb: &str, rest: &[String]) -> i32 {
     let runtime = match tokio::runtime::Builder::new_multi_thread()
