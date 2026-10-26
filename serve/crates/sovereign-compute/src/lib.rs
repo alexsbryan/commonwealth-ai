@@ -37,6 +37,7 @@ pub mod child_main;
 pub mod client;
 pub mod compute_roles;
 pub mod cpu_compat;
+pub mod engine_capture;
 /// The contracts an engine must satisfy, as runnable checks.
 pub mod engine_conformance;
 pub mod engine_factory;

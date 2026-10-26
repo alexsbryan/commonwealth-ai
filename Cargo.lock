@@ -12941,8 +12941,6 @@ dependencies = [
 name = "sovereign-inference"
 version = "0.8.0"
 dependencies = [
- "async-trait",
- "futures",
  "llama-cpp-4",
  "llama-cpp-sys-4",
  "llguidance",
@@ -12952,7 +12950,6 @@ dependencies = [
  "serde_json",
  "sovereign-contracts",
  "sovereign-time",
- "tempfile",
  "tokio",
  "tracing",
  "workspace-hack",

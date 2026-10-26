@@ -122,7 +122,7 @@ when a host advertises nothing.
 **What ships.** With `capture = "<path>"` the daemon appends every model call
 at the engine boundary to that file: the method, the `CompletionRequest` or
 the embed, rerank or count input, and the innermost tracing span
-(`sovereign-inference/src/engine_capture.rs`). Unset, the engine is not
+(`sovereign-compute/src/engine_capture.rs`). Unset, the engine is not
 wrapped at all.
 
 **Why unset.** It is an instrument for the engine conformance battery's case

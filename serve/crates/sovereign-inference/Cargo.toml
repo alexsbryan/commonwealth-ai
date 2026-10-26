@@ -11,10 +11,8 @@ sovereign-time = { workspace = true }
 # extracted here; re-exported at `sovereign_inference::remote::*`.
 oicp-client = { workspace = true }
 oicp-types = { workspace = true }
-async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-futures = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hack" }
@@ -145,12 +143,9 @@ windows-vulkan = ["llama-cpp-4/vulkan"]
 windows-cuda = ["llama-cpp-4/cuda"]
 
 [dev-dependencies]
-# `engine_capture`'s test records through `double::TestProvider`.
-sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
 # `llguidance_parity`'s F3 fixture proves the plan schema compiles under the
 # real engine; the schema moved to `sovereign-contracts::planner_schema`
 # 2026-09-21, so the dev-dep on the runtime hub is gone.
-tempfile = "3"
 # `llguidance_parity` pins that the schemas our callers send compile under
 # llguidance; nothing in the library links it since the engine went (es-g2).
 llguidance = { workspace = true }
