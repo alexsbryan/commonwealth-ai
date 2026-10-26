@@ -34,6 +34,15 @@ use sovereign_inference::capacity::SlotPlan;
 /// (`mtp_draft_max_decide`), the value every battery pass ran.
 const MTP_DRAFT_N_MAX: u32 = 3;
 
+/// Host RAM for llama-server's prompt cache, per model server. The embedded
+/// engine kept no host-side cache, and the server's default (8192 MiB) is a
+/// cost nobody chose: each chat section grew toward it, and on the Halo's
+/// first flip (2026-10-24) the primary's server held 17.7 GB and the fast one
+/// 6.5 GB of host RAM when the kernel OOM-killed the daemon. Measured on the
+/// fast model, 48 distinct prompts: 9.6 GB at the default, flat 1.5 GB at 0.
+/// Whether the cache earns RAM is C2's measurement against `cost.directed-pin`.
+const CACHE_RAM_MIB: u32 = 0;
+
 /// Parallel sequences on the fast model: the fast lane's coalescer sends 8
 /// at once, and on the server's default 4 they ran in two waves (C16: 52.6
 /// tok/s against embedded 68.8; with 8, 72.6 and 74.5).
@@ -44,12 +53,14 @@ const FAST_PARALLEL: u32 = 8;
 /// configuration (compute.embeddings 9/9).
 const ENCODER_CTX: u32 = 8192;
 
-/// Server slots on the rerank section. The spike scored its pairs on a server
-/// with `-np 1` and took 2x the embedded engine's wall time (R4, 2026-10-12):
-/// the embedded slot fans a shared prefix out to 16 document sequences, while
-/// a one-slot server runs every document alone. Slots that can overlap are
-/// what recovers that fan-out (A4; R4 re-measured 2026-10-23).
-const RERANK_PARALLEL: u32 = 4;
+/// Server slots on the rerank section. One: a rerank request is one task per
+/// document behind one template-and-query prefix, and a single slot reuses
+/// that prefix from task to task (patch rank-pooling-reuses-prompt-prefix).
+/// More slots did not overlap into throughput, because the work is compute
+/// bound. Measured on jina-reranker-v3, 50 docs, five concurrent requests
+/// (2026-10-25): 20 docs/s on 1 slot, 18 on 2, 17 on 4. The embedded slot
+/// does 22.
+const RERANK_PARALLEL: u32 = 1;
 
 /// What one router entry serves.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -116,6 +127,47 @@ pub struct RouterPreset {
     /// unit test, the hosted pair's one section — renders the one-device
     /// server it always did.
     placement: RouterPlacement,
+}
+
+/// The rerank kind's GGUF as the router will serve it
+/// ([`rerank_with_head`] over the file's own metadata).
+pub fn served_rerank(models: &ModelsSection) -> Result<Option<PathBuf>, String> {
+    rerank_with_head(
+        sovereign_inference::served_kind::RERANK.model_path(Some(models)),
+        sovereign_inference::gguf_meta::read_architecture,
+        sovereign_inference::gguf_meta::read_classifier_labels,
+    )
+}
+
+/// The rerank GGUF, refused when llama-server would have no head to score it
+/// with. Rank pooling on a decoder (qwen3, qwen3vl) reads the last token
+/// through `cls.output`. Without one, the server's score is
+/// softmax(hidden state)[0], about 1e-6 on the published
+/// jina-reranker-v3. That is a margin near -13 for every document, where the
+/// embedded slot read +4 to +5 (2026-10-25). An encoder cross-encoder carries
+/// its own head and is not asked.
+pub fn rerank_with_head(
+    path: Option<PathBuf>,
+    arch: impl Fn(&Path) -> std::io::Result<Option<String>>,
+    labels: impl Fn(&Path) -> std::io::Result<Option<u64>>,
+) -> Result<Option<PathBuf>, String> {
+    let Some(path) = path else { return Ok(None) };
+    let read = |e: std::io::Error| format!("reading the reranker {}: {e}", path.display());
+    let arch = arch(&path).map_err(read)?.unwrap_or_default();
+    let decoder = matches!(arch.as_str(), "qwen3" | "qwen3vl");
+    let head = labels(&path).map_err(read)?;
+    tracing::debug!(target: "llama_router", path = %path.display(), %arch, decoder, ?head, "preset: rerank head");
+    if decoder && head.unwrap_or(0) == 0 {
+        return Err(format!(
+            "the reranker {} is a {arch} model with no classifier head \
+             ({arch}.classifier.output_labels), so llama-server would score every \
+             document near zero; derive one with \
+             serve/crates/sovereign-compute/llama-server/rerank-head-gguf.py, \
+             or run kind = \"llama\"",
+            path.display()
+        ));
+    }
+    Ok(Some(path))
 }
 
 fn stem(path: &Path) -> Result<String, String> {
@@ -361,7 +413,8 @@ impl RouterPreset {
 
     /// The `--models-preset` file. Deterministic: sections in name order.
     pub fn render(&self) -> String {
-        let mut out = String::from("version = 1\n\n[*]\nn-gpu-layers = 99\n");
+        let mut out =
+            format!("version = 1\n\n[*]\nn-gpu-layers = 99\ncache-ram = {CACHE_RAM_MIB}\n");
         for (name, e) in &self.entries {
             let _ = write!(
                 out,
@@ -565,6 +618,25 @@ impl RouterPreset {
                 "t_max_predict_ms": sovereign_inference::embedded::inference_deadline_secs() * 1000
             })),
             ..Default::default()
+        }
+    }
+
+    /// The remote half of a hosted pair (`svrn setup --hosted`): chat at the
+    /// vendor `[engine]` names, embeddings at this router's one section.
+    /// That is the `embed_endpoint` shape `kind = "remote"` already serves, so
+    /// the vendor's endpoint, key, model ids and knobs pass through unchanged
+    /// and only the embed keys point here. [`Self::engine_section`] alone
+    /// would send chat to the router, which holds no chat model.
+    pub fn hosted_pair_section(&self, endpoint_v1: &str, vendor: &EngineSection) -> EngineSection {
+        let router = self.engine_section(endpoint_v1);
+        EngineSection {
+            kind: EngineKind::Remote,
+            embed_path: None,
+            embed_endpoint: router.endpoint,
+            embed_model_id: router.embed_model_id,
+            embed_inputs: router.embed_inputs,
+            context_size: 0,
+            ..vendor.clone()
         }
     }
 }

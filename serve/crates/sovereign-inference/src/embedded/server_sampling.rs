@@ -21,6 +21,7 @@ pub(crate) struct ServerSampling {
     pub min_p: f32,
     pub penalty_last_n: i32,
     pub penalty_repeat: f32,
+    pub penalty_freq: f32,
 }
 
 impl Default for ServerSampling {
@@ -33,6 +34,7 @@ impl Default for ServerSampling {
             min_p: 0.05,
             penalty_last_n: 64,
             penalty_repeat: 1.00,
+            penalty_freq: 0.00,
         }
     }
 }
@@ -74,6 +76,12 @@ impl ServerSampling {
         if let Some(v) = request.top_k {
             s.top_k = v as i32;
         }
+        if let Some(v) = request.repeat_penalty {
+            s.penalty_repeat = v;
+        }
+        if let Some(v) = request.frequency_penalty {
+            s.penalty_freq = v;
+        }
         s
     }
 
@@ -98,7 +106,7 @@ impl ServerSampling {
             model,
             self.penalty_last_n,
             self.penalty_repeat,
-            0.0,
+            self.penalty_freq,
             0.0,
         )];
         if self.temp <= 0.0 {

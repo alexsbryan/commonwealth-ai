@@ -355,6 +355,8 @@ pub(crate) async fn run_collaboration(
         structured_output: None,
         top_k: inference_config.top_k,
         top_p: None,
+        repeat_penalty: None,
+        frequency_penalty: None,
         oicp: None,
         tools: None,
         tool_choice: None,

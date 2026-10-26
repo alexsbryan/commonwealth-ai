@@ -807,6 +807,8 @@ pub async fn extract_long_term_memories(
             think_budget: None,
         top_k: None,
         top_p: None,
+        repeat_penalty: None,
+        frequency_penalty: None,
         oicp: None,
                 tools: None,
                 tool_choice: None,

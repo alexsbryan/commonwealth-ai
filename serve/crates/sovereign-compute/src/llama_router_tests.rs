@@ -44,7 +44,7 @@ fn the_preset_serves_each_gguf_by_its_stem_with_mtp_only_where_declared() {
     let preset = RouterPreset::from_models(&m, None, &idle(), layers).unwrap();
     let ini = preset.render();
     assert!(
-        ini.starts_with("version = 1\n\n[*]\nn-gpu-layers = 99\n"),
+        ini.starts_with("version = 1\n\n[*]\nn-gpu-layers = 99\ncache-ram = 0\n"),
         "{ini}"
     );
     assert!(ini.contains(
@@ -117,7 +117,7 @@ fn one_gguf_in_two_roles_is_one_entry() {
     assert!(
         ini.contains(
             "[Qwen3-Reranker-0.6B]\nmodel = /m/Qwen3-Reranker-0.6B.gguf\nctx-size = 8192\n\
-         reranking = true\nbatch-size = 8192\nubatch-size = 8192\nparallel = 4\n"
+         reranking = true\nbatch-size = 8192\nubatch-size = 8192\nparallel = 1\n"
         ),
         "{ini}"
     );
@@ -528,4 +528,67 @@ fn a_preset_one_card_cannot_hold_is_refused_rather_than_warmed_in_part() {
         "{err}"
     );
     assert!(preset.vram_if_every_section_loaded(|_| true).is_ok());
+}
+
+/// THE FAILING INPUT (2026-10-24, the Mac's hosted daemon after the host
+/// flip merge): the pair's remote half was `engine_section`, which points
+/// CHAT at the router too, so a `primary` turn reached llama-server as
+/// `hosted-default` and came back "model 'hosted-default' not found". The
+/// chat half is the vendor's; only embeddings point at the router.
+#[test]
+fn a_hosted_pair_chats_at_the_vendor_and_embeds_at_the_router() {
+    let preset = RouterPreset::embed_only(Path::new(EMBED), &DaemonSection::default()).unwrap();
+    let vendor = EngineSection {
+        kind: EngineKind::Remote,
+        endpoint: Some("https://api.vendor.example/v1".into()),
+        api_key: Some("key".into()),
+        model_id: Some("vendor-chat".into()),
+        embed_path: Some(EMBED.into()),
+        context_size: 0,
+        ..Default::default()
+    };
+    let s = preset.hosted_pair_section("http://127.0.0.1:4242/v1", &vendor);
+    assert_eq!(s.kind, EngineKind::Remote);
+    assert_eq!(s.endpoint.as_deref(), Some("https://api.vendor.example/v1"));
+    assert_eq!(s.api_key.as_deref(), Some("key"));
+    assert_eq!(s.model_id.as_deref(), Some("vendor-chat"));
+    assert_eq!(
+        s.embed_endpoint.as_deref(),
+        Some("http://127.0.0.1:4242/v1")
+    );
+    assert_eq!(
+        s.embed_model_id.as_deref(),
+        Some("Qwen3-Embedding-0.6B-Q8_0")
+    );
+    assert_eq!(s.embed_inputs, Some(EmbedInputs::Client));
+    assert_eq!(
+        s.embed_path, None,
+        "the router loads the GGUF, not this process"
+    );
+}
+
+/// A decoder reranker with no classifier head is refused before the router
+/// loads it, naming the derivation; with a head, or as an encoder, it is
+/// served. Failing input: the published jina-reranker-v3 (qwen3, no
+/// `classifier.output_labels`), which llama-server scores near zero.
+#[test]
+fn a_decoder_reranker_without_a_classifier_head_is_refused() {
+    let jina = || Some(PathBuf::from("/m/jina-reranker-v3-Q6_K.gguf"));
+    let qwen3 = |_: &Path| Ok(Some("qwen3".to_string()));
+    let refused = rerank_with_head(jina(), qwen3, |_: &Path| Ok(None)).unwrap_err();
+    assert!(refused.contains("no classifier head"), "{refused}");
+    assert!(refused.contains("rerank-head-gguf.py"), "{refused}");
+    assert_eq!(
+        rerank_with_head(jina(), qwen3, |_: &Path| Ok(Some(2))).unwrap(),
+        jina()
+    );
+    let bert = |_: &Path| Ok(Some("bert".to_string()));
+    assert_eq!(
+        rerank_with_head(jina(), bert, |_: &Path| Ok(None)).unwrap(),
+        jina()
+    );
+    assert_eq!(
+        rerank_with_head(None, qwen3, |_: &Path| Ok(None)).unwrap(),
+        None
+    );
 }

@@ -580,3 +580,30 @@ fn a_named_tool_choice_goes_as_required_over_that_tool_where_the_host_would_loos
     let body = llguidance().build_request(&req).unwrap();
     assert_eq!(body["tool_choice"], "required");
 }
+
+/// Penalties go out in llama-server's spelling when the request names them,
+/// and not at all otherwise, so the host's defaults stand. Failing input: a
+/// writer that drops them, the shape every daemon call had before
+/// 2026-10-25.
+#[test]
+fn penalties_are_written_only_when_named() {
+    let mut body = json!({});
+    write_penalties(&mut body, &CompletionRequest::default());
+    assert_eq!(body, json!({}));
+    let named = CompletionRequest {
+        repeat_penalty: Some(1.15),
+        frequency_penalty: Some(0.1),
+        ..Default::default()
+    };
+    write_penalties(&mut body, &named);
+    assert_eq!(
+        body["repeat_penalty"].as_f64().map(|v| (v * 100.0).round()),
+        Some(115.0)
+    );
+    assert_eq!(
+        body["frequency_penalty"]
+            .as_f64()
+            .map(|v| (v * 100.0).round()),
+        Some(10.0)
+    );
+}

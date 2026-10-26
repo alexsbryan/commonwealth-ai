@@ -102,6 +102,35 @@ pub fn read_context_length(path: &Path) -> io::Result<Option<u32>> {
     read_u32_by_suffix(path, CONTEXT_LENGTH_SUFFIX)
 }
 
+/// The suffix of the key naming a classifier head's outputs,
+/// `<arch>.classifier.output_labels` (llama.cpp
+/// `LLM_KV_CLASSIFIER_OUTPUT_LABELS`, which sets `n_cls_out`).
+pub const CLASSIFIER_LABELS_SUFFIX: &str = ".classifier.output_labels";
+
+/// How many classifier outputs the GGUF declares, read without loading it:
+/// whether llama-server's rank pooling has a head to score with on a
+/// decoder reranker.
+///
+/// - `Ok(Some(n))` — the key is present as an array of `n` labels.
+/// - `Ok(None)` — no such key, or one that is not an array.
+/// - `Err(_)` — I/O error or a malformed header.
+pub fn read_classifier_labels(path: &Path) -> io::Result<Option<u64>> {
+    let (mut r, kv_count) = open_kv_section(path)?;
+    for _ in 0..kv_count {
+        let key = read_gguf_string(&mut r)?;
+        let vtype = read_u32(&mut r)?;
+        if key.ends_with(CLASSIFIER_LABELS_SUFFIX) {
+            if vtype != T_ARRAY {
+                return Ok(None);
+            }
+            let _elem_type = read_u32(&mut r)?;
+            return Ok(Some(read_u64(&mut r)?));
+        }
+        skip_value(&mut r, vtype)?;
+    }
+    Ok(None)
+}
+
 /// The first key ending in `suffix`, when it holds a u32.
 fn read_u32_by_suffix(path: &Path, suffix: &str) -> io::Result<Option<u32>> {
     let (mut r, kv_count) = open_kv_section(path)?;
@@ -342,6 +371,27 @@ mod tests {
     fn err_on_bad_magic() {
         let (_d, p) = write_tmp(b"NOTGGUFatall............");
         assert!(read_architecture(&p).is_err());
+    }
+
+    #[test]
+    fn reads_classifier_label_count_after_the_vocab() {
+        let bytes = GgufBuilder::new()
+            .str_kv(ARCH_KEY, "qwen3")
+            .str_array_kv("tokenizer.ggml.tokens", &["a", "b", "c"])
+            .str_array_kv("qwen3.classifier.output_labels", &["score", "par"])
+            .finish();
+        let (_d, p) = write_tmp(&bytes);
+        assert_eq!(read_classifier_labels(&p).unwrap(), Some(2));
+    }
+
+    #[test]
+    fn no_classifier_labels_key_is_none() {
+        let bytes = GgufBuilder::new()
+            .str_kv(ARCH_KEY, "qwen3")
+            .str_array_kv("tokenizer.ggml.tokens", &["a", "b"])
+            .finish();
+        let (_d, p) = write_tmp(&bytes);
+        assert_eq!(read_classifier_labels(&p).unwrap(), None);
     }
 
     #[test]

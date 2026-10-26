@@ -267,7 +267,10 @@ fn rpc_peer_child_e2e() {
     let lan = lan_ip();
     let peer = SocketAddr::new(lan, reserved_port(lan));
 
-    let root = tempfile::tempdir().expect("tempdir");
+    // Under the target dir, not /tmp: the child's rpc cache holds the model's
+    // tensors, /tmp is RAM on the Halo, and es-f2's runs killed before the drop
+    // left 3 GB trees behind there that helped OOM the first flip (2026-10-24).
+    let root = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).expect("tempdir");
     let (home, rails_dir, data) = (
         root.path().join("home"),
         root.path().join("rails"),

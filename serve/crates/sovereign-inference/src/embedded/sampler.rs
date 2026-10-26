@@ -526,7 +526,7 @@ pub(crate) fn build_sampler(
                 ("min_p", f64::from(server.min_p)),
                 ("repeat_penalty", f64::from(server.penalty_repeat)),
                 ("repeat_last_n", f64::from(server.penalty_last_n)),
-                ("frequency_penalty", 0.0),
+                ("frequency_penalty", f64::from(server.penalty_freq)),
                 ("presence_penalty", 0.0),
             ],
             if server.temp <= 0.0 {
@@ -618,8 +618,12 @@ pub(crate) fn build_sampler(
     // llama-cpp tradition for other families is 1.15 / 0.1 / 0.05
     // (the historical hardcoded values, now preserved via the
     // serde-default compat helpers in `sovereign_contracts::model_family`).
-    let rep_pen: f32 = quirks.default_repetition_penalty;
-    let freq_pen: f32 = quirks.default_frequency_penalty;
+    let rep_pen: f32 = request
+        .repeat_penalty
+        .unwrap_or(quirks.default_repetition_penalty);
+    let freq_pen: f32 = request
+        .frequency_penalty
+        .unwrap_or(quirks.default_frequency_penalty);
     let min_p_threshold: f32 = quirks.default_min_p;
     // Sequence breakers tell DRY where one "thought unit" ends and another
     // begins — any of these tokens resets the repeated-suffix detector.

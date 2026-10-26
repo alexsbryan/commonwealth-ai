@@ -42,7 +42,7 @@ asserts = 5
 requirement = "GR-2"
 test = "sovereign-core::runtime::grounding::tests::rewrite_note_includes_corrective_passages"
 file = "svrn/crates/sovereign-core/src/runtime/grounding/tests.rs"
-line = 2410
+line = 2416
 asserts = 3
 
 [[claim]]
@@ -112,7 +112,7 @@ asserts = 3
 requirement = "GR-50"
 test = "sovereign-core::runtime::grounding::call_census::tests::no_gate_module_calls_inference_complete_behind_the_censuss_back"
 file = "svrn/crates/sovereign-core/src/runtime/grounding/call_census.rs"
-line = 463
+line = 464
 asserts = 2
 
 [[claim]]
@@ -126,7 +126,7 @@ asserts = 2
 requirement = "GR-6"
 test = "sovereign-core::runtime::grounding::tests::tombstoned_repair_releases_the_audited_draft_with_its_claims_marked"
 file = "svrn/crates/sovereign-core/src/runtime/grounding/tests.rs"
-line = 1346
+line = 1349
 asserts = 8
 
 [[claim]]

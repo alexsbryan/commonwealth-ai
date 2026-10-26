@@ -147,4 +147,14 @@ fn a_hosted_pair_boots_toward_the_router_not_the_loader_it_replaced() {
             && !err.contains("embed_path"),
         "the boot planned the pair's router, not a refusal: {err}"
     );
+    // Said positively: the boot gets as far as starting the router. Until
+    // 2026-10-24 it stopped earlier, at "no models are configured" (the moved
+    // section's kind asked for `[models]`, which a pair never names), and
+    // the negative checks above passed through it; the Mac's hosted daemon
+    // crashlooped on exactly that.
+    assert!(
+        err.contains("llama-server router is started from a tokio runtime")
+            || err.contains("needs llama-server beside the daemon"),
+        "the boot stops where the router starts: {err}"
+    );
 }

@@ -135,6 +135,8 @@ impl<'a> TypedLlmCall<'a> {
                 think_budget: self.think_budget,
                 top_k: None,
                 top_p: None,
+                repeat_penalty: None,
+                frequency_penalty: None,
                 oicp: None,
                 tools: None,
                 tool_choice: None,

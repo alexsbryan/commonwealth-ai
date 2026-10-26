@@ -257,6 +257,16 @@ struct LaneTurn {
     wall_ms: u64,
 }
 
+fn answer_lines(per_question: &[(String, Vec<LaneTurn>)]) -> Vec<serde_json::Value> {
+    let lines = per_question.iter().flat_map(|(q, runs)| {
+        runs.iter().enumerate().map(move |(i, r)| {
+            let action = r.metadata.as_ref().and_then(|m| gate_str(m, "action"));
+            serde_json::json!({"q": q, "run": i + 1, "wall_ms": r.wall_ms, "gate_action": action, "visible": r.visible})
+        })
+    });
+    lines.collect()
+}
+
 async fn ask_once(client: &TurnClient, corpus: &str, question: &str) -> Result<LaneTurn, String> {
     // The DAEMON mints the conversation and validates the corpus allow-list
     // against what it has installed — same door `chat ask` uses, so a lane
@@ -617,6 +627,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
         }
         per_question.push((q.id.clone(), kept));
     }
+    super::answers::keep(&ctx, LANE, &answer_lines(&per_question));
 
     // ── The assertion rows, one per bank question ──────────────────
     for (q, (_, runs)) in bank.questions.iter().zip(per_question.iter()) {

@@ -546,6 +546,8 @@ impl Runtime {
                 structured_output: None,
                 top_k: None,
                 top_p: None,
+                repeat_penalty: None,
+                frequency_penalty: None,
                 oicp: None,
                 tools: None,
                 tool_choice: None,
@@ -832,6 +834,8 @@ impl Runtime {
                 structured_output: None,
                 top_k: None,
                 top_p: None,
+                repeat_penalty: None,
+                frequency_penalty: None,
                 oicp: None,
                 tools: None,
                 tool_choice: None,
@@ -1351,6 +1355,8 @@ impl Runtime {
                     structured_output: None,
                     top_k: self.turn_inference_config().top_k,
                     top_p: None,
+                    repeat_penalty: None,
+                    frequency_penalty: None,
                     // oicp=None lets the wire layer auto-derive
                     // latency_class=Fast from preferred_speed (per the
                     // OICP-native fast-slot routing landed in v19).
@@ -1407,6 +1413,8 @@ impl Runtime {
                     structured_output: None,
                     top_k: self.turn_inference_config().top_k,
                     top_p: None,
+                    repeat_penalty: None,
+                    frequency_penalty: None,
                     oicp: self.build_oicp(&Intent::KnowledgeQuery),
                     tools: None,
                     tool_choice: None,

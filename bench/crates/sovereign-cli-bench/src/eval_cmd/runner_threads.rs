@@ -448,6 +448,8 @@ async fn score_thread_coverage(
         think_budget: Some(0),
         top_k: None,
         top_p: None,
+        repeat_penalty: None,
+        frequency_penalty: None,
         oicp: None,
         tools: None,
         tool_choice: None,
