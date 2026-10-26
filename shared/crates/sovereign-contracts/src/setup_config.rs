@@ -1920,8 +1920,7 @@ mod served;
 
 // ─── Slot context windows ───────────────────────────────────────────
 // Moved from sovereign-inference/src/embedded/engine.rs (2026-09-12) so a
-// client can spell the two windows without linking the inference stack;
-// `sovereign_inference::embedded::SlotWindows` re-exports it.
+// client can spell the two windows without linking the inference stack.
 
 /// The window each slot is built with — one value, named per slot.
 ///
