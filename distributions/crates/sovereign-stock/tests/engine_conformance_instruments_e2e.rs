@@ -480,7 +480,12 @@ fn the_new_instruments_reach_a_verdict_on_a_daemon_and_router_the_test_boots() {
     // in it; the record sets are small, so keep them where the failure can
     // be read.
     if std::env::var_os("CONFORMANCE_E2E_KEEP").is_some() {
-        for f in [&router_records, &embedded_records, &default_embed_records, &scenario] {
+        for f in [
+            &router_records,
+            &embedded_records,
+            &default_embed_records,
+            &scenario,
+        ] {
             let name = f.file_name().and_then(|n| n.to_str()).unwrap_or("rec");
             let _ = std::fs::copy(f, Path::new("/tmp").join(format!("e2e-{name}")));
         }

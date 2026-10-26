@@ -89,11 +89,19 @@ pub fn judge(
             // sitting in the file. The cell is named for the row, so a
             // failure still says where it came from.
             if cases.is_empty()
-                && row.judge.iter().any(|c| matches!(c, Check::Scenario { .. }))
+                && row
+                    .judge
+                    .iter()
+                    .any(|c| matches!(c, Check::Scenario { .. }))
             {
                 if let Some(cell) = scenarios.get(&row.id) {
                     tracing::debug!(target: "sovereign_cli_bench::engine_conformance", row = %row.id, target = %target, ?cell, "a scenario row judged from its own verdict, no record needed");
-                    out.push(roll_up(row, &reference, &target, &[(row.id.as_str(), cell.clone())]));
+                    out.push(roll_up(
+                        row,
+                        &reference,
+                        &target,
+                        &[(row.id.as_str(), cell.clone())],
+                    ));
                     continue;
                 }
             }

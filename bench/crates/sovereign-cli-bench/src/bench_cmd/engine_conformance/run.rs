@@ -272,7 +272,9 @@ async fn run_case(
                 });
                 let answer_tokens = match answer.as_deref() {
                     Some(generated) if !generated.is_empty() => {
-                        match reasoning_tokens(daemon, server, model.as_ref(), Some(generated)).await {
+                        match reasoning_tokens(daemon, server, model.as_ref(), Some(generated))
+                            .await
+                        {
                             Ok(n) => n,
                             Err(why) => {
                                 rec.facets

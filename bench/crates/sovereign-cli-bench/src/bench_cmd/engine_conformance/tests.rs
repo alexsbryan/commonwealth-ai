@@ -772,7 +772,9 @@ fn a_scenario_verdict_is_read_with_no_records_at_all() {
         .collect();
     let judged = verdict::judge(&inventory, &[], &scenarios);
     assert!(
-        judged.iter().any(|v| v.row == "parity" && v.verdict == "passed"),
+        judged
+            .iter()
+            .any(|v| v.row == "parity" && v.verdict == "passed"),
         "a scenario verdict must be read with no records: {judged:?}"
     );
     // The same inventory with no scenario file still says nothing, never a
