@@ -688,7 +688,7 @@ export interface HardwareInfo {
 }
 
 /** Hardware-tier names from `models.toml`. Mirrors
- *  `sovereign_inference::hardware::ProfileName`, serialised by the
+ *  `sovereign_compute::hardware::ProfileName`, serialised by the
  *  desktop's `recommended_profile` command as the bare manifest keys. */
 export type ProfileName =
   | "cpu_only"

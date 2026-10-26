@@ -173,7 +173,7 @@ fn check_build(binary: &Path, source: &BinarySource) -> Result<(), String> {
 /// (ENGINE_SWAP_PLAN A7): a preset the card cannot hold is a configuration
 /// this node cannot serve, refused by name instead of warmed in part.
 fn warm_within_memory(preset: &RouterPreset) -> Result<Vec<&str>, String> {
-    let hw = sovereign_inference::hardware::detect_hardware();
+    let hw = crate::hardware::detect_hardware();
     if !hw.gpu_available && !hw.is_unified_memory {
         tracing::info!(target: "llama_router", "router: no GPU budget to size --models-max against; warming every model");
         return Ok(preset.warm_models());

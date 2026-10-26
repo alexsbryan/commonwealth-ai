@@ -13711,7 +13711,7 @@ lines = 61
 note = ""
 
 [[module]]
-path = "serve/crates/sovereign-inference/src/hardware.rs"
+path = "serve/crates/sovereign-compute/src/hardware.rs"
 context = "unknown"
 lines = 130
 note = ""

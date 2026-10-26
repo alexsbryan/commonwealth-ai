@@ -38,6 +38,7 @@ pub mod compute_roles;
 /// The contracts an engine must satisfy, as runnable checks.
 pub mod engine_conformance;
 pub mod engine_factory;
+pub mod hardware;
 pub mod llama_router;
 pub mod manager;
 pub mod mock;

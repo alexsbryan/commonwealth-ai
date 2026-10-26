@@ -24,7 +24,7 @@
 //! editing `primary_pool.copies` or `context_size`. The cost of
 //! letting a thrashing config load is what we lived through above.
 
-use crate::hardware::HardwareProfile;
+use sovereign_contracts::daemon_wire::HardwareProfile;
 use std::path::PathBuf;
 
 /// One configured slot the daemon would eagerly load at boot.

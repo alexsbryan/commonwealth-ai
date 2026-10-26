@@ -115,7 +115,7 @@ pub fn check_vram_reporting(config: &SetupConfig, config_path: &std::path::Path)
         );
         return true;
     }
-    let hardware = sovereign_inference::hardware::detect_hardware();
+    let hardware = crate::hardware::detect_hardware();
     let slots = sovereign_inference::capacity::build_slots_from_config(config);
     let report = sovereign_inference::capacity::check_fit(&slots, &hardware);
 

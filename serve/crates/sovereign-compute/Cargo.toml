@@ -58,6 +58,8 @@ tracing-subscriber = { workspace = true }
 axum = { workspace = true }
 futures = { workspace = true }
 async-trait = { workspace = true }
+# `hardware::detect_hardware` reads system RAM.
+sysinfo = "0.34"
 workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hack" }
 
 # Graceful child termination: SIGTERM (so the compute child can run

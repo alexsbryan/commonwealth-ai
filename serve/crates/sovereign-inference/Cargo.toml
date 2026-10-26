@@ -16,7 +16,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 futures = { workspace = true }
 tokio = { workspace = true }
-sysinfo = "0.34"
 tracing = { workspace = true }
 workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hack" }
 

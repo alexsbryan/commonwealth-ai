@@ -15,12 +15,12 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde::Serialize;
+use sovereign_compute::hardware::{self, detect_hardware};
 use sovereign_compute::setup_planner::{self as planner, SlotKind};
 use sovereign_contracts::daemon_wire::{
     ByomSource, FetchedBytes, FimPlan, HardwareProfile, PrimaryPlacement, ProbedPlan, SetupPlan,
     SlotConfig,
 };
-use sovereign_inference::hardware::{self, detect_hardware};
 
 /// A question and the function that answers it.
 type Question = (&'static str, fn(&[String]) -> i32);
