@@ -1313,7 +1313,7 @@ their verdict from `--scenario`: `bench/lanes/engine-swap/llg-parity`, a
 standalone crate pinned to llama-server's llguidance, judges the corpus the
 engine side writes (`llg_parity_corpus_tests.rs`) and emits one verdict per
 row. Three scenarios the battery drives itself are graded from the record's
-own facets (`bench/.../engine_conformance/scenario.rs`), named by a row's
+own facets (`bench/crates/sovereign-cli-bench/src/bench_cmd/engine_conformance/scenario.rs`), named by a row's
 `judge.driver`: `split-line` (the typed stream cut across two byte chunks,
 read through the shipped SSE reader), `admission` (a long held call with a
 `turn_admission`, a fresh one behind it: the engine serves the admitted and

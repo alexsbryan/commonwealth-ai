@@ -4,7 +4,7 @@
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- size-gate --tighten
 28629	bench/crates/sovereign-cli-bench
-5466	bench/crates/sovereign-cli-bench::tests
+5497	bench/crates/sovereign-cli-bench::tests
 8996	bench/crates/sovereign-eval
 4627	bench/crates/sovereign-eval::tests
 4	bench/lanes/agent-coding/problems/1.1-reverse-string/scaffold
@@ -76,7 +76,7 @@
 74	distributions/crates/sovereign-onprem
 302	distributions/crates/sovereign-onprem::tests
 142	distributions/crates/sovereign-stock
-7226	distributions/crates/sovereign-stock::tests
+7649	distributions/crates/sovereign-stock::tests
 89491	ingest/crates/corpus-engine
 52144	ingest/crates/corpus-engine::tests
 723	ingest/crates/sovereign-authoring-harness
@@ -169,7 +169,7 @@
 58533	svrn/crates/sovereign-core
 40752	svrn/crates/sovereign-core::tests
 44934	svrn/crates/sovereign-daemon
-36504	svrn/crates/sovereign-daemon::tests
+36927	svrn/crates/sovereign-daemon::tests
 1853	svrn/crates/sovereign-grants
 1768	svrn/crates/sovereign-grants::tests
 4484	svrn/crates/sovereign-meshapp

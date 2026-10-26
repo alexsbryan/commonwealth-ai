@@ -751,25 +751,53 @@ fn a_mutation_subject_is_a_pair_whose_prompts_agree() {
     );
 }
 
-// ── the shipped inventory, and a retired row ──────────────────────────────
+// ── the shipped inventory's shape, and a retired row ──────────────────────
+//
+// The shipped `conformance.toml` is read at runtime by `battery.sh`, whose
+// preflight runs `judge` on no records and DIES unless it exits 4 — the
+// inventory loaded. That is the real check, in the crate that owns the data
+// (`sovereign-cli-bench` is a package crate and may not reach into the repo
+// tree at runtime, boundary-gate). This test pins the parse and the retired
+// rule on a fixture shaped like the shipped file instead.
 
 #[test]
-fn the_shipped_inventory_parses_and_its_retirements_are_not_live_rows() {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../bench/lanes/engine-swap/conformance.toml");
-    let inv = Inventory::load(&path).expect("the shipped inventory loads");
-    assert!(
-        inv.rows.iter().any(|r| r.id == "host.lifecycle"),
-        "host.lifecycle is a live row"
-    );
-    assert!(
-        inv.retired.iter().any(|r| r.id == "decode.split-sampler"),
-        "decode.split-sampler is retired with its reason"
-    );
-    assert!(
-        !inv.rows.iter().any(|r| r.id == "decode.split-sampler"),
-        "a retired row is not also a live row"
-    );
+fn a_row_and_a_retirement_parse_the_way_the_shipped_inventory_is_shaped() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("inv.toml");
+    std::fs::write(
+        &path,
+        "[[row]]\nid = \"host.lifecycle\"\njudge = [{ kind = \"scenario\", driver = \"lifecycle\", what = \"w\" }]\n\
+         when = [{ method = \"=\\\"host_lifecycle\\\"\" }]\npredict = \"pass\"\n\n\
+         [[row]]\nid = \"projection.stream-error\"\n\
+         judge = [{ kind = \"scenario\", driver = \"stream-error\", what = \"w\" }]\n\
+         when = [{ fault = \"=\\\"mid-stream-error\\\"\" }]\npredict = \"pass\"\n\n\
+         [[retired]]\nid = \"decode.split-sampler\"\nretired = \"2026-10-25\"\n\
+         why = \"its one caller, the Hermes path, went with es-t5\"\n",
+    )
+    .unwrap();
+    let inv = Inventory::load(&path).expect("the fixture loads");
+    let drivers: Vec<&str> = inv
+        .rows
+        .iter()
+        .flat_map(|r| r.judge.iter())
+        .filter_map(|c| match c {
+            Check::Scenario { driver, .. } => driver.as_deref(),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(drivers, vec!["lifecycle", "stream-error"]);
+    assert_eq!(inv.retired.len(), 1);
+    assert_eq!(inv.retired[0].id, "decode.split-sampler");
+    // A row with no check is refused, so a retired row cannot be modelled as
+    // an empty live one.
+    std::fs::write(
+        &path,
+        "[[row]]\nid = \"x\"\njudge = []\npredict = \"pass\"\n",
+    )
+    .unwrap();
+    assert!(Inventory::load(&path)
+        .unwrap_err()
+        .contains("names no check"));
 }
 
 #[test]
