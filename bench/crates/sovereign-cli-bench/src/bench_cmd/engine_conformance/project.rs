@@ -72,6 +72,24 @@ fn outcome(v: &Value) -> Outcome {
     }
 }
 
+/// `host.lifecycle`'s three answers, by their keys (`host.lifecycle`, L I4).
+/// Each is kept as the provider reported it, `NotAsked` included: a step the
+/// run never asked for is a gap the scenario names, never a silent success.
+pub fn record_lifecycle(answer: &Value, f: &mut Facets) {
+    for key in ["warmup_loaded", "extra_loaded", "extra_unloaded"] {
+        let call = &answer[key];
+        if call.is_null() {
+            f.lifecycle.insert(
+                key.into(),
+                serde_json::json!({"kind": "not-asked", "why": "the daemon did not report it"}),
+            );
+        } else {
+            f.lifecycle.insert(key.into(), call.clone());
+        }
+    }
+    tracing::debug!(target: "engine_conformance", lifecycle = ?f.lifecycle, "host.lifecycle recorded");
+}
+
 /// One value from the observations of one call. Several equal ones are one;
 /// several that differ are not silently narrowed to one of them.
 fn single<T: PartialEq>(mut items: Vec<T>, what: &str) -> Result<T, String> {
@@ -160,7 +178,7 @@ fn answer_facets(case: &Case, method: ReplayMethod, answer: &Value, f: &mut Face
         // The model a rerank must name: a fact about the far end, no facet.
         ReplayMethod::RerankModelId => {}
         ReplayMethod::CountTokens => f.token_count = answer.as_u64(),
-        ReplayMethod::Host => {
+        ReplayMethod::Host | ReplayMethod::HostLifecycle => {
             if let Value::Object(map) = answer {
                 f.host_reported = map.clone().into_iter().collect();
             }

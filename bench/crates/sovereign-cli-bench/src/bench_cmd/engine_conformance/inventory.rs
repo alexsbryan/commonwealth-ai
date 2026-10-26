@@ -10,11 +10,27 @@ use serde::Deserialize;
 use super::check::Check;
 
 /// The inventory.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct Inventory {
     /// In-scope rows.
-    #[serde(rename = "row")]
+    #[serde(rename = "row", default)]
     pub rows: Vec<Row>,
+    /// Rows that are gone, and why. Not judged and not cases: kept so a
+    /// reader who greps a retired id finds the reason rather than silence
+    /// (ARCH 6 — an absence is reported, never defaulted).
+    #[serde(rename = "retired", default)]
+    pub retired: Vec<Retired>,
+}
+
+/// A row that no longer exists, with its retirement on record.
+#[derive(Debug, Deserialize)]
+pub struct Retired {
+    /// The id it had.
+    pub id: String,
+    /// The date the row was retired (`YYYY-MM-DD`).
+    pub retired: String,
+    /// Why, citing the caller census that retired it.
+    pub why: String,
 }
 
 /// One row: a boundary behaviour, its checks and its prediction.
@@ -62,6 +78,19 @@ impl Inventory {
         let mut seen = std::collections::BTreeSet::new();
         if let Some(row) = inventory.rows.iter().find(|r| !seen.insert(r.id.as_str())) {
             return Err(format!("row id {} appears twice", row.id));
+        }
+        let mut gone = std::collections::BTreeSet::new();
+        if let Some(row) = inventory
+            .retired
+            .iter()
+            .find(|r| !gone.insert(r.id.as_str()))
+        {
+            return Err(format!("retired row id {} appears twice", row.id));
+        }
+        if let Some(both) = gone.intersection(&seen).next() {
+            return Err(format!(
+                "row id {both} is both a live row and a retired one"
+            ));
         }
         Ok(inventory)
     }

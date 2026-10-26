@@ -57,6 +57,18 @@ pub enum ReplayMethod {
     CountTokensExact,
     /// The provider's report about itself, read-only.
     Host,
+    /// `warmup_primary`, `load_extra_slot` and `unload_extra_slot`, each
+    /// called once and reported with how it ended (`host.lifecycle`, L I4).
+    /// Separate from [`Self::Host`] because a provider's report about itself
+    /// is read-only (ARCH 1): a status field must never be produced by a
+    /// call that can block or load a model. Not a captured method.
+    HostLifecycle,
+    /// The provider's typed stream, cut and corrupted mid-flight: an SSE
+    /// line split across two byte chunks (the line whole, as
+    /// `projection.stream-split-line` asks) and a mid-stream `error` datum
+    /// (which `projection.stream-error` asks ends in `Finish{Error}`). The
+    /// driver's own fault injection (L I3), not a captured method.
+    StreamFault,
     /// `probe_logprobs`: greedy steps with each step's top-k logprobs, the
     /// compute row's instrument. Not a captured method.
     Probe,
@@ -115,6 +127,58 @@ pub struct ProbeAnswer {
     pub prompt_ids: Vec<i64>,
     /// One entry per generated token.
     pub steps: Vec<ProbeStep>,
+}
+
+/// How the three lifecycle calls of `host.lifecycle` ended, each asked of
+/// the provider once (`ReplayMethod::HostLifecycle`, L I4). The calls load
+/// and unload nothing of their own: each reports how the provider's own
+/// method answered, so a refusal and a success are both the evidence.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HostLifecycleAnswer {
+    /// `warmup_primary`.
+    pub warmup: LifecycleCall,
+    /// `load_extra_slot`, if the provider was asked to load one.
+    pub extra_load: Option<LifecycleCall>,
+    /// `unload_extra_slot`, if the provider was asked to unload one.
+    pub extra_unload: Option<LifecycleCall>,
+    /// What the provider reports about residency after the calls, by the
+    /// host report's keys: the router's `/models` state a remote target
+    /// reads, so the row sees the state beside the call's own answer.
+    #[serde(default)]
+    pub host: std::collections::BTreeMap<String, serde_json::Value>,
+}
+
+impl Default for HostLifecycleAnswer {
+    fn default() -> Self {
+        // Not a substitute for a measurement: a default answer judges
+        // could-not-judge on every key rather than reading as success
+        // (ARCH 6), which is what `LifecycleCall::NotAsked` is for.
+        Self {
+            warmup: LifecycleCall::NotAsked,
+            extra_load: None,
+            extra_unload: None,
+            host: Default::default(),
+        }
+    }
+}
+
+/// One lifecycle call, and how it ended.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum LifecycleCall {
+    /// The call returned `Ok`. `model` is what it named, when it named one.
+    Ok {
+        /// The model the call loaded or unloaded, if any.
+        model: Option<String>,
+    },
+    /// The call returned `Err`, with the provider's own message.
+    Err {
+        /// The error as the provider answered it.
+        message: String,
+    },
+    /// The method was not asked (the request did not name an extra slot, or
+    /// an earlier step left nothing to ask).
+    NotAsked,
 }
 
 /// One thing an engine did.

@@ -19,6 +19,7 @@ mod mutate;
 mod project;
 mod record;
 mod run;
+mod scenario;
 mod server;
 mod verdict;
 
@@ -56,7 +57,7 @@ const HELP: Help = Help {
             ),
             (
                 "judge",
-                "Apply each row's checks to the records, one verdict per row and target pair, beside the prediction. A target run twice is judged only where its two runs agree (A/A). A row's scenario check takes its verdict from --scenario (one {row, verdict, detail} line per row, as bench/lanes/engine-swap/llg-parity writes), and stays could-not-judge for a row the file does not name. Exit 0 all as predicted, 3 a verdict differs from its prediction, 4 nothing judged. With --mutate, instead perturb one passing cell per check and judge it again: exit 0 every mutation caught, 3 one was missed.",
+                "Apply each row's checks to the records, one verdict per row and target pair, beside the prediction. A target run twice is judged only where its two runs agree (A/A). A row's scenario check with no `driver` takes its verdict from --scenario (one {row, verdict, detail} line per row, as bench/lanes/engine-swap/llg-parity writes) and stays could-not-judge for a row the file does not name; a `driver` (split-line, admission, lifecycle; L I3, I4) is graded from the record's own facets. A row in [[retired]] is not judged; it records why it is gone. Exit 0 all as predicted, 3 a verdict differs from its prediction, 4 nothing judged. With --mutate, instead perturb one passing cell per check and judge it again: exit 0 every mutation caught, 3 one was missed.",
             ),
         ]),
     ],

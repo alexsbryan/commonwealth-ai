@@ -1312,7 +1312,21 @@ target, and `svrn bench engine-conformance judge` holds the records to
 their verdict from `--scenario`: `bench/lanes/engine-swap/llg-parity`, a
 standalone crate pinned to llama-server's llguidance, judges the corpus the
 engine side writes (`llg_parity_corpus_tests.rs`) and emits one verdict per
-row.
+row. Three scenarios the battery drives itself are graded from the record's
+own facets (`bench/.../engine_conformance/scenario.rs`), named by a row's
+`judge.driver`: `split-line` (the typed stream cut across two byte chunks,
+read through the shipped SSE reader), `admission` (a long held call with a
+`turn_admission`, a fresh one behind it: the engine serves the admitted and
+sheds the fresh) and `lifecycle`. Two replay methods are the instruments
+behind them: `stream_fault` returns a stream cut mid-line or corrupted with a
+mid-stream error datum, and `host_lifecycle` calls `warmup_primary`,
+`load_extra_slot` and `unload_extra_slot` once each and reports how each
+ended beside the router's `/models` state — `host` itself stays read-only
+(ARCH 1). `battery.sh`'s `embedded` target now writes `kind = "llama"`
+explicitly (the resident is `llama-server` since the host flip) and its
+`llama-server` / `llama-server-default-embed` targets let the daemon
+supervise its own router. A retired row is a `[[retired]]` table (`id`,
+`retired`, `why`), not a live row with no check.
 
 **A remote engine off this machine is a third party.** `build_remote` builds
 one shape, `oicp_client::SplitInferenceProvider::engine` (`far_end.rs`), which

@@ -517,7 +517,11 @@ fn outcomes_decide_before_any_facet_is_read() {
         "served where the reference refused"
     );
     assert!(matches!(
-        Check::Scenario { what: "x".into() }.judge(Some(&r), &t),
+        Check::Scenario {
+            what: "x".into(),
+            driver: None,
+        }
+        .judge(Some(&r), &t),
         CellVerdict::CouldNotJudge(_)
     ));
 }
@@ -548,6 +552,7 @@ pub(super) fn case(id: &str, target: &str, row: &str, count: Option<u64>) -> Cas
 #[test]
 fn roll_up_fails_on_any_case_and_sets_the_verdict_beside_its_prediction() {
     let inventory = Inventory {
+        retired: Vec::new(),
         rows: vec![
             row("same", vec![Check::TokenCount], Prediction::Pass),
             row("one-off", vec![Check::TokenCount], Prediction::Silent),
@@ -607,7 +612,10 @@ fn roll_up_fails_on_any_case_and_sets_the_verdict_beside_its_prediction() {
 fn a_row_with_pairs_compares_only_those_targets() {
     let mut r = row("spec", vec![Check::TokenCount], Prediction::Pass);
     r.pairs = vec![("embedded-nospec".into(), "embedded".into())];
-    let inventory = Inventory { rows: vec![r] };
+    let inventory = Inventory {
+        retired: Vec::new(),
+        rows: vec![r],
+    };
     let records = vec![
         case("a", "embedded-nospec", "spec", Some(5)),
         case("a", "embedded", "spec", Some(5)),
@@ -624,6 +632,7 @@ fn a_row_with_pairs_compares_only_those_targets() {
 #[test]
 fn a_target_run_twice_is_judged_only_where_its_two_runs_agree() {
     let inventory = Inventory {
+        retired: Vec::new(),
         rows: vec![row("count", vec![Check::TokenCount], Prediction::Pass)],
     };
     let records = vec![
@@ -651,6 +660,7 @@ fn a_target_run_twice_is_judged_only_where_its_two_runs_agree() {
     );
 
     let only_c = Inventory {
+        retired: Vec::new(),
         rows: vec![row("count", vec![Check::TokenCount], Prediction::Pass)],
     };
     let c: Vec<_> = records
@@ -680,6 +690,7 @@ fn a_target_run_twice_is_judged_only_where_its_two_runs_agree() {
 fn every_mutation_is_caught_and_an_a_a_pair_gives_the_reference_a_subject() {
     use super::mutate;
     let inventory = Inventory {
+        retired: Vec::new(),
         rows: vec![row("count", vec![Check::TokenCount], Prediction::Pass)],
     };
     // llama-server disagrees, so the only passing pair is embedded's A/A.
@@ -700,6 +711,7 @@ fn every_mutation_is_caught_and_an_a_a_pair_gives_the_reference_a_subject() {
 fn a_mutation_subject_is_a_pair_whose_prompts_agree() {
     use super::mutate;
     let inventory = Inventory {
+        retired: Vec::new(),
         rows: vec![row("tools", vec![Check::ToolCalls], Prediction::Pass)],
     };
     let tool = |target: &str, prompt: Vec<i64>| CaseRecord {
@@ -737,4 +749,39 @@ fn a_mutation_subject_is_a_pair_whose_prompts_agree() {
         ("caught", Some("llama-server")),
         "{m:?}"
     );
+}
+
+// ── the shipped inventory, and a retired row ──────────────────────────────
+
+#[test]
+fn the_shipped_inventory_parses_and_its_retirements_are_not_live_rows() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../bench/lanes/engine-swap/conformance.toml");
+    let inv = Inventory::load(&path).expect("the shipped inventory loads");
+    assert!(
+        inv.rows.iter().any(|r| r.id == "host.lifecycle"),
+        "host.lifecycle is a live row"
+    );
+    assert!(
+        inv.retired.iter().any(|r| r.id == "decode.split-sampler"),
+        "decode.split-sampler is retired with its reason"
+    );
+    assert!(
+        !inv.rows.iter().any(|r| r.id == "decode.split-sampler"),
+        "a retired row is not also a live row"
+    );
+}
+
+#[test]
+fn a_retired_table_and_a_live_row_cannot_share_an_id() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("inv.toml");
+    std::fs::write(
+        &path,
+        "[[row]]\nid = \"a\"\njudge = [{ kind = \"token-count\" }]\npredict = \"pass\"\n\n\
+         [[retired]]\nid = \"a\"\nretired = \"2026-10-25\"\nwhy = \"gone\"\n",
+    )
+    .unwrap();
+    let err = Inventory::load(&path).unwrap_err();
+    assert!(err.contains("both a live row and a retired one"), "{err}");
 }

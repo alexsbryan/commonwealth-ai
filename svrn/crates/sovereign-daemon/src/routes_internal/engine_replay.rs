@@ -16,7 +16,9 @@ use axum::Json;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sovereign_contracts::engine_observe::{observed, Observation, ProbeRequest, ReplayMethod};
+use sovereign_contracts::engine_observe::{
+    observed, HostLifecycleAnswer, LifecycleCall, Observation, ProbeRequest, ReplayMethod,
+};
 use sovereign_contracts::error::Error;
 use sovereign_contracts::traits::{InferenceProvider, ServingLocus};
 use sovereign_contracts::types::{CompletionRequest, Speed, StreamFrame};
@@ -104,12 +106,29 @@ async fn run(
             })
     };
     let completion = || -> Result<CompletionRequest, (StatusCode, String)> {
-        serde_json::from_value(req.input.clone()).map_err(|e| {
+        // `admission` is `#[serde(skip)]` on the request — a field a wire hop
+        // must not be able to assert — so the tail of this comment carries it
+        // through a `turn_admission` key written where the client's own
+        // `write_turn_admission` puts it, for `cost.admission`'s scenario
+        // (L I3). The battery names a turn it minted; nothing else changes.
+        let admission = req.input.get("turn_admission").and_then(Value::as_str);
+        let input = {
+            let mut v = req.input.clone();
+            if let Value::Object(m) = &mut v {
+                m.remove("turn_admission");
+            }
+            v
+        };
+        let mut request: CompletionRequest = serde_json::from_value(input).map_err(|e| {
             (
                 StatusCode::BAD_REQUEST,
                 format!("input is not a CompletionRequest: {e}"),
             )
-        })
+        })?;
+        if let Some(id) = admission {
+            request.admission = Some(sovereign_contracts::types::TurnAdmission::new(id));
+        }
+        Ok(request)
     };
     Ok(match req.method {
         ReplayMethod::Complete | ReplayMethod::CompleteBatch => {
@@ -154,6 +173,11 @@ async fn run(
             p.count_tokens_exact(&text("text")?).await.map(|n| json!(n))
         }
         ReplayMethod::Host => Ok(host_report(p).await),
+        ReplayMethod::HostLifecycle => Ok(with_lifecycle(
+            host_report(p).await,
+            lifecycle(p, req).await,
+        )),
+        ReplayMethod::StreamFault => Ok(stream_fault(p, req).await),
         ReplayMethod::Probe => {
             let probe: ProbeRequest = serde_json::from_value(req.input.clone()).map_err(|e| {
                 (
@@ -209,6 +233,193 @@ async fn host_report(p: &dyn InferenceProvider) -> Value {
         "peer_manifests": p.peer_manifests().await.len(),
         "lender_manifest": p.lender_manifest().await.map(|(id, _)| id),
     })
+}
+
+/// The host report with `host.lifecycle`'s answer beside it, under the three
+/// keys the row names: the calls' own endings, and the provider's report
+/// after them. One object, because the row compares the call to the state it
+/// left — a call that says `Ok` while the model is not resident is the
+/// failure the row exists to catch.
+fn with_lifecycle(report: Value, lifecycle: HostLifecycleAnswer) -> Value {
+    let mut out = report;
+    if let Value::Object(map) = &mut out {
+        map.insert(
+            "warmup_loaded".into(),
+            serde_json::to_value(&lifecycle.warmup).unwrap_or(Value::Null),
+        );
+        // A step the run did not ask is `NotAsked`, never `null`: a null
+        // would read as "no answer" and leave the row could-not-judge for the
+        // wrong reason (ARCH 6).
+        map.insert(
+            "extra_loaded".into(),
+            serde_json::to_value(
+                lifecycle
+                    .extra_load
+                    .as_ref()
+                    .unwrap_or(&LifecycleCall::NotAsked),
+            )
+            .unwrap_or(Value::Null),
+        );
+        map.insert(
+            "extra_unloaded".into(),
+            serde_json::to_value(
+                lifecycle
+                    .extra_unload
+                    .as_ref()
+                    .unwrap_or(&LifecycleCall::NotAsked),
+            )
+            .unwrap_or(Value::Null),
+        );
+    }
+    out
+}
+
+/// Call the three lifecycle methods once each and report how they ended, L
+/// I4's instrument. The request's `extra` names the slot to load and unload
+/// (`{"slot": "...", "path": "...", "context_size": 4096}`); without it the
+/// extra half is [`LifecycleCall::NotAsked`], never a silent success.
+async fn lifecycle(p: &dyn InferenceProvider, req: &ReplayRequest) -> HostLifecycleAnswer {
+    let warmup = match p.warmup_primary().await {
+        Ok(()) => LifecycleCall::Ok {
+            model: Some(p.model_id_for(Speed::Slow)),
+        },
+        Err(e) => LifecycleCall::Err {
+            message: e.to_string(),
+        },
+    };
+    let mut answer = HostLifecycleAnswer {
+        warmup,
+        ..Default::default()
+    };
+    let extra = req.input.get("extra").filter(|e| !e.is_null());
+    let Some(extra) = extra else {
+        tracing::debug!(target: "engine_replay", "host.lifecycle: no extra slot named, only warmup asked");
+        return answer;
+    };
+    let Some(slot) = extra["slot"].as_str() else {
+        // The request asked for an extra and named no slot: an Err for the
+        // caller, not a skipped step (ARCH 6 — absence is reported).
+        answer.extra_load = Some(LifecycleCall::Err {
+            message: "input.extra.slot must be a string".into(),
+        });
+        return answer;
+    };
+    let Some(path) = extra["path"].as_str() else {
+        answer.extra_load = Some(LifecycleCall::Err {
+            message: "input.extra.path must be a string".into(),
+        });
+        return answer;
+    };
+    let context_size = extra["context_size"].as_u64().unwrap_or(4096) as u32;
+    answer.extra_load = Some(call_outcome(
+        p.load_extra_slot(
+            slot.to_string(),
+            std::path::PathBuf::from(path),
+            context_size,
+        )
+        .map(|id| Some(id)),
+    ));
+    answer.extra_unload = Some(call_outcome(p.unload_extra_slot(slot)));
+    tracing::debug!(
+        target: "engine_replay",
+        slot,
+        path,
+        context_size,
+        load = ?answer.extra_load,
+        unload = ?answer.extra_unload,
+        "host.lifecycle: extra slot loaded and unloaded"
+    );
+    answer
+}
+
+/// One lifecycle call's `Result` as the answer reports it.
+fn call_outcome(result: sovereign_contracts::Result<Option<String>>) -> LifecycleCall {
+    match result {
+        Ok(model) => LifecycleCall::Ok { model },
+        Err(e) => LifecycleCall::Err {
+            message: e.to_string(),
+        },
+    }
+}
+
+/// The typed stream, cut and corrupted on its way back (L I3): every frame
+/// as the SSE line it is on the wire, then
+/// - `fault = "split-line"`: the text delivered in two byte chunks that cut
+///   one SSE line in half, so a reader without a line buffer loses the frame;
+/// - `fault = "mid-stream"`: the answer's first tokens, then a `{"error":
+///   …}` datum and no `[DONE]`, as llama-server fails a stream
+///   (`server-context.cpp:4294`).
+/// Anything else is a 400: the driver names the fault it wants, never gets a
+/// silent default.
+async fn stream_fault(p: &dyn InferenceProvider, req: &ReplayRequest) -> Value {
+    let fault = req.input["fault"].as_str().unwrap_or_default();
+    if !matches!(fault, "split-line" | "mid-stream") {
+        // Name the fault first: the driver asks for one, and an unknown name
+        // is answered as such, not as a malformed request.
+        return json!({
+            "kind": "error",
+            "message": format!("`{fault}` is not a fault the stream injects (`split-line`, `mid-stream`)"),
+        });
+    }
+    let Ok(r): Result<CompletionRequest, _> = serde_json::from_value(req.input.clone()) else {
+        return json!({"kind": "error", "message": "input is not a CompletionRequest"});
+    };
+    let frames: Vec<Value> = match p.complete_stream_with_finish(&r).await {
+        Ok(stream) => stream.map(frame_json).collect().await,
+        Err(e) => return json!({"kind": "error", "message": e.to_string()}),
+    };
+    let lines: Vec<String> = frames.iter().map(|f| format!("data: {f}\n\n")).collect();
+    let (chunks, error) = match fault {
+        "split-line" => (split_at_half(&lines), None),
+        // A mid-stream failure replaces the tail: llama-server writes the
+        // error datum where the rest of the stream would have gone and closes
+        // without `[DONE]` (server-context.cpp:4294). So the tokens before it
+        // stand, the finish frame is not sent, and the datum is one more SSE
+        // line a reader must turn into `Finish{Error}`.
+        "mid-stream" => {
+            let tokens: Vec<String> = frames
+                .iter()
+                .filter(|f| f["kind"] == "token")
+                .map(|f| format!("data: {f}\n\n"))
+                .collect();
+            let datum = json!({"error": {"message": "the model process died"}});
+            let mut chunks = tokens;
+            chunks.push(format!("data: {datum}\n\n"));
+            (chunks, Some(datum))
+        }
+        _ => unreachable!("the fault name was checked before the stream ran"),
+    };
+    // Every chunk is exactly what a byte reader receives: `lines` whole,
+    // except the one line each side of the split carries a half of.
+    json!({"kind": "ok", "chunks": chunks, "error": error})
+}
+
+/// The frames as SSE bytes, with one line cut across two chunks (the first
+/// chunk ends mid-line, so only a reader that buffers to a newline recovers
+/// it). The cut lands after the first line's `data: `, which is a real
+/// boundary in an SSE stream.
+fn split_at_half(lines: &[String]) -> Vec<String> {
+    let mut chunks = Vec::new();
+    let mut cut = false;
+    for line in lines {
+        if !cut && line.len() > "data: ".len() + 2 {
+            let at = "data: ".len() + 2;
+            chunks.push(line[..at].to_string());
+            chunks.push(line[at..].to_string());
+            cut = true;
+        } else {
+            chunks.push(line.clone());
+        }
+    }
+    if !cut && !chunks.is_empty() {
+        // Nothing long enough to split: cut the last chunk in two anyway, so
+        // a reader that does not buffer loses the tail rather than passing.
+        let last = chunks.pop().unwrap_or_default();
+        let at = last.len() / 2;
+        chunks.push(last[..at].to_string());
+        chunks.push(last[at..].to_string());
+    }
+    chunks
 }
 
 #[cfg(test)]
@@ -304,5 +515,123 @@ mod tests {
             matches!(answer, Err(Error::NotImplemented(_))),
             "the default answers NotImplemented, which the route reports as refused: {answer:?}"
         );
+    }
+
+    #[tokio::test]
+    async fn every_stream_fault_splits_a_line_whole_and_ends_a_corrupt_stream_in_error() {
+        let frames = vec![
+            StreamFrame::Token("the whole answer".into()),
+            StreamFrame::Finish {
+                reason: FinishReason::Stop,
+                usage: None,
+            },
+        ];
+        let p = TestProvider::new().with_typed_frames(frames);
+        let split = run(
+            &p,
+            &call(
+                "stream_fault",
+                json!({"fault": "split-line", "prompt": "q", "preferred_speed": "Fast"}),
+            ),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        let chunks: Vec<String> = split["chunks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap().to_string())
+            .collect();
+        // The answer text is whole once the chunks are joined: the reader,
+        // not the cut, decides what a line is.
+        let joined = chunks.concat();
+        assert!(
+            joined.contains("\"text\":\"the whole answer\""),
+            "the cut lost the token line: {joined}"
+        );
+        assert!(
+            chunks.iter().any(|c| !c.ends_with("\n\n")),
+            "no chunk ended mid-line: the cut did not split a line"
+        );
+
+        let p = TestProvider::new().with_typed_frames(vec![StreamFrame::Token("x".into())]);
+        let corrupt = run(
+            &p,
+            &call(
+                "stream_fault",
+                json!({"fault": "mid-stream", "prompt": "q", "preferred_speed": "Fast"}),
+            ),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            corrupt["error"]["error"]["message"],
+            "the model process died"
+        );
+
+        let p = TestProvider::new();
+        let refused = run(
+            &p,
+            &call(
+                "stream_fault",
+                json!({"fault": "no-such-fault", "prompt": "q", "preferred_speed": "Fast"}),
+            ),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(refused["kind"], "error");
+        assert!(refused["message"]
+            .as_str()
+            .unwrap()
+            .contains("not a fault the stream injects"));
+    }
+
+    #[tokio::test]
+    async fn a_lifecycle_replay_reports_each_call_and_stamps_the_admission_it_is_given() {
+        // The double honours warmup (Ok) and refuses extra load/unload (the
+        // trait default), which is what a provider with no extras reports.
+        let p = TestProvider::new().with_model_id("m");
+        let answer = run(&p, &call("host_lifecycle", json!({})))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(answer["warmup_loaded"]["kind"], "ok");
+        assert_eq!(answer["warmup_loaded"]["model"], "m");
+        assert_eq!(answer["extra_loaded"]["kind"], "not-asked");
+        assert_eq!(answer["extra_unloaded"]["kind"], "not-asked");
+
+        let answer = run(
+            &p,
+            &call(
+                "host_lifecycle",
+                json!({"extra": {"slot": "s", "path": "/m.gguf", "context_size": 4096}}),
+            ),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            answer["extra_loaded"]["kind"], "err",
+            "the double refuses an extra slot, as a provider with none does"
+        );
+        assert_eq!(answer["extra_unloaded"]["kind"], "err");
+
+        // A `turn_admission` on a completion is stamped onto the request the
+        // engine sees, which `admission`'s scenario relies on.
+        let p = TestProvider::new().with_complete_text("ok");
+        let answer = run(
+            &p,
+            &call(
+                "complete",
+                json!({"prompt": "q", "preferred_speed": "Fast", "turn_admission": "turn-7"}),
+            ),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(answer["text"], "ok");
     }
 }
