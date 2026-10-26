@@ -123,6 +123,24 @@ pub fn load_from_env() -> RerankLoad {
     load_fitted(&path)
 }
 
+/// The rerank kind's loader (`served_kind::RERANK`): the one in-process
+/// rerank load, fit check first ([`load_fitted`]). A refusal and a failed
+/// load are both an `Err` naming which one it was. It lives with the engine,
+/// not the kind registry, because G2 deletes it with the engine
+/// (ENGINE_SWAP_PLAN G1).
+pub fn load_rerank(path: &Path) -> sovereign_contracts::error::Result<Arc<dyn InferenceProvider>> {
+    match load_fitted(path) {
+        RerankLoad::Loaded(provider) => Ok(provider),
+        RerankLoad::Refused { message } | RerankLoad::Failed { message } => {
+            Err(sovereign_contracts::error::Error::Inference(message))
+        }
+        RerankLoad::NotConfigured => Err(sovereign_contracts::error::Error::Inference(format!(
+            "no reranker configured at {}",
+            path.display()
+        ))),
+    }
+}
+
 /// Load the reranker at `path`, refused up front when it does not fit. The
 /// one in-process rerank load: [`load_from_env`] and the rerank kind's loader
 /// (`served_kind::RERANK`, which the serving assembly and the compute child

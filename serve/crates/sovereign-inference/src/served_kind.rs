@@ -194,7 +194,7 @@ impl ServedKind {
 pub const RERANK: ServedKind = ServedKind {
     role: RERANK_ROLE,
     env_path: Some("SOVEREIGN_RERANK_MODEL_PATH"),
-    loader: KindLoader::Provider(load_rerank),
+    loader: KindLoader::Provider(crate::reranker_standalone::load_rerank),
     route: KindRoute::Served {
         path: RERANK_PATH,
         serve: serve_rerank,
@@ -204,23 +204,6 @@ pub const RERANK: ServedKind = ServedKind {
     },
     child: KindChild::Hosted { role: RERANK_ROLE },
 };
-
-/// The one in-process rerank load, fit check first
-/// (`reranker_standalone::load_fitted`). A refusal and a failed load are both
-/// an `Err` naming which one it was.
-fn load_rerank(path: &Path) -> sovereign_contracts::error::Result<Arc<dyn InferenceProvider>> {
-    use crate::reranker_standalone::RerankLoad;
-    match crate::reranker_standalone::load_fitted(path) {
-        RerankLoad::Loaded(provider) => Ok(provider),
-        RerankLoad::Refused { message } | RerankLoad::Failed { message } => {
-            Err(sovereign_contracts::error::Error::Inference(message))
-        }
-        RerankLoad::NotConfigured => Err(sovereign_contracts::error::Error::Inference(format!(
-            "no reranker configured at {}",
-            path.display()
-        ))),
-    }
-}
 
 fn serve_rerank(
     provider: Arc<dyn InferenceProvider>,
