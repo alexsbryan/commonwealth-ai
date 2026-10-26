@@ -822,7 +822,10 @@ mod tests {
             Some(SamplingMode::Instruct)
         ));
         assert!(!is_server_default_shape(None, None));
-        assert!(!is_server_default_shape(Some(&PromptShape::Templated), None));
+        assert!(!is_server_default_shape(
+            Some(&PromptShape::Templated),
+            None
+        ));
         assert!(!is_server_default_shape(Some(&PromptShape::Raw), None));
     }
 }
