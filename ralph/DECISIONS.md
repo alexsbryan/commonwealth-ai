@@ -2207,6 +2207,16 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: es-g2 also deletes every item outside the engine whose only consumer is the engine (`rpc_worker_main` + `Launch::RpcWorker`, `distributed_respawn` whole, the fabric's engine-hook call sites and what goes dead with them, `engine_state`'s engine fields, `mesh_plan`'s FFI projection); es-g4 keeps the rest, the planner included. The generate and embed child roles are in es-g2, as P G2 lists them. Acceptance unchanged; ENV added to es-g2's checks because it removes env reads.
 - Because: P G2 already lists `rpc_worker_main` here, so the row contradicted the plan. The cut follows the compiler and ARCH 12: a deletion takes its own call sites, and what keeps a reader outside the engine (`distributed_role`, `SOVEREIGN_RPC_SERVE`, discovery, the planner) stays with the row that owns the fabric. Merging the two rows (~33k lines, one session) and running es-g4 first (it would edit the engine G2 deletes) were both rejected.
 
+**engine-swap-7 · 2026-10-26 · es-g4-delete-mesh-fabric · director** — this commit
+- Needed: the row deletes the planner and the pre-seed (`sovereign_inference::rpc_warm_cache`) and stops on a caller outside the fabric (§6). The census found three: `svrn mesh plan`/`bench`/`warm-cache` with `remote_gguf` (~6.0k lines, dispatched at `sovereign-serve/src/lib.rs:299-302`), model transfer's split-GGUF listing (`model_transfer.rs:453` → `shard_files`), and `/status`'s `rpc_worker` (`routes_status.rs:287,374`, from `SOVEREIGN_RPC_SERVE`). With them the row is ~12.3k lines against its "about 4k".
+- Chose: split. `es-g4-delete-mesh-fabric` deletes the named fabric and the wiring its deletion forces, moves `shard_files`/`split_shard_names` to `sovereign-contracts` beside `gguf_meta` (no path left at the old one), and takes `rpc_worker` off `/status` with `RpcServe` and `--rpc-worker`; the planner and the pre-seed stay one row longer. New `es-g4-delete-mesh-fabric-verbs` (depends on it) deletes the three verbs, `remote_gguf`, their CLI-contract and conformance entries, then the rest of `rpc_warm_cache`. es-m3-move-agnostic-after-g2 and es-g3 depend on both. The row's false premise (`distributed_discovery/tests.rs`) is corrected. Acceptance unchanged: everything the row named is still deleted, across two rows; each half gains the TESTs of the crates it now touches, the verbs half DOCS.
+- Because: the verbs are not a kept capability (the plan's are FIM, rerank, NER and distributed models); they are front ends of the placement the operator cut on 2026-10-23 and of the planner D4 deleted on 2026-10-24. `mesh plan` dry-runs the planner's split, which no longer runs (upstream's free-memory split does, P F), so keeping it would preview a placement the daemon never uses (ARCH 6); `mesh bench` keys its number on the fabric's `placement_digest` for `mesh plan` to look up, and D4 itself was measured by `d4-split.sh` against llama-server, not by it; `mesh warm-cache` is the pre-seed's CLI, which the row names. Model transfer is not distribution, so its one need (`shard_files`, pure GGUF file layout) moves to the crate that owns GGUF file facts (ARCH 12). `/status`'s `rpc_worker` has one reader, `rpc_discovery.rs:392-405`, which this row deletes. Fabric first compiles: `mesh_plan`/`mesh_bench` import nothing from `sovereign_compute` and read the distribution report over HTTP.
+
+**engine-swap-8 · 2026-10-26 · es-g4-delete-mesh-fabric · director** — this commit
+- Needed: the row deletes `distributed_role` whole and stops on a caller outside the fabric (§6). What is left of it, `apply_shared_model_role_to_env`, is the only writer of `SOVEREIGN_SHARED_MODEL_ID`, which serve's ranking reads once at construction (`rank.rs:217`, `SharedModelFleet::from_env` → `set_shared_model_id`) to route this node's primary turns to the mesh peer serving the shared model. That is peer inference, not the fabric; deleting it whole leaves a configured `[shared_model] model_id` unrouted with no error (ARCH 6).
+- Chose: keep that one line and delete the rest. `[shared_model] model_id` → `SOVEREIGN_SHARED_MODEL_ID` (explicit env still wins, the `info!` kept) moves to `serve/crates/sovereign-serve/src/shared_model.rs` as `sovereign_serve::apply_shared_model_to_env`; `sovereign_compute::distributed_role` and the `sovereign-serve/src/lib.rs:105` re-export go, and the three callers (`standalone.rs:22`, `sovereign-stock/src/main.rs:100`, `sovereign-onprem/src/main.rs:64`) and the doc comments naming the old function are repointed, nothing left at the old path. Everything else it wrote goes: the role → discover translation, the anchor eligibility knobs, the host pin, quorum, pooled, headroom and shard-fetch. The worker's package recommended keeping `quorum_anchors` too, and that half is not taken because it has no production reader.
+- Because: serve's ranking is what decides where primary turns go, so the value it reads lives beside the reader and not in compute, which owns process supervision and model kinds (ARCH 12, the charter's placement rule). It is the smallest change that keeps routing intact, and the row's acceptance and checks are unchanged. No other write had a reader in the process that sets it, and that was verified at 7a610b614 (appendix).
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -14187,5 +14197,105 @@ assembly and its idle monitors".
 
 Package: the lane's `control/package.md` (worker census, options 1-4); option 1
 taken with the compiler as the rule for where it stops, option 4 confirmed.
+
+</details>
+
+## engine-swap-7 · 2026-10-26 — es-g4 split at census: the fabric, then the mesh verbs and the planner
+
+<details><summary>reasoning, evidence, package</summary>
+
+Reproduced at 4bbf69f2a.
+
+`git grep -n rpc_warm_cache -- '*.rs'` outside `sovereign-inference/src/rpc_warm_cache*`:
+fabric (`distributed_warm.rs:10`, `distributed_warm/worker.rs:14,26,42`,
+`distribution.rs:30`, `discovery_policy.rs:228,672`, `manager.rs:1472`); model
+transfer (`model_transfer.rs:453`); the verbs (`mesh_plan.rs:249,410`,
+`mesh_plan/report.rs:63,120,312`, `mesh_plan/tests.rs:95`, `mesh_bench/shell.rs:518`,
+`warm_cache.rs:46,63`, `remote_gguf.rs:67,156`, `examples/warm_cache.rs:10`); and
+`sovereign-cli-mesh/tests/weight_verbs_are_serves.rs:33`.
+
+`wc -l` of the verbs: `mesh_plan.rs` + `mesh_plan/` 2397, `mesh_bench.rs` + four
+files under `mesh_bench/` 3064 (more under `mesh_bench/tests/`), `remote_gguf.rs`
+444, `warm_cache.rs` 82.
+
+`ls serve/crates/sovereign-compute/src/distributed_discovery*` returns only the
+`.rs`; it has no test module.
+
+`git grep -n -E '"rpc_worker"|\.rpc_worker\b|RpcWorkerStatus'` outside
+`routes_status.rs`: `rpc_discovery.rs:392,400,405` (the only reader),
+`clients/desktop/src-tauri/src/mesh_commands.rs:205` (a passthrough),
+`clients/desktop/tests/e2e/demo/b8-code-intel.demo.spec.ts:147` (a key list),
+`scripts/rpc-distributed-e2e.sh:72` (the fabric's e2e script).
+
+`grep -n 'sovereign_compute::' serve/crates/sovereign-serve/src/mesh_bench*
+…/mesh_plan*` is empty; `mesh_bench` reaches `placement_digest` through
+`crate::mesh_measurements` from the daemon's report, so deleting `distribution.rs`
+first leaves the verbs compiling, reporting no distribution until their own row.
+
+P F (`svrn-docs/ENGINE_SWAP_PLAN.md`): "`-ot` from our planner is NOT sent, because
+D4 measured it at parity … and a tie deletes it"; "G4 deletes the planner with the
+fabric". P lists the kept capabilities at "Each kept capability, in its layer".
+
+Finding filed, not acted on: P F says upstream's `-c` cache under `LLAMA_CACHE` is
+"ggml's own format, which our in-process worker already writes", so an offline
+pre-seed of es-f1's child is still possible in principle. The row names the
+pre-seed for deletion and this decision does not reverse it; if the operator wants
+the thumbdrive path back, it is a small restore aimed at the child's cache dir.
+
+Package: the lane's `control/package.md` (worker census, items 1-5, options 1-5);
+options 1, 2, 3 and 5 taken; option 4's split taken with the halves named
+`es-g4-delete-mesh-fabric` and `es-g4-delete-mesh-fabric-verbs`.
+
+</details>
+
+## engine-swap-8 · 2026-10-26 — the shared-model routing line outlives `distributed_role`
+
+<details><summary>reasoning, evidence, findings</summary>
+
+Reproduced at 7a610b614.
+
+`git grep -n 'SOVEREIGN_SHARED_MODEL_ID' -- '*.rs'`: one writer
+(`sovereign-compute/src/distributed_role.rs:28`); one reader,
+`sovereign-contracts/src/launch.rs:423` (`SharedModelFleet::from_env`), whose one
+production caller is `sovereign-serve/src/rank.rs:217`, followed by
+`mesh_provider.set_shared_model_id(..)`. `rank/tests.rs:109,121` already cover the
+env → provider half.
+
+`git grep -n '\.quorum_anchors()' -- '*.rs'` finds only `launch.rs:503,514`, which are
+tests. `SOVEREIGN_RPC_QUORUM_ANCHORS` is still parsed into `SharedModelFleet::Member`,
+but no production code reads that field, and the write sat behind `discover`, i.e.
+serving roles only.
+
+The other writes, and why dropping them changes no behaviour:
+- `SOVEREIGN_RPC_WORKER_SETTLE_SECS`/`_FLAP_THRESHOLD` are read by
+  `worker_eligibility.rs:232-233`, which has had no writer since `rpc_discovery` was
+  deleted (b585dbf4d).
+- `SOVEREIGN_RPC_DISCOVER` is read only by `contracts/containment.rs:20`, whose caller
+  is doctor (`checks_sovereign.rs:979`). Doctor runs in the CLI process, which never
+  inherited the daemon's `set_var`, and `classify_containment` discounts the variable
+  whenever the role implies discovery anyway (`containment.rs:81-93`).
+- `SOVEREIGN_SHARED_MODEL_HOST_NODE_ID`, `SOVEREIGN_RPC_MIN_POOLED_GB` and
+  `SOVEREIGN_RPC_SHARD_FETCH` have no `.rs` reader.
+- `SOVEREIGN_RPC_HEADROOM` is read by `mesh_plan.rs:230`, a CLI process that falls
+  back to `[shared_model] headroom` from config itself (`mesh_plan.rs:225-227`), and
+  es-g4-delete-mesh-fabric-verbs deletes it.
+
+Findings filed and not acted on, because scope is frozen:
+1. The `[shared_model]` keys `role`, `host_node_id`, `quorum_anchors`,
+   `min_pooled_gb`, `shard_fetch` and `allow_plaintext_lan` are now inert, and
+   `headroom` becomes inert with the verbs row. Refusing them by name, as
+   `[compute] distributed_primary` is refused in `assembly.rs`, would be a new row
+   and is the operator's call. Until then a config that sets them loads without a
+   word (ARCH 6).
+2. `worker_eligibility` (serving-host) and its `/v1/mesh/status` rows
+   (`sovereign-serve/src/lib.rs:116`) have had no writer since b585dbf4d. No row
+   names them.
+3. `SharedModelFleet::Member.quorum_anchors` and the env read behind it are an
+   accessor with no production reader, and could fold into a `from_config` with no
+   env var at all. That is a behaviour change, so it does not belong in this row.
+
+Package: the lane's `control/package.md`. Its option 1 is taken, minus
+`quorum_anchors`, with the home in sovereign-serve rather than sovereign-compute.
+Options 2 and 3 are filed as findings 1 and 2.
 
 </details>
