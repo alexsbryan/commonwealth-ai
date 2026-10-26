@@ -18,12 +18,12 @@ use super::{RpcWarmShardRequest, RpcWarmShardResponse, RpcWarmSource, TensorRang
 /// All sibling file names of a split GGUF (`<stem>-<idx>-of-<count>.gguf`),
 /// including `name` itself, in shard order; `[name]` for a non-split name.
 ///
-/// Delegates to `sovereign-inference`'s `split_shard_names` — host and worker
+/// Delegates to `sovereign_contracts::gguf_shards::split_shard_names` — host and worker
 /// MUST agree on what "the whole model" means, and a second copy of the parser
 /// is a standing invitation to disagree. This wrapper only adds the
 /// non-split fallback the fetch path wants.
 fn split_sibling_names(name: &str) -> Vec<String> {
-    sovereign_inference::rpc_warm_cache::split_shard_names(name)
+    sovereign_contracts::gguf_shards::split_shard_names(name)
         .unwrap_or_else(|| vec![name.to_string()])
 }
 

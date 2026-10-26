@@ -64,7 +64,7 @@ pub async fn resolve(spec: &str) -> Result<ResolvedModel, String> {
         resolve_hf(rest).await
     } else {
         let path = PathBuf::from(spec);
-        let shards = sovereign_inference::rpc_warm_cache::shard_files(&path);
+        let shards = sovereign_contracts::gguf_shards::shard_files(&path);
         let total_bytes = shards
             .iter()
             .filter_map(|p| std::fs::metadata(p).ok().map(|m| m.len()))

@@ -407,7 +407,7 @@ pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
         let named_split = model
             .file_name()
             .and_then(|n| n.to_str())
-            .and_then(sovereign_inference::rpc_warm_cache::split_shard_names)
+            .and_then(sovereign_contracts::gguf_shards::split_shard_names)
             .map(|v| v.len());
         match named_split {
             Some(want) if resolved.shards < want => {
