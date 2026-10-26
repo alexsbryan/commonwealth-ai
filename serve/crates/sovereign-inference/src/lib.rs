@@ -14,6 +14,5 @@ pub mod priority_gate;
 pub mod remote {
     pub use oicp_client::*;
 }
-pub mod rpc_warm_cache;
 
 pub use gguf_validator::{validate_gguf, GgufExpectation, GgufValidationError};

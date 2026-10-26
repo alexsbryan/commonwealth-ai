@@ -1675,7 +1675,7 @@ Eight decision points, each with one home:
 | Hub picks a local model for a peer request | `sovereign-daemon/src/routes_inference.rs::route_with_oicp` |
 | Serving peer picks Fast-vs-Slow slot | `sovereign-serving-host/src/slot_select.rs::pick_slot_for_oicp` |
 | Synthesis tier (Fast vs Primary) | `sovereign-core/runtime/evidence.rs::resolve_synthesis_route` |
-| Distributed placement (model > one node) | the router section's `rpc` key and `-ts` split (`sovereign_compute::llama_router::placement`); the FFI-free planner `sovereign-inference/src/rpc_warm_cache.rs` stays until the `svrn mesh plan`/`bench`/`warm-cache` verbs that read it are deleted (es-g4-delete-mesh-fabric-verbs) |
+| Distributed placement (model > one node) | the router section's `rpc` key and `-ts` split (`sovereign_compute::llama_router::placement`) |
 | Collaborative ingest partitioning | `sovereign-grants/knowledge_assignment.rs` |
 
 Slot policy is normative in [`svrn/docs/SLOT_POLICY.md`](../svrn/docs/SLOT_POLICY.md):
@@ -1697,16 +1697,10 @@ Findings are in `svrn/docs/specs/SCHEDULER_QUALITY.md`; **the standing one is F1
 the scheduler has no speed signal in production**, so `throughput_factor` is
 neutral 1.0 for every peer.
 
-**Byte-mass-aware split (`plan_shards_weighted`).** Each device gets a
-CONTIGUOUS block range whose *bytes*, not block *count*, are proportional to
-its VRAM. The big open-weight models are MoE and MoE mass is deeply
-non-uniform — routed experts are ~88–93% of the bytes but cold, and a hybrid
-SSM+MoE stack alternates a ~20 MB block with a ~1.3 GB one, a measured 62×
-per-block spread — so count-proportional apportionment hands a small node a
-heavy run and OOMs it. Per-device fit is
-`shard_fits(plan, capacities, mass, headroom)`, where **`None` means
-cannot-judge and is not a pass**: an unread tensor table would otherwise clear
-every device on the strength of zeros.
+The byte-mass-aware planner (`plan_shards_weighted`, `shard_fits`) is deleted
+(es-g4-delete-mesh-fabric-verbs): D4 measured our `-ot` split at parity with
+upstream's own free-memory split on a real Mac peer (2026-10-24), and a tie
+deletes it, so the router section sends only `rpc` and `-ts`.
 
 `svrn mesh plan`, `bench` and `warm-cache` were deleted with the fabric
 (es-g4-delete-mesh-fabric-verbs). The placement measurements a node already
