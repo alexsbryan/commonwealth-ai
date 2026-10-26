@@ -2,7 +2,7 @@
 //! Which inference engine serves this node — the one place that decides.
 //!
 //! Before this module, engine choice was not a decision the system could
-//! express: five construction sites named [`EmbeddedLlamaCpp`] literally
+//! express: five construction sites named `EmbeddedLlamaCpp` literally
 //! (`sovereign-daemon/src/build/inference.rs`, `sovereign-server/src/main.rs` ×2,
 //! the desktop's `builders/inference.rs`, `sovereign-compute`'s
 //! `child_main.rs`), and `SetupConfig` had no key that could say
@@ -15,9 +15,12 @@
 //! "construct which engine?"; it does not answer "is this node allowed to
 //! run that engine?" (admission belongs to the serving assembly,
 //! `sovereign_compute::assembly`, with the `[compute]` containment rules)
-//! and it does not configure llama's optional slots (extras, edit, rerank,
-//! idle monitors — all concrete `EmbeddedLlamaCpp` methods the assembly
-//! calls on [`BuiltEngine::llama`] when it is `Some`).
+//! and it does not start the router (the assembly does, before it asks this
+//! module for the router's remote half).
+//!
+//! `kind = "llama"`, the in-process engine, was deleted (ENGINE_SWAP_PLAN
+//! G2). The name still parses, so a config that names it is refused here
+//! with the replacement, never read as an unknown custom engine.
 //!
 //! **Open set, so a registry — but the in-tree half stays an enum**
 //! (ARCH §2, §4). The engines that ship here are a closed set and get
@@ -31,11 +34,7 @@
 //! substitute).
 //!
 //! **Home.** `sovereign-compute`, which owns the serving assembly that
-//! calls it (ENGINE_SWAP_PLAN G1). It sat in `sovereign-inference` beside
-//! the in-process engine until then; from here it names that engine
-//! (`build_llama`, [`BuiltEngine::llama`]) through compute's existing
-//! dependency on inference until G2 deletes both, and the remote engine
-//! through `oicp-client`. No new dependency edge.
+//! calls it (ENGINE_SWAP_PLAN G1); the remote engine is `oicp-client`'s.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock, RwLock};
@@ -45,8 +44,6 @@ use sovereign_contracts::model_family::ModelFamily;
 use sovereign_contracts::setup_config::{EmbedInputs, EngineSection, SetupConfig};
 use sovereign_contracts::traits::InferenceProvider;
 
-use sovereign_inference::embedded::{EmbeddedLlamaCpp, SlotWindows};
-
 /// Re-exported so a host or an out-of-tree engine can name the selection
 /// type without also depending on `sovereign-contracts` directly. The
 /// definition lives one layer down, next to [`EngineSection`], because it
@@ -54,22 +51,12 @@ use sovereign_inference::embedded::{EmbeddedLlamaCpp, SlotWindows};
 /// contract crate depend upward.
 pub use sovereign_contracts::setup_config::EngineKind;
 
-/// A constructed engine plus the concrete handles its host still needs.
+/// A constructed engine plus what its host still needs to know about it.
 ///
-/// The `provider` is what every consumer above the seam receives. The
-/// `llama` handle is the honest, contained form of a leak that used to be
-/// implicit: the daemon holds it for the RPC-worker auto-reload path and
-/// for llama's optional slot installs, and it is `None` for every other
-/// engine. A host must treat `None` as "this engine has no local slots" —
-/// never as a reason to fall back to constructing one.
+/// The `provider` is what every consumer above the seam receives.
 pub struct BuiltEngine {
     /// The `dyn`-erased engine, installed and advertised by the host.
     pub provider: Arc<dyn InferenceProvider>,
-    /// `Some` only for [`EngineKind::Llama`]. Carries the concrete API
-    /// the trait deliberately does not expose: `install_extras`,
-    /// `install_edit_slot`, `install_rerank`, `start_idle_monitor`,
-    /// and the primary reload the mesh worker-discovery task fires.
-    pub llama: Option<Arc<EmbeddedLlamaCpp>>,
     /// The manifest-resolved family of the embed slot, which drives
     /// app-side pooling and the document/query instruction prefixes, and
     /// is threaded into the mesh embed-model advertisement.
@@ -82,7 +69,6 @@ impl std::fmt::Debug for BuiltEngine {
     /// the `Arc` is not `Debug`, and its address would say nothing anyway.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("BuiltEngine")
-            .field("holds_llama_slots", &self.llama.is_some())
             .field("embed_family", &self.embed_family)
             .field(
                 "max_context_tokens",
@@ -93,13 +79,11 @@ impl std::fmt::Debug for BuiltEngine {
 }
 
 impl BuiltEngine {
-    /// Wrap a provider that owns no local llama slots. The constructor an
-    /// out-of-tree [`EngineBuilder`] uses — it cannot produce an
-    /// `EmbeddedLlamaCpp`, and should not pretend to.
+    /// Wrap a provider that embeds remotely. The constructor an out-of-tree
+    /// [`EngineBuilder`] uses.
     pub fn external(provider: Arc<dyn InferenceProvider>) -> Self {
         Self {
             provider,
-            llama: None,
             embed_family: ModelFamily::Unknown,
         }
     }
@@ -136,7 +120,7 @@ fn registry() -> &'static Registry {
 /// loser would be chosen by registration order — which is startup
 /// sequencing, not a decision anyone made.
 ///
-/// `name` must not shadow a built-in (`llama`, `remote`) — those parse to
+/// `name` must not shadow a built-in (`llama`, `remote`, `llama-server`) — those parse to
 /// typed variants before the registry is consulted, so a builder
 /// registered under either name is dead code. This is rejected rather
 /// than accepted-and-ignored.
@@ -167,9 +151,9 @@ pub fn register_engine(
 
 /// The engine ids this binary can serve — the two built-ins plus every
 /// registered custom name, sorted. What an unknown-id error lists, and
-/// what a host can show the operator.
+/// what a host can show the operator. The retired `llama` is not one.
 pub fn available_engines() -> Vec<String> {
-    let mut names = vec!["llama".to_string(), "remote".to_string()];
+    let mut names = vec!["llama-server".to_string(), "remote".to_string()];
     if let Ok(guard) = registry().read() {
         names.extend(guard.keys().cloned());
     }
@@ -179,9 +163,9 @@ pub fn available_engines() -> Vec<String> {
 
 /// The quirks family of the primary and fast slots. `Unknown`, so they
 /// sample with the generic llama.cpp penalties (repeat 1.15, frequency 0.1,
-/// DRY) whatever GGUF `[models]` names. The router path reads the same
-/// constant, so both engines penalise a slot's calls alike. Whether a Qwen
-/// primary should carry them is HUMAN-es-measure-sampler-pins' question.
+/// DRY) whatever GGUF `[models]` names; the router sends them
+/// (`llama_router::provider`). Whether a Qwen primary should carry them is
+/// HUMAN-es-measure-sampler-pins' question.
 pub const CHAT_SLOT_FAMILY: ModelFamily = ModelFamily::Unknown;
 
 /// The code slot's family. The only code GGUF we ship is
@@ -202,7 +186,13 @@ pub fn build_engine(config: &SetupConfig) -> Result<BuiltEngine, String> {
         "constructing the inference engine"
     );
     let built = match &kind {
-        EngineKind::Llama => build_llama(config),
+        EngineKind::Llama => {
+            tracing::error!(
+                target: "engine_factory",
+                "refused: kind = \"llama\", the in-process engine, was deleted"
+            );
+            Err(LLAMA_RETIRED.to_string())
+        }
         EngineKind::Remote => build_remote(&config.engine),
         // Its endpoint exists only once its router runs, and the router is a
         // supervised child that must outlive every reload: serving assembly
@@ -244,62 +234,10 @@ pub fn build_engine(config: &SetupConfig) -> Result<BuiltEngine, String> {
     })
 }
 
-/// The in-process llama.cpp engine — the three-to-four GGUF slots.
-///
-/// Everything llama-specific that was inline in the daemon's
-/// `load_provider` and is *construction* lives here; everything that is
-/// *post-construction configuration* (extras, edit slot, rerank, idle
-/// monitors) stays with the serving assembly, which calls it on
-/// [`BuiltEngine::llama`].
-fn build_llama(config: &SetupConfig) -> Result<BuiltEngine, String> {
-    // `[models]` is an `Option` since the `terminal` node class landed
-    // (2026-08-30): a node can legitimately hold none. Read it through the
-    // accessor rather than a field, so the absence arrives as the refusal that
-    // names WHY there are no slots — "this node is a terminal, route instead"
-    // vs "run `svrn setup`" — instead of an empty `PathBuf` reaching
-    // llama.cpp and coming back as whatever it says about `""` (§18.3).
-    //
-    // A terminal never actually gets here; the daemon returns its forwarding
-    // provider before calling the factory. This is the guard for the case that
-    // is NOT a deliberate terminal — a half-written or hand-edited config.
-    let models = config.models()?;
-    let embed_family = embed_family_for(&models.embed);
-
-    // `[compute] distributed_primary` — the primary lives in a supervised
-    // child, so the daemon must NOT also hold it. Withholding the path is
-    // what makes that true: every lazy in-process primary load reads
-    // `primary_path`, so `None` means no code path in this process can pull
-    // the distributed model in behind our back. The *guards* around this
-    // mode (containment armed? is `fast` distinct from `primary`?) are
-    // admission and live in the serving assembly (sovereign-compute
-    // `assembly.rs`, `containment.rs`); this is only the derivation.
-    let child_owns_primary = child_owns_primary(config);
-
-    let engine = EmbeddedLlamaCpp::load_full_with_families(
-        models.fast_path(),
-        if child_owns_primary {
-            None
-        } else {
-            Some(&models.primary)
-        },
-        Some(&models.embed),
-        models.code.as_deref(),
-        SlotWindows::from_models(models),
-        None, // gpu_layers — auto-detect
-        CHAT_SLOT_FAMILY,
-        CHAT_SLOT_FAMILY,
-        embed_family.clone(),
-        CODE_SLOT_FAMILY,
-    )
-    .map_err(|e| format!("failed to load models: {e}"))?;
-
-    let arc = Arc::new(engine);
-    Ok(BuiltEngine {
-        provider: Arc::clone(&arc) as Arc<dyn InferenceProvider>,
-        llama: Some(arc),
-        embed_family,
-    })
-}
+/// The refusal for `kind = "llama"`: what it was and what serves instead.
+pub const LLAMA_RETIRED: &str = "[engine] kind = \"llama\" is retired: the in-process llama.cpp \
+     engine was deleted (ENGINE_SWAP_PLAN G2). Set kind = \"llama-server\" (the default, which \
+     serves the same `[models]` through a supervised router), or remove the key.";
 
 /// Does a supervised compute child own this node's primary
 /// (`[compute] enabled` + `distributed_primary`)? When it does, no path in

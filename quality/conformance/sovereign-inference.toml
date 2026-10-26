@@ -44,10 +44,3 @@ test = "sovereign-inference::rpc_warm_cache::tests::an_unread_tensor_table_is_ne
 file = "serve/crates/sovereign-inference/src/rpc_warm_cache/tests.rs"
 line = 496
 asserts = 4
-
-[[claim]]
-requirement = "FE-77"
-test = "sovereign-inference::embedded::rpc_distribution::rpc_prune_tests::a_per_device_overflow_is_its_own_refusal_and_advises_lowering_headroom"
-file = "serve/crates/sovereign-inference/src/embedded/rpc_distribution.rs"
-line = 2883
-asserts = 12

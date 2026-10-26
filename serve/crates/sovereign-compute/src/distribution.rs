@@ -69,28 +69,6 @@ impl DistributionHandoff {
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
     }
 
-    /// Install this handoff into the CURRENT process, so the next model load
-    /// distributes across exactly these workers with exactly this plan.
-    ///
-    /// Called by the child before it loads. Two effects:
-    /// 1. the worker list becomes the process's RPC worker source, and
-    /// 2. the shard plan is pinned into the plan cache, so `plan_distribution`
-    ///    takes a cache hit instead of re-planning against post-warm VRAM.
-    ///
-    /// The child must ALSO have `SOVEREIGN_RPC_ASSUME_WARMED=1` in its
-    /// environment (the manager sets it): no warm orchestrator is installed in
-    /// a child, and without that assertion `classify_placement` would refuse to
-    /// distribute a large model and fall back to a local load.
-    pub fn install(&self, model_path: &Path) {
-        let endpoints = self.endpoints.clone();
-        sovereign_inference::embedded::set_rpc_worker_provider(move || endpoints.clone());
-        sovereign_inference::embedded::pin_shard_plan(
-            model_path,
-            &self.endpoints,
-            self.plan.clone(),
-        );
-    }
-
     /// The `/status`-shaped placement this handoff describes: which blocks the
     /// child put on which remote worker, and how many stayed local.
     ///

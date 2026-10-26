@@ -250,8 +250,7 @@ pub const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
 /// there is no override ambiguity. A host `RUST_LOG` adds to it
 /// ([`compose_filter`]).
 ///
-/// `llama_cpp` is not here: it is the loader's target, and serve's filter
-/// carries it with its debug crank (`sovereign_serve::tracing_filter`), which
+/// The loader's targets are serve's (`sovereign_serve::tracing_filter`), which
 /// a distribution hosting serve unions with this one (pb-serve-distributes).
 pub fn daemon_tracing_filter(iroh_debug: bool) -> String {
     let lvl = if iroh_debug { "debug" } else { "warn" };
@@ -451,7 +450,7 @@ mod tests {
              records only transitions and not the ramp between them: {verbose}"
         );
         // Not spelling — ADMISSION. `contains` (and even a parse + `Display`
-        // round-trip, which is as far as serve's `llama_cpp` test goes)
+        // round-trip)
         // asserts on a string this function itself produced; it cannot tell a
         // directive that admits an event from one that merely survives
         // parsing. So emit the real thing through a subscriber built from the

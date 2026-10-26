@@ -2,12 +2,11 @@
 //! Tests for `ReloadFactory`'s refusal — see `assembly.rs`.
 
 use super::*;
-use sovereign_contracts::setup_config::{ComputeSlotConfig, EngineSection};
+use sovereign_contracts::setup_config::{ComputeSlotConfig, EngineSection, ModelsSection};
 
 /// A running compute generation with no process in it: a remote engine holds
-/// no weights, and the distributed primary's child stays unspawned until a
-/// warmed worker set exists.
-fn remote_distributed_primary() -> SetupConfig {
+/// no weights, and a cold slot spawns nothing.
+fn remote_with_a_cold_child() -> SetupConfig {
     let mut config = SetupConfig::unconfigured();
     config.data.dir = std::env::temp_dir().join(format!("pb-reload-{}", std::process::id()));
     config.models = Some(ModelsSection {
@@ -23,7 +22,15 @@ fn remote_distributed_primary() -> SetupConfig {
         ..Default::default()
     };
     config.compute.enabled = true;
-    config.compute.distributed_primary = true;
+    config.compute.slot.push(ComputeSlotConfig {
+        name: "crash".into(),
+        role: "mock".into(),
+        model: "/m/none.gguf".into(),
+        context_size: None,
+        n_gpu_layers: None,
+        warm: false,
+        capture_embed: false,
+    });
     config
 }
 
@@ -31,12 +38,12 @@ fn remote_distributed_primary() -> SetupConfig {
 /// the error string the admin route returns.
 #[tokio::test]
 async fn a_refused_reload_is_logged_where_the_daemon_filter_admits_it() {
-    let config = remote_distributed_primary();
+    let config = remote_with_a_cold_child();
     let cold = assemble_serving(&config).expect("a remote engine needs no weights");
     let mut changed = config.clone();
     changed.compute.slot.push(ComputeSlotConfig {
         name: "another".into(),
-        role: "generate".into(),
+        role: "mock".into(),
         model: "/m/small-fast.gguf".into(),
         context_size: None,
         n_gpu_layers: None,

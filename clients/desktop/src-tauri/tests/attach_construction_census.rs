@@ -291,12 +291,10 @@ fn the_desktop_names_no_inference_stack() {
     // types by name on purpose — the epitaphs are the record of what left and
     // why — so a bare-name needle would go red on its own documentation. The
     // parenthesised form is a thing only code can spell.
+    // `EmbeddedLlamaCpp::load_full_with_families(` was a needle until the
+    // type itself was deleted (ENGINE_SWAP_PLAN G2); nothing can spell it now.
     let state = state_rs();
-    for needle in [
-        "SplitInferenceProvider::new(",
-        "EmbeddedLlamaCpp::load_full_with_families(",
-        "load_inference(&",
-    ] {
+    for needle in ["SplitInferenceProvider::new(", "load_inference(&"] {
         assert!(
             !state.contains(needle),
             "svt-7: `state.rs` performs `{needle}` again. The desktop holds no \

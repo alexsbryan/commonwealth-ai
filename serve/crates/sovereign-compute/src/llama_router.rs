@@ -607,12 +607,12 @@ impl RouterPreset {
             embed_inputs: Some(EmbedInputs::Client),
             // The shipped router is built with llguidance.
             grammar: Some(GrammarSupport::Llguidance),
-            // The embedded engine's decode deadline, on every chat request.
-            // The server measures it from the first generated token and
-            // stops only at a newline past it, where the engine stopped
-            // the wall clock outright: no caller reads that difference.
+            // The decode deadline, on every chat request. The server
+            // measures it from the first generated token and stops only at
+            // a newline past it, where the embedded engine stopped the wall
+            // clock outright: no caller reads that difference.
             extra_params: Some(serde_json::json!({
-                "t_max_predict_ms": sovereign_inference::embedded::inference_deadline_secs() * 1000
+                "t_max_predict_ms": inference_deadline_secs() * 1000
             })),
             ..Default::default()
         }
@@ -636,6 +636,28 @@ impl RouterPreset {
             ..vendor.clone()
         }
     }
+}
+
+/// The decode deadline the router sends as `t_max_predict_ms`:
+/// `SOVEREIGN_INFERENCE_TIMEOUT_SECS`, else 300 s. Read once per process. It
+/// lived in the embedded engine, which enforced it itself, and moved here with
+/// its one reader when that engine was deleted (ENGINE_SWAP_PLAN G2).
+fn inference_deadline_secs() -> u64 {
+    use std::sync::OnceLock;
+    static DEADLINE: OnceLock<u64> = OnceLock::new();
+    *DEADLINE.get_or_init(|| {
+        let raw = std::env::var("SOVEREIGN_INFERENCE_TIMEOUT_SECS").ok();
+        let parsed = raw.as_deref().and_then(|s| s.parse::<u64>().ok());
+        if let (Some(raw), None) = (&raw, parsed) {
+            tracing::warn!(
+                target: "llama_router",
+                value = %raw,
+                "SOVEREIGN_INFERENCE_TIMEOUT_SECS is not a whole number of seconds; \
+                 the 300 s default applies"
+            );
+        }
+        parsed.unwrap_or(300)
+    })
 }
 
 #[cfg(test)]

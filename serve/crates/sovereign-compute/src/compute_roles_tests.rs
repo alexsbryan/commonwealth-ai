@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The router retires the generate and embed compute-child roles.
+//! The generate and embed compute-child roles are retired with the embedded
+//! engine (ENGINE_SWAP_PLAN G2).
 
 use super::*;
 use sovereign_contracts::setup_config::ComputeSlotConfig;
@@ -24,13 +25,13 @@ fn compute(slots: &[(&str, &str)]) -> ComputeSection {
     }
 }
 
-/// THE FAILING INPUT: a `[compute]` pool naming the two roles the router now
-/// serves itself. Before this, the daemon spawned a second copy of each
-/// model in an embedded child beside the router's own.
+/// THE FAILING INPUT: a `[compute]` pool naming the two roles whose engine
+/// is gone. Before the router, each spawned an embedded child; now there is
+/// nothing to host them, so the boot refuses them by name.
 #[test]
-fn a_generate_or_embed_pool_is_refused_by_name_on_the_router() {
+fn a_generate_or_embed_pool_is_refused_by_name() {
     let section = compute(&[("talker", "generate"), ("vectors", "embed")]);
-    let refused = retired_slots(&EngineKind::LlamaServer, &section);
+    let refused = retired_slots(&section);
     assert_eq!(refused.len(), 2, "{refused:?}");
     assert!(refused[0].starts_with("talker: "), "{refused:?}");
     assert!(
@@ -44,21 +45,23 @@ fn a_generate_or_embed_pool_is_refused_by_name_on_the_router() {
     );
 }
 
-/// A role the router does not own still runs, so the retirement is the two
-/// named roles and not `[compute]` itself.
+/// A served kind or the mock still runs, so the retirement is the two named
+/// roles and not `[compute]` itself.
 #[test]
 fn a_role_the_router_does_not_own_is_left_alone() {
-    let section = compute(&[("crash-slot", "mock"), ("ranker", "rerank")]);
-    assert!(retired_slots(&EngineKind::LlamaServer, &section).is_empty());
+    let section = compute(&[("crash-slot", "mock")]);
+    assert!(retired_slots(&section).is_empty());
 }
 
-/// The embedded engine is untouched until the default flips: the same pool
-/// is admitted there.
+/// The child's own parse refuses a retired role with the startup check's
+/// words, so a hand-typed `--compute-child --role generate` says why too.
 #[test]
-fn the_embedded_engine_still_admits_both_roles() {
-    let section = compute(&[("talker", "generate"), ("vectors", "embed")]);
-    assert!(retired_slots(&EngineKind::Llama, &section).is_empty());
-    assert!(retired_slots(&EngineKind::Remote, &section).is_empty());
+fn the_child_refusal_is_the_startup_refusal() {
+    let why = retired("generate").expect("generate is retired");
+    assert_eq!(why, retired_role("generate"));
+    assert!(why.contains("embedded engine"), "{why}");
+    assert!(retired("mock").is_none());
+    assert!(retired("rerank").is_some_and(|why| why.contains("router")));
 }
 
 /// A disabled `[compute]` spawns nothing, so nothing is retired and a
@@ -67,5 +70,5 @@ fn the_embedded_engine_still_admits_both_roles() {
 fn a_disabled_section_retires_nothing() {
     let mut section = compute(&[("talker", "generate")]);
     section.enabled = false;
-    assert!(retired_slots(&EngineKind::LlamaServer, &section).is_empty());
+    assert!(retired_slots(&section).is_empty());
 }

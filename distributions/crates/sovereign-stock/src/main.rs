@@ -166,17 +166,7 @@ fn main() {
         Some(mesh),
         sovereign_daemon::process::Posture::Open,
     );
-    // macOS: past `__cxa_finalize_ranges`, so the ggml-metal device sweeper
-    // never asserts on still-resident resources; the loader's fast-exit,
-    // through serve's face, where the daemon's `run` used to call it.
-    #[cfg(target_os = "macos")]
-    {
-        sovereign_serve::fast_exit_skip_destructors(exit_code)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        std::process::exit(exit_code)
-    }
+    std::process::exit(exit_code)
 }
 
 /// serve's ranking as svrn is handed it: the router as svrn's provider, its

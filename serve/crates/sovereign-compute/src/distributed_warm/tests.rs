@@ -1,21 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Tests for the warm orchestrator's rules and the `/internal/rpc-warm` wire
+//! Tests for the `/internal/rpc-warm` wire
 //! (moved with them from the daemon's `tests/rpc_warm_http.rs`).
 
 use super::*;
-
-#[test]
-fn raw_fallback_refused_for_loopback_worker() {
-    // A loopback worker_ip means a bridge-local endpoint (task 6): the
-    // hand-built raw URL would target OURSELF, and a self-warm reports
-    // success while the real worker stays cold → upload deadlock.
-    assert!(!raw_warm_fallback_allowed("127.0.0.1"));
-    assert!(!raw_warm_fallback_allowed("::1"));
-    // Real remote IPs and unparseable hostnames keep the legacy fallback.
-    assert!(raw_warm_fallback_allowed("192.168.1.2"));
-    assert!(raw_warm_fallback_allowed("100.104.36.28"));
-    assert!(raw_warm_fallback_allowed("beefymac.local"));
-}
 
 #[test]
 fn request_round_trips_through_json() {

@@ -148,12 +148,8 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // Re-keyed (pb-cli-llm-bench-move, repairing pb-serve-distributes b13c2ab8b):
     // the rpc-warm worker moved to sovereign-compute, its two sites with it.
     ("serve/crates/sovereign-compute/src/distributed_warm/worker.rs", Class::Mesh, 2),
-    // The 2026-09 split of rpc_warm_http.rs moved sites into a sibling
-    // orchestrator and a test module; neither had a row, so this census was
-    // already red on main before the FIVE_PROGRAMS cut touched it.
-    // Re-keyed at pb-serve-distributes: the orchestrator moved whole to
-    // sovereign-compute (count unchanged, 2).
-    ("serve/crates/sovereign-compute/src/distributed_warm.rs", Class::Mesh, 2),
+    // `distributed_warm.rs` held the host-side orchestrator's two sites; it
+    // was deleted with the embedded engine it answered (ENGINE_SWAP_PLAN G2).
     // Re-keyed with it (b13c2ab8b): the worker's tests, same four sites.
     ("serve/crates/sovereign-compute/src/distributed_warm/worker_tests.rs", Class::TestOnly, 4),
     // mesh_proof_outbound.rs's stamp fixture: retired with the mesh proof

@@ -219,6 +219,20 @@ async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize, Option<Stri
     Ok((devices, host_idx, pin))
 }
 
+/// The default headroom factor, named once.
+const RPC_HEADROOM_DEFAULT: f64 = 1.2;
+
+/// `SOVEREIGN_RPC_HEADROOM` as the operator set it, or `None`, so the caller
+/// can fall back to `[shared_model] headroom` when it runs before bootstrap
+/// has bridged config into the environment. A value below 1.0 is refused
+/// here: it gates on less memory than the model needs.
+fn rpc_headroom_from_env() -> Option<f64> {
+    std::env::var("SOVEREIGN_RPC_HEADROOM")
+        .ok()
+        .and_then(|v| v.trim().parse::<f64>().ok())
+        .filter(|&f| f >= 1.0)
+}
+
 /// `svrn mesh plan` — dry-run a model's tensor split across a mesh, offline. Reuses
 /// the daemon's own `plan_shards` + `quantize_vram` and the SAME `shard_fits`
 /// decider its per-device gate runs (see `first_worker_overflow`), so the preview
@@ -238,32 +252,18 @@ pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
     let mut model_spec: Option<String> = None;
     let mut devices_gb: Vec<f64> = Vec::new();
     let mut host_idx: Option<usize> = None;
-    // Default headroom mirrors the daemon's OWN resolution order exactly, so a
-    // previewed plan uses the SAME factor the load executes with: an explicit
-    // `SOVEREIGN_RPC_HEADROOM` env wins (the daemon reads it directly), else the
-    // `[shared_model] headroom` config (bootstrap bridges config→env), else 1.2.
-    // `--headroom` overrides this for what-if planning.
-    // ONE parser, ONE default (§10.6). The env read, the `>= 1.0` filter and
-    // the literal `1.2` used to exist here AND in
-    // `sovereign_inference::embedded::rpc_headroom_factor` — the function that
-    // actually gates the load. They agreed, which is the weakest way for a
-    // promise to hold: this command's whole contract is that "a previewed plan
-    // uses the headroom the load executes with", and it was kept by two copies
-    // of a number matching.
-    //
-    // The config fallback stays here, and is why the shared helper returns an
-    // `Option`: this CLI can run BEFORE bootstrap has bridged
-    // `[shared_model] headroom` into the environment, so it has a second
-    // source the daemon does not. The filter applies to that source too — a
-    // headroom below 1.0 gates on less memory than the model needs.
-    let mut headroom: f64 = sovereign_inference::embedded::rpc_headroom_from_env()
+    // Default headroom: an explicit `SOVEREIGN_RPC_HEADROOM` env wins, else
+    // the `[shared_model] headroom` config, else 1.2. `--headroom` overrides
+    // this for what-if planning. The filter applies to the config source too
+    // — a headroom below 1.0 gates on less memory than the model needs.
+    let mut headroom: f64 = rpc_headroom_from_env()
         .or_else(|| {
             sovereign_contracts::setup_config::SetupConfig::load()
                 .ok()
                 .and_then(|c| c.shared_model.headroom)
                 .filter(|&h| h >= 1.0)
         })
-        .unwrap_or(sovereign_inference::embedded::RPC_HEADROOM_DEFAULT);
+        .unwrap_or(RPC_HEADROOM_DEFAULT);
     let mut headroom_from_flag = false;
     let mut json = false;
     let mut from_mesh = false;
@@ -473,15 +473,14 @@ pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
         .map(|c| c.effective_context_size())
         .unwrap_or(16384);
 
-    // llama.cpp's three-term projection (KV + compute per device) — the SAME
-    // numbers the live fit gate judges with, so the preview's fit column and a
-    // load-time refusal can never disagree about the non-weight terms. The
-    // backend guard must stay alive past the projection call (its Drop frees
-    // the backend); a failed init or projection degrades the preview to
-    // weights-only fit, the same fallback the live gate takes. Measured
-    // ~278 ms warm on a 155 GB set (tests/device_memory_probe.rs).
-    let _backend = sovereign_inference::llama::cpp::llama_backend::LlamaBackend::init();
-    let overheads = sovereign_inference::embedded::projected_overheads(&model, n_ctx, false);
+    // llama.cpp's three-term projection (KV + compute per device) read the
+    // in-process engine, which was deleted (ENGINE_SWAP_PLAN G2). The preview
+    // takes the weights-only fit it always fell back to, and says so.
+    let overheads = None;
+    eprintln!(
+        "mesh plan: fit is weights-only — the KV and compute projection read llama.cpp \
+         in this process, and no engine is linked here any more"
+    );
 
     // What peers have measured. A key pins the exact silicon *and* the exact
     // split, so an operator asking about a configuration they have never run will

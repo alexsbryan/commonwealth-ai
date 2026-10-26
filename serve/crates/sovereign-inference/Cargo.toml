@@ -5,67 +5,26 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-serving-policy = { workspace = true }
-# The launch-shape vocabulary. `RpcServe` is the ONE reading of
-# `SOVEREIGN_RPC_SERVE`, shared with the two mesh surfaces and
-# sovereign-api's `/status`, so nothing can advertise a worker this
-# crate would not bind (sovereign-contracts is a serde/DTO leaf — no
-# runtime, no layer inversion).
 sovereign-contracts = { workspace = true }
-# Pid-liveness probe (kill(pid, 0)) for the prefix-state stale-dir sweep.
-libc = "0.2"
-# Not dev-only: `rpc_worker_main` is a child-process ENTRYPOINT and must
-# install its own subscriber, the same reason sovereign-compute's
-# `child_main` carries it. Workspace-pinned, so no version skew (§8.2).
-tracing-subscriber = { workspace = true }
 sovereign-time = { workspace = true }
 # The pure-HTTP OICP client (RemoteApiProvider / SplitInferenceProvider) was
 # extracted here; re-exported at `sovereign_inference::remote::*`.
 oicp-client = { workspace = true }
-# The tool-call parser moved DOWN here (domains
-# REVIEW-build-serving-drop-inference): it is pure `serde_json` + `std`, and
-# the serving host must reach it without linking this crate, so `oicp-types`
-# is now the owner and `embedded/grammar.rs` re-exports it.
 oicp-types = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-thiserror = { workspace = true }
 futures = { workspace = true }
 tokio = { workspace = true }
-tokio-util = { workspace = true }
 sysinfo = "0.34"
-# Cross-platform home-dir resolution (USERPROFILE on Windows, HOME on unix) for
-# the RPC tensor-cache path. Matches sovereign-core's `dirs::home_dir()` usage.
-dirs = "5"
-encoding_rs = "0.8"
 tracing = { workspace = true }
-tokio-stream = "0.1"
-reqwest = { workspace = true, features = ["stream"] }
-# Parallel logit-mask in `json_constraint::mask`. Any model with a
-# large vocab (Gemma-3-E4B ≈ 262K, Qwen3 ≈ 152K, Llama-3 ≈ 128K)
-# pays a per-candidate validator cost on every generated token;
-# running it serially on one core was the dominant Phase-1 latency.
-rayon = "1.10"
-# Jinja2 chat-template renderer. The llama-cpp-4 0.2.x binding
-# dropped `apply_chat_template_oaicompat` (the bundled minja path),
-# so models whose `tokenizer.chat_template` uses macros/sets
-# (Gemma 3/4, Qwen3.5-9B-vOP) used to fall through to plain-text
-# concat with hallucinated role markers + drifting stop tokens.
-# See `embedded::apply_chat_template_minijinja`.
-minijinja = { workspace = true }
-
-# Re-adopted 2026-05-21 after the agent-bench sweep showed both
-# observed failure classes (parse_failed_envelope, loop_trap) trace
-# to the parser-leniency surface around free-form tool emission.
-# llguidance's top-level alternation (`tool_envelope | plain_text`)
-# closes both classes structurally. Used directly from Rust — the
-# llama-cpp-4 binding's `LlamaSampler::llguidance` shim doesn't
-# exist in 0.2.x, so we call llguidance from `ConstrainedSampler`
-# alongside the existing in-house `JsonConstraint` mask.
-llguidance = { workspace = true }
 workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hack" }
 
+# No code in this crate calls llama.cpp since the engine was deleted
+# (ENGINE_SWAP_PLAN G2). The per-OS llama-cpp dependencies and the
+# `windows-*` features below stay until G3 drops them with the vendored
+# crates and the toolchain, in one step.
+#
 # llama.cpp's GPU backend is picked per-OS. Linux uses Vulkan because
 # ROCm crashes in `ggml_cpu_extra_work_size` during Qwen3-A3B MoE
 # inference on gfx1151 — a secondary CPU SEGV after a primary GPU
@@ -193,28 +152,9 @@ sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
 # real engine; the schema moved to `sovereign-contracts::planner_schema`
 # 2026-09-21, so the dev-dep on the runtime hub is gone.
 tempfile = "3"
-
-[[example]]
-name = "complete"
-
-[[example]]
-name = "bench_embed"
-
-[[example]]
-name = "bench_decode"
-
-[[example]]
-name = "grammar_smoke"
-
-[[example]]
-name = "sd_smoke"
-
-# A/B harness comparing JsonConstraint vs LlguidanceConstraint on a
-# real LlamaModel. See `LLGUIDANCE_MIGRATION_AUDIT.md` §3.C / §3.G /
-# §6 — measures decode tok/s, mask p50/p99, and llguidance ff-token
-# yield. Drop-in path for the D-full migration perf gate.
-[[example]]
-name = "bench_constraint"
+# `llguidance_parity` pins that the schemas our callers send compile under
+# llguidance; nothing in the library links it since the engine went (es-g2).
+llguidance = { workspace = true }
 
 [lints]
 workspace = true

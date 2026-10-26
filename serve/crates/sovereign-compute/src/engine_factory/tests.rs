@@ -2,10 +2,6 @@
 use super::*;
 use sovereign_contracts::setup_config::{EngineSection, ModelsSection};
 
-/// The default must stay `Llama`: an existing `config.toml` names no
-/// engine, and `#[serde(default)]` on the section must therefore
-/// reproduce today's behaviour exactly. A change here silently
-/// re-points every deployed node.
 /// `embed_inputs = "client"` names the family through the one table and
 /// refuses an id it cannot place; `server` (and unset) prepares nothing.
 #[test]
@@ -37,12 +33,20 @@ fn client_embed_inputs_name_a_family_or_refuse() {
 
 /// The release default is the router (ENGINE_SWAP_PLAN E2), so a
 /// `[engine]` section that omits `kind` — or no section at all — plans and
-/// boots the supervised router. `llama` is the written rollback.
+/// boots the supervised router. `llama`, the deleted in-process engine
+/// (G2), still parses, and is refused naming its replacement rather than
+/// read as an unknown custom engine.
 #[test]
-fn the_default_engine_is_the_router_and_llama_is_the_written_rollback() {
+fn the_default_engine_is_the_router_and_llama_is_refused_by_name() {
     assert_eq!(EngineKind::default(), EngineKind::LlamaServer);
     assert_eq!(EngineSection::default().kind, EngineKind::LlamaServer);
     assert_eq!(EngineKind::from("llama".to_string()), EngineKind::Llama);
+
+    let mut config = SetupConfig::unconfigured();
+    config.engine.kind = EngineKind::Llama;
+    let err = build_engine(&config).expect_err("kind = \"llama\" must not build");
+    assert_eq!(err, LLAMA_RETIRED);
+    assert!(err.contains("llama-server"), "{err}");
 }
 
 #[test]
@@ -74,7 +78,7 @@ fn an_unknown_engine_refuses_and_lists_what_is_available() {
         "the error must name the id the operator typed; got: {err}"
     );
     assert!(
-        err.contains("llama") && err.contains("remote"),
+        err.contains("llama-server") && err.contains("remote"),
         "the error must list the engines this binary CAN serve; got: {err}"
     );
     assert!(
@@ -94,7 +98,7 @@ fn a_builtin_name_cannot_be_re_registered() {
             unreachable!("a built-in name must never reach the registry")
         }
     }
-    for builtin in ["llama", "remote"] {
+    for builtin in ["llama", "remote", "llama-server"] {
         let err = register_engine(builtin, Arc::new(Never))
             .expect_err("registering over a built-in must be refused");
         assert!(err.contains(builtin), "got: {err}");
@@ -272,13 +276,12 @@ fn a_local_embed_model_is_the_one_source_or_a_refusal() {
     );
 }
 
-/// The whole point of the seam: an engine that is not llama.cpp
-/// builds, holds no llama handle, and needs no GGUF on disk. This is
-/// the test that would have been impossible before the factory —
-/// `load_provider` reached `EmbeddedLlamaCpp::load_full_with_families`
-/// unconditionally.
+/// The whole point of the seam: an engine that is not llama.cpp builds
+/// and needs no GGUF on disk. This is the test that would have been
+/// impossible before the factory — `load_provider` reached
+/// `EmbeddedLlamaCpp::load_full_with_families` unconditionally.
 #[test]
-fn the_remote_engine_builds_with_no_weights_and_no_llama_handle() {
+fn the_remote_engine_builds_with_no_weights() {
     let mut config = SetupConfig::unconfigured();
     config.engine = EngineSection {
         kind: EngineKind::Remote,
@@ -312,11 +315,6 @@ fn the_remote_engine_builds_with_no_weights_and_no_llama_handle() {
     });
 
     let built = build_engine(&config).expect("the remote engine needs no weights");
-    assert!(
-        built.llama.is_none(),
-        "a non-llama engine must not carry a llama handle — a host that finds one \
-         will call slot methods that cannot work"
-    );
     assert_eq!(built.embed_family, ModelFamily::Unknown);
 }
 
@@ -345,7 +343,6 @@ fn a_separate_embedding_server_is_wired_to_its_own_model() {
         server_binary: None,
     };
     let built = build_engine(&config).expect("split chat/embed builds without I/O");
-    assert!(built.llama.is_none());
     assert_eq!(
         built.provider.embed_model_id(),
         "BAAI/bge-m3",

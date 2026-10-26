@@ -37,6 +37,12 @@ pub enum KindLoader {
     /// path); `None` is a model this node has not installed, which the loader
     /// reports itself.
     Ner(fn() -> Option<Arc<dyn LabeledEntityExtractor>>),
+    /// Nothing loads the kind in this process, and why: another process
+    /// serves it (the router's preset section, for rerank).
+    Absent {
+        /// The reason, for the caller that asked for a load.
+        reason: &'static str,
+    },
 }
 
 /// Serves one request on a kind's route: the JSON body in, the JSON answer
@@ -186,15 +192,31 @@ impl ServedKind {
                 "served kind `{}` loads an entity extractor, not a provider",
                 self.role
             ))),
+            KindLoader::Absent { reason } => {
+                tracing::warn!(target: "served_kind", kind = self.role, reason, "refused: no in-process loader");
+                Err(sovereign_contracts::error::Error::Inference(format!(
+                    "served kind `{}` loads nothing in this process: {reason}",
+                    self.role
+                )))
+            }
         }
     }
 }
 
-/// The cross-encoder reranker.
+/// Why no process of ours loads the reranker: its in-process loader was the
+/// embedded engine's (`reranker_standalone`, ENGINE_SWAP_PLAN G2).
+pub const RERANK_IN_ROUTER: &str = "the reranker is the llama-server router's `[models.kinds] \
+     rerank` section (`llama_router::served_rerank`); its in-process loader went with the \
+     embedded engine";
+
+/// The cross-encoder reranker. The router loads it; this process and a
+/// compute child load nothing for it.
 pub const RERANK: ServedKind = ServedKind {
     role: RERANK_ROLE,
     env_path: Some("SOVEREIGN_RERANK_MODEL_PATH"),
-    loader: KindLoader::Provider(sovereign_inference::reranker_standalone::load_rerank),
+    loader: KindLoader::Absent {
+        reason: RERANK_IN_ROUTER,
+    },
     route: KindRoute::Served {
         path: RERANK_PATH,
         serve: serve_rerank,
@@ -202,7 +224,9 @@ pub const RERANK: ServedKind = ServedKind {
     client: KindClient::Provided {
         method: "rerank_batch",
     },
-    child: KindChild::Hosted { role: RERANK_ROLE },
+    child: KindChild::Absent {
+        reason: RERANK_IN_ROUTER,
+    },
 };
 
 fn serve_rerank(
@@ -340,9 +364,11 @@ pub fn kind_for_child_role(role: &str) -> Option<ServedKind> {
 mod tests {
     use super::*;
 
-    /// Rerank is a served kind: routed, dialled, and hostable in a child.
+    /// Rerank is a served kind: routed and dialled. The router loads it, so
+    /// no process of ours does and no child role hosts it; asking for a
+    /// load is refused with the reason, never answered with nothing.
     #[test]
-    fn rerank_is_registered_with_its_route_client_and_child_role() {
+    fn rerank_is_registered_with_its_route_and_client_and_loads_nowhere_here() {
         let kinds = served_kinds();
         let rerank = kinds
             .iter()
@@ -355,11 +381,13 @@ mod tests {
                 method: "rerank_batch"
             }
         );
-        assert_eq!(rerank.child_role(), Some("rerank"));
-        assert_eq!(
-            kind_for_child_role("rerank").map(|k| k.role),
-            Some("rerank")
-        );
+        assert_eq!(rerank.child_role(), None);
+        assert!(kind_for_child_role("rerank").is_none());
+        let refused = match rerank.load_provider(std::path::Path::new("/m/reranker.gguf")) {
+            Ok(_) => panic!("rerank must not load in this process"),
+            Err(e) => e.to_string(),
+        };
+        assert!(refused.contains("router"), "{refused}");
     }
 
     /// Every named absence names its reason.
@@ -377,6 +405,13 @@ mod tests {
                 assert!(
                     !reason.trim().is_empty(),
                     "{}: client absent with no reason",
+                    kind.role
+                );
+            }
+            if let KindLoader::Absent { reason } = kind.loader {
+                assert!(
+                    !reason.trim().is_empty(),
+                    "{}: loader absent with no reason",
                     kind.role
                 );
             }
@@ -459,30 +494,6 @@ mod tests {
         for kind in served_kinds() {
             admit(&mut admitted, kind).expect("every registered kind passes the clash check");
         }
-    }
-
-    /// The kind's loader carries the residency fit check, so a slot that
-    /// cannot fit is refused before anything allocates — in the daemon and
-    /// the compute child, not only in the CLI's `load_from_env`.
-    #[test]
-    fn the_rerank_loader_refuses_a_slot_that_does_not_fit() {
-        assert!(
-            !sovereign_inference::capacity::check_skipped_by_env(),
-            "SOVEREIGN_SKIP_VRAM_CHECK disables the check this test watches"
-        );
-        let dir = std::env::temp_dir().join(format!("pb-rerank-fit-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
-        let path = dir.join("huge-reranker.gguf");
-        // Sparse: 4 TiB on paper, no blocks on disk.
-        std::fs::File::create(&path)
-            .and_then(|f| f.set_len(4 << 40))
-            .expect("sparse file");
-        let err = match RERANK.load_provider(&path) {
-            Ok(_) => panic!("a 4 TiB reranker cannot load"),
-            Err(e) => e.to_string(),
-        };
-        let _ = std::fs::remove_dir_all(&dir);
-        assert!(err.contains("does not fit"), "got: {err}");
     }
 
     /// The config key is the kind's role; the env var, when set, wins.

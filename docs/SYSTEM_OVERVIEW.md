@@ -1154,11 +1154,12 @@ forced-choice body itself is built in one place for every subsystem,
 it through a census (`gate_call` here, RESOLVE's `decision_call` in ingest).
 A WAVE (`forced_choice::wave`, advertised `x:forced_choice_wave`, routed only
 to hosts that advertise it) carries several closed questions over one shared
-prompt as branches; the engine renders each branch as the single request it
-stands for, decodes the shared token prefix once, restores that sequence state
-before each branch and reads each distribution as a single forced choice does
-(`embedded/decide_wave.rs`), so every answer equals its single request's.
-No ingest path issues a wave since the passes reader was deleted (2026-10-16).
+prompt as branches; the embedded engine rendered each branch as the single
+request it stands for, decoded the shared token prefix once, restored that
+sequence state before each branch and read each distribution as a single forced
+choice does, so every answer equalled its single request's. It was the only host
+that advertised the feature, and it was deleted (ENGINE_SWAP_PLAN G2). No ingest
+path issues a wave since the passes reader was deleted (2026-10-16).
 
 **Retrieval** is `runtime/retrieval_pipeline.rs`, a step ledger where every
 step accounts for what it did to the pool. `apply_atlas_grounding` is a CALLER
@@ -1186,9 +1187,10 @@ from flag values.
 
 ### Inference
 
-`sovereign-inference/src/embedded/` wraps `llama-cpp` with lazy-loaded slots
-(Quick / Main / Code / Embed). Hybrid and remote providers wrap
-OpenAI-compatible servers. Full detail
+Every model runs in a supervised llama-server router
+(`sovereign_compute::llama_router`); the in-process llama.cpp engine that held
+lazy-loaded slots in this process was deleted (ENGINE_SWAP_PLAN G2). Remote
+providers wrap OpenAI-compatible servers. Full detail
 [`svrn/docs/inference.md`](../svrn/docs/inference.md).
 
 **Which engine serves this node is config, not code.**
@@ -1196,7 +1198,7 @@ OpenAI-compatible servers. Full detail
 becomes an `Arc<dyn InferenceProvider>`. The vocabulary is one layer down in
 `sovereign-contracts`, so an out-of-tree engine can name the selection without
 naming any implementation. `llama`, `remote` and `llama-server` are typed
-variants; anything else is `EngineKind::Custom(name)` resolved through
+variants (`llama` refused by name since G2); anything else is `EngineKind::Custom(name)` resolved through
 `register_engine`, and an unknown id refuses listing what IS registered rather
 than falling back. `llama-server` is the default (ENGINE_SWAP_PLAN E2): what
 `svrn setup` writes, and what an `[engine]` section with no `kind`, or no
@@ -1298,8 +1300,10 @@ preflight is llama's own question, skipped for engines holding no weights.
 The contracts are executable: `engine_conformance::{check_sync, check_serving}`.
 Cold start and hot reload both reach it through ONE serving assembly,
 `sovereign_compute::assembly` (`assemble_serving`, `ReloadFactory::build`),
-which adds admission, llama's slot installs and the compute-child layer; a
-reload re-wraps the running compute children instead of spawning new ones.
+which adds admission, the router and the compute-child layer (`kind =
+"llama"`, the generate, embed and rerank child roles and `[compute]
+distributed_primary` are refused by name since the embedded engine was
+deleted, ENGINE_SWAP_PLAN G2); a reload re-wraps the running compute children instead of spawning new ones.
 
 **The engine conformance battery measures the engine that serves.**
 `POST /internal/engine/replay`, on the operator listener beside
@@ -1307,15 +1311,16 @@ reload re-wraps the running compute children instead of spawning new ones.
 `sovereign_contracts::engine_observe` sink installed and returns the answer
 and what the engine recorded on the way. Its `probe` method is
 `InferenceProvider::probe_logprobs`: greedy steps with each step's top-k
-logprobs, on a context of the slot's own parameters (`embedded/probe.rs`).
-The default refuses, and the wrappers on the daemon's path forward it.
+logprobs, on a context of the slot's own parameters (the embedded engine's
+implementation went with it, ENGINE_SWAP_PLAN G2; the router forwards the call
+to its remote half). The default refuses, and the wrappers on the daemon's path forward it.
 `bench/lanes/engine-swap/battery.sh` drives the case bank through it per
 target, and `svrn bench engine-conformance judge` holds the records to
 `conformance.toml`. Rows whose oracle is a language rather than a record take
 their verdict from `--scenario`: `bench/lanes/engine-swap/llg-parity`, a
-standalone crate pinned to llama-server's llguidance, judges the corpus the
-engine side writes (`llg_parity_corpus_tests.rs`) and emits one verdict per
-row. Three scenarios the battery drives itself are graded from the record's
+standalone crate pinned to llama-server's llguidance, judges the committed corpus
+(`serve/crates/sovereign-inference/tests/fixtures/llg-parity/corpus.jsonl`; its
+engine-side writer went with the engine, G2) and emits one verdict per row. Three scenarios the battery drives itself are graded from the record's
 own facets (`bench/crates/sovereign-cli-bench/src/bench_cmd/engine_conformance/scenario.rs`), named by a row's
 `judge.driver`: `split-line` (the typed stream cut across two byte chunks,
 read through the shipped SSE reader), `admission` (a long held call with a
@@ -1402,13 +1407,13 @@ no matcher step until the accepted bytes close it (`ThinkWait`), so the
 reasoning is free and the answer after it is held to the schema; a block that
 never closes is warned at the sampler's drop.
 
-**Residency is a policy.** `embedded/idle_slot.rs` is the one idleness decider.
-It exists because the daemon is a MESH NODE and must stay available to peers
-while the app is closed, which makes idle-EXIT impossible and idle-UNLOAD the
-only answer to resident RAM. **The unit of residency is the FAMILY, not the
-slot**: `fast` shares its `Arc<LlamaModel>` with `fast_short` and, in alias
-mode, with `primary`, so dropping a slot frees a KV cache and leaves the
-weights — "fast unloaded" in the log is not yet "memory returned".
+**Residency was a policy of the embedded engine**, whose one idleness decider
+and idle monitors were deleted with it (ENGINE_SWAP_PLAN G2). It existed because
+the daemon is a MESH NODE and must stay available to peers while the app is
+closed, which makes idle-EXIT impossible and idle-UNLOAD the only answer to
+resident RAM. Its unit of residency was the model FAMILY, not the slot:
+`fast` shared its weights with `fast_short` and, in alias mode, with
+`primary`, so dropping a slot freed a KV cache and left the weights.
 
 **`sovereign-compute` is a process boundary, and its value is crash isolation
 plus the can't-fit-one-box case, NOT throughput.** For a model that fits one
@@ -1669,7 +1674,7 @@ Eight decision points, each with one home:
 | Hub picks a local model for a peer request | `sovereign-daemon/src/routes_inference.rs::route_with_oicp` |
 | Serving peer picks Fast-vs-Slow slot | `sovereign-serving-host/src/slot_select.rs::pick_slot_for_oicp` |
 | Synthesis tier (Fast vs Primary) | `sovereign-core/runtime/evidence.rs::resolve_synthesis_route` |
-| Distributed placement (model > one node) | `sovereign-inference/embedded/rpc_distribution.rs` (load); plan and warm cache, FFI-free, `sovereign-inference/rpc_warm_cache.rs` |
+| Distributed placement (model > one node) | the router section's `rpc` key and `-ts` split (`sovereign_compute::llama_router::placement`); the FFI-free planner `sovereign-inference/src/rpc_warm_cache.rs` stays until the mesh fabric is deleted |
 | Collaborative ingest partitioning | `sovereign-grants/knowledge_assignment.rs` |
 
 Slot policy is normative in [`svrn/docs/SLOT_POLICY.md`](../svrn/docs/SLOT_POLICY.md):

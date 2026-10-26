@@ -1,35 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-/// Without `llama_cpp` in the allowlist, the log route serve installs
-/// before loading delivers nothing and a failed load is a bare error. It
-/// must be listed at BOTH postures, and reach `debug` when the operator
-/// asks for verbose ggml output (moved with the knob from svrn's filter,
-/// pb-serve-distributes).
-#[test]
-fn serve_filter_carries_llama_cpp_target() {
-    let quiet = super::tracing_filter_for(false);
-    let verbose = super::tracing_filter_for(true);
-    assert!(
-        quiet.contains("llama_cpp=info"),
-        "llama_cpp must be allowlisted even when quiet: {quiet}"
-    );
-    assert!(
-        verbose.contains("llama_cpp=debug"),
-        "GGML_RPC_DEBUG / SOVEREIGN_LLAMA_LOGS=1 must lift llama_cpp to debug: {verbose}"
-    );
-    tracing_subscriber::EnvFilter::builder()
-        .parse(&quiet)
-        .expect("serve's default filter must parse");
-    let rendered = tracing_subscriber::EnvFilter::builder()
-        .parse(&verbose)
-        .expect("verbose serve filter must parse")
-        .to_string();
-    assert!(
-        rendered.contains("llama_cpp=debug"),
-        "llama_cpp=debug did not survive EnvFilter parsing: {rendered}"
-    );
-}
-
 use super::*;
 
 #[test]

@@ -128,8 +128,8 @@ fn load_once(
                 tracing::info!(target: "served_kind", kind = kind.role, loaded = handle.is_some(), "NER kind loaded for this process");
                 handle
             }
-            KindLoader::Provider(_) => {
-                tracing::warn!(target: "served_kind", kind = kind.role, "registered kind loads a provider, not an entity extractor");
+            KindLoader::Provider(_) | KindLoader::Absent { .. } => {
+                tracing::warn!(target: "served_kind", kind = kind.role, "registered kind loads no entity extractor");
                 None
             }
         }

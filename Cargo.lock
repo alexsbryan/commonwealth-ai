@@ -7977,12 +7977,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "memo-map"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38d1115007560874e373613744c6fba374c17688327a71c1476d1a5954cc857b"
-
-[[package]]
 name = "memoffset"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8031,17 +8025,6 @@ checksum = "f7c44f8e672c00fe5308fa235f821cb4198414e1c77935c1ab6948d3fd78550e"
 dependencies = [
  "mime",
  "unicase",
-]
-
-[[package]]
-name = "minijinja"
-version = "2.21.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb3d648e68cea56d9858d535ee28f9538404e2dd8cb08ed0bd05dca379477f39"
-dependencies = [
- "indexmap 2.14.0",
- "memo-map",
- "serde",
 ]
 
 [[package]]
@@ -12958,31 +12941,20 @@ name = "sovereign-inference"
 version = "0.8.0"
 dependencies = [
  "async-trait",
- "dirs 5.0.1",
- "encoding_rs",
  "futures",
- "libc",
  "llama-cpp-4",
  "llama-cpp-sys-4",
  "llguidance",
- "minijinja",
  "oicp-client",
  "oicp-types",
- "rayon",
- "reqwest 0.12.28",
  "serde",
  "serde_json",
- "serving-policy",
  "sovereign-contracts",
  "sovereign-time",
  "sysinfo 0.34.2",
  "tempfile",
- "thiserror 2.0.18",
  "tokio",
- "tokio-stream",
- "tokio-util",
  "tracing",
- "tracing-subscriber",
  "workspace-hack",
 ]
 
@@ -13265,7 +13237,6 @@ dependencies = [
  "sovereign-core",
  "sovereign-daemon",
  "sovereign-hosted-ingest",
- "sovereign-inference",
  "sovereign-recipe-author",
  "sovereign-serve",
  "sovereign-serving-host",

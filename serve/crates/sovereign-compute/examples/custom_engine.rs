@@ -221,10 +221,6 @@ context_size = 32768
     // ── The factory picks the engine. Same call the daemon makes. ─────
     let built = build_engine(&config)?;
     println!("built: {built:?}");
-    assert!(
-        built.llama.is_none(),
-        "a custom engine must not carry a llama handle"
-    );
 
     // From here the rest of the system sees only the trait.
     let engine: Arc<dyn InferenceProvider> = built.provider;

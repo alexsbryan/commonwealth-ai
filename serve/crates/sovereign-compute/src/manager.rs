@@ -319,7 +319,7 @@ struct ChildSpec {
 
 impl ChildSpec {
     fn for_slot(slot: &ComputeSlotConfig) -> Self {
-        let mut args = vec![
+        let args = vec![
             sovereign_contracts::launch::COMPUTE_CHILD_FLAG.to_string(),
             "--role".to_string(),
             slot.role.clone(),
@@ -330,13 +330,19 @@ impl ChildSpec {
             "--model".to_string(),
             slot.model.display().to_string(),
         ];
-        if let Some(ctx) = slot.context_size {
-            args.push("--ctx".to_string());
-            args.push(ctx.to_string());
-        }
-        if let Some(gpu) = slot.n_gpu_layers {
-            args.push("--gpu-layers".to_string());
-            args.push(gpu.to_string());
+        // `context_size` and `n_gpu_layers` sized the generate and embed
+        // engines, retired with the embedded engine (ENGINE_SWAP_PLAN G2); a
+        // served kind loads at its own size, so the keys are named, not passed.
+        if slot.context_size.is_some() || slot.n_gpu_layers.is_some() {
+            tracing::warn!(
+                target: "compute_child",
+                slot = %slot.name,
+                role = %slot.role,
+                context_size = ?slot.context_size,
+                n_gpu_layers = ?slot.n_gpu_layers,
+                "ignored: context_size and n_gpu_layers sized the retired generate and embed \
+                 roles; no child role reads them"
+            );
         }
         Self {
             name: slot.name.clone(),

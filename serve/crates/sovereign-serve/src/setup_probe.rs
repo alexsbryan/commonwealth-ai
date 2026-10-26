@@ -36,11 +36,6 @@ const QUESTIONS: &[Question] = &[
 
 /// The probe's entry, routed by [`crate::child_launch`].
 pub(crate) fn run(args: &[String]) -> i32 {
-    // ggml logs go through `tracing` before detection touches a backend
-    // device: without it, Metal's library-compile lines land in the middle of
-    // an onboarding screen (the reason setup installed this before the probe
-    // moved here).
-    let _ = sovereign_inference::llama_logs::LlamaLogs::from_env().install_global();
     let (question, rest) = match args.split_first() {
         Some((q, rest)) => (q.as_str(), rest),
         None => ("", args),

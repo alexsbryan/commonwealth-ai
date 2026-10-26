@@ -38,7 +38,6 @@ pub mod compute_roles;
 pub mod containment;
 pub mod discovery_policy;
 pub mod distributed_discovery;
-pub mod distributed_respawn;
 pub mod distributed_role;
 pub mod distributed_warm;
 pub mod distribution;
