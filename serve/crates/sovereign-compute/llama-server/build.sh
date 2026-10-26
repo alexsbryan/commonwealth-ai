@@ -151,7 +151,18 @@ case $backend in
   vulkan) flags="-DGGML_VULKAN=ON" ;;
   metal) flags="-DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON $mac -DGGML_CPU_ARM_ARCH=armv8-a" ;;
   cpu) flags="-DGGML_METAL=OFF $mac -DGGML_SSE42=ON -DGGML_AVX=OFF -DGGML_AVX2=OFF -DGGML_AVX_VNNI=OFF
-    -DGGML_FMA=OFF -DGGML_F16C=OFF -DGGML_BMI2=OFF -DGGML_AVX512=OFF" ;;
+    -DGGML_FMA=OFF -DGGML_F16C=OFF -DGGML_BMI2=OFF -DGGML_AVX512=OFF"
+    # The x86_64 leg cross-built on an arm64 Mac (release-cli-local.sh), which
+    # needs Rosetta for the build's own x86_64 tools. The nested llguidance
+    # cargo builds for its host into target/release, where CMake reads it, so
+    # it runs as the x86_64 toolchain. Homebrew's OpenSSL and the SDK's librdma
+    # (ggml-rpc's RDMA-over-Thunderbolt) are arm64 only, so HTTPS and RDMA go:
+    # the daemon hands the server local model paths and RPC runs over TCP.
+    if [ "$(uname -s)/$(uname -m)" = Darwin/arm64 ]; then
+      export RUSTUP_TOOLCHAIN=stable-x86_64-apple-darwin
+      flags="$flags -DCMAKE_OSX_ARCHITECTURES=x86_64 -DLLAMA_OPENSSL=OFF -DGGML_RPC_RDMA=OFF"
+      echo "build.sh: cross-building x86_64 on arm64: llguidance with $RUSTUP_TOOLCHAIN, OpenSSL and RPC RDMA off" >&2
+    fi ;;
   # No PIE, as serve/container/Containerfile links the daemon: ggml-hip's
   # static archive carries R_X86_64_32 relocations a PIE link rejects.
   rocm) flags="-DGGML_HIP=ON -DGGML_NATIVE=OFF -DCMAKE_EXE_LINKER_FLAGS=-no-pie${GPU_TARGETS:+ -DGPU_TARGETS=$GPU_TARGETS}" ;;
