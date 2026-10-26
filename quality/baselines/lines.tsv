@@ -76,7 +76,7 @@
 74	distributions/crates/sovereign-onprem
 302	distributions/crates/sovereign-onprem::tests
 142	distributions/crates/sovereign-stock
-7649	distributions/crates/sovereign-stock::tests
+7722	distributions/crates/sovereign-stock::tests
 89491	ingest/crates/corpus-engine
 52144	ingest/crates/corpus-engine::tests
 723	ingest/crates/sovereign-authoring-harness
