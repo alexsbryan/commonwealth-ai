@@ -28,7 +28,8 @@ use crate::llama::{LlamaContextExt, LlamaModelExt};
 
 use sovereign_contracts::error::Error;
 use sovereign_contracts::model_family::{
-    EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
+    quirks_repeat_penalties, EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks,
+    ThinkingControl,
 };
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::*;
@@ -323,29 +324,6 @@ impl ConstrainedSampler {
             .map(|id| LlamaToken(id as i32))
             .collect()
     }
-}
-
-/// The repeat-penalty stage's two knobs for a family's quirks.
-///
-/// ONE decider (ARCH 8): this is the arithmetic both engines use, the
-/// embedded sampler below and `llama_router::provider::slot_penalties`.
-/// The router used to re-derive it from `ModelFamily::default_quirks()`
-/// on its own, which is how the two engines came to sample the same
-/// 2810-token prompt differently (2026-10-25).
-///
-/// C1 measured whether the quirks tuple earns its place. It does, but
-/// only these two parameters moved: on `llama-server` and GGUF defaults
-/// the router failed chat-ask q1 ("both halves answered") 0 of 3 runs in
-/// all three checks that ran it; with repeat 1.15 and frequency 0.1 sent
-/// it passed 19 of 19. Nothing else in the tuple is sent to the router
-/// and E1 passed without it (decode is greedy, and the temperature and
-/// top-* fields are the request's or llama.cpp's). So the tuple stays
-/// exactly here, as two numbers, and no third reader sends the rest.
-pub fn quirks_repeat_penalties(quirks: &ModelQuirks) -> (f32, f32) {
-    (
-        quirks.default_repetition_penalty,
-        quirks.default_frequency_penalty,
-    )
 }
 
 /// Resolved sampling parameters for a single role. Picked from

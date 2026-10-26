@@ -160,9 +160,11 @@ impl RouterProvider {
 
 /// A daemon call with the penalties the embedded engine samples it with.
 ///
-/// The arithmetic is not this function's: the embedded quirks sampler
-/// answers it (`embedded::sampler::quirks_repeat_penalties`), and asking
-/// it is what keeps the two engines on one decider instead of two — the
+/// The arithmetic is not this function's: the pairing function beside
+/// `ModelQuirks` answers it
+/// (`sovereign_contracts::model_family::quirks_repeat_penalties`, which
+/// the embedded quirks sampler also calls), and asking it is what keeps
+/// the two engines on one decider instead of two — the
 /// drift between them was the whole of the 2026-10-25 finding. So is the
 /// "which requests are sampled from the quirks at all" question: the
 /// embedded engine samples a conversation with no `sampling_mode` as
@@ -187,7 +189,7 @@ fn slot_penalties<'a>(
         false => sovereign_inference::engine_factory::CHAT_SLOT_FAMILY,
     };
     let quirks = family.default_quirks();
-    let (repeat, frequency) = sovereign_inference::embedded::quirks_repeat_penalties(&quirks);
+    let (repeat, frequency) = sovereign_contracts::model_family::quirks_repeat_penalties(&quirks);
     let mut penalised = request.clone();
     penalised.repeat_penalty = penalised.repeat_penalty.or(Some(repeat));
     penalised.frequency_penalty = penalised.frequency_penalty.or(Some(frequency));
@@ -581,7 +583,7 @@ mod tests {
             "the embedded primary's measured pair, which C1 found the defaults do not hold without"
         );
         assert_eq!(
-            sovereign_inference::embedded::quirks_repeat_penalties(&chat),
+            sovereign_contracts::model_family::quirks_repeat_penalties(&chat),
             (1.15, 0.1),
             "the router and the embedded sampler must read one decider"
         );

@@ -4121,9 +4121,9 @@ Without them the router failed chat-ask q1 ("both halves answered") 0 of 3
 runs in all three quality checks that ran it; with them it passed 19 of 19.
 Nothing else in the tuple is sent and E1's performance bar passed without it,
 so the tuple is not a policy the router carries: it is
-`sampler::quirks_repeat_penalties`, one pairing function the embedded sampler
-(`sampler.rs`, its penalties stage) and `llama_router::provider::slot_penalties`
-both call, and the rest of `ModelQuirks`'s sampling fields reach no server
+`sovereign_contracts::model_family::quirks_repeat_penalties`, one pairing
+function beside `ModelQuirks` that the embedded sampler (`sampler.rs`, its
+penalties stage) and `llama_router::provider::slot_penalties` both call, and the rest of `ModelQuirks`'s sampling fields reach no server
 request. Which requests are sampled this way at all is likewise one decider,
 `sovereign_contracts::types::is_server_default_shape`: an OpenAI conversation
 with no explicit `sampling_mode` is llama-server's own to sample (llama.cpp's
