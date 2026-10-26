@@ -116,7 +116,7 @@ preflight() {
   # memory, so the estimate stays on the cautious side.
   free_g=$(free -g | awk '/^Mem:/ {print $7}')
   resident_g=0
-  if pid=$(pgrep -x sovereign-stock); then
+  if pid=$(resident_pid) && [ -n "$pid" ]; then
     resident_g=$(awk '/^VmRSS:/ {print int($2 / 1048576)}' "/proc/$pid/status")
   fi
   [ $((free_g + resident_g)) -ge 60 ] \
@@ -149,19 +149,28 @@ print(", ".join(busy))')
 
 # ── the resident daemon, restarted per target ──────────────────────────────
 
+# The resident is the sovereign-stock listening on :9741, not every process
+# of that name: a hand-started `sovereign-stock run` in a terminal shares it
+# (2026-10-25, a four-day-old one), and counting it broke the memory check
+# and would have held daemon_down to its 90s limit.
+resident_pid() {
+  ss -ltnpH 'sport = :9741' | sed -n 's/.*"sovereign-stock",pid=\([0-9]*\).*/\1/p' | head -1
+}
+
 daemon_down() {
+  rp=$(resident_pid)
   tb sovereign daemon stop >/dev/null 2>&1 || true
   # /health goes quiet before the process exits (its stop runs ~45s), so a
   # bare /health wait let the next target's daemon start beside the old one.
-  i=0; while curl -sf -m 2 localhost:9741/health >/dev/null || pgrep -x sovereign-stock >/dev/null; do
-    i=$((i + 1)); [ $i -lt 90 ] || die "daemon still alive after 90s: pids $(pgrep -x sovereign-stock | tr '\n' ' ')"; sleep 1
+  i=0; while curl -sf -m 2 localhost:9741/health >/dev/null || { [ -n "$rp" ] && kill -0 "$rp" 2>/dev/null; }; do
+    i=$((i + 1)); [ $i -lt 90 ] || die "daemon still alive after 90s: pid $rp"; sleep 1
   done
 }
 
 daemon_up() {
   tb sovereign daemon start >"$out/daemon-start-$1.log" 2>&1 || true
   curl -sf -m 5 localhost:9741/health >/dev/null || die "daemon not up, see $out/daemon-start-$1.log"
-  pid=$(pgrep -x sovereign-stock)
+  pid=$(resident_pid)
   say "daemon up for $1, pid $pid, exe $(readlink -f /proc/$pid/exe)"
 }
 
