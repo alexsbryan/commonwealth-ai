@@ -141,11 +141,6 @@ command = "agent-bench"
 [[probe]]
 tier = 1
 domain = "FE"
-command = "mesh bench"
-
-[[probe]]
-tier = 1
-domain = "FE"
 command = "mesh fetch-model"
 
 [[probe]]
@@ -167,11 +162,6 @@ command = "mesh rotate"
 tier = 1
 domain = "FE"
 command = "mesh switch"
-
-[[probe]]
-tier = 1
-domain = "FE"
-command = "mesh warm-cache"
 
 [[probe]]
 tier = 1

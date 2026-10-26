@@ -1695,9 +1695,7 @@ check it reproduces its own verdict. The Tier-1 simulator is
 `sovereign-mesh-test-harness`'s `mesh_sim` module behind the `dst` feature.
 Findings are in `svrn/docs/specs/SCHEDULER_QUALITY.md`; **the standing one is F10 —
 the scheduler has no speed signal in production**, so `throughput_factor` is
-neutral 1.0 for every peer, and `svrn mesh bench` deliberately does NOT write
-to `NodeCapabilities.benchmark` (`gossip_never_advertises_a_benchmark` fails
-the build if it is populated).
+neutral 1.0 for every peer.
 
 **Byte-mass-aware split (`plan_shards_weighted`).** Each device gets a
 CONTIGUOUS block range whose *bytes*, not block *count*, are proportional to
@@ -1705,17 +1703,17 @@ its VRAM. The big open-weight models are MoE and MoE mass is deeply
 non-uniform — routed experts are ~88–93% of the bytes but cold, and a hybrid
 SSM+MoE stack alternates a ~20 MB block with a ~1.3 GB one, a measured 62×
 per-block spread — so count-proportional apportionment hands a small node a
-heavy run and OOMs it. One function serves both the live load and
-`svrn mesh plan`'s preview, so they cannot diverge. Per-device fit is
+heavy run and OOMs it. Per-device fit is
 `shard_fits(plan, capacities, mass, headroom)`, where **`None` means
 cannot-judge and is not a pass**: an unread tensor table would otherwise clear
 every device on the strength of zeros.
 
-`svrn mesh bench` measures the configuration that is loaded and never loads
-the one it wants to measure — there is no slot argument, so there is no slot
-to get wrong. A record carries the pre-image of its own key (`witness`) and
-the conditions it met (`conditions`), travels on the ring rail rather than the
-gossip KV store, and refuses to travel when invalid. Origin comes from the
+`svrn mesh plan`, `bench` and `warm-cache` were deleted with the fabric
+(es-g4-delete-mesh-fabric-verbs). The placement measurements a node already
+holds (`~/.svrnmesh/mesh-measurements.json`) stay on the ring rail through
+serve's reconcile (`measurements_rail::reconcile_loop`). A record carries the
+pre-image of its own key (`witness`) and the conditions it met
+(`conditions`), and refuses to travel when invalid. Origin comes from the
 SIGNATURE, never the payload.
 
 Known gap: `commonwealth-inference/orchestrator/` was deleted as dead code,

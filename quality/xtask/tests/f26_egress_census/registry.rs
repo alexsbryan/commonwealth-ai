@@ -460,9 +460,6 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // 7 -> 6 (pb-serve-placement): `mesh plan`'s live-mesh read moved to
     // sovereign-serve/src/mesh_plan.rs.
     ("cmnwlth/crates/sovereign-cli-mesh/src/mesh_cmd.rs", Class::Mesh, 6),
-    // `mesh plan`'s read of the local daemon's `/v1/mesh/status`
-    // (pb-serve-placement, from mesh_cmd.rs). Loopback to our own daemon.
-    ("serve/crates/sovereign-serve/src/mesh_plan.rs", Class::LocalDaemon, 1),
     // NEW 2026-08-28: `svrn mesh forget-member`, the repair for an
     // endpoint-key collision, posts to the running daemon's
     // /v1/mesh/forget-member. Class Mesh — 127.0.0.1 loopback to our own
@@ -561,10 +558,6 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // building its own client and asks `ServingHost` instead.
     ("svrn/crates/sovereign-cli-llm/src/search_gym_cmd/mod.rs", Class::LocalDaemon, 2),
     ("svrn/crates/sovereign-cli-llm/src/recipe_agent_live_trial.rs", Class::LocalDaemon, 3),
-    // `mesh bench` and remote_gguf moved to serve whole (pb-serve-placement);
-    // the sites travelled with the files.
-    ("serve/crates/sovereign-serve/src/mesh_bench/shell.rs", Class::Mesh, 3),
-    ("serve/crates/sovereign-serve/src/remote_gguf.rs", Class::InboundOnly, 2),
     ("svrn/crates/sovereign-cli-llm/src/corpus_watch_cmd.rs", Class::LocalDaemon, 2),
     // probe_or_bail and resolve_model_ids moved with build_inference to
     // oicp-client (pb-cli-llm-bench-move); the two sites travelled with them.
