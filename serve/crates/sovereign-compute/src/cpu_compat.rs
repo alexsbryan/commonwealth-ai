@@ -21,14 +21,14 @@
 //! ## What it does
 //!
 //! Rather than load such a model and crash, we detect the architecture from the
-//! GGUF header ([`crate::gguf_meta`]) *before* loading and, on a CPU machine,
+//! GGUF header ([`sovereign_contracts::gguf_meta`]) *before* loading and, on a CPU machine,
 //! substitute a **dense** model discovered alongside it — or, if none exists,
 //! report that cleanly so the app can explain it instead of dying. A crash on
 //! "someone tried a cool model their machine can't run" must never be silent.
 
 use std::path::{Path, PathBuf};
 
-use crate::gguf_meta;
+use sovereign_contracts::gguf_meta;
 
 /// Architecture markers whose CPU prefill path is known (or strongly expected)
 /// to hit the recurrent-`SET` OOB crash. Substring match, lowercased.

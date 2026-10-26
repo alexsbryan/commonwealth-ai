@@ -730,8 +730,8 @@ id = "IN-17"
 family = "IN"
 status = "exists-untagged"
 clause = '''Where a model architecture is known to fault on a given compute backend, the system MUST detect this **before loading weights** — from model metadata alone — and MUST substitute a safe alternative discovered alongside it, surfacing a non-fatal notice. Where no safe alternative exists, start-up MUST fail with a clear in-application message rather than a native crash.'''
-target = '''serve/crates/sovereign-inference/src/cpu_compat.rs:125::choose_cpu_safe_chat_model'''
-existing = '''serve/crates/sovereign-inference/src/cpu_compat.rs:265::substitutes_largest_dense_when_unsafe_on_cpu'''
+target = '''serve/crates/sovereign-compute/src/cpu_compat.rs:125::choose_cpu_safe_chat_model'''
+existing = '''serve/crates/sovereign-compute/src/cpu_compat.rs:265::substitutes_largest_dense_when_unsafe_on_cpu'''
 
 [[spec]]
 id = "IN-2"

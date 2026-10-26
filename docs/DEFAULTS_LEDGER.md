@@ -548,7 +548,7 @@ already shared crates, so neither implementation moves — only its caller, into
 `sovereign-cli-daemon`'s slot build beside the `force_cpu_chat()` reads that
 are already there (`sovereign-inference/src/embedded/model_slot.rs:1564,2326`):
 
-* `sovereign_inference::cpu_compat::{choose_cpu_safe_chat_model,
+* `sovereign_compute::cpu_compat::{choose_cpu_safe_chat_model,
   is_cpu_incompatible_arch}` — the arch gate.
 * `sovereign_inference::smoketest::{run_from_argv, SMOKETEST_FLAG}` — the
   probe's whole implementation, which has always lived in the shared crate.

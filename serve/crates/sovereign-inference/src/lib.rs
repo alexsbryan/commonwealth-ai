@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pub mod cpu_compat;
 pub mod engine_capture;
 pub use sovereign_contracts::gguf_meta;
 pub use sovereign_contracts::gguf_validator;

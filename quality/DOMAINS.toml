@@ -13579,7 +13579,7 @@ lines = 747
 note = ""
 
 [[module]]
-path = "serve/crates/sovereign-inference/src/cpu_compat.rs"
+path = "serve/crates/sovereign-compute/src/cpu_compat.rs"
 context = "unknown"
 lines = 302
 note = ""

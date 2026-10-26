@@ -7249,7 +7249,7 @@ work pins the GPU while the user is chatting. Components:
   `build_daemon_provider` derive a model id the daemon never loaded, under a
   `model-notice` banner claiming a substitution that had not happened (ARCH
   principle 6). It was already wrong in attach mode before svt-3 made attach
-  universal. `sovereign_inference::cpu_compat` is shared, so the DECIDER does
+  universal. `sovereign_compute::cpu_compat` is shared, so the DECIDER does
   not move — only its caller, to the daemon's slot build, which has no such
   guard today (`grep choose_cpu_safe_chat_model svrn/crates/sovereign-cli-daemon`
   → zero hits). Until it lands the guard has no owner:

@@ -489,7 +489,7 @@ pub async fn bootstrap_with_progress(
     // telling the user a swap had happened that had not (ARCH principle 6).
     //
     // Deciding which weights are safe to load is the job of whoever loads
-    // them. `sovereign_inference::cpu_compat` is already a shared crate, so
+    // them. `sovereign_compute::cpu_compat` is already a shared crate, so
     // the decider does not move — only its caller does, to the daemon's slot
     // build. Until it lands the guard has NO owner: `docs/DEFAULTS_LEDGER.md`
     // carries the row, with the flip condition and a review-by.
