@@ -2137,7 +2137,7 @@ impl EmbeddedLlamaCpp {
         if let Ok(guard) = self.rerank_slot.try_lock() {
             if let Some((model_id, _)) = guard.as_ref() {
                 out.push(ResidentSlot {
-                    role: crate::served_kind::RERANK.role.to_string(),
+                    role: sovereign_contracts::rerank_kind::RERANK_ROLE.to_string(),
                     model_id: model_id.clone(),
                     resident: true,
                     size_bytes: None,

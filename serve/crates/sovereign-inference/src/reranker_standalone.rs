@@ -54,7 +54,7 @@ pub struct StandaloneReranker {
     slot: Arc<RerankSlot>,
 }
 
-/// What [`load_from_env`] decided about the rerank slot.
+/// What [`load_fitted`] decided about the rerank slot.
 ///
 /// Four arms rather than an `Option`, because the three ways to end up without
 /// a reranker are not the same fact and a caller has different things to say
@@ -91,38 +91,6 @@ impl RerankLoad {
     }
 }
 
-/// Load the reranker named by `SOVEREIGN_RERANK_MODEL_PATH`, if any — and
-/// refuse it up front when it does not fit.
-///
-/// **One loader for every shipping surface.** The CLI, the desktop and the hub
-/// server all reach the reranker through here (ARCH §10.6).
-///
-/// That sentence was in this doc comment before 2026-08-25 and was FALSE: the
-/// CLI never called this function. It carried its own load path in
-/// `chat_cmd/bootstrap.rs` — and that path had the capacity pre-flight this
-/// one did not, so of the three shipping surfaces exactly one honoured note
-/// `b57b0cd5`, the 64 GB SIGTERM incident whose whole lesson is that a slot
-/// which does not fit must be refused UP FRONT rather than discovered by the
-/// OOM killer mid-turn. A comment asserting a mirror that is not one is
-/// ARCH §7.2's smell, and this is what it cost: the desktop and the hub could
-/// each load a rerank slot alongside a resident primary with nothing checking
-/// whether the two fit together.
-///
-/// The pre-flight is now HERE, so all three inherit it from one place.
-/// `SOVEREIGN_SKIP_VRAM_CHECK` still overrides it — loudly, as before.
-///
-/// Soft-fail by contract: none of the three absences may block startup —
-/// retrieval simply runs the baseline fusion path. Each is logged and each is
-/// a distinct arm of [`RerankLoad`], so a caller with a banner can say which
-/// one happened.
-pub fn load_from_env() -> RerankLoad {
-    // The kind's one path decider; no `[models]` here, so the env var alone.
-    let Some(path) = crate::served_kind::RERANK.model_path(None) else {
-        return RerankLoad::NotConfigured;
-    };
-    load_fitted(&path)
-}
-
 /// The rerank kind's loader (`served_kind::RERANK`): the one in-process
 /// rerank load, fit check first ([`load_fitted`]). A refusal and a failed
 /// load are both an `Err` naming which one it was. It lives with the engine,
@@ -142,9 +110,9 @@ pub fn load_rerank(path: &Path) -> sovereign_contracts::error::Result<Arc<dyn In
 }
 
 /// Load the reranker at `path`, refused up front when it does not fit. The
-/// one in-process rerank load: [`load_from_env`] and the rerank kind's loader
-/// (`served_kind::RERANK`, which the serving assembly and the compute child
-/// call) both land here, so each carries the fit check.
+/// one in-process rerank load: the rerank kind's loader ([`load_rerank`],
+/// which the serving assembly and the compute child call) lands here, so each
+/// carries the fit check.
 pub fn load_fitted(path: &Path) -> RerankLoad {
     let path = path.to_path_buf();
     // NATIVE_GROUNDING.md §8 residency plan — the fit check BEFORE the slot
