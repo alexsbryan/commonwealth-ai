@@ -411,7 +411,7 @@ pub async fn assemble(
     }
     // The model-free engine, selectable by `[engine] kind = "mock"` and by
     // nothing else (the registry refuses an unknown id, never substitutes).
-    if let Err(e) = sovereign_inference::engine_factory::register_engine(
+    if let Err(e) = sovereign_compute::engine_factory::register_engine(
         sovereign_compute::mock::MOCK_ENGINE,
         Arc::new(sovereign_compute::mock::MockEngine),
     ) {

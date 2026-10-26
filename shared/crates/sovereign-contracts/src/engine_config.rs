@@ -10,8 +10,8 @@
 //! out-of-tree engine implementation lifts: it names an engine without
 //! naming any engine's implementation. The factory that turns an
 //! [`EngineKind`] into a running provider is
-//! `sovereign_inference::engine_factory`, one layer up, because it has
-//! to name `EmbeddedLlamaCpp` and this must not.
+//! `sovereign_compute::engine_factory`, layers up, because it has to
+//! name `EmbeddedLlamaCpp` and this must not.
 
 use serde::{Deserialize, Serialize};
 
@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 /// The engines that ship in-tree are a closed set and get typed
 /// variants; an engine built OUT of tree cannot be, so it is named as
 /// [`EngineKind::Custom`] and resolved through
-/// `sovereign_inference::engine_factory::register_engine` (ARCH §2, §4 —
+/// `sovereign_compute::engine_factory::register_engine` (ARCH §2, §4 —
 /// closed sets are enums, open sets are registries).
 ///
 /// Lives here rather than beside the factory because this is config
@@ -335,7 +335,7 @@ impl EngineSection {
     /// a vendor names no `[models]`, so that one GGUF has no preset to be a
     /// section of. The server route is `embed_endpoint`, which hosts nothing
     /// here; the pair's own route is `hosted_router_section` (sovereign
-    /// inference's `engine_factory`), which moves `kind = "remote"` +
+    /// compute's `engine_factory`), which moves `kind = "remote"` +
     /// `embed_path` onto a one-section router.
     ///
     /// One implementation, read by both the startup class check

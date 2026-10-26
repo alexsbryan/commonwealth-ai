@@ -40,15 +40,15 @@ use futures::Stream;
 // stays available for `EngineBuilder::build`, which reports a plain
 // operator-facing `String`.
 use sovereign_compute::engine_conformance::{check_serving, check_sync};
+use sovereign_compute::engine_factory::{
+    available_engines, build_engine, register_engine, BuiltEngine, EngineBuilder,
+};
 use sovereign_contracts::error::Result as SovResult;
 use sovereign_contracts::setup_config::{EngineSection, SetupConfig};
 use sovereign_contracts::traits::InferenceProvider;
 use sovereign_contracts::types::{
     CompletionRequest, CompletionResponse, Depth, FinishReason, ProviderCapabilities, Speed,
     StreamFrame,
-};
-use sovereign_inference::engine_factory::{
-    available_engines, build_engine, register_engine, BuiltEngine, EngineBuilder,
 };
 
 /// The name the operator writes in `config.toml`.

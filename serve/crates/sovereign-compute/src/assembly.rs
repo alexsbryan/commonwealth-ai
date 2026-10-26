@@ -4,7 +4,7 @@
 //!
 //! It owns everything between "this node holds weights" and "here is the
 //! provider": admission ([`crate::containment`], fast ≠ primary), the engine
-//! choice (`sovereign_inference::engine_factory::build_engine`, the registry),
+//! choice (`crate::engine_factory::build_engine`, the registry),
 //! llama's own slot installs and idle monitors, and the compute-child layer.
 //! A terminal never reaches it; its forwarder is the daemon's.
 
@@ -12,13 +12,13 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 
+use crate::engine_factory;
 use crate::served_kind;
 use sovereign_contracts::model_family::ModelFamily;
 use sovereign_contracts::setup_config::{EngineKind, EngineSection, ModelsSection, SetupConfig};
 use sovereign_contracts::types::NextEditFormat;
 use sovereign_contracts::InferenceProvider;
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
-use sovereign_inference::engine_factory;
 
 use crate::llama_router::live::LiveRouter;
 use crate::llama_router::placement::RouterPlacement;
@@ -614,7 +614,7 @@ fn build_in_process(
     String,
 > {
     // WHICH engine — the one decision, made in one place
-    // (`sovereign_inference::engine_factory`). Default `[engine] kind` is
+    // (`crate::engine_factory`). Default `[engine] kind` is
     // `llama`, so a config.toml that names no engine builds exactly what
     // this function used to build unconditionally.
     let built = engine_factory::build_engine(config).map_err(|e| {
@@ -878,7 +878,7 @@ pub(crate) fn assemble_child_generate(
 pub(crate) fn assemble_child_embed(
     path: &Path,
 ) -> sovereign_contracts::Result<Arc<dyn InferenceProvider>> {
-    let family = sovereign_inference::engine_factory::embed_family_for(path);
+    let family = crate::engine_factory::embed_family_for(path);
     let engine = sovereign_inference::embedded::EmbedOnlyProvider::load(path, family)?;
     Ok(Arc::new(engine))
 }

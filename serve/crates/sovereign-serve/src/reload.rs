@@ -111,7 +111,7 @@ mod tests {
         String,
         tempfile::TempDir,
     ) {
-        let _ = sovereign_inference::engine_factory::register_engine(
+        let _ = sovereign_compute::engine_factory::register_engine(
             MOCK_ENGINE,
             Arc::new(sovereign_compute::mock::MockEngine),
         );

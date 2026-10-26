@@ -44,6 +44,7 @@ pub mod distributed_warm;
 pub mod distribution;
 /// The contracts an engine must satisfy, as runnable checks.
 pub mod engine_conformance;
+pub mod engine_factory;
 pub mod llama_router;
 pub mod manager;
 pub mod mock;

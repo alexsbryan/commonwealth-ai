@@ -764,28 +764,6 @@ fn rand_seed() -> u32 {
 mod tests {
     use super::*;
 
-    /// C1: the sampler policy is two numbers, and these are the numbers
-    /// the measurement moved. The check's arms were the embedded engine's
-    /// primary (repeat 1.15, frequency 0.1, `ModelFamily::Unknown`) against
-    /// llama-server's defaults, and the router failed chat-ask q1 with no
-    /// penalties sent and passed 19 of 19 with them. Asserting the literal
-    /// pair, not only the field names, means a change to the family's
-    /// defaults has to be a deliberate re-opening of that question.
-    #[test]
-    fn the_sampler_policy_is_the_pair_the_measurement_moved() {
-        let chat = crate::engine_factory::CHAT_SLOT_FAMILY.default_quirks();
-        assert_eq!(quirks_repeat_penalties(&chat), (1.15, 0.1));
-        let code = crate::engine_factory::CODE_SLOT_FAMILY.default_quirks();
-        assert_eq!(
-            quirks_repeat_penalties(&code),
-            (
-                code.default_repetition_penalty,
-                code.default_frequency_penalty
-            ),
-            "the code slot reads the same pairing function, whatever its family publishes"
-        );
-    }
-
     /// One decider for "llama-server's own defaults sample this request".
     /// The router must pass exactly the requests this sampler hands to
     /// `ServerSampling`; a second spelling of the predicate is how the two

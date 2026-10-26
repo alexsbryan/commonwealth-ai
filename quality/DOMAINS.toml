@@ -11179,6 +11179,12 @@ lines = 422
 note = ""
 
 [[module]]
+path = "serve/crates/sovereign-compute/src/engine_factory.rs"
+context = "unknown"
+lines = 557
+note = ""
+
+[[module]]
 path = "serve/crates/sovereign-compute/src/distributed_discovery.rs"
 context = "serving"
 lines = 464
@@ -13738,12 +13744,6 @@ note = ""
 path = "serve/crates/sovereign-inference/src/embedded/sampler.rs"
 context = "unknown"
 lines = 601
-note = ""
-
-[[module]]
-path = "serve/crates/sovereign-inference/src/engine_factory.rs"
-context = "unknown"
-lines = 557
 note = ""
 
 [[module]]

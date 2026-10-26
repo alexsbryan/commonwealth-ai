@@ -4,7 +4,6 @@ pub mod cpu_compat;
 pub mod embedded;
 pub mod engine_capture;
 /// Which inference engine serves this node — selection + construction.
-pub mod engine_factory;
 pub mod evidence_id_constraint;
 pub mod fim;
 pub use sovereign_contracts::gguf_meta;

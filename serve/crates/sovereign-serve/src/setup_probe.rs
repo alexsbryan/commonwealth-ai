@@ -214,7 +214,7 @@ fn placement(args: &[String]) -> i32 {
     };
     match sovereign_contracts::setup_config::SetupConfig::load_from(Path::new(config)) {
         Ok(cfg) => answer(&PrimaryPlacement {
-            child_owns_primary: sovereign_inference::engine_factory::child_owns_primary(&cfg),
+            child_owns_primary: sovereign_compute::engine_factory::child_owns_primary(&cfg),
         }),
         Err(e) => refuse(e),
     }

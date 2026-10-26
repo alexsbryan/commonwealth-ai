@@ -3921,8 +3921,10 @@ adapters, cutoff legibility, conversation-history compaction — in
 
 **Which engine serves this node — `[engine]` (2026-08-30).** llama.cpp is the
 default engine, not the only one, and the choice is config rather than code.
-`sovereign_inference::engine_factory::build_engine(&SetupConfig)` is the ONE
-place that turns `[engine] kind` into an `Arc<dyn InferenceProvider>`; before
+`sovereign_compute::engine_factory::build_engine(&SetupConfig)` is the ONE
+place that turns `[engine] kind` into an `Arc<dyn InferenceProvider>` (it moved
+from `sovereign-inference` in ENGINE_SWAP_PLAN G1, beside the serving assembly
+that calls it); before
 it, five construction sites named `EmbeddedLlamaCpp` literally and `SetupConfig`
 had no key that could say otherwise.
 

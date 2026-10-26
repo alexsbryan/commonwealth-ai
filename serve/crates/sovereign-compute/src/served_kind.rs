@@ -2,7 +2,7 @@
 //! Served model kinds — what a model that is not a chat or embed slot needs
 //! from a serving process, declared once.
 //!
-//! [`sovereign_inference::engine_factory::register_engine`] answers "which engine?". This
+//! [`crate::engine_factory::register_engine`] answers "which engine?". This
 //! answers "which extra kinds of model does that engine serve, and how is each
 //! reached?". A kind registers five things together: its role (the
 //! `[models.kinds]` key and the name it is logged under), its loader, its

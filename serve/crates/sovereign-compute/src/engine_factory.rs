@@ -30,11 +30,12 @@
 //! than falling back to a default (ARCH §18.3 — never silently
 //! substitute).
 //!
-//! **Home.** This crate, because it is the only one that can already name
-//! both engines: `EmbeddedLlamaCpp` is its own, and `oicp-client` has been
-//! a dependency since the `remote.rs` extraction (re-exported at
-//! `crate::remote`). Zero new dependency edges, no change to
-//! `quality/ARCH_LAYERS.toml`.
+//! **Home.** `sovereign-compute`, which owns the serving assembly that
+//! calls it (ENGINE_SWAP_PLAN G1). It sat in `sovereign-inference` beside
+//! the in-process engine until then; from here it names that engine
+//! (`build_llama`, [`BuiltEngine::llama`]) through compute's existing
+//! dependency on inference until G2 deletes both, and the remote engine
+//! through `oicp-client`. No new dependency edge.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock, RwLock};
@@ -44,7 +45,7 @@ use sovereign_contracts::model_family::ModelFamily;
 use sovereign_contracts::setup_config::{EmbedInputs, EngineSection, SetupConfig};
 use sovereign_contracts::traits::InferenceProvider;
 
-use crate::embedded::{EmbeddedLlamaCpp, SlotWindows};
+use sovereign_inference::embedded::{EmbeddedLlamaCpp, SlotWindows};
 
 /// Re-exported so a host or an out-of-tree engine can name the selection
 /// type without also depending on `sovereign-contracts` directly. The
@@ -226,7 +227,7 @@ pub fn build_engine(config: &SetupConfig) -> Result<BuiltEngine, String> {
                 return Err(format!(
                     "[engine] kind = \"{name}\" is not a known engine. This binary can serve: \
                      {}. An out-of-tree engine must call \
-                     `sovereign_inference::engine_factory::register_engine` before the \
+                     `sovereign_compute::engine_factory::register_engine` before the \
                      provider is built.",
                     available_engines().join(", ")
                 ));
@@ -235,7 +236,7 @@ pub fn build_engine(config: &SetupConfig) -> Result<BuiltEngine, String> {
         }
     }?;
     Ok(BuiltEngine {
-        provider: crate::engine_capture::wrap_if_requested(
+        provider: sovereign_inference::engine_capture::wrap_if_requested(
             built.provider,
             config.engine.capture.as_deref(),
         ),
@@ -392,7 +393,7 @@ fn unhostable_embed_path(section: &EngineSection) -> Option<String> {
 }
 
 fn build_remote(section: &EngineSection) -> Result<BuiltEngine, String> {
-    use crate::remote::EngineEmbed;
+    use oicp_client::EngineEmbed;
     let endpoint = section.endpoint.as_deref().ok_or_else(|| {
         "[engine] kind = \"remote\" requires `endpoint` (e.g. \
          endpoint = \"http://localhost:8000/v1\")"
@@ -407,7 +408,7 @@ fn build_remote(section: &EngineSection) -> Result<BuiltEngine, String> {
     let model_id = section
         .model_id
         .as_deref()
-        .unwrap_or(crate::remote::HOSTED_DEFAULT_MODEL_ID);
+        .unwrap_or(oicp_client::HOSTED_DEFAULT_MODEL_ID);
     // Chat and embeddings are ONE model id on ONE endpoint unless the
     // operator says otherwise. That default is correct against a Sovereign
     // daemon, which routes embeddings to its own embed slot whatever id it
@@ -488,7 +489,7 @@ fn build_remote(section: &EngineSection) -> Result<BuiltEngine, String> {
     // One shape for every remote engine. The pair decides each half's far
     // end (an endpoint off this machine is a third party, never sent texts)
     // and the locus the router reads.
-    let provider = crate::remote::SplitInferenceProvider::engine(
+    let provider = oicp_client::SplitInferenceProvider::engine(
         endpoint,
         embed,
         section.api_key.clone(),

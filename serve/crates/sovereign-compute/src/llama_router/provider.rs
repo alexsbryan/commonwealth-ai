@@ -185,8 +185,8 @@ fn slot_penalties<'a>(
         return Cow::Borrowed(request);
     }
     let family = match request.model_id.as_deref() == code_model && code_model.is_some() {
-        true => sovereign_inference::engine_factory::CODE_SLOT_FAMILY,
-        false => sovereign_inference::engine_factory::CHAT_SLOT_FAMILY,
+        true => crate::engine_factory::CODE_SLOT_FAMILY,
+        false => crate::engine_factory::CHAT_SLOT_FAMILY,
     };
     let quirks = family.default_quirks();
     let (repeat, frequency) = sovereign_contracts::model_family::quirks_repeat_penalties(&quirks);
@@ -567,8 +567,8 @@ mod tests {
     fn a_daemon_call_carries_its_slot_penalties_and_a_conversation_does_not() {
         use super::slot_penalties;
         use sovereign_contracts::types::{CompletionRequest, PromptShape, SamplingMode};
-        let chat = sovereign_inference::engine_factory::CHAT_SLOT_FAMILY.default_quirks();
-        let code = sovereign_inference::engine_factory::CODE_SLOT_FAMILY.default_quirks();
+        let chat = crate::engine_factory::CHAT_SLOT_FAMILY.default_quirks();
+        let code = crate::engine_factory::CODE_SLOT_FAMILY.default_quirks();
 
         let call = CompletionRequest {
             temperature: Some(0.0),
