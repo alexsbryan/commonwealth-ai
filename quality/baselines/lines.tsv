@@ -98,7 +98,7 @@
 2962	quality/arch-layers::tests
 6637	quality/xtask
 7341	quality/xtask::tests
-63553	scripts
+63509	scripts
 2	serve/crates/serving-policy
 8876	serve/crates/sovereign-compute
 1848	serve/crates/sovereign-compute::tests
@@ -108,7 +108,7 @@
 1827	serve/crates/sovereign-inference::tests
 2561	serve/crates/sovereign-scheduler
 2344	serve/crates/sovereign-scheduler::tests
-3770	serve/crates/sovereign-serve
+3765	serve/crates/sovereign-serve
 1359	serve/crates/sovereign-serve::tests
 5168	serve/crates/sovereign-serving-host
 12808	serve/crates/sovereign-serving-host::tests
