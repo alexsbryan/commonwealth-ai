@@ -18,5 +18,8 @@ pub fn apply_shared_model_to_env(cfg: &sovereign_contracts::setup_config::Shared
         return;
     }
     std::env::set_var("SOVEREIGN_SHARED_MODEL_ID", id);
-    tracing::info!(model_id = id, "shared-model: primary routes to SOVEREIGN_SHARED_MODEL_ID");
+    tracing::info!(
+        model_id = id,
+        "shared-model: primary routes to SOVEREIGN_SHARED_MODEL_ID"
+    );
 }
