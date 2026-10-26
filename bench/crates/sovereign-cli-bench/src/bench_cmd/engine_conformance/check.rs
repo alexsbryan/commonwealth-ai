@@ -94,12 +94,18 @@ pub enum Check {
         /// Keys compared.
         keys: Vec<String>,
     },
-    /// Judged by a scenario outside the records (e.g. llg-parity): its
-    /// verdict comes from `judge --scenario`, keyed by row id, and is
-    /// could-not-judge for a row without one.
+    /// Judged by a scenario. `driver` names one the battery drives itself
+    /// (L I3: `split-line`, `admission`, `lifecycle`), graded from the
+    /// record's own facets by [`super::scenario`]. Without a driver — or for
+    /// a driver this build does not know — the verdict comes from
+    /// `judge --scenario`, keyed by row id, and is could-not-judge for a row
+    /// without one.
     Scenario {
         /// What the scenario must establish.
         what: String,
+        /// A scenario the driver runs and grades itself.
+        #[serde(default)]
+        driver: Option<String>,
     },
 }
 
@@ -188,7 +194,14 @@ impl Check {
 
     /// Judge one case. `reference` is `None` for a target-only check.
     pub fn judge(&self, reference: Option<&CaseRecord>, target: &CaseRecord) -> CellVerdict {
-        if let Check::Scenario { what } = self {
+        if let Check::Scenario { what, driver } = self {
+            if let Some(driver) = driver.as_deref() {
+                return super::scenario::grade(driver, target).unwrap_or_else(|| {
+                    CellVerdict::CouldNotJudge(format!(
+                        "`{driver}` is not a scenario this battery drives: {what}"
+                    ))
+                });
+            }
             return CellVerdict::CouldNotJudge(format!("no scenario verdict given: {what}"));
         }
         if self.target_only() {

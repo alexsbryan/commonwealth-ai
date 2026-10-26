@@ -88,10 +88,32 @@ pub struct Facets {
     /// The serving process's own state for the same keys.
     #[serde(default)]
     pub host_observed: BTreeMap<String, Value>,
+    /// `host.lifecycle`'s three calls, as the provider answered them
+    /// (`warmup_loaded`, `extra_loaded`, `extra_unloaded`, L I4).
+    #[serde(default)]
+    pub lifecycle: BTreeMap<String, Value>,
+    /// `cost.admission`'s scenario: how each call of the sequence ended
+    /// (`admitted`, `parked` or `shed`), in order.
+    #[serde(default)]
+    pub admission: Vec<String>,
+    /// `projection.stream-split-line`'s scenario: the text delivered when
+    /// the stream arrives in chunks, and how many deltas the driver read.
+    #[serde(default)]
+    pub split_line: Option<SplitLine>,
     /// Why the driver left a facet unobserved, by facet name, so a
     /// could-not-judge cell carries the cause rather than only the absence.
     #[serde(default)]
     pub unobserved: BTreeMap<String, String>,
+}
+
+/// What a split-line stream delivered (L I3,
+/// `projection.stream-split-line`).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SplitLine {
+    /// The text the driver read from the chunked stream, concatenated.
+    pub text: String,
+    /// How many deltas the driver's reader emitted.
+    pub deltas: usize,
 }
 
 /// A resolved sampler: named parameters and the order the stages run in.

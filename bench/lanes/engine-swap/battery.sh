@@ -6,11 +6,24 @@
 #   battery.sh [--only <case-id>]... <target>...
 #
 # Targets, each one pass of the resident daemon on a swapped config:
-#   embedded       the config as it stands ([engine] kind = "llama")
-#   llama-server   [engine] kind = "remote" against one llama-server router on
+#   embedded       the embedded engine: [engine] kind = "llama", the [models]
+#                  table as it stands. Written explicitly since the host flip
+#                  put the resident on kind = "llama-server" (HUMAN-es-host-flip);
+#                  "the config as it stands" is no longer the embedded engine.
+#   llama-server   [engine] kind = "llama-server": the daemon supervises its own
+#                  router, the shipped binary (build.sh), serving the same
+#                  three GGUFs from [models]. A target replays the supervised
+#                  router, so this is the shape a swap ships.
+#   llama-server-default-embed
+#                  as llama-server, with embed_inputs left at its default
+#                  ("server"): compute.embeddings-default-inputs' reference
+#                  pair (L I3), the configuration where the client does NOT
+#                  prepare the embedding input.
+#   llama-server-remote
+#                  [engine] kind = "remote" against one llama-server router on
 #                  :18301, built by serve/crates/sovereign-compute/llama-server/build.sh --vanilla --llguidance
 #   llama-server-matched
-#                  the same with no MTP drafting, the configuration the
+#                  llama-server-remote with no MTP drafting, the configuration the
 #                  compute row compares: a drafted token gets no
 #                  probabilities, and no request field turns drafting off
 #                  in this build (speculative.type "none" and n_max 0 both
@@ -41,6 +54,9 @@ embed=$repo/models/qwen-embedding-0.6b.gguf/Qwen3-Embedding-0.6B-Q8_0.gguf
 # BATTERY_LLAMA_SERVER picks another build (a patched one, for an experiment);
 # BATTERY_SERVER_ENV is extra environment for the router and its children.
 server=${BATTERY_LLAMA_SERVER:-$repo/target/llama-server-vanilla/build-llg/bin/llama-server}
+# The shipped server beside the daemon, which a supervised (kind =
+# "llama-server") target runs and the daemon verifies against PIN.toml.
+daemon_dir=${BATTERY_DAEMON_DIR:-$repo/target/debug}
 server_env=${BATTERY_SERVER_ENV:-}
 # mesh-llm: the release build, with a config that turns its usage reporting
 # off (it is on by default) and a data dir of its own, both under target/.
@@ -61,16 +77,38 @@ while [ $# -gt 0 ]; do
     *) break ;;
   esac
 done
-[ $# -gt 0 ] || { echo "battery.sh [--only <case-id>]... embedded|llama-server|llama-server-matched|mesh-llm..." >&2; exit 2; }
+[ $# -gt 0 ] || { echo "battery.sh [--only <case-id>]... embedded|llama-server|llama-server-default-embed|llama-server-remote|llama-server-matched|mesh-llm..." >&2; exit 2; }
 for t in "$@"; do
-  case $t in embedded|llama-server|llama-server-matched|mesh-llm) ;; *) die "unknown target $t" ;; esac
+  case $t in
+    embedded|llama-server|llama-server-default-embed|llama-server-remote|llama-server-matched|mesh-llm) ;;
+    *) die "unknown target $t" ;;
+  esac
 done
+# A router target the daemon supervises (kind = "llama-server") and a remote
+# target the battery runs (kind = "remote" against :18301) are different
+# shapes; name which is which once, so the loops below read one predicate.
+case " $* " in
+  *" llama-server "*|*" llama-server-default-embed "*) needs_shipped=1 ;;
+  *) needs_shipped=0 ;;
+esac
+case " $* " in
+  *" llama-server-remote "*|*" llama-server-matched "*) needs_remote_router=1 ;;
+  *) needs_remote_router=0 ;;
+esac
 
 # ── preflight: refuse rather than share the box ────────────────────────────
 
 preflight() {
   [ -f "$cases" ] || die "no case bank at $cases"
-  [ -x "$server" ] || die "no llama-server at $server"
+  # A supervised target runs the SHIPPED server beside the daemon, which the
+  # daemon verifies against PIN.toml; a remote target runs the battery's own
+  # --vanilla --llguidance build. Each target needs only its own.
+  if [ "$needs_shipped" = 1 ]; then
+    [ -x "$daemon_dir/llama-server" ] || die "no shipped llama-server beside the daemon ($daemon_dir/llama-server); build it with serve/crates/sovereign-compute/llama-server/build.sh"
+  fi
+  if [ "$needs_remote_router" = 1 ]; then
+    [ -x "$server" ] || die "no llama-server at $server"
+  fi
   # Available, not free: page cache from reading the GGUFs is reclaimed on
   # demand, and counting it refused a box with 89G available (2026-10-10).
   # The resident's own memory comes back when the first pass stops it; its
@@ -129,8 +167,61 @@ daemon_up() {
 
 write_config() {
   case $1 in
-    embedded) cp "$out/config.before.toml" "$cfg" ;;
-    llama-server|llama-server-matched)
+    # The embedded engine. Since the host flip the resident is kind =
+    # "llama-server", so "the config as it stands" is no longer the embedded
+    # engine: this target WRITES kind = "llama", keeping the [models] table
+    # (the three GGUFs the reference runs).
+    embedded)
+      python3 - "$out/config.before.toml" "$cfg" <<'EOF'
+import re, sys
+src, dst = sys.argv[1], sys.argv[2]
+text = open(src).read()
+engine = '''[engine]
+kind = "llama"
+'''
+new, n = re.subn(r'(?ms)^\[engine\]\n.*?(?=^\[|\Z)', engine + "\n", text)
+assert n == 1, "exactly one [engine] table"
+open(dst, "w").write(new)
+EOF
+      ;;
+    # The daemon supervises its own router, the shipped binary, over the
+    # [models] table: the shape a swap ships. embed_inputs "client" is the
+    # default for this kind; the -default-embed target leaves it at the
+    # section's own default ("server") to measure what the client-preparation
+    # decider is worth.
+    llama-server)
+      python3 - "$out/config.before.toml" "$cfg" client <<'EOF'
+import re, sys
+src, dst, inputs = sys.argv[1:]
+text = open(src).read()
+engine = f'''[engine]
+kind = "llama-server"
+embed_inputs = "{inputs}"
+grammar = "llguidance"
+context_size = 65536
+'''
+new, n = re.subn(r'(?ms)^\[engine\]\n.*?(?=^\[|\Z)', engine + "\n", text)
+assert n == 1, "exactly one [engine] table"
+open(dst, "w").write(new)
+EOF
+      ;;
+    llama-server-default-embed)
+      python3 - "$out/config.before.toml" "$cfg" server <<'EOF'
+import re, sys
+src, dst, inputs = sys.argv[1:]
+text = open(src).read()
+engine = f'''[engine]
+kind = "llama-server"
+embed_inputs = "{inputs}"
+grammar = "llguidance"
+context_size = 65536
+'''
+new, n = re.subn(r'(?ms)^\[engine\]\n.*?(?=^\[|\Z)', engine + "\n", text)
+assert n == 1, "exactly one [engine] table"
+open(dst, "w").write(new)
+EOF
+      ;;
+    llama-server-remote|llama-server-matched)
       python3 - "$out/config.before.toml" "$cfg" <<'EOF'
 import re, sys
 src, dst = sys.argv[1], sys.argv[2]
@@ -308,11 +399,25 @@ for t in "$@"; do
   write_config "$t"
   server_flag=""
   case $t in
-    llama-server) router_up spec ;;
+    llama-server-remote) router_up spec ;;
     llama-server-matched) router_up nospec ;;
   esac
-  case $t in llama-server*) server_flag="--server http://127.0.0.1:18301" ;; esac
+  case $t in llama-server-remote|llama-server-matched) server_flag="--server http://127.0.0.1:18301" ;; esac
   daemon_up "$t"
+  # A supervised target's own router is the server the driver must ask: it
+  # sits behind the daemon on an ephemeral port, which /status names in
+  # compute_children (role "router"). Read it once the daemon is up.
+  case $t in
+    llama-server|llama-server-default-embed)
+      port=$(curl -sf -m 10 localhost:9741/status | python3 -c '
+import json, sys
+children = json.load(sys.stdin)["inference"]["compute_children"]
+print(next((c["port"] for c in children if c.get("role") == "router" and c.get("port")), ""))')
+      [ -n "$port" ] || die "$t: /status names no running router to observe (compute_children)"
+      server_flag="--server http://127.0.0.1:$port"
+      say "$t: the daemon's supervised router is on :$port"
+      ;;
+  esac
   rec=$out/$n-$t.jsonl
   t0=$(date +%s)
   # shellcheck disable=SC2086 # $only and $server_flag are word lists by design

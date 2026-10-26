@@ -36,6 +36,12 @@ pub enum CaseMethod {
     Probe,
     /// Concurrent fast completions, timed.
     Throughput,
+    /// Two fast calls against one slot, the second admitted and the first
+    /// not, to see which parks and which is shed (`cost.admission`, L I3).
+    Admission,
+    /// The typed stream cut across two byte chunks, read back through the
+    /// client's SSE reader (`projection.stream-split-line`, L I3).
+    SplitLine,
     /// One provider call through the daemon's replay route.
     #[serde(untagged)]
     Replay(ReplayMethod),

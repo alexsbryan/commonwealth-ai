@@ -17,7 +17,7 @@ use sovereign_contracts::engine_observe::{ProbeAnswer, ProbeRequest, ReplayMetho
 use sovereign_contracts::types::Speed;
 
 use super::case::{Case, CaseMethod};
-use super::project::{self, Replay};
+use super::project::{self, record_lifecycle, Replay};
 use super::record::{CaseRecord, Outcome};
 use super::server::LlamaServer;
 
@@ -181,14 +181,28 @@ async fn run_case(
     case: &Case,
 ) -> Result<CaseRecord, String> {
     if let Some(fault) = &case.fault {
+        if fault == MID_STREAM_ERROR {
+            return mid_stream_error(daemon, target, case).await;
+        }
         return Err(format!("fault `{fault}` is not injected by the driver yet"));
     }
     let method = match case.method {
         CaseMethod::Replay(m) => m,
         CaseMethod::Throughput => return throughput(daemon, target, case).await,
+        CaseMethod::Admission => return admission(daemon, target, case).await,
+        CaseMethod::SplitLine => return split_line(daemon, target, case).await,
         CaseMethod::Probe => return probe(daemon, server, target, case).await,
     };
-    let replay = daemon.replay(method, &case.input).await?;
+    // A lifecycle case names the extra GGUF by file name in
+    // SOVEREIGN_MODELS_DIR (a path in a bank is a host's absolute path);
+    // resolve it here, the way the e2e's ROLES do, so the daemon is asked to
+    // load a path this host has.
+    let input = if method == ReplayMethod::HostLifecycle {
+        resolved_lifecycle_input(&case.input)
+    } else {
+        case.input.clone()
+    };
+    let replay = daemon.replay(method, &input).await?;
     let mut rec = project::record(case, method, target, &replay);
     let wire = project::wire_reply(&replay.observations);
     match (&wire, server) {
@@ -203,13 +217,24 @@ async fn run_case(
         }
         (None, _) => {}
     }
-    if method == ReplayMethod::Host {
+    if method == ReplayMethod::Host || method == ReplayMethod::HostLifecycle {
         if let Some(s) = server {
             match s.host_observed(&rec.facets.host_reported).await {
                 Ok(truth) => rec.facets.host_observed = truth,
                 Err(why) => {
                     rec.facets.unobserved.insert("host_observed".into(), why);
                 }
+            }
+        }
+        if method == ReplayMethod::HostLifecycle {
+            record_lifecycle(&replay.answer, &mut rec.facets);
+            // The residency the report carries is the router's state after
+            // the calls; without a server there is no other reading of it.
+            if rec.facets.host_observed.is_empty() {
+                rec.facets.unobserved.insert(
+                    "host_observed".into(),
+                    "no --server to read the state after the lifecycle calls".into(),
+                );
             }
         }
     }
@@ -228,6 +253,28 @@ async fn run_case(
         }
     }
     Ok(rec)
+}
+
+/// `host.lifecycle`'s input with the extra slot's GGUF resolved. The bank
+/// names a file in `SOVEREIGN_MODELS_DIR` (never an absolute path, which is
+/// one host's); an absolute path is taken as given.
+fn resolved_lifecycle_input(input: &Value) -> Value {
+    let mut out = input.clone();
+    let Some(path) = input["extra"]["path"].as_str() else {
+        return out;
+    };
+    let resolved = std::path::Path::new(path);
+    if resolved.is_absolute() {
+        return out;
+    }
+    let Some(dir) = std::env::var_os("SOVEREIGN_MODELS_DIR").map(std::path::PathBuf::from) else {
+        // No directory to resolve against: leave the name as the bank wrote
+        // it, and the daemon's own refusal is the answer (never a silence).
+        tracing::debug!(target: "engine_conformance", path, "SOVEREIGN_MODELS_DIR unset; lifecycle extra path left as named");
+        return out;
+    };
+    out["extra"]["path"] = json!(dir.join(resolved).to_string_lossy());
+    out
 }
 
 /// The think block's length in tokens, by the target's own tokenizer: the
@@ -344,6 +391,202 @@ async fn throughput(daemon: &Daemon, target: &str, case: &Case) -> Result<CaseRe
     tracing::debug!(target: "engine_conformance", n, generated, wall, "throughput measured");
     rec.facets.tokens_per_s = Some(generated as f64 / wall);
     Ok(rec)
+}
+
+/// The fault a case injects to make a stream fail mid-answer
+/// (`projection.stream-error`). The case names it; the driver asks the
+/// daemon's `stream_fault` for the cut and corrupt stream and reads it back
+/// through the client's own reader, so the verdict is on the client.
+const MID_STREAM_ERROR: &str = "mid-stream-error";
+
+/// `cost.admission` (L I3): one slot, two callers. The first — a long
+/// generation, the slot's only permit — is held open while a second arrives.
+/// The second carries a turn admission (`turn_admission`, the field the
+/// client writes for an already-accepted turn); the claim is that an admitted
+/// caller PARKS past the slot's bound where an unadmitted one is SHED, and
+/// the two calls are queued in that order so the shed is decided first.
+/// `scenario::admission` reads the sequence from how each call ended.
+///
+/// The case names the held call's `think_budget`/`max_tokens` long enough to
+/// outlast the bound on the reference engine's own model; a 0-length answer
+/// cannot hold the slot and the run reports could-not-judge rather than a
+/// false pass.
+async fn admission(daemon: &Daemon, target: &str, case: &Case) -> Result<CaseRecord, String> {
+    let mut base = case.input.clone();
+    let turn = base["admission"]
+        .as_str()
+        .unwrap_or("es-c2-admission")
+        .to_string();
+    let mut held = base.clone();
+    if let Value::Object(m) = &mut held {
+        m.remove("admission");
+        m.insert("turn_admission".into(), json!(turn));
+    }
+    // Start the holder, give it the slot, then arrive behind it with a call
+    // that carries no admission: the shed is this second call's.
+    let holder = tokio::spawn({
+        let d = Daemon {
+            url: daemon.url.clone(),
+            http: daemon.http.clone(),
+        };
+        let req = held.clone();
+        async move { d.replay(ReplayMethod::Complete, &req).await }
+    });
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    let behind = daemon.replay(ReplayMethod::Complete, &base).await;
+    let holder = holder
+        .await
+        .map_err(|e| format!("the admitted holder task failed: {e}"))?;
+    let mut facets = super::record::Facets::default();
+    let mut outcome = Outcome::Ok;
+    let mut seq = Vec::new();
+    for (who, r) in [("admitted", holder), ("unadmitted", behind)] {
+        let r = r?;
+        seq.push(admission_word(who, &r));
+        if r.outcome["kind"] != "ok" && outcome == Outcome::Ok {
+            outcome = Outcome::Error {
+                message: r.outcome.to_string(),
+            };
+        }
+    }
+    tracing::debug!(target: "engine_conformance", ?seq, turn, "admission sequence");
+    facets.admission = seq;
+    Ok(CaseRecord {
+        case_id: case.case_id.clone(),
+        target: target.into(),
+        rows: case.rows.clone(),
+        request: base,
+        outcome,
+        facets,
+    })
+}
+
+/// How one admission call ended: `shed` for the slot's named refusal
+/// (`Error::QueueShed`), `parked` for an admitted call served after it, and
+/// `served` for an unadmitted call the slot took anyway (idle host — not the
+/// failure the row names, which the scenario reports separately).
+fn admission_word(who: &str, r: &Replay) -> String {
+    let kind = r.outcome["kind"].as_str().unwrap_or("error");
+    let message = r.outcome["message"].as_str().unwrap_or_default();
+    if kind != "ok" && (message.contains("queue") || message.contains("busy")) {
+        format!("shed:{who}")
+    } else if kind == "ok" {
+        format!("served:{who}")
+    } else {
+        format!("error:{who}")
+    }
+}
+
+/// `projection.stream-split-line` (L I3): the daemon returns the answer's
+/// typed frames as SSE bytes, one line cut across two chunks. Read back
+/// through the client's own reader, which buffers to a newline; the delta
+/// survives whole.
+async fn split_line(daemon: &Daemon, target: &str, case: &Case) -> Result<CaseRecord, String> {
+    let input = json!({"fault": "split-line", "prompt": case.input["prompt"], "preferred_speed": case.input["preferred_speed"], "prompt_shape": case.input["prompt_shape"], "max_tokens": case.input["max_tokens"], "temperature": case.input["temperature"]});
+    let replay = daemon.replay(ReplayMethod::StreamFault, &input).await?;
+    let mut facets = super::record::Facets::default();
+    let outcome = if replay.answer["kind"] == "ok" {
+        let chunks: Vec<String> = replay.answer["chunks"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|v| v.as_str().unwrap_or_default().to_string())
+            .collect();
+        let (text, deltas) = read_chunked_text(&chunks);
+        facets.split_line = Some(super::record::SplitLine {
+            text: text.clone(),
+            deltas,
+        });
+        facets.output = Some(super::record::Output {
+            text: text.clone(),
+            ..Default::default()
+        });
+        Outcome::Ok
+    } else {
+        Outcome::Error {
+            message: replay.answer.to_string(),
+        }
+    };
+    Ok(CaseRecord {
+        case_id: case.case_id.clone(),
+        target: target.into(),
+        rows: case.rows.clone(),
+        request: case.input.clone(),
+        outcome,
+        facets,
+    })
+}
+
+/// Read SSE bytes through the client's own reader (the one the untyped
+/// stream uses), one chunk at a time: the text and how many deltas arrived.
+fn read_chunked_text(chunks: &[String]) -> (String, usize) {
+    let bytes: Vec<&[u8]> = chunks.iter().map(|c| c.as_bytes()).collect();
+    let (deltas, _terminal) = oicp_client::read_sse_chunks(bytes, false);
+    (deltas.concat(), deltas.len())
+}
+
+/// `projection.stream-error` (L I3): the answer's first tokens, then the
+/// server's mid-stream `error` datum and no `[DONE]`. Through the client's
+/// own reader, that is one `Finish{Error}` frame, as the engine's stream
+/// ends.
+async fn mid_stream_error(
+    daemon: &Daemon,
+    target: &str,
+    case: &Case,
+) -> Result<CaseRecord, String> {
+    let mut input = case.input.clone();
+    input["fault"] = json!("mid-stream");
+    let replay = daemon.replay(ReplayMethod::StreamFault, &input).await?;
+    let mut facets = super::record::Facets::default();
+    let outcome = if replay.answer["kind"] == "ok" {
+        let chunks: Vec<String> = replay.answer["chunks"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|v| v.as_str().unwrap_or_default().to_string())
+            .collect();
+        let finish = read_to_error(&chunks);
+        // The frame list is what the reader ended on, not a claim about it:
+        // `error` only when the reason is one, so a reader that swallowed the
+        // datum shows `stop` and the row fails.
+        let frames = if finish == "error" {
+            vec!["error".into()]
+        } else {
+            vec!["finish".into()]
+        };
+        facets.output = Some(super::record::Output {
+            finish: Some(finish),
+            frames,
+            ..Default::default()
+        });
+        Outcome::Ok
+    } else {
+        Outcome::Error {
+            message: replay.answer.to_string(),
+        }
+    };
+    Ok(CaseRecord {
+        case_id: case.case_id.clone(),
+        target: target.into(),
+        rows: case.rows.clone(),
+        request: case.input.clone(),
+        outcome,
+        facets,
+    })
+}
+
+/// Read the corrupted stream through the client's own reader, and report the
+/// finish reason it ends on (`error` when the datum failed it, else the
+/// server's or the reader's own).
+fn read_to_error(chunks: &[String]) -> String {
+    let bytes: Vec<&[u8]> = chunks.iter().map(|c| c.as_bytes()).collect();
+    let (_deltas, terminal) = oicp_client::read_sse_chunks(bytes, false);
+    match terminal {
+        sovereign_contracts::types::StreamFrame::Finish { reason, .. } => {
+            reason.as_openai_str().to_string()
+        }
+        _ => "no-finish".into(),
+    }
 }
 
 fn write(path: &std::path::Path, records: &[CaseRecord]) -> Result<(), String> {

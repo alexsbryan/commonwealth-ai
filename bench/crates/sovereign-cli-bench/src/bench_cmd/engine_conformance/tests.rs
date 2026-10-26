@@ -517,7 +517,11 @@ fn outcomes_decide_before_any_facet_is_read() {
         "served where the reference refused"
     );
     assert!(matches!(
-        Check::Scenario { what: "x".into() }.judge(Some(&r), &t),
+        Check::Scenario {
+            what: "x".into(),
+            driver: None,
+        }
+        .judge(Some(&r), &t),
         CellVerdict::CouldNotJudge(_)
     ));
 }
@@ -548,6 +552,7 @@ pub(super) fn case(id: &str, target: &str, row: &str, count: Option<u64>) -> Cas
 #[test]
 fn roll_up_fails_on_any_case_and_sets_the_verdict_beside_its_prediction() {
     let inventory = Inventory {
+        retired: Vec::new(),
         rows: vec![
             row("same", vec![Check::TokenCount], Prediction::Pass),
             row("one-off", vec![Check::TokenCount], Prediction::Silent),
@@ -607,7 +612,10 @@ fn roll_up_fails_on_any_case_and_sets_the_verdict_beside_its_prediction() {
 fn a_row_with_pairs_compares_only_those_targets() {
     let mut r = row("spec", vec![Check::TokenCount], Prediction::Pass);
     r.pairs = vec![("embedded-nospec".into(), "embedded".into())];
-    let inventory = Inventory { rows: vec![r] };
+    let inventory = Inventory {
+        retired: Vec::new(),
+        rows: vec![r],
+    };
     let records = vec![
         case("a", "embedded-nospec", "spec", Some(5)),
         case("a", "embedded", "spec", Some(5)),
@@ -624,6 +632,7 @@ fn a_row_with_pairs_compares_only_those_targets() {
 #[test]
 fn a_target_run_twice_is_judged_only_where_its_two_runs_agree() {
     let inventory = Inventory {
+        retired: Vec::new(),
         rows: vec![row("count", vec![Check::TokenCount], Prediction::Pass)],
     };
     let records = vec![
@@ -651,6 +660,7 @@ fn a_target_run_twice_is_judged_only_where_its_two_runs_agree() {
     );
 
     let only_c = Inventory {
+        retired: Vec::new(),
         rows: vec![row("count", vec![Check::TokenCount], Prediction::Pass)],
     };
     let c: Vec<_> = records
@@ -680,6 +690,7 @@ fn a_target_run_twice_is_judged_only_where_its_two_runs_agree() {
 fn every_mutation_is_caught_and_an_a_a_pair_gives_the_reference_a_subject() {
     use super::mutate;
     let inventory = Inventory {
+        retired: Vec::new(),
         rows: vec![row("count", vec![Check::TokenCount], Prediction::Pass)],
     };
     // llama-server disagrees, so the only passing pair is embedded's A/A.
@@ -700,6 +711,7 @@ fn every_mutation_is_caught_and_an_a_a_pair_gives_the_reference_a_subject() {
 fn a_mutation_subject_is_a_pair_whose_prompts_agree() {
     use super::mutate;
     let inventory = Inventory {
+        retired: Vec::new(),
         rows: vec![row("tools", vec![Check::ToolCalls], Prediction::Pass)],
     };
     let tool = |target: &str, prompt: Vec<i64>| CaseRecord {
@@ -737,4 +749,67 @@ fn a_mutation_subject_is_a_pair_whose_prompts_agree() {
         ("caught", Some("llama-server")),
         "{m:?}"
     );
+}
+
+// ── the shipped inventory's shape, and a retired row ──────────────────────
+//
+// The shipped `conformance.toml` is read at runtime by `battery.sh`, whose
+// preflight runs `judge` on no records and DIES unless it exits 4 — the
+// inventory loaded. That is the real check, in the crate that owns the data
+// (`sovereign-cli-bench` is a package crate and may not reach into the repo
+// tree at runtime, boundary-gate). This test pins the parse and the retired
+// rule on a fixture shaped like the shipped file instead.
+
+#[test]
+fn a_row_and_a_retirement_parse_the_way_the_shipped_inventory_is_shaped() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("inv.toml");
+    std::fs::write(
+        &path,
+        "[[row]]\nid = \"host.lifecycle\"\njudge = [{ kind = \"scenario\", driver = \"lifecycle\", what = \"w\" }]\n\
+         when = [{ method = \"=\\\"host_lifecycle\\\"\" }]\npredict = \"pass\"\n\n\
+         [[row]]\nid = \"projection.stream-error\"\n\
+         judge = [{ kind = \"scenario\", driver = \"stream-error\", what = \"w\" }]\n\
+         when = [{ fault = \"=\\\"mid-stream-error\\\"\" }]\npredict = \"pass\"\n\n\
+         [[retired]]\nid = \"decode.split-sampler\"\nretired = \"2026-10-25\"\n\
+         why = \"its one caller, the Hermes path, went with es-t5\"\n",
+    )
+    .unwrap();
+    let inv = Inventory::load(&path).expect("the fixture loads");
+    let drivers: Vec<&str> = inv
+        .rows
+        .iter()
+        .flat_map(|r| r.judge.iter())
+        .filter_map(|c| match c {
+            Check::Scenario { driver, .. } => driver.as_deref(),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(drivers, vec!["lifecycle", "stream-error"]);
+    assert_eq!(inv.retired.len(), 1);
+    assert_eq!(inv.retired[0].id, "decode.split-sampler");
+    // A row with no check is refused, so a retired row cannot be modelled as
+    // an empty live one.
+    std::fs::write(
+        &path,
+        "[[row]]\nid = \"x\"\njudge = []\npredict = \"pass\"\n",
+    )
+    .unwrap();
+    assert!(Inventory::load(&path)
+        .unwrap_err()
+        .contains("names no check"));
+}
+
+#[test]
+fn a_retired_table_and_a_live_row_cannot_share_an_id() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("inv.toml");
+    std::fs::write(
+        &path,
+        "[[row]]\nid = \"a\"\njudge = [{ kind = \"token-count\" }]\npredict = \"pass\"\n\n\
+         [[retired]]\nid = \"a\"\nretired = \"2026-10-25\"\nwhy = \"gone\"\n",
+    )
+    .unwrap();
+    let err = Inventory::load(&path).unwrap_err();
+    assert!(err.contains("both a live row and a retired one"), "{err}");
 }

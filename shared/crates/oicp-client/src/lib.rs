@@ -1430,6 +1430,7 @@ mod forced_choice;
 mod outbound;
 mod response_wire;
 pub use outbound::{EngineEmbed, FarEnd, Payload, ThirdPartyRefusal, HOSTED_DEFAULT_MODEL_ID};
+pub use response_wire::read_sse_chunks;
 mod shed;
 pub use chat_wire::{openai_function_name, titled_schema, write_constraints, StructuredOutputMode};
 mod loopback;

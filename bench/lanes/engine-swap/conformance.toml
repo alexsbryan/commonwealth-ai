@@ -171,18 +171,10 @@ basis = "read"
 note = "Sent as 'sampling_mode' (lib.rs:794), unknown to llama-server."
 fix = "oicp-client: expand the mode to explicit parameters from ModelQuirks"
 
-[[row]]
+[[retired]]
 id = "decode.split-sampler"
-layer = "decode"
-covers = ["tools"]
-callers = "Hermes path with tools: content inside JSON strings at SOVEREIGN_CONTENT_TEMPERATURE 0.0"
-check = "per-role temperature applied"
-judge = [{ kind = "sampler", order = false }]
-when = [{ kind = "complete", shape = "templated", tools = "set" }]
-predict = "fail:differs"
-basis = "read"
-note = "Embedded switches temperature inside JSON string content (sampler.rs:536-584). llama-server has one sampler per request."
-fix = "decided 2026-10-10: dropped. Its quality effect was never measured; a caller that wants deterministic arguments sets temperature."
+retired = "2026-10-25"
+why = "Its one caller was the Hermes path, deleted by es-t5-delete-hermes: the engine switched temperature inside JSON string content (sampler.rs SOVEREIGN_CONTENT_TEMPERATURE), and nothing reaches that any more. The router has one sampler per request. Dropped 2026-10-10 on the same reasoning; retired outright by the es-c2-battery-rejudge row, which named it."
 
 [[row]]
 id = "decode.max-tokens"
@@ -254,9 +246,10 @@ callers = "grounding judge judge.rs:170; atlas select.rs:570, read.rs:155"
 check = "per-label probability |Δ| <= 1e-3; prompt token ids equal"
 judge = [{ kind = "label-probs", tol = 1e-3 }, { kind = "prompt-ids" }]
 when = [{ kind = "complete", forced_choice = "=true" }]
-predict = "pass"
+predict = "fail:differs"
 basis = "measured"
-note = "70 of 70 calls found the labels, minimum label mass 0.964 (2026-10-09). A label outside the server's top 20 gets 0 where the engine computes it (forced_choice.rs:131-139)."
+note = "Re-predicted 2026-10-25 (es-c2-battery-rejudge) from L E4, which measured it: 3 of 7 label calls over the 1e-3 bar, up to 0.6 nats of log-odds (A 0.986 engine against 0.993 server on 3f6ba1e52a73), identical with and without drafting. The earlier `pass` rested on the 2026-10-09 70-of-70 label-mass run, which checked labels were FOUND, not that their probabilities agreed across engines. The A/A bound (battery-20261011-203935) lets a 6.6e-4 self-move through, so the bar separates the engines; the cause (E3's per-position residual over ~2700-token prompts, or the client's top-20 truncation) is not settled."
+fix = "L E4: a probe of the label logits on both engines would tell whether the difference is the accumulate-over-2700-tokens residual (E3) or the client's top-20 truncation. Whichever it is, the row stays failed until E3 closes or the client asks for the labels' exact logits rather than the top 20."
 
 [[row]]
 id = "decode.lark"
@@ -383,7 +376,7 @@ when = [{ method = "=\"embed\"" }, { method = "=\"embed_query\"" }]
 pairs = [["embedded", "llama-server-default-embed"]]
 predict = "fail:silent"
 basis = "measured"
-note = "Default embed_inputs=server sends bare text (engine_config.rs:245); cosine 0.84 against the engine's index, and embed_query equals embed (lib.rs:415)."
+note = "Default embed_inputs=server sends bare text (engine_config.rs:245); cosine 0.84 against the engine's index, and embed_query equals embed (lib.rs:415). SEEN PASSING 2026-10-25 (es-c2-battery-rejudge, `engine_conformance_instruments_e2e`): the reference and this target gave cosine 0.99986 on this host, both preparing input (each side's embed vs embed_query 0.619). The prediction is NOT edited to match (ARCH 5): the seat's full rerun (HUMAN-es-c2-battery-rejudge-run) adjudicates, and the fix row records why the 0.84 no longer reproduces here."
 fix = "decided 2026-10-10: input preparation belongs to the embedding model (EmbedQuirks), applied by one decider whichever engine serves; client is the default for kind=remote"
 
 [[row]]
@@ -505,11 +498,12 @@ layer = "projection"
 covers = ["complete_stream_with_finish"]
 callers = "every streaming caller"
 check = "a server error mid-stream ends in Finish{Error} on both"
-judge = [{ kind = "stream-frames", frames = ["error"] }]
+judge = [{ kind = "scenario", driver = "stream-error", what = "a corrupted stream ends in an error frame on the client's reader, not a clean Stop" }]
 when = [{ fault = "=\"mid-stream-error\"" }]
-predict = "fail:silent"
-basis = "read"
-note = "The client skips error chunks and transport errors with continue (lib.rs:1153) and ends with Stop (lib.rs:1199). The engine emits Finish{Error}."
+predict = "pass"
+basis = "measured"
+note = "Driven since 2026-10-25 (es-c2-battery-rejudge, L I3): the driver asks the daemon's `stream_fault` for the answer's first tokens, then a `{\"error\":…}` datum and no `[DONE]`, and reads it back through the shipped SSE reader (`oicp_client::read_sse_chunks`). The fix landed at 2d7bcf3d3: the reader turns an error datum into `Finish{Error}` (`response_wire.rs` `line`, `:405`), where the old parser skipped it and ended in `Stop` (lib.rs:1153,1199). Target-only: the row judges the client's reading of a corrupted stream, which is the same corruption for either engine."
+fix = "done: the client's one SSE reader ends a corrupted stream in Finish{Error} (2d7bcf3d3). This row now proves it stays so."
 
 [[row]]
 id = "projection.stream-split-line"
@@ -517,10 +511,12 @@ layer = "projection"
 covers = ["complete_stream", "complete_stream_with_id"]
 callers = "bare Split providers: CLI chat, desktop attach (the daemon uses the typed path)"
 check = "an SSE line split across two byte chunks is delivered whole"
-judge = [{ kind = "scenario", what = "an SSE line split across two byte chunks, through a bare Split provider" }]
-predict = "fail:silent"
-basis = "read"
-note = "The untyped parser has no line buffer across chunks (lib.rs:1222-1245)."
+judge = [{ kind = "scenario", driver = "split-line", what = "an SSE line split across two byte chunks, through the shipped SSE reader" }]
+when = [{ method = "=\"split_line\"" }]
+predict = "pass"
+basis = "measured"
+note = "Driven since 2026-10-25 (es-c2-battery-rejudge, L I3): the daemon's `stream_fault` returns the answer's SSE bytes with one line cut across two chunks, and the driver reads them through `oicp_client::read_sse_chunks`, the shipped reader. The fix landed at 2d7bcf3d3: one reader buffers to a newline across chunks (`response_wire.rs` `SseReader.pending`), where the old untyped parser read each chunk on its own (lib.rs:1222-1245) and dropped a split line."
+fix = "done: one SSE reader serves both stream methods and buffers a split line (2d7bcf3d3). This row now proves it stays whole through the reader the cli and desktop attach actually use."
 
 # ── cost ────────────────────────────────────────────────────────────────
 
@@ -567,11 +563,12 @@ layer = "cost"
 covers = ["admission"]
 callers = "admission::stamp, streaming.rs:985,1392,2959; call_census.rs:258"
 check = "under predicted overload, an admitted call parks and an unadmitted one is shed"
-judge = [{ kind = "scenario", what = "an admitted call parks and an unadmitted one is shed under predicted overload" }]
+judge = [{ kind = "scenario", driver = "admission", what = "an admitted call is served after the bound where a fresh one behind it is shed (or, against the router, both are served and neither sheds)" }]
+when = [{ method = "=\"admission\"" }]
 predict = "fail:differs"
 basis = "read"
 fix = "decided 2026-10-10: admission belongs to the scheduler above the engine (ARCH 12); it sheds from the server's /slots occupancy rather than an engine-internal prediction"
-note = "The engine parks admitted calls and sheds the rest past 30 s predicted wait (model_slot.rs:1316-1403). The engine client never sends turn_admission (outbound.rs:359-386), and llama-server queues everything without shedding."
+note = "Driven since 2026-10-25 (es-c2-battery-rejudge, L I3): one slot, a long held call, then a second arriving behind it, the first carrying a `turn_admission` the replay route stamps onto the request. The engine parks the admitted caller past its bound and sheds the fresh one (`model_slot.rs:1316-1403`). Predicted `fail:differs` against the router: the engine client never sends `turn_admission` for a plain remote call (`outbound.rs`), and llama-server queues everything without shedding, so a remote target serves both where the engine sheds one. The scenario grades each target on its own (`admitted` served and `shed` present on the engine; both served, no shed, on the router), so the prediction is the verdict the difference predicts."
 
 # ── host ────────────────────────────────────────────────────────────────
 
@@ -644,12 +641,12 @@ layer = "host"
 covers = ["warmup_primary", "load_extra_slot", "unload_extra_slot"]
 callers = "mesh_admin.rs:193,307,364; hybrid.rs:288,301"
 check = "the call does what it says, or refuses"
-judge = [{ kind = "host-truth", keys = ["warmup_loaded", "extra_loaded", "extra_unloaded"] }]
-when = [{ method = "=\"host\"" }]
-predict = "fail:silent"
-basis = "read"
-fix = "oicp-client: warmup and load/unload go to the router's /models/load and /models/unload; a failure is an error"
-note = "warmup POSTs a route llama-server lacks and reports Ok on failure (lib.rs:1382). load and unload refuse (lib.rs:1868-1872), which is honest; the router has /models/load and /models/unload."
+judge = [{ kind = "scenario", driver = "lifecycle", what = "warmup, extra load and extra unload each report Ok or Err beside the router's /models state, and an Ok names a model that is resident" }]
+when = [{ method = "=\"host_lifecycle\"" }]
+predict = "pass"
+basis = "measured"
+fix = "done: es-r1 gave `RouterProvider` a `warmup_primary` that loads through `POST /models/load` and reports a failure as an error; the extra load/unload stay an honest refusal (`provider.rs` `extras_refusal`) because a router has no extra-slot concept. Re-predicted pass 2026-10-25 after the instruments row measured it passing on a self-booted daemon."
+note = "Driven since 2026-10-25 (es-c2-battery-rejudge, L I4): a replay host method of its own calls `warmup_primary`, `load_extra_slot` and `unload_extra_slot` once each and reports how each ended beside the router's `/models` state. `host` stays read-only. Re-predicted `pass` from the measurement: `RouterProvider::warmup_primary` loads through `POST /models/load` and names the resident primary (`Ok{model}`), while `load_extra_slot`/`unload_extra_slot` refuse honestly (`Err`), which the scenario accepts as its verdict. Predicted `fail:differs` before this measurement on the reading that the load/unload refusal would be a difference; the scenario counts an honest refusal as a verdict, so the row passes on the same evidence. A `warmup` that answered Ok over a non-resident model would still fail it."
 
 [[row]]
 id = "host.unchanged"

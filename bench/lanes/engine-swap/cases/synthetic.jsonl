@@ -25,3 +25,9 @@
 {"label": "probe-greedy-64", "method": "probe", "input": {"text": "The three laws of thermodynamics are", "steps": 64, "top_k": 20}}
 {"label": "host-state", "method": "host", "input": {}}
 {"label": "throughput-fast-8", "method": "throughput", "input": {"concurrency": 8, "prompt": "Write a haiku about the sea.", "max_tokens": 256, "preferred_speed": "Fast"}}
+{"label": "host-lifecycle", "method": "host_lifecycle", "input": {"extra": {"slot": "battery", "path": "Qwen3.5-0.8B-UD-Q6_K_XL.gguf", "context_size": 4096}}}
+{"label": "admission-turn", "method": "admission", "input": {"prompt": "Count to two hundred.", "preferred_speed": "Slow", "max_tokens": 256, "temperature": 0.0, "admission": "es-c2-admission"}}
+{"label": "split-line-stream", "method": "split_line", "input": {"prompt": "Say the word ready, then stop.", "preferred_speed": "Fast", "max_tokens": 16, "temperature": 0.0}}
+{"label": "embed-question", "method": "embed", "input": {"text": "What is the Stoic view of virtue?"}}
+{"label": "embed-query", "method": "embed_query", "input": {"text": "How do the Stoics define the highest good?"}}
+{"label": "embed-batch", "method": "embed_batch", "input": {"texts": ["Virtue is the only good for the Stoics.", "Cats sleep most of the day.", "Seneca wrote letters on Stoic ethics."]}}
