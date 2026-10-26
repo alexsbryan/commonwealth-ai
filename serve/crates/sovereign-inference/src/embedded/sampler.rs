@@ -325,6 +325,29 @@ impl ConstrainedSampler {
     }
 }
 
+/// The repeat-penalty stage's two knobs for a family's quirks.
+///
+/// ONE decider (ARCH 8): this is the arithmetic both engines use, the
+/// embedded sampler below and `llama_router::provider::slot_penalties`.
+/// The router used to re-derive it from `ModelFamily::default_quirks()`
+/// on its own, which is how the two engines came to sample the same
+/// 2810-token prompt differently (2026-10-25).
+///
+/// C1 measured whether the quirks tuple earns its place. It does, but
+/// only these two parameters moved: on `llama-server` and GGUF defaults
+/// the router failed chat-ask q1 ("both halves answered") 0 of 3 runs in
+/// all three checks that ran it; with repeat 1.15 and frequency 0.1 sent
+/// it passed 19 of 19. Nothing else in the tuple is sent to the router
+/// and E1 passed without it (decode is greedy, and the temperature and
+/// top-* fields are the request's or llama.cpp's). So the tuple stays
+/// exactly here, as two numbers, and no third reader sends the rest.
+pub fn quirks_repeat_penalties(quirks: &ModelQuirks) -> (f32, f32) {
+    (
+        quirks.default_repetition_penalty,
+        quirks.default_frequency_penalty,
+    )
+}
+
 /// Resolved sampling parameters for a single role. Picked from
 /// ModelQuirks based on `SamplingMode` + per-request
 /// overrides.
@@ -514,9 +537,10 @@ pub(crate) fn build_sampler(
     // samples the same request: llama.cpp's defaults, the GGUF's own
     // recommendations, then the client's values — no daemon profile, DRY
     // or repetition penalty. An explicit `sampling_mode` still wins.
-    if matches!(request.prompt_shape, Some(PromptShape::Conversation { .. }))
-        && request.sampling_mode.is_none()
-    {
+    if sovereign_contracts::types::is_server_default_shape(
+        request.prompt_shape.as_ref(),
+        request.sampling_mode,
+    ) {
         let server = super::server_sampling::ServerSampling::for_model(model, request);
         observe_sampler(
             &[
@@ -618,12 +642,9 @@ pub(crate) fn build_sampler(
     // llama-cpp tradition for other families is 1.15 / 0.1 / 0.05
     // (the historical hardcoded values, now preserved via the
     // serde-default compat helpers in `sovereign_contracts::model_family`).
-    let rep_pen: f32 = request
-        .repeat_penalty
-        .unwrap_or(quirks.default_repetition_penalty);
-    let freq_pen: f32 = request
-        .frequency_penalty
-        .unwrap_or(quirks.default_frequency_penalty);
+    let (quirks_rep_pen, quirks_freq_pen) = quirks_repeat_penalties(quirks);
+    let rep_pen: f32 = request.repeat_penalty.unwrap_or(quirks_rep_pen);
+    let freq_pen: f32 = request.frequency_penalty.unwrap_or(quirks_freq_pen);
     let min_p_threshold: f32 = quirks.default_min_p;
     // Sequence breakers tell DRY where one "thought unit" ends and another
     // begins — any of these tokens resets the repeated-suffix detector.
@@ -759,4 +780,49 @@ fn rand_seed() -> u32 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .subsec_nanos()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// C1: the sampler policy is two numbers, and these are the numbers
+    /// the measurement moved. The check's arms were the embedded engine's
+    /// primary (repeat 1.15, frequency 0.1, `ModelFamily::Unknown`) against
+    /// llama-server's defaults, and the router failed chat-ask q1 with no
+    /// penalties sent and passed 19 of 19 with them. Asserting the literal
+    /// pair, not only the field names, means a change to the family's
+    /// defaults has to be a deliberate re-opening of that question.
+    #[test]
+    fn the_sampler_policy_is_the_pair_the_measurement_moved() {
+        let chat = crate::engine_factory::CHAT_SLOT_FAMILY.default_quirks();
+        assert_eq!(quirks_repeat_penalties(&chat), (1.15, 0.1));
+        let code = crate::engine_factory::CODE_SLOT_FAMILY.default_quirks();
+        assert_eq!(
+            quirks_repeat_penalties(&code),
+            (
+                code.default_repetition_penalty,
+                code.default_frequency_penalty
+            ),
+            "the code slot reads the same pairing function, whatever its family publishes"
+        );
+    }
+
+    /// One decider for "llama-server's own defaults sample this request".
+    /// The router must pass exactly the requests this sampler hands to
+    /// `ServerSampling`; a second spelling of the predicate is how the two
+    /// came apart on 2026-10-25.
+    #[test]
+    fn the_server_default_shape_is_a_conversation_with_no_mode() {
+        use sovereign_contracts::types::is_server_default_shape;
+        let conversation = PromptShape::Conversation { messages: vec![] };
+        assert!(is_server_default_shape(Some(&conversation), None));
+        assert!(!is_server_default_shape(
+            Some(&conversation),
+            Some(SamplingMode::Instruct)
+        ));
+        assert!(!is_server_default_shape(None, None));
+        assert!(!is_server_default_shape(Some(&PromptShape::Templated), None));
+        assert!(!is_server_default_shape(Some(&PromptShape::Raw), None));
+    }
 }

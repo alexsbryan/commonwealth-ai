@@ -158,37 +158,39 @@ impl RouterProvider {
     }
 }
 
-/// A daemon call with the penalties the embedded engine takes from the
-/// slot's quirks (`engine_factory::CHAT_SLOT_FAMILY`, `CODE_SLOT_FAMILY`
-/// for the code model). Without them llama-server's greedy pick differed
-/// from the embedded engine's on the same 2810-token prompt (chat-ask
-/// q1's citation call, 2026-10-25). A conversation with no
-/// `sampling_mode` samples as llama-server does, as the embedded engine
-/// samples it, so it passes untouched, and a caller's own value stands.
-/// DRY is not sent: llama-server's counts the prompt, and it garbled the
-/// verbatim quotes that call copies.
+/// A daemon call with the penalties the embedded engine samples it with.
+///
+/// The arithmetic is not this function's: the embedded quirks sampler
+/// answers it (`embedded::sampler::quirks_repeat_penalties`), and asking
+/// it is what keeps the two engines on one decider instead of two — the
+/// drift between them was the whole of the 2026-10-25 finding. So is the
+/// "which requests are sampled from the quirks at all" question: the
+/// embedded engine samples a conversation with no `sampling_mode` as
+/// llama-server does (llama.cpp's defaults, the GGUF's, then the
+/// client's), and that call answers none, so the router passes it
+/// untouched too. A caller's own value stands.
 fn slot_penalties<'a>(
     request: &'a CompletionRequest,
     code_model: Option<&str>,
 ) -> Cow<'a, CompletionRequest> {
-    let conversation = matches!(request.prompt_shape, Some(PromptShape::Conversation { .. }))
-        && request.sampling_mode.is_none();
-    if conversation {
+    if sovereign_contracts::types::is_server_default_shape(
+        request.prompt_shape.as_ref(),
+        request.sampling_mode,
+    ) {
         return Cow::Borrowed(request);
     }
-    let code = request.model_id.is_some() && request.model_id.as_deref() == code_model;
-    let family = match code {
+    if request.repeat_penalty.is_some() && request.frequency_penalty.is_some() {
+        return Cow::Borrowed(request);
+    }
+    let family = match request.model_id.as_deref() == code_model && code_model.is_some() {
         true => sovereign_inference::engine_factory::CODE_SLOT_FAMILY,
         false => sovereign_inference::engine_factory::CHAT_SLOT_FAMILY,
     };
     let quirks = family.default_quirks();
+    let (repeat, frequency) = sovereign_inference::embedded::quirks_repeat_penalties(&quirks);
     let mut penalised = request.clone();
-    penalised.repeat_penalty = penalised
-        .repeat_penalty
-        .or(Some(quirks.default_repetition_penalty));
-    penalised.frequency_penalty = penalised
-        .frequency_penalty
-        .or(Some(quirks.default_frequency_penalty));
+    penalised.repeat_penalty = penalised.repeat_penalty.or(Some(repeat));
+    penalised.frequency_penalty = penalised.frequency_penalty.or(Some(frequency));
     tracing::debug!(
         target: "llama_router",
         ?family,
@@ -551,6 +553,14 @@ mod tests {
     /// passthrough and a caller's own values do not change. Failing input:
     /// the citation call of 2026-10-25, which went out with neither penalty
     /// and picked another quote than the embedded engine on the same prompt.
+    ///
+    /// C1's verdict is what this pins: the defaults did not hold, so these
+    /// two parameters are sent (and, by `quirks_repeat_penalties` being the
+    /// only reader of the quirks here, nothing else in the tuple is). The
+    /// values are asserted against the literal pair the measurement used,
+    /// 1.15 and 0.1, not only against the family's own fields — a change to
+    /// `ModelFamily::Unknown`'s defaults must break this test and reopen
+    /// the question the check answered, not pass silently.
     #[test]
     fn a_daemon_call_carries_its_slot_penalties_and_a_conversation_does_not() {
         use super::slot_penalties;
@@ -566,10 +576,22 @@ mod tests {
         assert_eq!(out.repeat_penalty, Some(chat.default_repetition_penalty));
         assert_eq!(out.frequency_penalty, Some(chat.default_frequency_penalty));
         assert_eq!(
-            out.repeat_penalty,
-            Some(1.15),
-            "the embedded primary's value"
+            (out.repeat_penalty, out.frequency_penalty),
+            (Some(1.15), Some(0.1)),
+            "the embedded primary's measured pair, which C1 found the defaults do not hold without"
         );
+        assert_eq!(
+            sovereign_inference::embedded::quirks_repeat_penalties(&chat),
+            (1.15, 0.1),
+            "the router and the embedded sampler must read one decider"
+        );
+        assert_eq!(
+            out.temperature,
+            Some(0.0),
+            "no sampling field but the two is added"
+        );
+        assert_eq!(out.top_k, None);
+        assert_eq!(out.top_p, None);
 
         let to_code = CompletionRequest {
             model_id: Some("coder".into()),

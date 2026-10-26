@@ -4113,6 +4113,32 @@ section, and `[models]` may be absent on a router node because the preset is
 its model list. With neither, the node is refused at plan time rather than
 started serving nothing.
 
+**The sampler policy is two numbers, and it stays (ENGINE_SWAP_PLAN C1).**
+The engine-swap plan asked whether the router needed the `ModelQuirks` tuple
+sampling on `llama-server`'s own defaults. Measured 2026-10-26: it does, but
+only two parameters moved — the primary slot's repeat 1.15 and frequency 0.1.
+Without them the router failed chat-ask q1 ("both halves answered") 0 of 3
+runs in all three quality checks that ran it; with them it passed 19 of 19.
+Nothing else in the tuple is sent and E1's performance bar passed without it,
+so the tuple is not a policy the router carries: it is
+`sampler::quirks_repeat_penalties`, one pairing function the embedded sampler
+(`sampler.rs`, its penalties stage) and `llama_router::provider::slot_penalties`
+both call, and the rest of `ModelQuirks`'s sampling fields reach no server
+request. Which requests are sampled this way at all is likewise one decider,
+`sovereign_contracts::types::is_server_default_shape`: an OpenAI conversation
+with no explicit `sampling_mode` is llama-server's own to sample (llama.cpp's
+defaults, the GGUF's recommendations, then the client's) on both engines, and
+every other request carries the pair. The router sends nothing else — no
+temperature, top-k or top-p profile — and a caller's own value stands. DRY is
+not sent: llama-server counts the prompt in it and it garbled the verbatim
+quotes the citation call copies. `sampling_mode` stays on the wire as the
+caller's selector (the embedded engine's profile picker, and FIM's code mode),
+not as a router policy. Two unit tests pin the literal pair,
+`embedded::sampler::tests::the_sampler_policy_is_the_pair_the_measurement_moved`
+and `llama_router::provider::tests::a_daemon_call_carries_its_slot_penalties_and_a_conversation_does_not`,
+so a change to `ModelFamily::Unknown`'s defaults reopens the measurement
+instead of passing silently.
+
 **The distributed primary in a child (`[compute] distributed_primary`, default
 OFF).** The payoff the boundary was built for. Distributing a primary across
 mesh workers puts ggml's error-path-free RPC client inside the daemon: a worker
