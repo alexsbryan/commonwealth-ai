@@ -25,17 +25,6 @@
 #   SOVEREIGN_DESKTOP_CARGO_RUNNER   cargo command to use (default `cargo`);
 #                                    the Windows leg sets `cargo-xwin`.
 #   SOVEREIGN_DESKTOP_SIDECAR_PROFILE  `release` (default) or `debug`.
-#   SOVEREIGN_SIDECAR_FEATURES       comma-separated cargo features for the
-#                                    LOADER build (`sovereign-stock`, staged
-#                                    beside the sidecar). This is where the
-#                                    WINDOWS GPU BACKEND is selected —
-#                                    `windows-vulkan` or `windows-cuda`. They
-#                                    were `sovereign-desktop` features until
-#                                    sv-surface svt-7 (2026-09-12), then
-#                                    `sovereign-cli-daemon`'s until
-#                                    pb-distribution-setup; the process that
-#                                    loads the weights is the stock binary, so
-#                                    the backend is chosen on ITS build.
 #   CARGO_TARGET_DIR                 honoured; the container legs set it.
 #
 # Why release by default: this stages an artifact that ships inside an
@@ -103,17 +92,13 @@ fi
 
 TARGET_DIR="${CARGO_TARGET_DIR:-$REPO_ROOT/target}"
 
-# stage <package> <bin> [<features>] — build one binary and stage it under
-# the per-triple name `externalBin` expects.
+# stage <package> <bin> — build one binary and stage it under the per-triple
+# name `externalBin` expects.
 stage() {
-    local pkg="$1" bin="$2" features="${3:-}"
+    local pkg="$1" bin="$2"
     local dest="$DESKTOP_BIN_DIR/${bin}-${TARGET}${EXE_SUFFIX}"
     local args=(build --target "$TARGET" -p "$pkg" --bin "$bin")
     [[ "$PROFILE" == "release" ]] && args+=(--release)
-    if [[ -n "$features" ]]; then
-        args+=(--features "$features")
-        echo "stage-daemon-sidecar: $bin features=$features"
-    fi
     echo "stage-daemon-sidecar: dest=$dest"
     echo "stage-daemon-sidecar: ${RUN[*]} ${args[*]}"
     if ! ( cd "$REPO_ROOT" && "${RUN[@]}" "${args[@]}" ); then
@@ -142,10 +127,12 @@ stage() {
     echo "stage-daemon-sidecar: staged $(basename "$dest") (${size} bytes)"
 }
 
-# The sidecar loads no model, so it takes no features. The loader it execs
-# (`daemon run`, setup's probe) is the build the GPU backend is chosen on.
+# Neither binary takes features: the GPU backend is the llama-server's,
+# chosen below by build.sh's `--backend`. SOVEREIGN_SIDECAR_FEATURES carried
+# the loader's `windows-vulkan`/`windows-cuda` until those left with the
+# vendored llama crates (ENGINE_SWAP_PLAN G3).
 stage sovereign-cli-daemon "$SIDECAR_NAME"
-stage sovereign-stock "$LOADER_NAME" "${SOVEREIGN_SIDECAR_FEATURES:-}"
+stage sovereign-stock "$LOADER_NAME"
 
 # The llama-server the daemon runs on `kind = "llama-server"` (ENGINE_SWAP_PLAN
 # D3): every binary PIN.toml names, built by build.sh in the backend this

@@ -1312,8 +1312,9 @@ default-on for `qwen4exp` the first time a load is observed in which
 ~26 GiB. Either means the accident has stopped holding and the model is about to
 stop fitting.
 
-**The event that could trigger it is known:** the next move of the vendored
-llama.cpp pin (`vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT`). Check the detector
+**The event that could trigger it is known:** the next move of the llama.cpp
+pin (`serve/crates/sovereign-compute/llama-server/PIN.toml` since the vendored
+copy went in ENGINE_SWAP_PLAN G3). Check the detector
 above as part of that move — that is cheaper and more reliable than a calendar.
 
 **Review by 2026-10-27**, or the next vendor pin move, whichever comes first.

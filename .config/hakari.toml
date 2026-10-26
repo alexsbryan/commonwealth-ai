@@ -72,7 +72,3 @@ workspace-members = [
     "oicp-client",
     "sovereign-contracts",
 ]
-third-party = [
-    { name = "llama-cpp-4", path = "vendor/llama-cpp-4" },
-    { name = "llama-cpp-sys-4", path = "vendor/llama-cpp-sys-4" },
-]

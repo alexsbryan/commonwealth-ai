@@ -8,7 +8,7 @@
 # image:
 #
 #   1. NVIDIA CUDA base (devel for build, runtime for serving).
-#   2. llama-cpp-2 features patched from `"rocm"` to `"cuda"`.
+#   2. build.sh builds the llama-server in its `cuda` mode.
 #   3. cuBLAS comes from the base image — no extra apt math-libs.
 #   4. CMAKE_CUDA_ARCHITECTURES env picks the SM list to compile for.
 #
@@ -122,24 +122,13 @@ RUN ln -sf libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1 \
  && ln -sf /usr/local/cuda/lib64/stubs/libcuda.so.1 /usr/lib/x86_64-linux-gnu/libcuda.so.1 \
  && ldconfig
 
-# llama-cpp-sys-2's bundled llama.cpp has unconditional NCCL calls in
-# ggml-cuda.cu (single-GPU builds still reference the multi-GPU
-# all-reduce primitives). Its build.rs doesn't emit
-# `cargo:rustc-link-lib=nccl`, so the static archive's symbols stay
-# unresolved at the final binary link. Inject `-lnccl` here so rustc
-# appends it to the link command.
-#
 # `-fuse-ld=lld` swaps the slow GNU bfd linker for LLVM lld — measurable
-# win on the final sovereign-cli link (lancedb + arrow + llama-cpp pull
-# in a lot of object files).
-# Since the vendored llama-cpp-4 dropped `dynamic-link`, ggml/llama link
-# STATICALLY into the Rust binaries — and llama-cpp-sys-4's build.rs
-# emits no CUDA link directives (it only sets GGML_CUDA=ON in cmake; the
-# transitive cudart/cublas deps used to travel inside libggml-cuda.so).
-# Append them here: runtime API (cudart), cuBLAS (+Lt), and the driver
-# API (cuda — VMM cuMem* calls; resolved from the stubs at build time,
-# the real driver mount at runtime).
-ENV RUSTFLAGS="-C link-arg=-lnccl -C link-arg=-fuse-ld=lld -C link-arg=-L/usr/local/cuda/lib64 -C link-arg=-lcudart -C link-arg=-lcublas -C link-arg=-lcublasLt -C link-arg=-lcuda"
+# win on the final sovereign-cli link (lancedb + arrow pull in a lot of
+# object files). The CUDA libraries (-lnccl -lcudart -lcublas -lcublasLt
+# -lcuda) stood here while ggml linked statically into the Rust binaries;
+# no Rust crate links ggml since the vendored llama crates went
+# (ENGINE_SWAP_PLAN G3), and build.sh links the llama-server's own.
+ENV RUSTFLAGS="-C link-arg=-fuse-ld=lld"
 
 # sccache wiring. CARGO_INCREMENTAL=0 is mandatory — sccache can't cache
 # anything while rustc emits per-crate incremental fragments. The CMAKE
@@ -183,24 +172,8 @@ COPY clients/desktop/src-tauri/ ./clients/desktop/src-tauri/
 COPY clients/mobile/src-tauri/  ./clients/mobile/src-tauri/
 COPY quality/xtask/        ./quality/xtask/
 COPY quality/arch-layers/  ./quality/arch-layers/
-# [patch.crates-io] in the root manifest points llama-cpp-4, llama-cpp-sys-4
-# and lance-linalg at vendor/ — without it cargo resolves the unpatched
-# registry crates (wrong llama.cpp = wrong RPC wire version).
-#
-# llama-cpp-sys-4 joined the patch set on 2026-08-03 and takes this COPY from
-# ~1 MB to ~35 MB, because that crate carries llama.cpp itself. It is vendored
-# for exactly one reason: to hold the llama.cpp revision one commit ahead of
-# what the published crate bundles (upstream 1464c62d88, the Metal DSv4
-# Lightning Indexer kernel). Provenance and the re-pin procedure are in
-# vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT, and
-# ./scripts/verify-vendored-llama-cpp.sh checks the tree against upstream.
-#
-# Adding a file under llama.cpp/ used to need a `touch` on the top-level
-# CMakeLists.txt as well, to move build.rs's mtime-keyed extraction cache.
-# DO NOT RELY ON THAT — a touch changes no content, so podman reuses this
-# COPY layer verbatim, old mtimes and all, and the key never moves. The
-# extraction is now unconditional at the cargo build step below; see the
-# comment there.
+# [patch.crates-io] in the root manifest points lance-linalg at vendor/;
+# cargo fails the workspace load outright on a patch whose path is missing.
 COPY vendor/              ./vendor/
 # sovereign-cli-shared's cli_contract::manifest_path() is
 # env!("SOVEREIGN_CLI_CONTRACT"); in-tree the workspace .cargo/config.toml
@@ -211,63 +184,7 @@ COPY vendor/              ./vendor/
 # read it (sovereign-cli main.rs), and a worker pod runs none of them.
 ENV SOVEREIGN_CLI_CONTRACT=/workspace/svrn/docs/cli-contract.toml
 
-# Swap the linux llama-cpp-4 backend feature (whichever of "rocm" or
-# "vulkan" is currently checked in — the repo default has flipped over
-# time) to "cuda" for this image. We do it in-image rather than via a
-# Cargo feature flag because the choice lives inside a target-conditional
-# dependency declaration, not in the workspace features table. The ROCm
-# image runs the same script with its own target argument, so the two
-# cannot drift apart.
-COPY serve/container/swap-inference-backend.py /usr/local/bin/swap-inference-backend.py
-RUN python3 /usr/local/bin/swap-inference-backend.py /workspace cuda
-
 WORKDIR /workspace
-# Pre-fetch dependencies so the llama.cpp source lands on disk in the
-# cargo registry; then patch its CMakeLists to default GGML_CUDA_NCCL
-# to OFF. NCCL is only useful for multi-GPU peer-to-peer collectives,
-# but llama.cpp's `ggml_cuda_init` calls `ncclCommInitAll`
-# unconditionally and hard-fails on hosts where the driver/runtime/
-# NCCL combo doesn't line up (common on Vast.ai marketplaces where
-# host driver versions vary widely). Single-GPU pods don't need NCCL.
-# With this patch, ncclCommInitAll is never called and the daemon
-# starts cleanly on any host with a CUDA-capable driver.
-#
-# BuildKit cache mounts persist the cargo registry, git checkouts,
-# target dir, and sccache across rebuilds. First build is cold; every
-# subsequent rebuild reuses dep compiles + cached nvcc artifacts. The
-# sed patch runs inside the same mount as fetch so the registry the
-# build sees is the patched one. `sharing=locked` serializes parallel
-# builds against the same cache; flip to `shared` if doing multi-arch
-# matrix builds.
-#
-# The compiled binary is copied out of the cached target dir into
-# /usr/local/bin so the runtime stage can COPY --from=build from a
-# real image layer (cache mounts don't survive across stages).
-# SEARCHES BOTH ROOTS, AND REFUSES AN EMPTY MATCH (2026-08-28). This looked
-# only under the cargo registry, which was right until `llama-cpp-sys-4`
-# joined the `[patch.crates-io]` set on 2026-08-03 and started resolving to
-# `vendor/` — after which `cargo fetch` never puts it in the registry and the
-# `find` returns nothing. The observed symptom is `sed: no input files`,
-# exit 123, ~6 min into the build.
-#
-# The dangerous version of this bug is the one where it does NOT error. A
-# patch step that silently matches nothing leaves GGML_CUDA_NCCL ON, and the
-# daemon then segfaults the moment llama.cpp enumerates CUDA — a build that
-# exits 0 and produces an image that cannot start (§18.3). Hence the explicit
-# empty check rather than relying on `xargs` to fail.
-RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
-    --mount=type=cache,target=/root/.cargo/git,sharing=locked \
-    cargo fetch \
- && CMAKE_LISTS="$(find /root/.cargo/registry/src /workspace/vendor \
-      -path '*/llama-cpp-sys-4*/llama.cpp/ggml/CMakeLists.txt' 2>/dev/null)" \
- && { [ -n "$CMAKE_LISTS" ] || { \
-      echo "FATAL: no llama-cpp-sys-4 ggml/CMakeLists.txt under the registry OR vendor/;" \
-           "the NCCL patch would no-op and the daemon would segfault on CUDA enumeration"; \
-      exit 1; }; } \
- && echo "$CMAKE_LISTS" \
-    | xargs sed -i 's|option(GGML_CUDA_NCCL\s*"[^"]*"\s*ON)|option(GGML_CUDA_NCCL "" OFF)|' \
- && echo "$CMAKE_LISTS" | xargs grep -n GGML_CUDA_NCCL
-
 # The llama-server the daemon ships for kind = "llama-server", built from the
 # pin by build.sh in its CUDA mode (CMAKE_CUDA_ARCHITECTURES above, NCCL off),
 # with ggml-rpc-server and llama-server.manifest.toml, into /usr/local/bin: the
@@ -283,25 +200,11 @@ RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/workspace/target \
     env -u RUSTFLAGS serve/crates/sovereign-compute/llama-server/build.sh --backend cuda --install-dir /usr/local/bin
 
-# THE `rm -rf` IS LOAD-BEARING — DO NOT DROP IT AS A TIDY-UP (2026-08-28).
-# /workspace/target is a persistent cache mount, and build.rs extracts
-# llama.cpp into target/release/build/llama-cpp-sys-4-*/out/, re-copying only
-# when `llama_src_version` changes. On a non-git tree that version is the
-# MTIME of llama.cpp/CMakeLists.txt plus a patches hash (build.rs:519-558).
-# Two caches then conspire: adding source files under llama.cpp/ does not move
-# an mtime, and `touch`ing the CMakeLists does not move podman's CONTENT-
-# addressed layer digest either, so the COPY layer is reused WITH THE OLD
-# MTIME and the key never changes. The compile then fails on a file that is
-# demonstrably present in the image — which cost four rebuilds on 2026-08-28.
-# Deleting the extracted copy makes the extraction unconditional and drops the
-# mtime dependence entirely. It is not expensive: /root/.cache/sccache is
-# mounted right above, so the C++/CUDA recompile is served from there.
 RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
     --mount=type=cache,target=/root/.cache/sccache,sharing=locked \
     --mount=type=cache,target=/workspace/target \
-    rm -rf /workspace/target/release/build/llama-cpp-sys-4-*/out/llama.cpp \
- && cargo build --release --bin sovereign-cli --bin sovereign-cli-daemon --bin sovereign-cli-llm --bin sovereign-stock --bin sovereign-pod-worker \
+    cargo build --release --bin sovereign-cli --bin sovereign-cli-daemon --bin sovereign-cli-llm --bin sovereign-stock --bin sovereign-pod-worker \
  && cp /workspace/target/release/sovereign-cli        /usr/local/bin/sovereign-cli \
  && cp /workspace/target/release/sovereign-cli-daemon /usr/local/bin/sovereign-cli-daemon \
  && cp /workspace/target/release/sovereign-cli-llm    /usr/local/bin/sovereign-cli-llm \
@@ -400,12 +303,9 @@ COPY --from=build /usr/local/bin/sovereign-pod-worker /usr/local/bin/sovereign-p
 COPY --from=build /usr/local/bin/cuda-preflight /usr/local/bin/cuda-preflight
 COPY --from=build /usr/local/bin/llama-server /usr/local/bin/ggml-rpc-server \
                   /usr/local/bin/llama-server.manifest.toml /usr/local/bin/
-# NOTE: no llama.cpp shared-lib copy here anymore. The vendored
-# llama-cpp-4 dropped `dynamic-link` from its default features
-# (vendor/llama-cpp-4/Cargo.toml — "sovereign vendor divergence"), so
-# ggml/llama link STATICALLY into sovereign-cli; there are no
-# libggml*/libllama* .so files to ship, and /workspace/target is a
-# cache mount that never persists into stage layers anyway.
+# No llama.cpp shared-lib copy: no Rust binary links ggml/llama, and build.sh
+# links the llama-server statically, so there are no libggml*/libllama* .so
+# files to ship.
 # Stub libcuda.so so the binary's dynamic linker is satisfied on hosts
 # without a GPU (e.g. local podman smoke tests). On real Vast pods the
 # NVIDIA Container Toolkit bind-mounts the real libcuda.so.1 from the

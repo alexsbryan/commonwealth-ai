@@ -264,7 +264,6 @@ its comments explain why. For orientation when something new breaks:
 | *(Windows)* `cannot use 'throw' with exceptions disabled` / `undefined symbol: __std_max_element_4i` | cargo-xwin's C++ flags lack `/EHsc` and mix bleeding-edge msstl headers with the older xwin CRT's `msvcprt.lib`; entrypoint forces a unified xwin-CRT CXXFLAGS set via cargo `[env]` (a plain export is clobbered by cargo-xwin) |
 | *(Windows)* aws-lc-sys "NASM command not found" | nasm is in the image; the MSVC asm path needs it |
 | *(Windows)* `could not find native static library onnxruntime` on a rerun | ort-sys extracts pyke's prebuilt into `/root/.cache/ort.pyke.io` and cargo caches that path; persisted via the `.ort-cache-container/` mount |
-| *(Windows)* llama cmake dies on a `C:\Temp/llcb/…` path | llama-cpp-sys-4's MAX_PATH workaround keys off the TARGET; `LOCALAPPDATA=/tmp` in the entrypoint redirects it to a valid host path |
 | *(Windows)* `undefined symbol: RegOpenKeyExA` at llama's cmake link | xwin's toolchain file deliberately empties CMake's standard libraries and its libpaths miss the compiler-ID try-link; the entrypoint's wrapper toolchain (`sovereign-windows-toolchain.cmake`) restores both |
 | *(Windows)* tauri-cli panics "Can't detect any appindicator library" | host-side detection that runs on Linux regardless of target; `libayatana-appindicator3-dev` is in the image |
 
@@ -326,8 +325,7 @@ Three names have to agree, and only two of them are checked by the compiler:
 | `scripts/stage-daemon-sidecar.sh` | `SIDECAR_NAME="sovereign-cli-daemon"`, `LOADER_NAME="sovereign-stock"` |
 
 The second binary is the loader the sidecar execs for `daemon run` and for
-first-run setup's probe, found beside the sidecar; it carries the Windows GPU
-features (`SOVEREIGN_SIDECAR_FEATURES`). Until pb-distribution-setup the bundle
+first-run setup's probe, found beside the sidecar. Until pb-distribution-setup the bundle
 carried no binary `daemon run` could exec. The other three entries are the
 inference server and its RPC sibling (a third and fourth `externalBin`) and the
 manifest (a `bundle.resources` entry, not an executable), which
@@ -726,7 +724,7 @@ load-bearing artifact of the release process.
 
 Two driver scripts run the same build the GitHub Actions workflow runs,
 locally — so you can iterate on Tauri config / `.cargo/config.toml` /
-llama-cpp-sys-4 linkage / Vulkan bundling without 30-minute round-trips
+llama-server staging / Vulkan bundling without 30-minute round-trips
 through CI.
 
 ### Linux
@@ -855,39 +853,10 @@ EV cert (Phase 2).
 `sudo apt install libfuse2` on the user's machine. Modern distros have
 moved to FUSE 3; AppImage still uses 2.
 
-### Linux build fails: `Could not find dependency: libggml-base.so.0`
-
-You'll only see this if `dynamic-link` has been re-enabled on
-`llama-cpp-4`. By default the project **static-links** ggml/llama (the
-vendored `llama-cpp-4` drops `dynamic-link` from its `default`
-features), so the binary has no `libggml*.so` / `libllama*.so`
-`DT_NEEDED` entries at all — every installer (`.deb`, `.rpm`, AppImage)
-is self-contained, and `linuxdeploy`'s dependency walk only sees
-packageable system libs (`libvulkan.so.1`, GTK, …).
-
-If you turn `dynamic-link` back on, `llama-cpp-sys-4` emits shared libs
-(`libggml-base.so.0` … `libmtmd.so.0`) into its hashed CMake-cache dir
-(`target/<triple>/llama-cmake-cache/<hash>/{build/bin,lib}/`), which is
-on no standard search path — so `linuxdeploy` can't find them and
-aborts. To make that path work you'd need to `cargo tauri build
---no-bundle` first, then put that dir on `LD_LIBRARY_PATH` before the
-bundling pass (linuxdeploy then copies them into `AppDir/usr/lib/` and
-patches the binary RUNPATH to `$ORIGIN/../lib`) — **and** separately
-co-package them into the `.deb`/`.rpm` (those bundlers skip the
-dependency walk, so they'd build but not launch). Static-linking
-sidesteps all of this; prefer it.
-
-Verify a build is self-contained (no ggml/llama in the dynamic deps):
-
-```sh
-readelf -d target/<triple>/release/sovereign-desktop | grep -E 'NEEDED.*(ggml|llama|mtmd)'
-# → no output when static-linked
-```
-
 ### deb/rpm installs but won't launch: `libvulkan.so.1: cannot open`
 
-The Vulkan backend still dynamically links the **system** loader
-`libvulkan.so.1` (only ggml/llama are static). Tauri doesn't auto-detect
+The staged llama-server's Vulkan backend dynamically links the **system**
+loader `libvulkan.so.1` (ggml/llama are static in it). Tauri doesn't auto-detect
 it, so `tauri.release.conf.json` declares it explicitly:
 `bundle.linux.deb.depends = ["libvulkan1"]` and
 `bundle.linux.rpm.depends = ["vulkan-loader"]`. apt/dnf then pull the
@@ -902,8 +871,8 @@ the sonames.)
 
 ### Linux build fails: `'spv' has not been declared` / `glslc` not found
 
-Vulkan build tooling missing. The Linux backend forces
-`-DGGML_VULKAN=ON`, so the build needs `glslc` (from `shaderc`), the
+Vulkan build tooling missing. `stage-daemon-sidecar.sh` runs build.sh
+`--backend vulkan` on Linux, so the llama-server build needs `glslc` (from `shaderc`), the
 SPIR-V headers (`spirv-headers` — ggml-vulkan.cpp `#include`s
 `<spirv/unified1/spirv.hpp>` for the `spv::` namespace), and
 `libvulkan-dev`. Stock Ubuntu 22.04 has none of `glslc`/`shaderc`/
@@ -927,7 +896,9 @@ These are wired into the workflow + `build-desktop-{linux,macos}.sh`.
 ### macOS build fails: `'path'/'string' is unavailable: introduced in macOS 10.15`
 
 In `llama-cpp-sys-4`'s ggml compile (`ggml-backend-dl.cpp` uses
-`std::filesystem`). The `cc` crate picks the deployment target as: (1)
+`std::filesystem`); that crate left the workspace in ENGINE_SWAP_PLAN G3, and
+the `.cargo/config.toml` pin below stays for any other C++ the `cc` crate
+compiles. The `cc` crate picks the deployment target as: (1)
 `MACOSX_DEPLOYMENT_TARGET` env if set, else (2) **the Xcode SDK's
 `DefaultDeploymentTarget` — 10.13 on Xcode 15.4**, else (3) arch default.
 With the env var unset it falls to 10.13, which predates `std::filesystem`.
@@ -941,17 +912,6 @@ NB: this is NOT driven by Tauri's `minimumSystemVersion` — `tauri-build`'s
 `cargo:rustc-env` only reaches `sovereign-desktop`'s own rustc and runs
 *after* `llama-cpp-sys-4` is already built. It's a COMPILE-time floor, so
 a rustflags `link-arg` cannot fix it.
-
-### macOS build fails: `libomp not found` / `OpenMP not found`
-
-The vendored `llama-cpp-4`'s default features include `openmp`, which on
-macOS makes `llama-cpp-sys-4` build ggml with `-DGGML_OPENMP=ON` and
-demand a Homebrew `libomp` → `libomp.dylib`, a non-self-contained runtime
-dep the `.app` would have to bundle (the same trap static-linking closed).
-Fix: `sovereign-inference/Cargo.toml`'s macOS `llama-cpp-4` dep uses
-`default-features = false, features = ["metal", "mtmd"]` (drops openmp,
-keeps mtmd). Linux keeps openmp — `libgomp` is a standard system lib
-there. ggml's pthread threadpool covers CPU ops; Metal does the real work.
 
 ### Windows build fails: `unresolved import std::os::fd` / `pdfium.dll not found in archive`
 

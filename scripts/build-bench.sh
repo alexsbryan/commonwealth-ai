@@ -281,8 +281,6 @@ opt-level = 3
 opt-level = 3
 [profile.dev-release.package."lance-index"]
 opt-level = 3
-[profile.dev-release.package."llama-cpp-sys-4"]
-opt-level = 3
 [profile.dev-release.package."arrow"]
 opt-level = 3
 

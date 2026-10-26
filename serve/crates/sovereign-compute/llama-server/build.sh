@@ -29,9 +29,7 @@
 # `--version` names the enclosing repo's HEAD, since cmake reads the git repo
 # that target/ sits in.
 #
-# The tree comes from codeload at the pinned SHA. The vendored tree cannot
-# build the server (it keeps only tools/server's CMakeLists.txt and
-# server.cpp).
+# The tree comes from codeload at the pinned SHA.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../../../.." && pwd)
@@ -73,13 +71,6 @@ case $sha in
   [0-9a-f]*) [ ${#sha} -eq 40 ] || { echo "build.sh: llama_cpp_commit in $pin is not a 40-char sha" >&2; exit 2; } ;;
   *) echo "build.sh: no llama_cpp_commit in $pin" >&2; exit 2 ;;
 esac
-# The conformance battery compares the embedded engine with this server, so
-# while the embedded engine is vendored the two are built from one commit.
-vendored=$repo/vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT
-if [ -f "$vendored" ] && [ "$(head -1 "$vendored")" != "$sha" ]; then
-  echo "build.sh: $pin pins $sha, the embedded engine vendors $(head -1 "$vendored") ($vendored)" >&2
-  exit 2
-fi
 
 # The pristine tarball, fetched once per SHA into $1.
 fetch() {
@@ -134,8 +125,9 @@ esac
 binaries=$(sed -n 's/^binaries = \[\(.*\)\]$/\1/p' "$pin" | tr ',"' '  ')
 [ -n "$binaries" ] || { echo "build.sh: no binaries list in $pin" >&2; exit 2; }
 
-# The backend's flags. The macOS modes match the embedded engine's build
-# (vendor/llama-cpp-sys-4/build.rs): no OpenMP, 10.15, and GGML_NATIVE off with
+# The backend's flags. The macOS modes match the build the embedded engine
+# shipped with (llama-cpp-sys-4's build.rs, deleted in ENGINE_SWAP_PLAN G3):
+# no OpenMP, 10.15, and GGML_NATIVE off with
 # its portable CPU baseline, since a release runs on Macs other than the
 # builder. The pod modes are portable too; GPU_TARGETS and
 # CMAKE_CUDA_ARCHITECTURES pass through from the Containerfiles' env.
@@ -155,7 +147,7 @@ case $backend in
   # No PIE, as serve/container/Containerfile links the daemon: ggml-hip's
   # static archive carries R_X86_64_32 relocations a PIE link rejects.
   rocm) flags="-DGGML_HIP=ON -DGGML_NATIVE=OFF -DCMAKE_EXE_LINKER_FLAGS=-no-pie${GPU_TARGETS:+ -DGPU_TARGETS=$GPU_TARGETS}" ;;
-  # NCCL off as Containerfile.cuda sets it for the embedded engine: with it on,
+  # NCCL off, as Containerfile.cuda once patched it for the embedded engine: with it on,
   # ggml_cuda_init's ncclCommInitAll fails on pod hosts whose driver and NCCL
   # disagree, and a single-GPU pod has no use for it.
   cuda) flags="-DGGML_CUDA=ON -DGGML_CUDA_NCCL=OFF -DGGML_NATIVE=OFF${CMAKE_CUDA_ARCHITECTURES:+ -DCMAKE_CUDA_ARCHITECTURES=$CMAKE_CUDA_ARCHITECTURES}" ;;

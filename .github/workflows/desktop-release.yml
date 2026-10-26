@@ -152,19 +152,17 @@ jobs:
           # the arm64 + Linux artifacts the way macos-13 did. See RELEASING.md
           # §"macOS Intel (x86_64) — self-hosted runner" for the per-release flow.
           #
-          # WINDOWS: code is wired (sovereign-inference cfg(target_os="windows")
-          # llama arm, CPU baseline + feature-selected vulkan/cuda; readiness
-          # fixes landed) and the Rust/cfg layer cross-checks clean via
-          # scripts/windows-crosscheck.sh (cargo-xwin). IMPORTANT: windows-2022 is
+          # WINDOWS: readiness fixes landed and the Rust/cfg layer cross-checks
+          # clean via scripts/windows-crosscheck.sh (cargo-xwin). IMPORTANT: windows-2022 is
           # a NATIVE x86_64 runner — that build is NOT cross-compiled, so the
           # OpenSSL/lance cross-link failures above are cargo-xwin (cross)
           # ARTIFACTS that should not occur there. cargo-xwin cannot prove the
           # native-dep build; the leg stays COMMENTED until the NATIVE build is
           # validated on a Windows VM or one windows-2022 run. If native Windows
-          # DOES hit the llama OpenSSL link, the minimal fix is dropping `mtmd`
-          # from the desktop (no common → no cpp-httplib → no OpenSSL), not a
-          # vendored fork. Backend roadmap: CPU first, then windows-x64-vulkan
-          # (SOVEREIGN_SIDECAR_FEATURES=windows-vulkan + Vulkan SDK).
+          # hits an OpenSSL link, look there first. The GPU backend is the
+          # llama-server's, and build.sh has no Windows mode yet, so
+          # stage-daemon-sidecar.sh refuses this target until it does (no
+          # cargo crate links llama.cpp since ENGINE_SWAP_PLAN G3).
           - name: macos-arm64
             runner: macos-14
             target: aarch64-apple-darwin
@@ -186,17 +184,6 @@ jobs:
           # old cross-link blockers are solved there (see that script + the
           # RELEASING.md "Full local release" symptom table); this CI leg
           # stays available as the native-MSVC alternative.
-          # - name: windows-x86_64-vulkan     # NVIDIA+AMD+Intel GPU; needs a Vulkan SDK install step
-          #   runner: windows-2022
-          #   target: x86_64-pc-windows-msvc
-          #   # Since sv-surface svt-7 (2026-09-12) the GPU backend is chosen
-          #   # on the LOADER's build (sovereign-stock, staged beside the
-          #   # sidecar since pb-distribution-setup), not the app's: the
-          #   # desktop links no inference stack to forward a feature to. Set
-          #   # SOVEREIGN_SIDECAR_FEATURES=windows-vulkan for the
-          #   # stage-daemon-sidecar.sh step rather than passing
-          #   # `cargo tauri build --features`.
-          #   sidecar_features: windows-vulkan
 
     steps:
       - name: Checkout
@@ -258,44 +245,6 @@ jobs:
           workspaces: "."
           key: desktop-release-${{ matrix.platform.target }}
           save-if: false
-      # See ci.yml's test job for the full story: rust-cache's cleanup
-      # deletes target/llama-cmake-cache while keeping the sys crate's
-      # fingerprint (poisoned cache → link failure). Cache the tree
-      # separately; key shared with CI (the C++ is CMAKE_BUILD_TYPE=Release
-      # regardless of cargo profile). Windows uses a LOCALAPPDATA path
-      # instead of this dir; the steps are harmless no-ops there.
-      #
-      # KEY FIX (2026-07-24): this was `hashFiles('Cargo.lock')`. Cargo.lock
-      # changed 29 times in July; llama-cpp-sys-4's version has changed 4
-      # times EVER — so nearly every release rebuilt llama.cpp from source to
-      # produce bit-identical output. On macOS, billed at 10x, that ~20-minute
-      # C++ build was roughly 200 of the 250 billed minutes this leg cost per
-      # run. Key on what actually invalidates the artifact.
-      #
-      # restore-only, for the same reason as the cargo cache above: CI's
-      # `test` job is the writer of this key.
-      - name: Resolve llama-cpp-sys-4 version (cache key input)
-        id: llama-ver
-        shell: bash
-        run: |
-          ver=$(awk '/^name = "llama-cpp-sys-4"$/{getline; gsub(/"/,"",$3); print $3; exit}' Cargo.lock)
-          if [ -z "$ver" ]; then
-            echo "::error::could not resolve llama-cpp-sys-4 version from Cargo.lock" >&2
-            exit 1
-          fi
-          echo "ver=$ver" >> "$GITHUB_OUTPUT"
-      - name: Restore llama.cpp CMake tree
-        uses: actions/cache/restore@v6
-        with:
-          path: target/llama-cmake-cache
-          key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ steps.llama-ver.outputs.ver }}-${{ hashFiles('rust-toolchain.toml') }}
-      - name: Guard llama fingerprint vs missing CMake tree
-        shell: bash
-        run: |
-          if ! ls target/llama-cmake-cache/*/lib*/libllama.* >/dev/null 2>&1; then
-            rm -rf target/*/.fingerprint/llama-cpp-sys-4-* 2>/dev/null || true
-          fi
-
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0.0" --locked
 
@@ -315,9 +264,9 @@ jobs:
         run: |
           # Vulkan build tooling is NOT on the stock ubuntu-22.04 runner
           # and stock Ubuntu apt has no `glslc`/`shaderc`/`spirv-headers`.
-          # sovereign-inference forces llama-cpp-4's `vulkan` feature on
-          # Linux, so llama-cpp-sys-4 builds ggml with -DGGML_VULKAN=ON and
-          # needs: glslc (ggml-vulkan's vulkan-shaders-gen), the SPIR-V
+          # stage-daemon-sidecar.sh runs build.sh --backend vulkan on Linux,
+          # which builds the shipped llama-server's ggml with
+          # -DGGML_VULKAN=ON and needs: glslc (ggml-vulkan's vulkan-shaders-gen), the SPIR-V
           # headers (ggml-vulkan.cpp #includes <spirv/unified1/spirv.hpp>
           # for the `spv::` namespace), and libvulkan.so to link against.
           # LunarG's apt repo provides all three. (Mirrors
@@ -395,13 +344,16 @@ jobs:
           # job installs protobuf-compiler explicitly via apt) — without this
           # the build dies in lance-encoding with "Could not find `protoc`".
           #
-          # cmake: llama-cpp-sys-4 needs it to compile llama.cpp's Metal backend.
+          # cmake: build.sh compiles the shipped llama-server's llama.cpp
+          # (Metal on arm64), and aws-lc-sys's build script uses it.
           # Preinstalled on the hosted macOS runner, but NOT guaranteed on a
           # self-hosted Mac — install it explicitly (brew skips it if present).
           brew install lld protobuf cmake
-          # SDKROOT: llama-cpp-sys-4's bindgen step resolves system headers via
-          # the macOS SDK; without an explicit SDKROOT it fails with
-          # "'memory' file not found". $GITHUB_ENV persists it to every later
+          # SDKROOT: llama-cpp-sys-4's bindgen step resolved system headers via
+          # the macOS SDK; without an explicit SDKROOT it failed with
+          # "'memory' file not found". That crate left in ENGINE_SWAP_PLAN G3
+          # and nothing else in Cargo.lock uses bindgen; kept until a macOS
+          # leg runs without it. $GITHUB_ENV persists it to every later
           # step (this run: shell is otherwise discarded). See
           # feedback_macos_sdkroot_for_bindgen.
           echo "SDKROOT=$(xcrun --show-sdk-path)" >> "$GITHUB_ENV"
@@ -477,10 +429,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_PRIVATE_KEY_PASSWORD }}
         run: |
-          # ggml/llama are static-linked into the binary (the vendored
-          # llama-cpp-4 drops `dynamic-link` from its defaults), so the
-          # bundle is self-contained — no libggml*.so / libllama*.so to
-          # locate or co-package, and linuxdeploy's AppImage dependency walk
+          # No cargo crate links ggml/llama (ENGINE_SWAP_PLAN G3), and build.sh
+          # links the staged llama-server statically, so the bundle is
+          # self-contained — no libggml*.so / libllama*.so to locate or
+          # co-package, and linuxdeploy's AppImage dependency walk
           # only sees packageable system libs (libvulkan.so.1, GTK, …). A
           # single build pass produces all installers.
           #

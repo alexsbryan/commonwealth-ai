@@ -181,11 +181,9 @@ workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hac
 # The `windows-vulkan` / `windows-cuda` forwards stood here and are GONE
 # (svt-7). They forwarded to `sovereign-inference`, which this crate no longer
 # has — and they were selecting a GPU backend for a process that loads no
-# models. The selection belongs to the build of the thing that does: the
-# SIDECAR. `scripts/stage-daemon-sidecar.sh` passes them to the
-# `sovereign-cli-daemon` build, and the release matrix's Windows GPU legs pass
-# `SOVEREIGN_SIDECAR_FEATURES` to that script rather than
-# `cargo tauri build --features windows-vulkan`.
+# models. The features themselves went in ENGINE_SWAP_PLAN G3 with the
+# vendored llama crates; the GPU backend is the staged llama-server's, chosen
+# by build.sh's `--backend`.
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

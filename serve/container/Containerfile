@@ -39,7 +39,7 @@ FROM docker.io/rocm/dev-ubuntu-22.04:7.2 AS build
 ENV DEBIAN_FRONTEND=noninteractive
 # Build-chain peer deps for the Cargo workspace:
 #   protobuf-compiler  — lance-encoding / prost-build need `protoc`
-#   clang / libclang   — bindgen (llama-cpp-rs, ring, etc.)
+#   clang / libclang   — C build scripts (ring, aws-lc-sys)
 #   python3            — invoked by some build scripts (llama.cpp helpers)
 #   hipblas-dev /
 #   rocblas-dev        — math libs llama.cpp's GGML_HIP=ON needs at
@@ -117,25 +117,16 @@ ENV hipblas_ROOT=/opt/rocm
 ENV rocblas_ROOT=/opt/rocm
 ENV hipblaslt_ROOT=/opt/rocm
 
-# The daemon's link flags. Two jobs:
-#
-# 1. The HIP math libs. cmake adds hip::host / roc::hipblas / roc::rocblas
-#    to ggml-hip's own target, but the vendored llama-cpp-sys-4 build.rs
-#    emits the Rust link line and does not know about them (it emits only
-#    vulkan, gomp, and the Apple frameworks). Without this the final
-#    sovereign-cli link fails on undefined hipblas/rocblas symbols. The
-#    CUDA image passes its equivalents (-lcudart -lcublas) the same way.
-# 2. `-fuse-ld=lld` swaps the slow GNU bfd linker for LLVM lld.
-#
-# No -no-pie: with HIPFLAGS=-fPIC above, ggml-hip's archive is PIC and the
-# default PIE link is correct. (Historically it was not PIC, and -no-pie was
-# the workaround — which then broke proc-macro links in the llama-server
-# build's nested cargo.)
+# The daemon's link flags: `-fuse-ld=lld` swaps the slow GNU bfd linker for
+# LLVM lld. The HIP math libs (-lamdhip64 -lhipblas -lrocblas) stood here
+# while ggml-hip linked statically into the Rust binaries; no Rust crate
+# links ggml since the vendored llama crates went (ENGINE_SWAP_PLAN G3), and
+# build.sh links the llama-server's own.
 # Same stamp as Containerfile.cuda: `sovereign-pods`'s worker daemon logs it at
 # startup. Pass: --build-arg GIT_SHA=$(git rev-parse --short HEAD)
 ARG GIT_SHA=unknown
 ENV SOVEREIGN_GIT_SHA=${GIT_SHA}
-ENV RUSTFLAGS="-C link-arg=-L/opt/rocm/lib -C link-arg=-lamdhip64 -C link-arg=-lhipblas -C link-arg=-lrocblas -C link-arg=-fuse-ld=lld"
+ENV RUSTFLAGS="-C link-arg=-fuse-ld=lld"
 
 # sccache wiring. CARGO_INCREMENTAL=0 mandatory — see Containerfile.cuda.
 # CMAKE_HIP_COMPILER_LAUNCHER routes ggml-hip's hipcc compiles through
@@ -171,16 +162,9 @@ COPY clients/desktop/src-tauri/ ./clients/desktop/src-tauri/
 COPY clients/mobile/src-tauri/  ./clients/mobile/src-tauri/
 COPY quality/xtask/        ./quality/xtask/
 COPY quality/arch-layers/  ./quality/arch-layers/
-# [patch.crates-io] in the root manifest points llama-cpp-4, llama-cpp-sys-4
-# and lance-linalg at vendor/. Omitting this does not degrade gracefully:
-# cargo fails the workspace load outright on a patch whose path is missing.
-#
-# vendor/llama-cpp-sys-4 is ~35 MB because it carries llama.cpp itself. We
-# vendor it to hold the llama.cpp revision one commit ahead of what the
-# published crate bundles (upstream 1464c62d88 — the Metal DSv4 Lightning
-# Indexer kernel); see vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT. Resolving the
-# unpatched registry crates would build a DIFFERENT llama.cpp — wrong RPC wire
-# version, and a Metal worker that aborts mid-graph on DeepSeek-V4.
+# [patch.crates-io] in the root manifest points lance-linalg at vendor/.
+# Omitting this does not degrade gracefully: cargo fails the workspace load
+# outright on a patch whose path is missing.
 COPY vendor/              ./vendor/
 # sovereign-cli-shared's cli_contract::manifest_path() is
 # env!("SOVEREIGN_CLI_CONTRACT"); in-tree the workspace .cargo/config.toml
@@ -190,14 +174,6 @@ COPY vendor/              ./vendor/
 # `svrn contract` and the hidden dev verbs `__contract-smoke`/`__journey-plan`
 # read it (sovereign-cli main.rs), and a worker pod runs none of them.
 ENV SOVEREIGN_CLI_CONTRACT=/workspace/svrn/docs/cli-contract.toml
-
-# Swap the linux llama-cpp-4 backend feature from the repo default (currently
-# "vulkan") to "hip". Without it the daemon's embedded engine links ggml-vulkan,
-# and this image carries no Vulkan SDK (ggml-vulkan/CMakeLists.txt needs glslc),
-# so the build dies in llama-cpp-sys-4 instead of linking a ROCm backend. The
-# CUDA image runs the same script with "cuda"; one implementation, two targets.
-COPY serve/container/swap-inference-backend.py /usr/local/bin/swap-inference-backend.py
-RUN python3 /usr/local/bin/swap-inference-backend.py /workspace hip
 
 # The llama-server the daemon ships for kind = "llama-server", built from the
 # pin by build.sh in its ROCm mode (HIPFLAGS above carry the ISA as
@@ -219,9 +195,8 @@ RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
 # the full explanation. The explicit --target keeps RUSTFLAGS' link-args
 # off proc-macros and build scripts: a -shared proc-macro linked with the
 # daemon's flags fails (rust-lld: undefined symbol main, `paste` and
-# `time-macros` on stable rustc, 2026-10-12) — the -no-pie that used to
-# break this is gone now that HIPFLAGS=-fPIC makes the archive PIC, but the
-# -L/-l HIP libs are equally wrong on a proc-macro. Binary copied out of the
+# `time-macros` on stable rustc, 2026-10-12, when RUSTFLAGS still carried
+# the HIP libs). Binary copied out of the
 # cached target dir into /usr/local/bin so the runtime stage's COPY
 # --from=build pulls from a real image layer (cache mounts don't survive
 # across stages).

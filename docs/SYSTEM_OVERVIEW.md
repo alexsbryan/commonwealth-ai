@@ -43,8 +43,9 @@ commonwealth-ai/
 └── docs/             # This file, ARCH_PRINCIPLES and the other repo-wide docs
 ```
 
-Also at the top: `scripts/` (the build and test wrappers), `vendor/` (pinned
-`llama-cpp-4`), `research/` (cross-program spikes and captured runs), `gym/`
+Also at the top: `scripts/` (the build and test wrappers), `vendor/` (patched
+`lance-linalg`; the vendored llama-cpp crates went in ENGINE_SWAP_PLAN G3),
+`research/` (cross-program spikes and captured runs), `gym/`
 (the next-edit and FIM case banks, the comaintainer seat's charter) and
 `ralph/` (the work loop's queue and decisions). Downloaded GGUF weights sit
 in a gitignored models directory under sovereign/, the one thing left there.
@@ -2138,7 +2139,9 @@ cargo build -p sovereign-cli -p sovereign-cli-daemon \
 For local deployed-daemon iteration use `scripts/dev-release.sh` rather than
 plain `--release`: same opt-level, LTO and codegen-units overridden via env,
 so a one-line change costs seconds instead of ~7.5 minutes. A custom cargo
-profile cannot do this — `llama-cpp-sys-4`'s build script panics under any.
+profile could not do this while `llama-cpp-sys-4` was in the build (its build
+script panicked under any); that crate left in ENGINE_SWAP_PLAN G3, and a
+custom profile has not been tried since.
 
 **The gate is the two scripts**, not bare cargo — they resolve the repo's real
 feature contract (`corpus-engine/treesitter` + `sovereign-cli/dev-tools`, and

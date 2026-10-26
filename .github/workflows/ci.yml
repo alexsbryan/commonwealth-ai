@@ -34,9 +34,11 @@
 #      applies to main as well as PRs (see the concurrency block).
 #   2. NEVER PAY FOR A BUILD THAT CANNOT FAIL. The `changes` job decides which
 #      gates a diff can actually break; a docs-only commit skips the compile.
-#   3. NEVER THROW AWAY THE C++ BUILD. The llama cache is keyed on the thing
-#      that invalidates it (llama-cpp-sys-4's version + the toolchain), not on
-#      an unrelated hash that churns weekly.
+#   3. NEVER THROW AWAY THE C++ BUILD. The llama.cpp CMake tree was cached
+#      on llama-cpp-sys-4's version + the toolchain, not on an unrelated hash
+#      that churns weekly. That crate left the workspace with the embedded
+#      engine (ENGINE_SWAP_PLAN G3), and the cache with it: no cargo build
+#      here compiles llama.cpp any more.
 #   4. ONE DEFINITION OF "TESTS PASS". The compile gate runs
 #      `scripts/sovereign-test.sh` — the same script a developer runs by hand
 #      and the daemon's `test_status` watcher runs. CI previously ran a bare
@@ -110,7 +112,9 @@ env:
   # The tail of this build links dozens of integration-test binaries, each
   # statically linking the llama+ggml-vulkan archives — four parallel mold
   # links can OOM the 16 GB runner hard enough to kill the runner agent itself
-  # (the "log just stops, no artifacts" failure, 2026-07-02). This is the env
+  # (the "log just stops, no artifacts" failure, 2026-07-02). Those archives
+  # left with the embedded engine (ENGINE_SWAP_PLAN G3); the cap is kept until
+  # a run without it is measured. This is the env
   # form of the old `cargo test -j 3`, so it constrains the build regardless
   # of which executor runs the tests.
   CARGO_BUILD_JOBS: "3"
@@ -399,76 +403,23 @@ jobs:
           # step on failure by default; that is exactly how this CI
           # stayed cold for weeks).
           cache-on-failure: true
-      # THE cache-key fix. `llama-cpp-sys-4` builds llama.cpp+ggml from C++:
-      # ~20 minutes, and it is the single largest fixed cost in this job.
-      #
-      # The key used to be `hashFiles('Cargo.lock')`. Measured: Cargo.lock
-      # changed 29 times in July 2026; llama-cpp-sys-4's version has changed
-      # 4 times in the repo's entire history. So 29 dependency bumps — most of
-      # them dependabot's — each discarded a perfectly good C++ tree and paid
-      # 20 minutes to rebuild bit-identical output.
-      #
-      # Key on what actually invalidates the artifact: the sys-crate version
-      # and the toolchain that compiled it.
-      - name: Resolve llama-cpp-sys-4 version (cache key input)
-        id: llama-ver
-        shell: bash
-        run: |
-          ver=$(awk '/^name = "llama-cpp-sys-4"$/{getline; gsub(/"/,"",$3); print $3; exit}' Cargo.lock)
-          if [ -z "$ver" ]; then
-            echo "::error::could not resolve llama-cpp-sys-4 version from Cargo.lock" >&2
-            exit 1
-          fi
-          echo "Resolved llama-cpp-sys-4 = $ver"
-          echo "ver=$ver" >> "$GITHUB_OUTPUT"
-      # rust-cache's save-time cleanup prunes unrecognized dirs under target/
-      # — which would delete target/llama-cmake-cache (the shared CMake tree
-      # llama-cpp-sys links against) while KEEPING the crate's "already built"
-      # fingerprint: a poisoned cache that link-fails on every warm run. Cache
-      # the tree separately. Restore/save are split so the save (an explicit
-      # step below, `if: always()`) seeds the cache even when the tests fail —
-      # a red run must still bank the 20-minute C++ build. The C++ is
-      # CMAKE_BUILD_TYPE=Release regardless of cargo profile, so this key also
-      # serves the release workflows.
-      - name: Restore llama.cpp CMake tree
-        id: llama-cache
-        uses: actions/cache/restore@v6
-        with:
-          path: target/llama-cmake-cache
-          key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ steps.llama-ver.outputs.ver }}-${{ hashFiles('rust-toolchain.toml') }}
-      # Belt: if the tree is missing while the fingerprint survived
-      # (partial restore / LRU eviction), force the build script to rerun
-      # rather than link against nothing.
-      - name: Guard llama fingerprint vs missing CMake tree
-        shell: bash
-        run: |
-          if ! ls target/llama-cmake-cache/*/lib*/libllama.* >/dev/null 2>&1; then
-            rm -rf target/*/.fingerprint/llama-cpp-sys-4-* 2>/dev/null || true
-          fi
       # The workspace needs the full Linux native stack (mirrors
       # desktop-release.yml — keep in sync):
       #   mold + clang        — pinned as the Linux linker by .cargo/config.toml;
       #                         without ld.mold every link dies with
       #                         "invalid linker name in argument '-fuse-ld=mold'".
       #   protoc + libprotobuf — lance-encoding's prost-build.
-      #   Vulkan SDK (LunarG) — sovereign-inference hardcodes llama-cpp-4's
-      #                         `vulkan` feature on Linux, so ggml builds with
-      #                         GGML_VULKAN=ON and needs glslc (shaderc),
-      #                         spirv-headers, libvulkan even for `cargo check`.
+      #   cmake               — aws-lc-sys's build script.
       #   webkit2gtk et al.   — sovereign-desktop/src-tauri is a workspace member.
+      # No Vulkan SDK: no workspace crate builds ggml since the embedded engine
+      # and its vendored llama-cpp crates went (ENGINE_SWAP_PLAN G3). The SDK
+      # is a build.sh dependency now, installed only by jobs that run it.
       - name: System deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y ca-certificates curl gnupg
-          curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
-            | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
-          curl -fsSL "https://packages.lunarg.com/vulkan/lunarg-vulkan-$(lsb_release -cs).list" \
-            | sudo tee /etc/apt/sources.list.d/lunarg-vulkan.list >/dev/null
-          sudo apt-get update
           sudo apt-get install -y \
             protobuf-compiler libprotobuf-dev cmake mold clang \
-            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
-            libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev
       # cargo-nextest runs the workspace's 178 test binaries in PARALLEL;
       # `cargo test` runs them serially. Measured on this workspace:
       # 59.4s vs 125.9s. sovereign-test.sh picks nextest automatically when
@@ -538,13 +489,6 @@ jobs:
           path: target/sovereign-test/latest/
           retention-days: 7
           if-no-files-found: ignore
-      # Bank the C++ build even on a red run (see the restore step's comment).
-      - name: Save llama.cpp CMake tree
-        if: always() && steps.llama-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
-        with:
-          path: target/llama-cmake-cache
-          key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ steps.llama-ver.outputs.ver }}-${{ hashFiles('rust-toolchain.toml') }}
       # When something dies, say WHICH resource died — the ENOSPC failure
       # (2026-07-02) surfaced as a bare "error writing /tmp/…: No space left"
       # deep in a C++ trace.
@@ -578,8 +522,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.server == 'true'
     runs-on: ubuntu-22.04
-    # Cold: a fresh llama.cpp (the CMake tree cache is shared with `test` and
-    # keyed the same way) plus three GGUFs at ~640 MB each. The e2e itself is
+    # Cold: build.sh compiles llama.cpp from the pinned tree on every run,
+    # plus three GGUFs at ~640 MB each. The e2e itself is
     # ~40 s of wall clock; its boot waits are bounded at 300 s.
     timeout-minutes: 60
     env:
@@ -605,28 +549,6 @@ jobs:
           shared-key: workspace
           save-if: ${{ github.ref == 'refs/heads/main' }}
           cache-on-failure: true
-      # Same key and the same guard as `test`'s: this is a READ-ONLY consumer
-      # of the CMake tree `test` banks, so the two jobs never fight for the
-      # same cache entry.
-      - name: Resolve llama-cpp-sys-4 version (cache key input)
-        id: llama-ver
-        shell: bash
-        run: |
-          ver=$(awk '/^name = "llama-cpp-sys-4"$/{getline; gsub(/"/,"",$3); print $3; exit}' Cargo.lock)
-          [ -n "$ver" ] || { echo "::error::could not resolve llama-cpp-sys-4 version from Cargo.lock" >&2; exit 1; }
-          echo "ver=$ver" >> "$GITHUB_OUTPUT"
-      - name: Restore llama.cpp CMake tree
-        id: llama-cache
-        uses: actions/cache/restore@v6
-        with:
-          path: target/llama-cmake-cache
-          key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ steps.llama-ver.outputs.ver }}-${{ hashFiles('rust-toolchain.toml') }}
-      - name: Guard llama fingerprint vs missing CMake tree
-        shell: bash
-        run: |
-          if ! ls target/llama-cmake-cache/*/lib*/libllama.* >/dev/null 2>&1; then
-            rm -rf target/*/.fingerprint/llama-cpp-sys-4-* 2>/dev/null || true
-          fi
       - name: System deps
         run: |
           sudo apt-get update
@@ -852,37 +774,13 @@ jobs:
 #           # and hit the cache). Read-only: advisory lanes never write.
 #           shared-key: workspace
 #           save-if: false
-#       - name: Resolve llama-cpp-sys-4 version (cache key input)
-#         id: llama-ver
-#         shell: bash
-#         run: |
-#           ver=$(awk '/^name = "llama-cpp-sys-4"$/{getline; gsub(/"/,"",$3); print $3; exit}' Cargo.lock)
-#           echo "ver=$ver" >> "$GITHUB_OUTPUT"
-#       - name: Cache llama.cpp CMake tree
-#         uses: actions/cache@v6
-#         with:
-#           path: target/llama-cmake-cache
-#           key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ steps.llama-ver.outputs.ver }}-${{ hashFiles('rust-toolchain.toml') }}
-#       - name: Guard llama fingerprint vs missing CMake tree
-#         shell: bash
-#         run: |
-#           if ! ls target/llama-cmake-cache/*/lib*/libllama.* >/dev/null 2>&1; then
-#             rm -rf target/*/.fingerprint/llama-cpp-sys-4-* 2>/dev/null || true
-#           fi
 #       # Same native stack as the test job (see its comment) — keep in sync.
 #       - name: System deps
 #         run: |
 #           sudo apt-get update
-#           sudo apt-get install -y ca-certificates curl gnupg
-#           curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
-#             | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
-#           curl -fsSL "https://packages.lunarg.com/vulkan/lunarg-vulkan-$(lsb_release -cs).list" \
-#             | sudo tee /etc/apt/sources.list.d/lunarg-vulkan.list >/dev/null
-#           sudo apt-get update
 #           sudo apt-get install -y \
 #             protobuf-compiler libprotobuf-dev cmake mold clang \
-#             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
-#             libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
+#             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev
 #       # JSON stream feeds the lint-gate count ratchet: per-(crate, lint)
 #       # warning counts may never grow vs quality/baselines/clippy_counts.tsv.
 #       # Old debt burns down crate by crate; new debt is blocked.

@@ -230,10 +230,8 @@ distributes the big primary → workers seed their shards → tokens.
 ## Notes & limits
 
 - **Protocol match:** host and worker must run the **same llama.cpp version**
-  — the pin `035e22731a`, named by both
-  `serve/crates/sovereign-compute/llama-server/PIN.toml` and
-  `vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT` (the two are held equal; see
-  `build.sh`). Both built from this workspace ⇒ automatically matched, and
+  — the pin `035e22731a`, named by
+  `serve/crates/sovereign-compute/llama-server/PIN.toml`. Both built from this workspace ⇒ automatically matched, and
   `build_pin::verify` refuses a peer binary whose manifest names another pin. Distro/Homebrew
   llama.cpp is a different version: a 5.x client rejects a 3.x HELLO outright,
   so it will not work.
@@ -242,8 +240,9 @@ distributes the big primary → workers seed their shards → tokens.
   across two nodes; for a single-box test point the worker at a CPU device.
 - **Interconnect** is the throughput variable: a direct TB4/USB4 link or 10GbE
   ≫ Tailscale-over-Wi-Fi for the per-token activation traffic.
-- **Fallback (no daemon):** `scripts/build-rpc-worker.sh` builds a standalone,
-  version-matched `rpc-server` if you need a worker without running the daemon.
+- **Fallback (no daemon):** `serve/crates/sovereign-compute/llama-server/build.sh`
+  builds `ggml-rpc-server` from the pin beside `llama-server`, if you need a
+  worker without running the daemon.
 
 ## Tuning env vars (host side)
 
