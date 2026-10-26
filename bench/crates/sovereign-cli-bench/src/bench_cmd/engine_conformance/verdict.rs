@@ -13,6 +13,12 @@ use super::record::CaseRecord;
 /// The reference target when a row names no pairs.
 pub const REFERENCE: &str = "embedded";
 
+/// The targets a scenario-only judge call covers: the router and its
+/// default-embed twin, the two shapes a swap ships, beside the embedded
+/// reference. A scenario verdict is about the language both engines accept,
+/// so it is the same answer for each.
+const SCENARIO_TARGETS: [&str; 3] = ["embedded", "llama-server", "llama-server-default-embed"];
+
 /// A row's verdict for one target pair, over every case the row has.
 #[derive(Debug, Clone, Serialize)]
 pub struct RowVerdict {
@@ -62,7 +68,13 @@ pub fn judge(
             by_case.insert(key, r);
         }
     }
-    let targets: BTreeSet<&str> = records.iter().map(|r| r.target.as_str()).collect();
+    // A scenario row names the targets its file was measured on; without a
+    // record there is no other name for them, and judging no target would
+    // leave the file's answer unread.
+    let mut targets: BTreeSet<&str> = records.iter().map(|r| r.target.as_str()).collect();
+    if targets.is_empty() {
+        targets.extend(SCENARIO_TARGETS.iter().copied());
+    }
     let mut out = Vec::new();
     for row in &inventory.rows {
         for (reference, target) in pairs(row, &targets) {
@@ -71,6 +83,20 @@ pub fn judge(
                 .filter(|r| r.target == target && r.rows.iter().any(|id| *id == row.id))
                 .map(|r| r.case_id.as_str())
                 .collect();
+            // A scenario row's verdict is the scenario's, over a whole
+            // language: it needs no case of its own in the records, or a run
+            // that asked other rows leaves it never-ran with the answer
+            // sitting in the file. The cell is named for the row, so a
+            // failure still says where it came from.
+            if cases.is_empty()
+                && row.judge.iter().any(|c| matches!(c, Check::Scenario { .. }))
+            {
+                if let Some(cell) = scenarios.get(&row.id) {
+                    tracing::debug!(target: "sovereign_cli_bench::engine_conformance", row = %row.id, target = %target, ?cell, "a scenario row judged from its own verdict, no record needed");
+                    out.push(roll_up(row, &reference, &target, &[(row.id.as_str(), cell.clone())]));
+                    continue;
+                }
+            }
             let cells: Vec<(&str, CellVerdict)> = cases
                 .iter()
                 .map(|case| {

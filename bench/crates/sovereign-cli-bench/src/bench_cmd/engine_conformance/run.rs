@@ -251,6 +251,67 @@ async fn run_case(
                 rec.facets.unobserved.insert("reasoning_tokens".into(), why);
             }
         }
+        if method.is_stream() {
+            // `projection.stream-usage`'s instrument: the count the finish
+            // frame carried, and what it can be held to. The answer's own
+            // length comes from the target's tokenizer; without one the
+            // stream's delta count is the only tie, and it is recorded too.
+            if let Some(usage) = rec.facets.output.as_ref().and_then(|o| o.usage.clone()) {
+                // The answer a completion counts is everything the model
+                // generated: its text, its think block, and a tool call's
+                // name and arguments. A turn that answered with a call or a
+                // think block and no prose is not an empty answer.
+                let answer = rec.facets.output.as_ref().map(|o| {
+                    let mut s = o.reasoning.clone().unwrap_or_default();
+                    s.push_str(&o.text);
+                    for call in &o.tool_calls {
+                        s.push_str(&call.name);
+                        s.push_str(&call.arguments.to_string());
+                    }
+                    s
+                });
+                let answer_tokens = match answer.as_deref() {
+                    Some(generated) if !generated.is_empty() => {
+                        match reasoning_tokens(daemon, server, model.as_ref(), Some(generated)).await {
+                            Ok(n) => n,
+                            Err(why) => {
+                                rec.facets
+                                    .unobserved
+                                    .insert("stream_usage.answer_tokens".into(), why);
+                                None
+                            }
+                        }
+                    }
+                    _ => Some(0),
+                };
+                let deltas = rec
+                    .facets
+                    .output
+                    .as_ref()
+                    .map(|o| o.frames.iter().filter(|k| *k == "token").count() as u64)
+                    .unwrap_or(0);
+                tracing::debug!(
+                    target: "engine_conformance",
+                    completion = usage.completion,
+                    ?answer_tokens,
+                    deltas,
+                    "stream usage: the finish frame's count and what it can be held to"
+                );
+                rec.facets.stream_usage = Some(super::record::StreamUsageFacet {
+                    completion: usage.completion,
+                    // One `token` frame is one delta; a stream that emitted
+                    // the answer in one frame still counts one, so the frame
+                    // count alone is not the answer's length.
+                    answer_tokens,
+                    deltas,
+                });
+            } else {
+                rec.facets.unobserved.insert(
+                    "stream_usage".into(),
+                    "the finish frame carried no usage counts".into(),
+                );
+            }
+        }
     }
     Ok(rec)
 }

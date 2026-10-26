@@ -38,7 +38,9 @@
 # bank) through /internal/engine/replay, which the daemon mounts on its
 # operator listener (:9741, beside inference/warmup: server.rs), and writes
 # <out>/<n>-<target>.jsonl; then every record file is judged into <out>,
-# and every check is watched catching a mutation of a cell that passed.
+# beside the language-parity scenario bench/lanes/engine-swap/llg-parity
+# writes (the rows whose oracle is a language, not a record), and every check
+# is watched catching a mutation of a cell that passed.
 # Name a target twice for an A/A pair. On exit, however it exits, the
 # resident is put back on the config it started with.
 #
@@ -63,6 +65,10 @@ server_env=${BATTERY_SERVER_ENV:-}
 meshllm=${BATTERY_MESH_LLM:-$repo/target/mesh-llm/v0.78.1/x/mesh-bundle/mesh-llm}
 meshdir=$repo/target/mesh-llm
 cases=${BATTERY_CASES:-$repo/target/engine-conformance/cases-20261010.jsonl}
+# The rows whose oracle is a language rather than a record (decode.lark, the
+# two allow-lists): a separate crate, pinned to llama-server's own llguidance,
+# judged beside the records. Without its file those rows are could-not-judge.
+llg_dir=$repo/bench/lanes/engine-swap/llg-parity
 out=$repo/target/engine-conformance/battery-$(date +%Y%m%d-%H%M%S)
 tb() { toolbox run -c sovereign-vulkan "$@"; }
 say() { echo "battery: $*"; }
@@ -116,7 +122,7 @@ preflight() {
   # memory, so the estimate stays on the cautious side.
   free_g=$(free -g | awk '/^Mem:/ {print $7}')
   resident_g=0
-  if pid=$(resident_pid) && [ -n "$pid" ]; then
+  if pid=$(pgrep -x sovereign-stock); then
     resident_g=$(awk '/^VmRSS:/ {print int($2 / 1048576)}' "/proc/$pid/status")
   fi
   [ $((free_g + resident_g)) -ge 60 ] \
@@ -149,28 +155,19 @@ print(", ".join(busy))')
 
 # ── the resident daemon, restarted per target ──────────────────────────────
 
-# The resident is the sovereign-stock listening on :9741, not every process
-# of that name: a hand-started `sovereign-stock run` in a terminal shares it
-# (2026-10-25, a four-day-old one), and counting it broke the memory check
-# and would have held daemon_down to its 90s limit.
-resident_pid() {
-  ss -ltnpH 'sport = :9741' | sed -n 's/.*"sovereign-stock",pid=\([0-9]*\).*/\1/p' | head -1
-}
-
 daemon_down() {
-  rp=$(resident_pid)
   tb sovereign daemon stop >/dev/null 2>&1 || true
   # /health goes quiet before the process exits (its stop runs ~45s), so a
   # bare /health wait let the next target's daemon start beside the old one.
-  i=0; while curl -sf -m 2 localhost:9741/health >/dev/null || { [ -n "$rp" ] && kill -0 "$rp" 2>/dev/null; }; do
-    i=$((i + 1)); [ $i -lt 90 ] || die "daemon still alive after 90s: pid $rp"; sleep 1
+  i=0; while curl -sf -m 2 localhost:9741/health >/dev/null || pgrep -x sovereign-stock >/dev/null; do
+    i=$((i + 1)); [ $i -lt 90 ] || die "daemon still alive after 90s: pids $(pgrep -x sovereign-stock | tr '\n' ' ')"; sleep 1
   done
 }
 
 daemon_up() {
   tb sovereign daemon start >"$out/daemon-start-$1.log" 2>&1 || true
   curl -sf -m 5 localhost:9741/health >/dev/null || die "daemon not up, see $out/daemon-start-$1.log"
-  pid=$(resident_pid)
+  pid=$(pgrep -x sovereign-stock)
   say "daemon up for $1, pid $pid, exe $(readlink -f /proc/$pid/exe)"
 }
 
@@ -438,9 +435,28 @@ print(next((c["port"] for c in children if c.get("role") == "router" and c.get("
   records="$records --records $rec"
 done
 
+# The language-parity scenarios: the one crate outside this workspace, built
+# into a target dir of its own (its Cargo.lock pins 1.0.1 against the
+# workspace's 1.7.6). Its exit 0 or 3 is a verdict; 4 is a file where no row
+# could be judged, and is reported, not hidden.
+scenario_flag=""
+lrc=0
+if [ -f "$llg_dir/Cargo.toml" ]; then
+  CARGO_TARGET_DIR=$repo/target/llg-parity cargo build --manifest-path "$llg_dir/Cargo.toml" \
+    >"$out/llg-parity-build.log" 2>&1 || die "llg-parity did not build, see $out/llg-parity-build.log"
+  "$repo/target/llg-parity/debug/llg-parity" --out "$out/scenario.jsonl" \
+    >"$out/llg-parity.log" 2>&1 || lrc=$?
+  case $lrc in
+    0|3) scenario_flag="--scenario $out/scenario.jsonl"; say "llg-parity judged into $out/scenario.jsonl (exit $lrc)" ;;
+    *) say "WARNING: llg-parity claimed nothing for some row (exit $lrc), see $out/llg-parity.log; those rows stay could-not-judge" ;;
+  esac
+else
+  say "WARNING: no llg-parity at $llg_dir; the language-parity rows stay could-not-judge"
+fi
+
 rc=0
-# shellcheck disable=SC2086
-sovereign bench engine-conformance judge $records --out "$out" >"$out/judge.log" 2>&1 || rc=$?
+# shellcheck disable=SC2086 # $records and $scenario_flag are word lists by design
+sovereign bench engine-conformance judge $records $scenario_flag --out "$out" >"$out/judge.log" 2>&1 || rc=$?
 cat "$out/judge.log"
 say "judged into $out (judge exit $rc: 0 as predicted, 3 a verdict differs, 4 nothing judged)"
 # Every check watched failing on a perturbed copy of a cell that passed.
