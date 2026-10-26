@@ -53,8 +53,8 @@ commonwealth-ai/
 └── clients/mobile/          # Thin Tauri 2 mobile client (iOS + Android), tailnet or iroh dial-by-key
 ```
 
-Supporting directories outside the project tree: `vendor/` (pinned
-`llama-cpp-4`), `scripts/` (CI bench + corpus setup), `docs/`,
+Supporting directories outside the project tree: `vendor/` (patched
+`lance-linalg`), `scripts/` (CI bench + corpus setup), `docs/`,
 `clients/landing/`, `gym/`, `baselines/`, and `quality/xtask` (the
 docs-gate / arch-gate CI binaries, plus the workspace-hygiene
 generators in `xtask/tests/` — the requirement registry and the
@@ -4019,20 +4019,19 @@ had no key that could say otherwise.
   deliberately nonexistent `[models]` paths booted, served `/v1/chat/completions`
   (streaming and not), `/v1/embeddings` and `/v1/models`, opened zero GGUF file
   handles, and reported `loaded_models: []` on `/status`.
-- **What is NOT gated:** `llama-cpp-4` is still an unconditional dependency of
-  `sovereign-inference`, so every build compiles ggml regardless of `[engine]`.
-  Making it optional is a build-time win only, and measured 2026-08-30 it would
-  need `#[cfg]` at 65 downstream sites across 8 crates that name
-  `sovereign_inference::embedded` concretely. Deliberately not done.
+- **No build compiles ggml any more.** `llama-cpp-4` was an unconditional
+  dependency of `sovereign-inference` until the embedded engine was deleted
+  (ENGINE_SWAP_PLAN G2) and the vendored crates with it (G3).
 
 **Serving a model bigger than the GPU can hold — `qwen4exp` / Qwen3.8-Flash-Next
 (2026-08-27).** 176B total / ~6B active: a 125B transformer plus a **51.2B n-gram
 engram**, 103.7 GiB across four GGUF parts, on a 128 GB unified-memory box. Three
 facts make it work and each is easy to break.
 
-- **The arch is vendored ahead of upstream.** `LLM_ARCH_QWEN4EXP` comes from
-  ggml-org/llama.cpp#27742, pinned in `vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT`.
-  A build whose bundled llama.cpp predates it cannot load the model at all.
+- **The arch is pinned ahead of upstream.** `LLM_ARCH_QWEN4EXP` comes from
+  ggml-org/llama.cpp#27742; the llama-server's pin is
+  `serve/crates/sovereign-compute/llama-server/PIN.toml`. A build whose
+  llama.cpp predates it cannot load the model at all.
 - **26.8 GiB of it never reaches the GPU, and that is the only reason it fits.**
   `per_layer_token_embd` — one IQ4_NL tensor, `[160, 320001536]` — stays in the
   mmap on plain pageable CPU. Measured resident split: 81.9 GiB GTT + 27.0 GiB
@@ -7509,12 +7508,10 @@ work pins the GPU while the user is chatting. Components:
 
   **`windows-vulkan` / `windows-cuda` moved to `sovereign-cli-daemon`.** They
   were desktop features forwarding to a `sovereign-inference` the app no
-  longer has, selecting a GPU backend for a process that loads no models. The
-  build that needs them is the SIDECAR's:
-  `SOVEREIGN_SIDECAR_FEATURES=windows-vulkan scripts/stage-daemon-sidecar.sh`.
-  NOT VERIFIED on this host — the Windows legs are commented out in
-  `desktop-release.yml` and this is a macOS box; the cross-check path is
-  `scripts/windows-crosscheck.sh` plus a native run.
+  longer has, selecting a GPU backend for a process that loads no models.
+  They were deleted outright in ENGINE_SWAP_PLAN G3 with the vendored llama
+  crates, and `SOVEREIGN_SIDECAR_FEATURES` with them: the GPU backend is the
+  llama-server's, chosen by build.sh's `--backend`.
 
   **One instrument bug, caught by running the check rather than reading it.**
   The prose written into `quality/ARCH_LAYERS.toml` to record this burn-down
@@ -8049,8 +8046,8 @@ cargo build --release --workspace          # bundled assets copied via build.rs
 # For LOCAL deployed-daemon iteration use scripts/dev-release.sh instead of
 # plain --release: same opt-level, but LTO/CGU=1 overridden via env — a
 # one-line change costs seconds instead of ~7.5 minutes. (A custom cargo
-# profile can't do this: llama-cpp-sys-4's build script panics under any
-# custom profile — see the script header.)
+# profile couldn't while llama-cpp-sys-4 was in the build — see the script
+# header; untried since that crate left in ENGINE_SWAP_PLAN G3.)
 cargo check  --workspace --all-targets      # what CI's `check` job runs
 # The user-facing CLI spans 4 binaries (dispatcher + 3 siblings) — rebuild
 # all of them (editing one + rebuilding only the dispatcher is a silent no-op):
@@ -8175,9 +8172,7 @@ everything rather than reporting "no changes."
 gates outside contributions. It is path-filtered behind a `changes` job,
 cancels superseded runs on main as well as PRs, restricts cache *writes* to
 main (many concurrent writers against GitHub's 10 GB budget were LRU-evicting
-each other — the mechanism behind the empty cache), keys the llama.cpp CMake
-tree on `llama-cpp-sys-4`'s version rather than the `Cargo.lock` hash
-(`Cargo.lock` churned 29× in July; that version has changed 4× ever), and
+each other — the mechanism behind the empty cache), and
 invokes `scripts/sovereign-test.sh` so CI and local share one definition of
 "the tests pass" — which also closed a real coverage hole, since bare
 `cargo test --workspace` had never exercised the `sovereign-cli/dev-tools`

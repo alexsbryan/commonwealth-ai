@@ -188,47 +188,14 @@ jobs:
           workspaces: "." # single workspace at the repo root
           key: cli-release-${{ matrix.platform.target }}
           save-if: false
-      # See ci.yml's test job for the full story: rust-cache's cleanup
-      # deletes target/llama-cmake-cache while keeping the sys crate's
-      # fingerprint (poisoned cache → link failure). Cache the tree
-      # separately; the C++ is CMAKE_BUILD_TYPE=Release regardless of cargo
-      # profile, so this key is SHARED with CI — a release restores the
-      # C++ built by main's CI runs. (Windows uses a LOCALAPPDATA path
-      # instead of this dir; the steps are harmless no-ops there.)
-      #
-      # KEY FIX (2026-07-24): this was `hashFiles('Cargo.lock')`, which
-      # changed 29 times in July against 4 lifetime changes to
-      # llama-cpp-sys-4's version — so a ~20-minute C++ rebuild was discarded
-      # and repaid on nearly every release for bit-identical output. On the
-      # macOS legs that is billed at 10x.
-      - name: Resolve llama-cpp-sys-4 version (cache key input)
-        id: llama-ver
-        shell: bash
-        run: |
-          ver=$(awk '/^name = "llama-cpp-sys-4"$/{getline; gsub(/"/,"",$3); print $3; exit}' Cargo.lock)
-          if [ -z "$ver" ]; then
-            echo "::error::could not resolve llama-cpp-sys-4 version from Cargo.lock" >&2
-            exit 1
-          fi
-          echo "ver=$ver" >> "$GITHUB_OUTPUT"
-      - name: Restore llama.cpp CMake tree
-        uses: actions/cache/restore@v6
-        with:
-          path: target/llama-cmake-cache
-          key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ steps.llama-ver.outputs.ver }}-${{ hashFiles('rust-toolchain.toml') }}
-      - name: Guard llama fingerprint vs missing CMake tree
-        shell: bash
-        run: |
-          if ! ls target/llama-cmake-cache/*/lib*/libllama.* >/dev/null 2>&1; then
-            rm -rf target/*/.fingerprint/llama-cpp-sys-4-* 2>/dev/null || true
-          fi
-
       - name: Linux build deps
         if: runner.os == 'Linux'
-        # protoc + libprotobuf: lance-encoding prost-build. cmake: llama.cpp.
-        # mold + clang: pinned as the Linux linker by .cargo/config.toml.
-        # LunarG Vulkan SDK: Linux hardcodes llama-cpp-4's `vulkan` feature,
-        # so ggml builds with GGML_VULKAN=ON and needs glslc/spirv/libvulkan.
+        # protoc + libprotobuf: lance-encoding prost-build. cmake: aws-lc-sys
+        # and build.sh's llama.cpp. mold + clang: pinned as the Linux linker
+        # by .cargo/config.toml. LunarG Vulkan SDK: build.sh builds the
+        # shipped llama-server with GGML_VULKAN=ON on Linux, which needs
+        # glslc/spirv/libvulkan (no cargo crate builds ggml since
+        # ENGINE_SWAP_PLAN G3).
         # GTK/WebKit (2026-09-23): workspace-hack pulls tauri → wry → gdk-sys
         # into EVERY member's build since the hakari move, so the old "CLI bins
         # only, no gtk" claim stopped being true; run 35934299606 died on
@@ -266,11 +233,13 @@ jobs:
             eval "$(/opt/homebrew/bin/brew shellenv)"
             echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
           fi
-          # lld: .cargo/config.toml's *-apple-darwin rustflags pass `-fuse-ld=lld`
-          # (the CLI binaries link llama-cpp-sys-4 the same as the desktop does).
-          # protobuf: lance-encoding's prost-build. cmake: llama.cpp's build.
+          # lld: .cargo/config.toml's *-apple-darwin rustflags pass `-fuse-ld=lld`.
+          # protobuf: lance-encoding's prost-build. cmake: aws-lc-sys and
+          # build.sh's llama.cpp.
           brew install lld protobuf cmake
-          # SDKROOT: llama-cpp-sys-4's bindgen resolves system headers via the SDK.
+          # SDKROOT: llama-cpp-sys-4's bindgen resolved system headers via the
+          # SDK; that crate left in ENGINE_SWAP_PLAN G3 and nothing else in
+          # Cargo.lock uses bindgen. Kept until a macOS leg runs without it.
           echo "SDKROOT=$(xcrun --show-sdk-path)" >> "$GITHUB_ENV"
 
       # `code-intel` is REQUIRED — without it `svrn code index` is absent from

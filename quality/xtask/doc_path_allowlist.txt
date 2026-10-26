@@ -26,8 +26,8 @@ test-artifacts/a11y/
 # every working install but never in a clean checkout.
 models/
 
-# §1 supporting-directories prose cites `vendor/` (the pinned
-# llama-cpp-4 tree). It is real and tracked, but build_path_index
+# §1 supporting-directories prose cites `vendor/` (the patched
+# lance-linalg tree). It is real and tracked, but build_path_index
 # prunes vendored trees (same skip list as target/.git), so the gate
 # structurally cannot resolve it.
 vendor/

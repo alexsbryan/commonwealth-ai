@@ -11,9 +11,7 @@ WHY THIS EXISTS
     recorded could say which of the five it was. This closes the largest
     unknown -- worker compute -- without patching ggml.
 
-    Nothing here modifies vendored llama.cpp. `vendor/llama-cpp-sys-4` is
-    verified byte-identical to upstream (scripts/verify-vendored-llama-cpp.sh)
-    and must stay that way, so the only admissible instrument is a log
+    Nothing here modifies llama.cpp, and that must stay that way, so the only admissible instrument is a log
     upstream already emits.
 
 HOW IT WORKS

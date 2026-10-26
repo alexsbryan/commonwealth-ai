@@ -149,8 +149,8 @@ build_mac() {  # build_mac <triple>
     # identical in effect, and the Intel leg died at link with
     #     "_X509_verify_cert_error_string" … ld: symbol(s) not found for x86_64
     # (cli-v0.5.0, 2026-08-08). LLAMA_OPENSSL is now forced OFF unconditionally
-    # in vendor/llama-cpp-sys-4/build.rs, which is the single decider for every
-    # target and consumer and cannot be silently disabled by shell quoting.
+    # in vendor/llama-cpp-sys-4/build.rs, which was the single decider for every
+    # target and consumer until that crate went (ENGINE_SWAP_PLAN G3).
     #
     # `code-intel` is REQUIRED in the shipped build. Without it `svrn code
     # index` is not in the binary — which is the exact defect this flag was

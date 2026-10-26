@@ -11,9 +11,9 @@
 #   - PROVES: every cfg-gating / unix-only / Rust compile error across the
 #     desktop's Windows dependency tree. That layer is toolchain-independent, so
 #     green here ⇒ it compiles on a real windows-msvc toolchain too.
-#   - DOES NOT prove: the llama.cpp / onnxruntime NATIVE build (cmake → MSVC).
+#   - DOES NOT prove: the onnxruntime NATIVE build (cmake → MSVC).
 #     cargo-xwin drives clang-cl, not MSVC cl.exe; if it stalls inside the
-#     llama-cpp-sys-4 / ort-sys native build, that is a cargo-xwin limitation,
+#     ort-sys native build, that is a cargo-xwin limitation,
 #     NOT a real-CI signal — do not chase it. Prove the native build on a
 #     Windows VM or one prepared CI run (see sovereign-desktop/RELEASING.md).
 #
@@ -21,13 +21,10 @@
 #   scripts/windows-crosscheck.sh                          # cargo xwin check (fast)
 #   scripts/windows-crosscheck.sh --build                  # cargo xwin build (full)
 #
-# The GPU backend is NOT a flag here any more. `windows-vulkan` /
-# `windows-cuda` moved to `sovereign-cli-daemon` at sv-surface svt-7
-# (2026-09-12) — the desktop links no inference stack to forward them to — and
-# on to the loader `sovereign-stock` at pb-distribution-setup, so a GPU variant
-# is checked by staging the sidecars (the loader takes the features):
-#   SOVEREIGN_SIDECAR_FEATURES=windows-vulkan \
-#     scripts/stage-daemon-sidecar.sh x86_64-pc-windows-msvc
+# There is no GPU backend to select here: no workspace crate links llama.cpp
+# since the vendored llama crates and their `windows-vulkan`/`windows-cuda`
+# features went (ENGINE_SWAP_PLAN G3). The backend is the llama-server's,
+# and build.sh has no Windows mode yet.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -90,7 +87,7 @@ export XWIN_ACCEPT_LICENSE=1
 # ─── Cross-check ──────────────────────────────────────────────────────
 log "Tools: $(clang-cl --version | head -1) | $(cargo xwin --version)"
 log "Running: cargo xwin $CARGO_VERB --target $TARGET ${PASSTHRU[*]:-} (in sovereign-desktop)"
-log "Reminder: a failure INSIDE the llama.cpp/onnxruntime cmake build is a"
+log "Reminder: a failure INSIDE the onnxruntime cmake build is a"
 log "          cargo-xwin limitation, not a real-CI signal — prove that on Windows."
 
 cd clients/desktop
