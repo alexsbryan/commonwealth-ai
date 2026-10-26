@@ -27,7 +27,7 @@
 //! - [`child_main`] — the child process entrypoint (`--compute-child`),
 //!   reached by re-executing the daemon binary.
 //! - [`assembly`] — the one serving assembly: config in, the provider a
-//!   serving process installs out; [`containment`] is its admission guard.
+//!   serving process installs out.
 
 pub mod assembly;
 pub mod assets;
@@ -35,12 +35,7 @@ pub mod child;
 pub mod child_main;
 pub mod client;
 pub mod compute_roles;
-pub mod containment;
-pub mod discovery_policy;
-pub mod distributed_discovery;
 pub mod distributed_role;
-pub mod distributed_warm;
-pub mod distribution;
 /// The contracts an engine must satisfy, as runnable checks.
 pub mod engine_conformance;
 pub mod engine_factory;

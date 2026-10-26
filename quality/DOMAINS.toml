@@ -972,12 +972,6 @@ lines = 1195
 note = "was compute; sovereign-serving-host — SERVING_BOUNDARY.md corrections (2026-09-14)"
 
 [[module]]
-path = "serve/crates/sovereign-serving-host/src/rpc_discovery.rs"
-context = "serving"
-lines = 575
-note = "moved from sovereign-daemon daemon.rs (pb-serve-distributes)"
-
-[[module]]
 path = "cmnwlth/crates/sovereign-pods/src/worker_http.rs"
 context = "compute"
 lines = 2046
@@ -8317,12 +8311,6 @@ lines = 2861
 note = ""
 
 [[module]]
-path = "serve/crates/sovereign-compute/src/containment.rs"
-context = "serving"
-lines = 348
-note = ""
-
-[[module]]
 path = "svrn/crates/sovereign-daemon/src/build/inference.rs"
 context = "host"
 lines = 662
@@ -8338,12 +8326,6 @@ note = ""
 path = "svrn/crates/sovereign-daemon/src/build/preflight.rs"
 context = "host"
 lines = 293
-note = ""
-
-[[module]]
-path = "serve/crates/sovereign-compute/src/discovery_policy.rs"
-context = "serving"
-lines = 689
 note = ""
 
 [[module]]
@@ -11167,12 +11149,6 @@ lines = 237
 note = ""
 
 [[module]]
-path = "serve/crates/sovereign-compute/src/distribution.rs"
-context = "serving"
-lines = 297
-note = ""
-
-[[module]]
 path = "serve/crates/sovereign-compute/src/engine_conformance.rs"
 context = "unknown"
 lines = 422
@@ -11183,18 +11159,6 @@ path = "serve/crates/sovereign-compute/src/engine_factory.rs"
 context = "unknown"
 lines = 557
 note = ""
-
-[[module]]
-path = "serve/crates/sovereign-compute/src/distributed_discovery.rs"
-context = "serving"
-lines = 464
-note = "moved from sovereign-daemon bootstrap.rs (pb-serve-distributes)"
-
-[[module]]
-path = "serve/crates/sovereign-compute/src/distributed_warm.rs"
-context = "serving"
-lines = 521
-note = "the rpc-warm orchestrator and wire, moved from sovereign-daemon rpc_warm_http (pb-serve-distributes)"
 
 [[module]]
 path = "serve/crates/sovereign-compute/src/distributed_role.rs"

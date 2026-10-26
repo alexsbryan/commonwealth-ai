@@ -4141,33 +4141,16 @@ and `llama_router::provider::tests::a_daemon_call_carries_its_slot_penalties_and
 so a change to `ModelFamily::Unknown`'s defaults reopens the measurement
 instead of passing silently.
 
-**The distributed primary in a child (`[compute] distributed_primary`, default
-OFF).** The payoff the boundary was built for. Distributing a primary across
-mesh workers puts ggml's error-path-free RPC client inside the daemon: a worker
-that dies mid-decode (`ggml-rpc.cpp:491`), or one already gone when the
-prune-reload frees its buffers (`:386` — this killed the daemon live on
-2026-07-27, from the shrink-fast-prune path meant to protect it), SIGABRTs the
-whole process. In this mode the daemon **withholds the primary entirely**
-(`primary_path: None`, so no in-process path can lazily load it) and a
-`DynamicChildSlot` owns it instead. The division of labour is forced by reach:
-only the daemon can warm (the orchestrator needs the mesh member directory + the
-iroh transport), only the child should load. So the daemon plans + warms via
-`warm_distributed_primary` — the extracted shared tail of
-`resolve_placement_inner`, one code path for both — writes a
-`DistributionHandoff {endpoints, plan}` JSON, and spawns a child with
-`SOVEREIGN_RPC_ASSUME_WARMED=1` that pins that plan (`pin_shard_plan`) before
-loading via `EmbeddedLlamaCpp::load_single_distributed`. Shipping the *plan*, not
-just the worker list, is what extends the plan-agreement invariant across the
-process boundary: the shard cache is process-local, and a child that re-planned
-against post-warm VRAM would cut the blocks differently, miss every warm cache,
-and fall back to bulk weight send. Worker-set changes are **kill + respawn**, not
-reload — the discovery loop respawns the child instead of calling
-`reload_primary()`. `ComputeRoutedProvider` claims primary-class traffic (named
-primary, or unnamed at `Speed::Slow`/`Medium`; never unnamed `Speed::Fast`, which
-the in-process fast slot still owns) and never falls back to `inner` for it —
-the answer while the cluster re-forms is a fail-fast `ComputeUnavailable` → mesh
-cascade → clean 503. `/status` shows the primary as `mode: "child-distributed"`.
-Respawn acceptance: `distributed_primary_respawn_e2e.rs`.
+**The distributed primary in a child (`[compute] distributed_primary`) is
+deleted.** It ran a mesh-sharded primary in a `DynamicChildSlot` so ggml's
+RPC aborts (`ggml-rpc.cpp:386`, the 2026-07-27 daemon kill) landed in a child;
+the daemon discovered workers, warmed their caches and handed the child a
+`DistributionHandoff`. The key was refused once the embedded engine went
+(ENGINE_SWAP_PLAN G2), and the slot, the handoff, discovery, the warm and the
+in-process containment guard were deleted with the mesh fabric
+(es-g4-delete-mesh-fabric). A model past one box is the router's own child over
+static `[compute] rpc_peers` (P F); the pure containment table stays in
+`sovereign-contracts` for `doctor`.
 
 **CPU-arch compatibility gate + crash capture (desktop).** Recurrent /
 linear-attention architectures — Qwen3.5 "Gated DeltaNet" (`qwen35`),

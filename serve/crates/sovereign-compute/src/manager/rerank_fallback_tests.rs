@@ -45,7 +45,6 @@ fn a_rerank_that_falls_back_from_its_child_is_logged() {
         embed_child: None,
         rerank_child: Some(Arc::new(ChildProvider::new("reranker".into(), rx))),
         manager: None,
-        distributed_primary: None,
     };
     let runtime = tokio::runtime::Builder::new_current_thread()
         .build()

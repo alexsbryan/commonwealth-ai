@@ -69,17 +69,13 @@ fn main() {
             )
             .await;
             // serve on the node's mesh through cw-rails, exactly as a
-            // standalone serve is (pb-mesh-exit-transport): its distribution,
-            // rpc-warm, member client and origin registrations.
-            let mut routes = assembly.routes;
+            // standalone serve is (pb-mesh-exit-transport): its member client
+            // and origin registrations.
+            let routes = assembly.routes;
             sovereign_serve::rails_mesh::join(
                 &assembly.rails_base,
                 bound,
                 std::sync::Arc::clone(&assembly.cell) as _,
-                std::sync::Arc::clone(&ranking.router),
-                assembly.distribute,
-                assembly.servable,
-                &mut routes,
             )
             .await;
             let parts = sovereign_daemon::process::HostedParts {

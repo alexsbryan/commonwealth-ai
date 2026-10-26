@@ -10,8 +10,8 @@
 //! never a 404 that reads as "no such thing" (FIVE_PROGRAMS §4 rule 3). The
 //! in-repo clients dial cw-rails' base directly; the pointer is for a
 //! third-party client. The internal-port routes the flip gave to cw-rails
-//! and serve answer the same way ([`internal_moved`]), and a path retired
-//! with no new home names what replaced it ([`RETIRED`]).
+//! answer the same way ([`internal_moved`]), and a path retired with no new
+//! home names what replaced it ([`RETIRED`], [`INTERNAL_RETIRED`]).
 //!
 //! Localhost-only: any non-loopback caller gets `403 Forbidden`, same guard
 //! as `mcp_router`.
@@ -121,19 +121,31 @@ pub const INTERNAL_MOVED_TO_RAILS: &[&str] = &[
     "/internal/ring/checkpoint/{ns}",
 ];
 
-/// The internal-port routes serve took (sovereign-serve `rails_mesh`
-/// `PEER_PREFIXES`), registered by serve with cw-rails on `cwth/http/0`.
-pub const INTERNAL_MOVED_TO_SERVE: &[&str] = &["/internal/rpc-warm"];
+/// The internal-port routes this daemon served until a cut that have no
+/// home now, each with what replaced it. Each answers 410 with that text.
+pub const INTERNAL_RETIRED: &[(&str, &str)] = &[(
+    "/internal/rpc-warm",
+    "the mesh fabric's shard warm was deleted with the fabric \
+     (es-g4-delete-mesh-fabric): a distributed model's peers are static \
+     endpoints now, `[compute] rpc_peer` on a peer and `rpc_peers` on the head",
+)];
 
 /// Mount the internal routes the flip gave away on `router`, each a 410
 /// naming its owner, so a caller of the old port reads where to go rather
-/// than a 404 (FIVE_PROGRAMS §4 rule 3).
+/// than a 404 (FIVE_PROGRAMS §4 rule 3), and the retired ones, each a 410
+/// naming what replaced it.
 pub fn internal_moved(mut router: Router<AppState>) -> Router<AppState> {
     for path in INTERNAL_MOVED_TO_RAILS {
         router = router.route(path, any(internal_moved_to_rails));
     }
-    for path in INTERNAL_MOVED_TO_SERVE {
-        router = router.route(path, any(internal_moved_to_serve));
+    for &(path, replaced_by) in INTERNAL_RETIRED {
+        router = router.route(
+            path,
+            any(move || async move {
+                tracing::debug!(target: "mesh", %path, "mesh_http: a retired internal path asked of svrn");
+                gone(format!("{path} is retired: {replaced_by}"), None)
+            }),
+        );
     }
     router
 }
@@ -148,19 +160,6 @@ async fn internal_moved_to_rails(State(state): State<AppState>, uri: Uri) -> imp
              internal port: call {rails}{path}"
         ),
         Some(format!("{rails}{path}")),
-    )
-}
-
-async fn internal_moved_to_serve(uri: Uri) -> impl IntoResponse {
-    let serve = sovereign_turn_client::serve_self::default_serve_base();
-    let path = uri.path();
-    tracing::debug!(target: "mesh", %path, %serve, "mesh_http: a serve internal path asked of svrn");
-    gone(
-        format!(
-            "{path} is served by serve, not by svrn's internal port: a member reaches \
-             it through cw-rails on cwth/http/0, and on this host serve listens at {serve}"
-        ),
-        Some(format!("{serve}{path}")),
     )
 }
 

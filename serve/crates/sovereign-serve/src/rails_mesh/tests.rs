@@ -91,13 +91,7 @@ fn serve_registers_its_peer_prefixes_and_its_rpc_worker_only_when_it_binds() {
     assert_eq!(off.len(), 2, "no worker bind, no rpc origin: {off:?}");
     assert_eq!(off[0].alpn, "cwth/http/0");
     assert_eq!(off[0].port, 18000);
-    assert_eq!(
-        off[0].prefixes,
-        vec![
-            "/internal/v1/models".to_string(),
-            "/internal/rpc-warm".to_string()
-        ]
-    );
+    assert_eq!(off[0].prefixes, vec!["/internal/v1/models".to_string()]);
     assert_eq!(off[0].framing, Framing::Http);
     // The member client, whole on the ALPN the Inference class rides, at its
     // own listener rather than serve's.
@@ -220,18 +214,6 @@ fn an_unknown_vram_figure_declares_no_gpu_and_no_anchor() {
         .and_then(|r| r.claims.as_ref()?.anchor.as_ref())
         .expect("a known CPU-only node declares its anchor");
     assert_eq!(anchor.vram_gb, 0);
-}
-
-#[test]
-fn an_unspecified_listener_is_reached_on_loopback() {
-    assert_eq!(
-        origin_addr("0.0.0.0:7000".parse().unwrap()),
-        "127.0.0.1:7000".parse::<SocketAddr>().unwrap()
-    );
-    assert_eq!(
-        origin_addr("127.0.0.1:7001".parse().unwrap()),
-        "127.0.0.1:7001".parse::<SocketAddr>().unwrap()
-    );
 }
 
 /// A stand-in cw-rails: `doc(Some(PEER))` on its roster route, and a reach

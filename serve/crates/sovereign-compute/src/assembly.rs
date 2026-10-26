@@ -3,9 +3,8 @@
 //! installs out.
 //!
 //! It owns everything between "this node holds weights" and "here is the
-//! provider": admission ([`crate::containment`]), the engine choice
-//! (`crate::engine_factory::build_engine`, the registry), the router, and the
-//! compute-child layer. A terminal never reaches it; its forwarder is the
+//! provider": the engine choice (`crate::engine_factory::build_engine`, the
+//! registry), the router, and the compute-child layer. A terminal never reaches it; its forwarder is the
 //! daemon's.
 //!
 //! The in-process engine's arm (its slot installs and idle monitors) and the
@@ -251,8 +250,7 @@ pub fn assemble_serving(config: &SetupConfig) -> Result<ServingParts, AssemblyEr
 }
 
 impl ReloadFactory {
-    /// Plan, admit and build. The containment refusal prints its own block
-    /// before returning.
+    /// Plan, admit and build.
     pub fn build(self: &Arc<Self>, config: &SetupConfig) -> Result<ServingParts, AssemblyError> {
         // A hosted pair is SERVED, by the router: every model process is the
         // router's now (ENGINE_SWAP_PLAN A6), so the vendor chat stays remote
@@ -345,14 +343,6 @@ impl ReloadFactory {
             ));
         }
 
-        // Whether running a distributed primary in this process is survivable
-        // on this node (es-g4 deletes the guard with the fabric).
-        if !crate::containment::check_containment(config, None) {
-            return Err(fail(
-                "the distributed-primary containment guard refused this configuration (above)"
-                    .to_string(),
-            ));
-        }
         // One build at a time, and the children check before any load.
         let mut live = self.live.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(running) = live.as_ref() {

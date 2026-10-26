@@ -1419,9 +1419,10 @@ resident RAM. Its unit of residency was the model FAMILY, not the slot:
 plus the can't-fit-one-box case, NOT throughput.** For a model that fits one
 box, N process replicas LOSE to in-process multi-sequence batching — the
 replica-pool path is a demonstrated dead end for parallelism.
-`[compute] distributed_primary` is the payoff: the daemon plans and warms, a
-`DynamicChildSlot` owns the primary, and the handoff ships the PLAN rather
-than the worker list, so plan agreement survives the process boundary.
+`[compute] distributed_primary` and its `DynamicChildSlot` were retired with
+the embedded engine and deleted with the mesh fabric (discovery, warm,
+handoff, containment guard; es-g4-delete-mesh-fabric): a model past one box
+is the router's own child over static `[compute] rpc_peers`.
 
 ### Tools
 
@@ -1674,7 +1675,7 @@ Eight decision points, each with one home:
 | Hub picks a local model for a peer request | `sovereign-daemon/src/routes_inference.rs::route_with_oicp` |
 | Serving peer picks Fast-vs-Slow slot | `sovereign-serving-host/src/slot_select.rs::pick_slot_for_oicp` |
 | Synthesis tier (Fast vs Primary) | `sovereign-core/runtime/evidence.rs::resolve_synthesis_route` |
-| Distributed placement (model > one node) | the router section's `rpc` key and `-ts` split (`sovereign_compute::llama_router::placement`); the FFI-free planner `sovereign-inference/src/rpc_warm_cache.rs` stays until the mesh fabric is deleted |
+| Distributed placement (model > one node) | the router section's `rpc` key and `-ts` split (`sovereign_compute::llama_router::placement`); the FFI-free planner `sovereign-inference/src/rpc_warm_cache.rs` stays until the `svrn mesh plan`/`bench`/`warm-cache` verbs that read it are deleted (es-g4-delete-mesh-fabric-verbs) |
 | Collaborative ingest partitioning | `sovereign-grants/knowledge_assignment.rs` |
 
 Slot policy is normative in [`svrn/docs/SLOT_POLICY.md`](../svrn/docs/SLOT_POLICY.md):

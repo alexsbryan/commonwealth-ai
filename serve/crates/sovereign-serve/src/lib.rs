@@ -87,7 +87,6 @@ pub use rank::{rank, Ranking};
 mod reload;
 /// A model named by URL: fetched header-only so `plan` can read its tensors.
 mod remote_gguf;
-mod rpc_warm;
 mod self_report;
 /// `--setup-probe`: first-run setup's hardware probe and model planning,
 /// answered by the loader (pb-distribution-setup).
@@ -111,15 +110,6 @@ pub use sovereign_compute::distributed_role::{
 /// hosting serve's assembly hands svrn for its own ingest and retrieval
 /// (pb-serve-distributes), the same handle serve's `/v1/ner` reads.
 pub use sovereign_compute::ner::served_ner;
-
-/// The worker side of distributed-inference auto-warm (the contracts port
-/// `RpcShardWarmer`): what a process hosting serve's assembly hands svrn's
-/// `/internal/rpc-warm` until the flip (pb-serve-distributes).
-pub use sovereign_compute::distributed_warm::MeshRpcShardWarmer;
-
-/// The mesh a process hosting serve's assembly hands its `distribute`: the
-/// composition root builds them from svrn's daemon (pb-serve-ranks-discovery).
-pub use sovereign_serving_host::rpc_discovery::{MeshNow, MeshPorts, ModelOrigin};
 
 /// This process's RPC-worker eligibility rows, as `/v1/mesh/status` reports
 /// them: what a process hosting serve's assembly hands svrn's status route
@@ -348,13 +338,6 @@ pub struct ServeAssembly {
     pub listen: SocketAddr,
     /// serve's hold on the data root; drop it only when serve stops.
     pub run_lock: host_kit::RunLock,
-    /// The distribution over this assembly's engine and distributed-primary
-    /// slot (compute's `distributed_discovery::distribute`), which a hosting
-    /// process starts once its mesh is up (pb-serve-distributes). A
-    /// standalone serve drops it, as it did before.
-    pub distribute: sovereign_serving_host::rpc_discovery::Distribute,
-    /// The files peers may fetch, where a worker's rpc-warm finds its model.
-    pub servable: sovereign_serving_host::state::ServableModelFilesReader,
     /// cw-rails' API base, the node's mesh endpoint, from the same config
     /// (`rails_kv::resolve_rails_base`, the one reader): where serve reads the
     /// roster and registers its origins (`rails_mesh::join`).
@@ -446,8 +429,6 @@ pub async fn assemble(
         routes,
         listen: (DEFAULT_LISTEN.0, sovereign_contracts::venue::serve_port()).into(),
         run_lock,
-        distribute: sovereign_compute::distributed_discovery::distribute(),
-        servable,
         rails_base,
     })
 }

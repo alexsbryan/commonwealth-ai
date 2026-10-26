@@ -145,13 +145,9 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // `sovereign_mesh` build). The census scans production `src/` only, so those
     // sites are out of scope now and their rows are removed, not re-keyed —
     // the files still hold 9/4/3 sites, but no longer as production code.
-    // Re-keyed (pb-cli-llm-bench-move, repairing pb-serve-distributes b13c2ab8b):
-    // the rpc-warm worker moved to sovereign-compute, its two sites with it.
-    ("serve/crates/sovereign-compute/src/distributed_warm/worker.rs", Class::Mesh, 2),
-    // `distributed_warm.rs` held the host-side orchestrator's two sites; it
-    // was deleted with the embedded engine it answered (ENGINE_SWAP_PLAN G2).
-    // Re-keyed with it (b13c2ab8b): the worker's tests, same four sites.
-    ("serve/crates/sovereign-compute/src/distributed_warm/worker_tests.rs", Class::TestOnly, 4),
+    // The rpc-warm worker (`sovereign-compute/src/distributed_warm/worker.rs`,
+    // 2 sites) and its tests (4) were deleted with the mesh fabric
+    // (es-g4-delete-mesh-fabric); their rows went with them.
     // mesh_proof_outbound.rs's stamp fixture: retired with the mesh proof
     // (pb-mesh-exit-transport).
     // 5 -> 7 (2026-08-23): the two reload-diff regression tests
@@ -301,9 +297,9 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     ("serve/crates/sovereign-serving-host/src/guest_lender.rs", Class::Mesh, 1),
     // 2 -> 1 at d413b052b: the newsworthy watcher's MediaWiki client moved
     // into corpus-engine's daemon port (registered there, InboundOnly).
-    // Re-keyed at pb-serve-distributes: the one left, RPC-worker discovery's
-    // `/status` probe client, moved with discovery to serving-host.
-    ("serve/crates/sovereign-serving-host/src/rpc_discovery.rs", Class::Mesh, 1),
+    // The one left, RPC-worker discovery's `/status` probe client
+    // (`sovereign-serving-host/src/rpc_discovery.rs`), was deleted with the
+    // mesh fabric (es-g4-delete-mesh-fabric).
     ("svrn/crates/sovereign-daemon/src/auto_ingest.rs", Class::Mesh, 2),
     // Moved from sovereign-mesh (pb-mesh-exit-mesh): the canonical pull's
     // peer client. Class and count unchanged.
