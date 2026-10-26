@@ -33,10 +33,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "String", into = "String")]
 pub enum EngineKind {
-    /// In-process llama.cpp via `llama-cpp-4`. The ROLLBACK: a file that
-    /// names it runs the engine this repo shipped before the router, and
-    /// the embedded engine stays built for one release for exactly that
-    /// (ENGINE_SWAP_PLAN E2; `kind = "llama"` in a written `config.toml`).
+    /// The in-process llama.cpp engine, deleted (ENGINE_SWAP_PLAN G2). It
+    /// still parses so that a written `config.toml` naming it is refused by
+    /// name (`engine_factory::LLAMA_RETIRED`), not as an unknown kind.
     Llama,
     /// An OpenAI-compatible HTTP endpoint (`oicp-client`'s
     /// `RemoteApiProvider`). Holds no weights.
@@ -150,8 +149,9 @@ impl StructuredOutputMode {
 /// embed_model_id = "BAAI/bge-m3"
 /// ```
 ///
-/// The `endpoint` / `api_key` / `model_id` / `context_size` fields are
-/// inert under `kind = "llama"`, which takes its slots from `[models]`.
+/// The `endpoint` / `api_key` / `model_id` / `context_size` fields are how
+/// `kind = "remote"` reaches its backend; a node whose slots come from
+/// `[models]` does not need them.
 /// They are deliberately NOT defaulted for `remote`: a defaulted
 /// endpoint makes a misconfigured node look healthy until its first
 /// request (ARCH §18.3), so the factory refuses instead.

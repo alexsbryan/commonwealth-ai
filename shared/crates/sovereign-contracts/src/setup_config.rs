@@ -98,8 +98,8 @@ pub struct SetupConfig {
     /// `[engine]` — WHICH inference engine serves this node. Absent
     /// (the overwhelmingly common case) means [`EngineKind::LlamaServer`],
     /// the supervised router `svrn setup` writes and the release default
-    /// (ENGINE_SWAP_PLAN E2); `kind = "llama"` is the rollback to the
-    /// in-process engine. See [`EngineSection`].
+    /// (ENGINE_SWAP_PLAN E2); `kind = "llama"`, the in-process engine, is
+    /// refused by name since G2 deleted it. See [`EngineSection`].
     #[serde(default)]
     pub engine: EngineSection,
     /// `[search]` — the operator's web-search provider and its key. The

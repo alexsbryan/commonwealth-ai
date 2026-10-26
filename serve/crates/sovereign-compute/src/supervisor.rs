@@ -446,7 +446,7 @@ impl Supervisor {
     }
 
     /// Graceful stop: the run loop SIGTERMs the child (letting a compute
-    /// child `fast_exit_skip_destructors` past the ggml teardown SIGABRT),
+    /// child exit on its own),
     /// waits up to [`SupervisorConfig::terminate_grace`], SIGKILLs if needed, then exits the
     /// loop for good — NOT counted as a crash. Await the `run()` join
     /// handle to know the child is gone. Returns `false` if the loop

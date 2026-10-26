@@ -182,8 +182,7 @@ pub(crate) fn stable_daemon_binary() -> Option<PathBuf> {
 /// them). Each one absent from the bundle is reported and the rest go on:
 /// the loader's absence is named by the sidecar's refusal of `daemon run`,
 /// a server's or the manifest's by the daemon's refusal of
-/// `kind = "llama-server"`, the default engine; only the `kind = "llama"`
-/// rollback needs neither.
+/// `kind = "llama-server"`, the default engine.
 fn install_siblings(sidecar: &Path, resource_dir: Option<&Path>, dir: &Path) {
     let suffix = std::env::consts::EXE_SUFFIX;
     let mut wanted: Vec<Option<PathBuf>> = std::iter::once(LOADER_SIDECAR)

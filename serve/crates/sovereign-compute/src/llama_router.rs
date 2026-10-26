@@ -162,8 +162,7 @@ pub fn rerank_with_head(
             "the reranker {} is a {arch} model with no classifier head \
              ({arch}.classifier.output_labels), so llama-server would score every \
              document near zero; derive one with \
-             serve/crates/sovereign-compute/llama-server/rerank-head-gguf.py, \
-             or run kind = \"llama\"",
+             serve/crates/sovereign-compute/llama-server/rerank-head-gguf.py",
             path.display()
         ));
     }
@@ -193,8 +192,7 @@ impl RouterPreset {
     ) -> Result<Self, String> {
         if !models.extra.is_empty() {
             return Err(format!(
-                "[models.extra] ({}) is not served by kind = \"llama-server\" yet; \
-                 remove it or run kind = \"llama\"",
+                "[models.extra] ({}) is not served by kind = \"llama-server\" yet; remove it",
                 models.extra.keys().cloned().collect::<Vec<_>>().join(", ")
             ));
         }
