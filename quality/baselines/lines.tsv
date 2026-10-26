@@ -4,7 +4,7 @@
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- size-gate --tighten
 28629	bench/crates/sovereign-cli-bench
-5497	bench/crates/sovereign-cli-bench::tests
+5501	bench/crates/sovereign-cli-bench::tests
 8996	bench/crates/sovereign-eval
 4627	bench/crates/sovereign-eval::tests
 4	bench/lanes/agent-coding/problems/1.1-reverse-string/scaffold
@@ -101,7 +101,7 @@
 63553	scripts
 2	serve/crates/serving-policy
 8876	serve/crates/sovereign-compute
-2644	serve/crates/sovereign-compute::tests
+2690	serve/crates/sovereign-compute::tests
 787	serve/crates/sovereign-gliner
 1340	serve/crates/sovereign-gliner::tests
 11168	serve/crates/sovereign-inference
