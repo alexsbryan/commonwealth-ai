@@ -41,13 +41,27 @@ platforms = [
 # path — which is exactly what an un-excluded hack does — so the
 # `workspace-members` spelling resolves before generate and fails after.
 [traversal-excludes]
-# The shared leaves of the boundary contract (quality/ARCH_LAYERS.toml
-# [[package_leaf]]): each is budgeted to ZERO internal deps so a package lifts
-# against them alone, and boundary-gate counts an edge to the hack as one.
-# Their scoped builds were already 2-15 s (baseline-29), so unifying them buys
-# nothing the campaign measures; `cargo hakari manage-deps` keeps the hack out
-# of them. Measured cost on scope-drift.py: see the bl-hakari commit body.
+# A Tauri host swaps the window and tray dependencies under its own target
+# cfg, so no two of these crates ever agree on tauri's feature set: hakari's
+# union puts `tauri/tray-icon` in the hack unconditionally (statically, not
+# under the aarch64-apple-darwin table), which links gtk -> glib-sys into
+# every member. That broke two CI jobs on 2026-10-25 (bar 4): `Router e2e
+# (shipped llama-server, CPU)` died compiling `gio` on a runner with no glib,
+# and the docs workflow's `cargo run -p xtask` had failed on the same leak
+# since 44f9a1bdc. What they lose is the hack's unification of the deps BELOW
+# tauri (mio, tokio, hyper, ...); scope-drift.py still reads 0 on this host,
+# and both inverts are in the commit body.
 workspace-members = [
+    # The desktop and phone surfaces (quality/ARCH_LAYERS.toml `hosts`).
+    "sovereign-desktop",
+    "sovereign-mobile",
+    # The shared leaves of the boundary contract (quality/ARCH_LAYERS.toml
+    # [[package_leaf]]): each is budgeted to ZERO internal deps so a package
+    # lifts against them alone, and boundary-gate counts an edge to the hack
+    # as one. Their scoped builds were already 2-15 s (baseline-29), so
+    # unifying them buys nothing the campaign measures; `cargo hakari
+    # manage-deps` keeps the hack out of them. Measured cost on
+    # scope-drift.py: see the bl-hakari commit body.
     "oicp-types",
     "kernel-types",
     "corpus-engine-sections",
