@@ -8,7 +8,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::setup_config::{DaemonSection, DataSection, ModelsSection, SetupConfig};
+use crate::setup_config::{
+    DaemonSection, DataSection, EngineKind, EngineSection, ModelsSection, SetupConfig,
+};
 
 use super::emit::say;
 use super::opencode::{install_opencode_config, opencode_config_snippet, OpencodeInstall};
@@ -23,7 +25,15 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
     let data_dir = super::run_data_dir(opts);
 
     let cfg = SetupConfig {
-        engine: Default::default(),
+        // The release default, and what setup writes: `kind = "llama-server"`,
+        // a supervised llama-server router serving the `[models]` downloaded
+        // above (ENGINE_SWAP_PLAN E2). Written as a whole section rather than
+        // omitted so the file names the engine a reader would otherwise have
+        // to look up in the contract's `Default` impl.
+        engine: EngineSection {
+            kind: EngineKind::LlamaServer,
+            ..Default::default()
+        },
         compute: Default::default(),
         search: Default::default(),
         retrieval: Default::default(),

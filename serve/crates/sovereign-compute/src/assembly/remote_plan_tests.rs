@@ -50,7 +50,10 @@ fn a_hosted_engine_plans_without_models() {
 #[test]
 fn llama_without_models_still_refuses() {
     let mut config = hosted(None);
-    config.engine = EngineSection::default();
+    config.engine = EngineSection {
+        kind: EngineKind::Llama,
+        ..Default::default()
+    };
     assert!(plan_serving(&config).is_err());
 }
 

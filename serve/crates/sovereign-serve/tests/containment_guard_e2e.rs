@@ -24,11 +24,12 @@ fn serve_alone_refuses_a_host_with_an_in_process_distributed_primary() {
     let root = tempfile::tempdir().expect("tempdir");
     let (listen, dead_rails) = (free_port(), free_port());
     // A declared host, a distributable primary, no compute-child boundary;
-    // GGUFs that do not exist, so reaching a load is itself a failure.
+    // GGUFs that do not exist, so reaching a load is itself a failure. The
+    // in-process primary is the embedded engine's, so `kind = "llama"`.
     std::fs::write(
         root.path().join("config.toml"),
         format!(
-            "[models]\nprimary = \"/nonexistent/Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003.gguf\"\n\
+            "[engine]\nkind = \"llama\"\n\n[models]\nprimary = \"/nonexistent/Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003.gguf\"\n\
              fast = \"/nonexistent/Qwen3.5-0.8B-UD-Q6_K_XL.gguf\"\n\
              embed = \"/nonexistent/Qwen3-Embedding-0.6B-Q8_0.gguf\"\n\n\
              [shared_model]\nrole = \"host\"\n\n\

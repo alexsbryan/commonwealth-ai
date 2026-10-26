@@ -35,10 +35,14 @@ fn client_embed_inputs_name_a_family_or_refuse() {
     );
 }
 
+/// The release default is the router (ENGINE_SWAP_PLAN E2), so a
+/// `[engine]` section that omits `kind` — or no section at all — plans and
+/// boots the supervised router. `llama` is the written rollback.
 #[test]
-fn the_default_engine_is_llama() {
-    assert_eq!(EngineKind::default(), EngineKind::Llama);
-    assert_eq!(EngineSection::default().kind, EngineKind::Llama);
+fn the_default_engine_is_the_router_and_llama_is_the_written_rollback() {
+    assert_eq!(EngineKind::default(), EngineKind::LlamaServer);
+    assert_eq!(EngineSection::default().kind, EngineKind::LlamaServer);
+    assert_eq!(EngineKind::from("llama".to_string()), EngineKind::Llama);
 }
 
 #[test]

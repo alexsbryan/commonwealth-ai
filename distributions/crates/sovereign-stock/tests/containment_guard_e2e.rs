@@ -36,7 +36,7 @@ fn free_port() -> u16 {
 /// exist: the guard must fire BEFORE anything loads them.
 fn hazardous_config(root: &Path, client: u16, internal: u16, dead_rails: u16) -> String {
     format!(
-        "[models]\nprimary = \"/nonexistent/Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003.gguf\"\n\
+        "[engine]\nkind = \"llama\"\n\n[models]\nprimary = \"/nonexistent/Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003.gguf\"\n\
          fast = \"/nonexistent/Qwen3.5-0.8B-UD-Q6_K_XL.gguf\"\n\
          embed = \"/nonexistent/Qwen3-Embedding-0.6B-Q8_0.gguf\"\n\n\
          [shared_model]\nrole = \"host\"\n\n\

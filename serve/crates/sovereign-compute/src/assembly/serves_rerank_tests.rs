@@ -89,6 +89,8 @@ fn a_process_serves_rerank_only_when_it_holds_one() {
 #[test]
 fn a_failed_rerank_install_does_not_arm_the_lane() {
     let mut config = SetupConfig::unconfigured();
+    // The embedded engine's install, not the router's rerank section.
+    config.engine.kind = sovereign_contracts::setup_config::EngineKind::Llama;
     let mut models = ModelsSection {
         primary: "/m/primary.gguf".into(),
         embed: "/m/embed.gguf".into(),

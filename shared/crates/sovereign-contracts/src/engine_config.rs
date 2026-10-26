@@ -28,14 +28,15 @@ use serde::{Deserialize, Serialize};
 /// third-party engine implementation lifts. The factory is one layer up
 /// (it must name `EmbeddedLlamaCpp`); this type must not be.
 ///
-/// Serialized as a plain TOML string — `kind = "llama"` — so the config
-/// surface reads naturally while the code side stays typed.
+/// Serialized as a plain TOML string — `kind = "llama-server"` — so the
+/// config surface reads naturally while the code side stays typed.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "String", into = "String")]
 pub enum EngineKind {
-    /// In-process llama.cpp via `llama-cpp-4`. The default, and what
-    /// every existing deployment runs.
-    #[default]
+    /// In-process llama.cpp via `llama-cpp-4`. The ROLLBACK: a file that
+    /// names it runs the engine this repo shipped before the router, and
+    /// the embedded engine stays built for one release for exactly that
+    /// (ENGINE_SWAP_PLAN E2; `kind = "llama"` in a written `config.toml`).
     Llama,
     /// An OpenAI-compatible HTTP endpoint (`oicp-client`'s
     /// `RemoteApiProvider`). Holds no weights.
@@ -43,7 +44,10 @@ pub enum EngineKind {
     /// A llama-server router this node runs and supervises, serving the
     /// GGUFs in `[models]`. It holds the weights, as `Llama` does; it is
     /// reached the way `Remote` is, through an endpoint and model ids that
-    /// follow from the router and are never configured.
+    /// follow from the router and are never configured. The default since
+    /// the release flip (ENGINE_SWAP_PLAN E2), which is what `svrn setup`
+    /// writes and what a `[engine]` section that omits `kind` means.
+    #[default]
     LlamaServer,
     /// An engine registered out of tree, selected by name.
     Custom(String),
@@ -156,7 +160,7 @@ impl StructuredOutputMode {
 /// whatever subset it needs.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EngineSection {
-    /// Which engine. Default [`EngineKind::Llama`].
+    /// Which engine. Default [`EngineKind::LlamaServer`].
     #[serde(default)]
     pub kind: EngineKind,
     /// Base URL including the `/v1` suffix. Required by `remote`.

@@ -1198,7 +1198,10 @@ becomes an `Arc<dyn InferenceProvider>`. The vocabulary is one layer down in
 naming any implementation. `llama`, `remote` and `llama-server` are typed
 variants; anything else is `EngineKind::Custom(name)` resolved through
 `register_engine`, and an unknown id refuses listing what IS registered rather
-than falling back. `llama-server` is a router the node supervises: the factory
+than falling back. `llama-server` is the default (ENGINE_SWAP_PLAN E2): what
+`svrn setup` writes, and what an `[engine]` section with no `kind`, or no
+section, means. `llama`, the in-process engine, stays built for one release as
+its rollback. `llama-server` is a router the node supervises: the factory
 refuses it by name, because its endpoint exists only once serving assembly has
 started the router. Its models come from `[models]` through
 `sovereign_compute::llama_router::RouterPreset`, whose `engine_section` is the

@@ -38,6 +38,9 @@ fn primary() -> PathBuf {
 fn holder() -> SetupConfig {
     let dir = models_dir();
     let mut cfg = SetupConfig::unconfigured();
+    // The embedded engine's slot plan, which the router default no longer
+    // reaches (ENGINE_SWAP_PLAN E2): named, as its rollback config names it.
+    cfg.engine.kind = EngineKind::Llama;
     cfg.data.dir = dir.join("data-never-written");
     cfg.models = Some(ModelsSection {
         primary: primary(),

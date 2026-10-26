@@ -96,9 +96,10 @@ pub struct SetupConfig {
     #[serde(default)]
     pub compute: ComputeSection,
     /// `[engine]` — WHICH inference engine serves this node. Absent
-    /// (the overwhelmingly common case) means [`EngineKind::Llama`], the
-    /// in-process llama.cpp engine this repo has always run, so an
-    /// existing `config.toml` is unaffected. See [`EngineSection`].
+    /// (the overwhelmingly common case) means [`EngineKind::LlamaServer`],
+    /// the supervised router `svrn setup` writes and the release default
+    /// (ENGINE_SWAP_PLAN E2); `kind = "llama"` is the rollback to the
+    /// in-process engine. See [`EngineSection`].
     #[serde(default)]
     pub engine: EngineSection,
     /// `[search]` — the operator's web-search provider and its key. The
