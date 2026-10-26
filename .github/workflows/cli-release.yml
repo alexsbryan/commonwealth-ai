@@ -327,6 +327,11 @@ jobs:
               echo "::warning::router e2e needs SOVEREIGN_MODELS_DIR GGUFs, which this runner does not carry — the server is built and installed here, not exercised (never-ran, not passed)"
               ;;
             *)
+              # A dylib outside the OS fails at launch on a Mac that lacks it.
+              # This runner has Homebrew, so only the load commands show it (run
+              # 40269844732 shipped a server linked to Homebrew's openssl@3).
+              foreign=$(otool -L "$server" "$(dirname "$server")/ggml-rpc-server" | awk '!/:$/ && $1 !~ /^\/(usr\/lib|System\/Library)\// {print $1}')
+              [ -z "$foreign" ] || { echo "::error::the shipped server links outside the OS, so it fails to launch on a Mac without:" $foreign >&2; exit 1; }
               echo "router e2e is cfg(target_os = \"linux\") (it censuses model processes through /proc); on $triple this leg proves the server builds and installs for its triple, and the e2e proves it on a Linux host"
               ;;
           esac

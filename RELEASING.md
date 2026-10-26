@@ -117,8 +117,9 @@ arm64 Mac beyond the SDK: Rosetta (`softwareupdate --install-rosetta
 --agree-to-license`), because the build runs its own x86_64 tools, and the
 x86_64 Rust toolchain (`rustup toolchain install stable-x86_64-apple-darwin
 --profile minimal`) for the nested llguidance cargo. `build.sh`'s cpu mode on
-arm64 also drops OpenSSL and ggml-rpc's RDMA transport, whose libraries are
-arm64 only there.
+arm64 also drops ggml-rpc's RDMA transport, whose library is arm64 only there.
+Both Mac modes build without OpenSSL, so the server links nothing outside the
+OS; the leg's E2E step fails a server that does.
 
 A host **announces** the legs it cannot build and carries on with the rest; it
 never skips one silently. Two things follow:

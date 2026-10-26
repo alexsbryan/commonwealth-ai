@@ -146,7 +146,11 @@ if [ -z "$backend" ]; then
     *) backend=vulkan ;;
   esac
 fi
-mac="-DGGML_OPENMP=OFF -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DGGML_NATIVE=OFF"
+# OpenSSL off on both Mac modes: CMake finds Homebrew's, and a server linked to
+# /opt/homebrew/opt/openssl@3 does not launch on a Mac without it (the
+# macos-arm64 artifact of cli-release run 40269844732 did). The daemon hands
+# the server local model paths, so it never fetches over HTTPS.
+mac="-DGGML_OPENMP=OFF -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DGGML_NATIVE=OFF -DLLAMA_OPENSSL=OFF"
 case $backend in
   vulkan) flags="-DGGML_VULKAN=ON" ;;
   metal) flags="-DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON $mac -DGGML_CPU_ARM_ARCH=armv8-a" ;;
@@ -155,13 +159,12 @@ case $backend in
     # The x86_64 leg cross-built on an arm64 Mac (release-cli-local.sh), which
     # needs Rosetta for the build's own x86_64 tools. The nested llguidance
     # cargo builds for its host into target/release, where CMake reads it, so
-    # it runs as the x86_64 toolchain. Homebrew's OpenSSL and the SDK's librdma
-    # (ggml-rpc's RDMA-over-Thunderbolt) are arm64 only, so HTTPS and RDMA go:
-    # the daemon hands the server local model paths and RPC runs over TCP.
+    # it runs as the x86_64 toolchain. The SDK's librdma (ggml-rpc's
+    # RDMA-over-Thunderbolt) is arm64 only, so RDMA goes; RPC runs over TCP.
     if [ "$(uname -s)/$(uname -m)" = Darwin/arm64 ]; then
       export RUSTUP_TOOLCHAIN=stable-x86_64-apple-darwin
-      flags="$flags -DCMAKE_OSX_ARCHITECTURES=x86_64 -DLLAMA_OPENSSL=OFF -DGGML_RPC_RDMA=OFF"
-      echo "build.sh: cross-building x86_64 on arm64: llguidance with $RUSTUP_TOOLCHAIN, OpenSSL and RPC RDMA off" >&2
+      flags="$flags -DCMAKE_OSX_ARCHITECTURES=x86_64 -DGGML_RPC_RDMA=OFF"
+      echo "build.sh: cross-building x86_64 on arm64: llguidance with $RUSTUP_TOOLCHAIN, RPC RDMA off" >&2
     fi ;;
   # No PIE, as serve/container/Containerfile links the daemon: ggml-hip's
   # static archive carries R_X86_64_32 relocations a PIE link rejects.
