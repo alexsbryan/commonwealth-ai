@@ -133,7 +133,7 @@ pub struct RouterPreset {
 /// ([`rerank_with_head`] over the file's own metadata).
 pub fn served_rerank(models: &ModelsSection) -> Result<Option<PathBuf>, String> {
     rerank_with_head(
-        sovereign_inference::served_kind::RERANK.model_path(Some(models)),
+        crate::served_kind::RERANK.model_path(Some(models)),
         sovereign_inference::gguf_meta::read_architecture,
         sovereign_inference::gguf_meta::read_classifier_labels,
     )
@@ -369,10 +369,7 @@ impl RouterPreset {
             ("fast", self.fast.as_ref()),
             ("code", self.code.as_ref()),
             ("embed", self.embed.as_ref()),
-            (
-                sovereign_inference::served_kind::RERANK.role,
-                self.rerank.as_ref(),
-            ),
+            (crate::served_kind::RERANK.role, self.rerank.as_ref()),
         ]
         .into_iter()
         .filter_map(|(role, name)| name.map(|n| (role, n.as_str())))

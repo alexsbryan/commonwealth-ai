@@ -2,7 +2,7 @@
 //! Served model kinds — what a model that is not a chat or embed slot needs
 //! from a serving process, declared once.
 //!
-//! [`crate::engine_factory::register_engine`] answers "which engine?". This
+//! [`sovereign_inference::engine_factory::register_engine`] answers "which engine?". This
 //! answers "which extra kinds of model does that engine serve, and how is each
 //! reached?". A kind registers five things together: its role (the
 //! `[models.kinds]` key and the name it is logged under), its loader, its
@@ -194,7 +194,7 @@ impl ServedKind {
 pub const RERANK: ServedKind = ServedKind {
     role: RERANK_ROLE,
     env_path: Some("SOVEREIGN_RERANK_MODEL_PATH"),
-    loader: KindLoader::Provider(crate::reranker_standalone::load_rerank),
+    loader: KindLoader::Provider(sovereign_inference::reranker_standalone::load_rerank),
     route: KindRoute::Served {
         path: RERANK_PATH,
         serve: serve_rerank,
@@ -467,7 +467,7 @@ mod tests {
     #[test]
     fn the_rerank_loader_refuses_a_slot_that_does_not_fit() {
         assert!(
-            !crate::capacity::check_skipped_by_env(),
+            !sovereign_inference::capacity::check_skipped_by_env(),
             "SOVEREIGN_SKIP_VRAM_CHECK disables the check this test watches"
         );
         let dir = std::env::temp_dir().join(format!("pb-rerank-fit-{}", std::process::id()));

@@ -388,7 +388,7 @@ fix = "decided 2026-10-10: input preparation belongs to the embedding model (Emb
 id = "compute.rerank"
 layer = "compute"
 covers = ["rerank_batch"]
-callers = "corpus/mod.rs:188 search_with_rerank; /v1/rerank served_kind.rs:238; inner_chaos recall.rs:780"
+callers = "corpus/mod.rs:188 search_with_rerank; /v1/rerank sovereign-compute served_kind.rs:208; inner_chaos recall.rs:780"
 check = "same order and the same refusal class when no reranker is configured"
 judge = [{ kind = "rerank-order" }]
 when = [{ method = "=\"rerank_batch\"" }]

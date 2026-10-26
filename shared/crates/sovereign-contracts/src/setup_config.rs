@@ -683,7 +683,7 @@ pub struct ModelsSection {
     pub edit: Option<EditSection>,
 
     /// `[models.kinds]` — the GGUF each served model kind loads, keyed by the
-    /// kind's role (`sovereign_inference::served_kind`). A kind's env var,
+    /// kind's role (`sovereign_compute::served_kind`). A kind's env var,
     /// where it has one, wins over its key here.
     ///
     /// ```toml

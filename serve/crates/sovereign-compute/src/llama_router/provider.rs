@@ -146,7 +146,7 @@ impl RouterProvider {
     /// The served kind's role name for the cross-encoder, so the preset's
     /// role lookup and the kind registry cannot disagree about it.
     fn rerank_role(&self) -> &'static str {
-        sovereign_inference::served_kind::RERANK.role
+        crate::served_kind::RERANK.role
     }
 
     fn model_for(&self, role: &str) -> Option<&str> {

@@ -13,10 +13,10 @@
 use std::pin::Pin;
 use std::time::Duration;
 
+use crate::served_kind;
 use futures::{Stream, StreamExt};
 use sovereign_contracts::oicp::openai_types::{RerankRequest, RerankResponse};
 use sovereign_contracts::{CompletionRequest, CompletionResponse, Error, Result, StreamFrame};
-use sovereign_inference::served_kind;
 use tokio::sync::mpsc;
 
 use crate::wire::{

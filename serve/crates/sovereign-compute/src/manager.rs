@@ -21,6 +21,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use crate::served_kind;
 use async_trait::async_trait;
 use futures::Stream;
 use serde::Serialize;
@@ -29,7 +30,6 @@ use sovereign_contracts::{
     CompletionRequest, CompletionResponse, ComputeChildStatus, InferenceProvider,
     ProviderCapabilities, ResidentSlot, Result, Speed, StreamFrame,
 };
-use sovereign_inference::served_kind;
 use tokio::sync::{broadcast, watch};
 use tokio::task::JoinHandle;
 use tracing::{info, warn};

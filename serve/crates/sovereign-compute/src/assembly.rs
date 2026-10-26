@@ -12,13 +12,13 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 
+use crate::served_kind;
 use sovereign_contracts::model_family::ModelFamily;
 use sovereign_contracts::setup_config::{EngineKind, EngineSection, ModelsSection, SetupConfig};
 use sovereign_contracts::types::NextEditFormat;
 use sovereign_contracts::InferenceProvider;
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
 use sovereign_inference::engine_factory;
-use sovereign_inference::served_kind;
 
 use crate::llama_router::live::LiveRouter;
 use crate::llama_router::placement::RouterPlacement;

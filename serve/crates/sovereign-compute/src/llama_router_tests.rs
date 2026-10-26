@@ -229,10 +229,7 @@ fn every_role_names_the_model_that_fills_it_embed_and_rerank_included() {
             ("fast", "Qwen3.5-4B-UD-MTP-Q6_K_XL"),
             ("code", "Qwen3.6-35B-A3B-MTP-UD-Q6_K"),
             ("embed", "Qwen3-Embedding-0.6B-Q8_0"),
-            (
-                sovereign_inference::served_kind::RERANK.role,
-                "Qwen3-Reranker-0.6B"
-            ),
+            (crate::served_kind::RERANK.role, "Qwen3-Reranker-0.6B"),
         ]
     );
     assert_eq!(

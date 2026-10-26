@@ -9,6 +9,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use crate::served_kind::{self, KindRoute, KindServeError, ServedKind};
 use axum::body::Body;
 use axum::extract::State;
 use axum::http::{header::CONTENT_TYPE, StatusCode};
@@ -19,7 +20,6 @@ use futures::StreamExt;
 use host_kit::shell::RouteBundle;
 use sovereign_contracts::oicp::openai_types::ErrorResponse;
 use sovereign_contracts::{CompletionRequest, Error, InferenceProvider, StreamFrame};
-use sovereign_inference::served_kind::{self, KindRoute, KindServeError, ServedKind};
 use tracing::{debug, warn};
 
 use crate::wire::{

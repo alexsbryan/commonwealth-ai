@@ -193,7 +193,7 @@ async fn an_unreachable_route_is_named() {
 #[test]
 fn the_registered_kind_routes_are_the_paths_svrn_forwards() {
     register().expect("the NER kind registers");
-    let mut mounted: Vec<&str> = sovereign_inference::served_kind::served_kinds()
+    let mut mounted: Vec<&str> = crate::served_kind::served_kinds()
         .iter()
         .filter_map(|k| k.route_path())
         .collect();

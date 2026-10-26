@@ -18,6 +18,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
+use crate::served_kind::{self, ServedKind};
 use async_trait::async_trait;
 use futures::Stream;
 use sovereign_contracts::{
@@ -25,7 +26,6 @@ use sovereign_contracts::{
     Result, Speed, StreamFrame,
 };
 use sovereign_inference::fast_exit_skip_destructors;
-use sovereign_inference::served_kind::{self, ServedKind};
 use tracing::{error, info};
 
 use crate::mock::MockProvider;
@@ -42,7 +42,7 @@ enum Role {
     /// Model-free canned provider for the crash-isolation e2e.
     Mock,
     /// A served model kind hosted under its registered child role
-    /// (`sovereign_inference::served_kind`), serving its kind route.
+    /// (`crate::served_kind`), serving its kind route.
     Kind(ServedKind),
 }
 
