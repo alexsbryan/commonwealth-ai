@@ -14,12 +14,12 @@ use crate::{assemble, ServeArgs, ServeAssembly};
 pub(crate) async fn serve(args: ServeArgs) -> i32 {
     info!(target: "serve", data_dir = %args.data_dir.display(), listen = %args.listen, "serve starting");
     let config_path = SetupConfig::path_in(&args.data_dir);
-    // The loader's env contract, before the engine is built: the
-    // `[shared_model]` role names the fleet this node's primary turns route
-    // to, as svrn's boot applies it for a stock node (pb-serve-distributes-
-    // standalone). A config that does not load refuses in `assemble` below.
+    // The shared model this node's primary turns route to, published before
+    // `rank` reads it, as svrn's boot does for a stock node (pb-serve-
+    // distributes-standalone). A config that does not load refuses in
+    // `assemble` below.
     if let Ok(config) = SetupConfig::load_from(&config_path) {
-        crate::apply_shared_model_role_to_env(&config.shared_model);
+        crate::apply_shared_model_to_env(&config.shared_model);
     }
     let assembly = match assemble(&args.data_dir, &config_path).await {
         Ok(a) => a,

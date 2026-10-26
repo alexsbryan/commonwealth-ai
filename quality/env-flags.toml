@@ -878,7 +878,7 @@ cluster = "mesh"
 default = "unset"
 status = "shipped"
 shadows = "shared_model.model_id"
-purpose = "Distributed-inference shared model id override (bootstrap.rs env-or-config)."
+purpose = "Shared model id primary turns route to; written from [shared_model] model_id by sovereign_serve::apply_shared_model_to_env unless already set, read by rank via SharedModelFleet::from_env."
 
 [[flag]]
 name = "SOVEREIGN_SHARED_MODEL_HOST_NODE_ID"

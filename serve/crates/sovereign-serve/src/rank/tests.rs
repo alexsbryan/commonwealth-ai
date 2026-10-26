@@ -113,12 +113,18 @@ async fn own_root() -> (tokio::sync::MutexGuard<'static, ()>, tempfile::TempDir)
 /// On a shared-model fleet config, the FIRST primary turn after cold start
 /// goes to the shared model: `rank` sets it at the one construction, where
 /// before pb-serve-ranks only a reload did (provider.rs:179-181 at
-/// 474236221). Failing input: drop `set_shared_model_id` from `rank`, and the
-/// turn reaches the provider naming no model.
+/// 474236221). The id arrives the way a node's boot publishes it, from
+/// `[shared_model] model_id` (decision engine-swap-8). Failing input: drop
+/// `set_shared_model_id` from `rank`, or the `set_var` from
+/// `apply_shared_model_to_env`, and the turn reaches the provider naming no
+/// model.
 #[tokio::test]
 async fn the_first_primary_turn_after_cold_start_goes_to_the_shared_model() {
     let (_held, _root) = own_root().await;
-    std::env::set_var("SOVEREIGN_SHARED_MODEL_ID", "shared-model");
+    crate::apply_shared_model_to_env(&sovereign_contracts::setup_config::SharedModelSection {
+        model_id: Some("shared-model".to_string()),
+        ..Default::default()
+    });
     let saw = Arc::new(Mutex::new(Vec::new()));
     let local = Arc::new(Holds {
         id: "shared-model",
@@ -139,6 +145,28 @@ async fn the_first_primary_turn_after_cold_start_goes_to_the_shared_model() {
         Some(Some("shared-model".to_string())),
         "the first primary turn after cold start must name the shared model"
     );
+}
+
+/// An explicitly-set `SOVEREIGN_SHARED_MODEL_ID` wins over `[shared_model]
+/// model_id`, and an empty id publishes nothing. Failing input: drop the
+/// `var_os(..).is_some()` guard and the config overwrites the operator's env;
+/// drop the empty filter and `""` is published.
+#[tokio::test]
+async fn an_explicit_shared_model_env_wins_over_the_config_and_empty_publishes_nothing() {
+    let (_held, _root) = own_root().await;
+    let section = |id: &str| sovereign_contracts::setup_config::SharedModelSection {
+        model_id: Some(id.to_string()),
+        ..Default::default()
+    };
+    crate::apply_shared_model_to_env(&section(""));
+    assert_eq!(std::env::var_os("SOVEREIGN_SHARED_MODEL_ID"), None);
+    std::env::set_var("SOVEREIGN_SHARED_MODEL_ID", "from-env");
+    crate::apply_shared_model_to_env(&section("from-config"));
+    assert_eq!(
+        std::env::var("SOVEREIGN_SHARED_MODEL_ID").ok().as_deref(),
+        Some("from-env")
+    );
+    std::env::remove_var("SOVEREIGN_SHARED_MODEL_ID");
 }
 
 /// The router `rank` builds ranks the pinned worker pods persisted on disk,

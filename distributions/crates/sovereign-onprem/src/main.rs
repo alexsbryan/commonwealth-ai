@@ -61,7 +61,7 @@ fn main() {
         },
     )
     .env_contract(|shared_model| {
-        sovereign_serve::apply_shared_model_role_to_env(shared_model);
+        sovereign_serve::apply_shared_model_to_env(shared_model);
     })
     .ner(sovereign_serve::served_ner)
     .rank(|provider, ports| async move {

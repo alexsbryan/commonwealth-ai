@@ -376,7 +376,7 @@ impl DaemonHost {
 /// ## The split this closes
 ///
 /// `SOVEREIGN_SHARED_MODEL_ID` is not configuration a user sets; on the
-/// daemon path it is written by `apply_shared_model_role_to_env` from
+/// daemon path it is written by `sovereign_serve::apply_shared_model_to_env` from
 /// `[shared_model] model_id` and read back by three modules in two crates.
 /// That makes the process environment an inter-module contract, which is
 /// `TOPOLOGY.md` §2's point exactly: a value read at the point of use is not

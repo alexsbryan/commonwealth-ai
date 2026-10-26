@@ -11161,12 +11161,6 @@ lines = 557
 note = ""
 
 [[module]]
-path = "serve/crates/sovereign-compute/src/distributed_role.rs"
-context = "serving"
-lines = 143
-note = "moved from sovereign-daemon bootstrap.rs (pb-serve-distributes)"
-
-[[module]]
 path = "serve/crates/sovereign-compute/src/distributed_respawn.rs"
 context = "serving"
 lines = 320

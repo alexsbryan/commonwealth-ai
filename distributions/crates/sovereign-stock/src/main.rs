@@ -95,9 +95,9 @@ fn main() {
             Ok(parts)
         },
     )
-    // The loader's env contract, applied by svrn's boot on every path.
+    // The shared model primary turns route to, applied by svrn's boot on every path.
     .env_contract(|shared_model| {
-        sovereign_serve::apply_shared_model_role_to_env(shared_model);
+        sovereign_serve::apply_shared_model_to_env(shared_model);
     })
     // The NER kind svrn's ingest and retrieval take their handle from, where
     // this process loads for itself (hosted, or a terminal).

@@ -98,11 +98,11 @@ mod standalone;
 mod vram_plan;
 mod warm_cache;
 
-/// The loader's RPC env contract: the `[shared_model]` role, translated into
-/// the env the shared-model fleet and the host's knobs read. A process hosting
-/// serve's assembly applies it before anything reads that env
-/// (pb-serve-distributes).
-pub use sovereign_compute::distributed_role::apply_shared_model_role_to_env;
+/// `[shared_model] model_id` → `SOVEREIGN_SHARED_MODEL_ID`, which `rank` reads
+/// to route primary turns to the shared model. A process hosting serve's
+/// assembly applies it before `rank` (decision engine-swap-8).
+mod shared_model;
+pub use shared_model::apply_shared_model_to_env;
 
 /// The NER kind's one handle per process, loaded on first ask: what a process
 /// hosting serve's assembly hands svrn for its own ingest and retrieval

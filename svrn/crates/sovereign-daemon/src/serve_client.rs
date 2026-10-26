@@ -205,9 +205,8 @@ pub type NerSource = Box<
         + Sync,
 >;
 
-/// The loader's RPC env contract: the `[shared_model]` role, translated into
-/// the env its consumers read (`sovereign_compute::distributed_role`,
-/// pb-serve-distributes).
+/// `[shared_model]`, published as the env serve's `rank` reads
+/// (`sovereign_serve::apply_shared_model_to_env`, decision engine-swap-8).
 type EnvContract =
     Box<dyn Fn(&sovereign_contracts::setup_config::SharedModelSection) + Send + Sync>;
 
