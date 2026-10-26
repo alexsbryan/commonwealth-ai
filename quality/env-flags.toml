@@ -687,6 +687,13 @@ status = "guard"
 purpose = "Skip the model-fit VRAM check before load."
 
 [[flag]]
+name = "SOVEREIGN_ROUTER_SLOTS_DEBUG"
+cluster = "inference"
+default = "1 (on)"
+status = "guard"
+purpose = "Hand the supervised llama-server router LLAMA_SERVER_SLOTS_DEBUG, so its `/slots` describes each task rather than only its metrics. The conformance battery's grammar rows read the grammar the router enforced from that description; set 0 to serve the metrics-only form."
+
+[[flag]]
 name = "SOVEREIGN_BLOCK_NON_LATIN"
 cluster = "inference"
 default = "unset"

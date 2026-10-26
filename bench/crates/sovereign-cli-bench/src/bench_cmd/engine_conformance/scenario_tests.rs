@@ -136,7 +136,7 @@ fn a_scenario_file_is_read_per_row_and_refuses_what_it_cannot_mean() {
 
 use serde_json::json;
 
-use super::record::{Output, SplitLine};
+use super::record::{Output, SplitLine, StreamUsageFacet};
 use super::scenario;
 
 fn target(facets: super::record::Facets) -> CaseRecord {
@@ -276,6 +276,117 @@ fn a_corrupted_stream_passes_only_when_it_ends_in_an_error_frame() {
     f.output = None;
     assert!(matches!(
         scenario::stream_error(&target(f)),
+        CellVerdict::CouldNotJudge(_)
+    ));
+}
+
+#[test]
+fn admission_shape_passes_either_targets_own_answer_but_needs_the_admitted_call_served() {
+    // The engine's shape: the admitted call served, the fresh one shed.
+    let mut f = super::record::Facets::default();
+    f.admission = vec!["shed:unadmitted".into(), "served:admitted".into()];
+    assert_eq!(
+        scenario::admission_shape(&target(f.clone())),
+        CellVerdict::Passed
+    );
+
+    // The router's shape: no admission concept, both served, neither shed.
+    // A verdict, not a failure, and it is what `fail:differs` predicts.
+    f.admission = vec!["served:unadmitted".into(), "served:admitted".into()];
+    assert_eq!(
+        scenario::admission_shape(&target(f.clone())),
+        CellVerdict::Passed
+    );
+
+    // The admitted call shed is the bound failing, whichever engine.
+    f.admission = vec!["shed:admitted".into(), "served:unadmitted".into()];
+    assert!(is_differs(&scenario::admission_shape(&target(f.clone()))));
+
+    f.admission = Vec::new();
+    assert!(matches!(
+        scenario::admission_shape(&target(f)),
+        CellVerdict::CouldNotJudge(_)
+    ));
+}
+
+#[test]
+fn stream_usage_counts_the_answers_tokens_either_way_they_are_counted() {
+    let mut f = super::record::Facets::default();
+    // The engine's own count: the answer's tokens.
+    f.stream_usage = Some(StreamUsageFacet {
+        completion: 12,
+        answer_tokens: Some(12),
+        deltas: 3,
+    });
+    assert_eq!(
+        scenario::stream_usage(&target(f.clone())),
+        CellVerdict::Passed
+    );
+
+    // llama-server's count is what it evaluated: a draft head makes it the
+    // number of deltas, not the answer's tokens. Still the answer's length.
+    f.stream_usage = Some(StreamUsageFacet {
+        completion: 3,
+        answer_tokens: Some(12),
+        deltas: 3,
+    });
+    assert_eq!(
+        scenario::stream_usage(&target(f.clone())),
+        CellVerdict::Passed
+    );
+
+    // The prompt's count is a different number and fails.
+    f.stream_usage = Some(StreamUsageFacet {
+        completion: 277,
+        answer_tokens: Some(12),
+        deltas: 3,
+    });
+    assert!(is_differs(&scenario::stream_usage(&target(f.clone()))));
+
+    // Two tokenizers counting one templated answer: 55 against the 33 the
+    // other names is still the answer's count (the engine's template tokens
+    // cost more than the server's tokenizer makes of the same turn).
+    f.stream_usage = Some(StreamUsageFacet {
+        completion: 55,
+        answer_tokens: Some(33),
+        deltas: 1,
+    });
+    assert_eq!(
+        scenario::stream_usage(&target(f.clone())),
+        CellVerdict::Passed
+    );
+
+    // A count far past the answer's own is another turn's.
+    f.stream_usage = Some(StreamUsageFacet {
+        completion: 120,
+        answer_tokens: Some(33),
+        deltas: 1,
+    });
+    assert!(is_differs(&scenario::stream_usage(&target(f.clone()))));
+
+    // A frame that carried only the count, with no tie recorded, is
+    // could-not-judge: the instrument saw nothing to hold it to.
+    f.stream_usage = Some(StreamUsageFacet {
+        completion: 12,
+        answer_tokens: None,
+        deltas: 0,
+    });
+    assert!(matches!(
+        scenario::stream_usage(&target(f.clone())),
+        CellVerdict::CouldNotJudge(_)
+    ));
+
+    // With the answer's length, the frame is judged on it.
+    f.stream_usage = Some(StreamUsageFacet {
+        completion: 12,
+        answer_tokens: Some(40),
+        deltas: 0,
+    });
+    assert!(is_differs(&scenario::stream_usage(&target(f.clone()))));
+
+    f.stream_usage = None;
+    assert!(matches!(
+        scenario::stream_usage(&target(f)),
         CellVerdict::CouldNotJudge(_)
     ));
 }

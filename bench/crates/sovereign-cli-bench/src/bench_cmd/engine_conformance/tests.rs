@@ -751,6 +751,36 @@ fn a_mutation_subject_is_a_pair_whose_prompts_agree() {
     );
 }
 
+#[test]
+fn a_scenario_verdict_is_read_with_no_records_at_all() {
+    // The language-parity rows are answered by a scenario file over a whole
+    // language: `judge --scenario` with no records must still report them,
+    // or a run that did not ask those rows leaves the answer unread.
+    let inventory = Inventory {
+        retired: Vec::new(),
+        rows: vec![row(
+            "parity",
+            vec![Check::Scenario {
+                what: "language parity".into(),
+                driver: None,
+            }],
+            Prediction::Pass,
+        )],
+    };
+    let scenarios: verdict::Scenarios = [("parity".to_string(), CellVerdict::Passed)]
+        .into_iter()
+        .collect();
+    let judged = verdict::judge(&inventory, &[], &scenarios);
+    assert!(
+        judged.iter().any(|v| v.row == "parity" && v.verdict == "passed"),
+        "a scenario verdict must be read with no records: {judged:?}"
+    );
+    // The same inventory with no scenario file still says nothing, never a
+    // pass.
+    let judged = verdict::judge(&inventory, &[], &verdict::Scenarios::new());
+    assert!(judged.iter().all(|v| v.verdict != "passed"), "{judged:?}");
+}
+
 // ── the shipped inventory's shape, and a retired row ──────────────────────
 //
 // The shipped `conformance.toml` is read at runtime by `battery.sh`, whose

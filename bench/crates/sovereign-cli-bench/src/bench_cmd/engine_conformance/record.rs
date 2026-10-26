@@ -100,10 +100,28 @@ pub struct Facets {
     /// the stream arrives in chunks, and how many deltas the driver read.
     #[serde(default)]
     pub split_line: Option<SplitLine>,
+    /// `projection.stream-usage`'s scenario: what the finish frame counted.
+    #[serde(default)]
+    pub stream_usage: Option<StreamUsageFacet>,
     /// Why the driver left a facet unobserved, by facet name, so a
     /// could-not-judge cell carries the cause rather than only the absence.
     #[serde(default)]
     pub unobserved: BTreeMap<String, String>,
+}
+
+/// What a streamed answer's finish frame counted (L I3,
+/// `projection.stream-usage`), and the two counts it can be held to: the
+/// answer's own tokens, and the `token` frames the same stream delivered.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct StreamUsageFacet {
+    /// The completion count the finish frame carried.
+    pub completion: u64,
+    /// The answer's tokens, as the target's model counted them.
+    #[serde(default)]
+    pub answer_tokens: Option<u64>,
+    /// One `token` frame per delta the stream delivered.
+    #[serde(default)]
+    pub deltas: u64,
 }
 
 /// What a split-line stream delivered (L I3,

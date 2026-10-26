@@ -38,7 +38,9 @@
 # bank) through /internal/engine/replay, which the daemon mounts on its
 # operator listener (:9741, beside inference/warmup: server.rs), and writes
 # <out>/<n>-<target>.jsonl; then every record file is judged into <out>,
-# and every check is watched catching a mutation of a cell that passed.
+# beside the language-parity scenario bench/lanes/engine-swap/llg-parity
+# writes (the rows whose oracle is a language, not a record), and every check
+# is watched catching a mutation of a cell that passed.
 # Name a target twice for an A/A pair. On exit, however it exits, the
 # resident is put back on the config it started with.
 #
@@ -63,6 +65,10 @@ server_env=${BATTERY_SERVER_ENV:-}
 meshllm=${BATTERY_MESH_LLM:-$repo/target/mesh-llm/v0.78.1/x/mesh-bundle/mesh-llm}
 meshdir=$repo/target/mesh-llm
 cases=${BATTERY_CASES:-$repo/target/engine-conformance/cases-20261010.jsonl}
+# The rows whose oracle is a language rather than a record (decode.lark, the
+# two allow-lists): a separate crate, pinned to llama-server's own llguidance,
+# judged beside the records. Without its file those rows are could-not-judge.
+llg_dir=$repo/bench/lanes/engine-swap/llg-parity
 out=$repo/target/engine-conformance/battery-$(date +%Y%m%d-%H%M%S)
 tb() { toolbox run -c sovereign-vulkan "$@"; }
 say() { echo "battery: $*"; }
@@ -429,9 +435,28 @@ print(next((c["port"] for c in children if c.get("role") == "router" and c.get("
   records="$records --records $rec"
 done
 
+# The language-parity scenarios: the one crate outside this workspace, built
+# into a target dir of its own (its Cargo.lock pins 1.0.1 against the
+# workspace's 1.7.6). Its exit 0 or 3 is a verdict; 4 is a file where no row
+# could be judged, and is reported, not hidden.
+scenario_flag=""
+lrc=0
+if [ -f "$llg_dir/Cargo.toml" ]; then
+  CARGO_TARGET_DIR=$repo/target/llg-parity cargo build --manifest-path "$llg_dir/Cargo.toml" \
+    >"$out/llg-parity-build.log" 2>&1 || die "llg-parity did not build, see $out/llg-parity-build.log"
+  "$repo/target/llg-parity/debug/llg-parity" --out "$out/scenario.jsonl" \
+    >"$out/llg-parity.log" 2>&1 || lrc=$?
+  case $lrc in
+    0|3) scenario_flag="--scenario $out/scenario.jsonl"; say "llg-parity judged into $out/scenario.jsonl (exit $lrc)" ;;
+    *) say "WARNING: llg-parity claimed nothing for some row (exit $lrc), see $out/llg-parity.log; those rows stay could-not-judge" ;;
+  esac
+else
+  say "WARNING: no llg-parity at $llg_dir; the language-parity rows stay could-not-judge"
+fi
+
 rc=0
-# shellcheck disable=SC2086
-sovereign bench engine-conformance judge $records --out "$out" >"$out/judge.log" 2>&1 || rc=$?
+# shellcheck disable=SC2086 # $records and $scenario_flag are word lists by design
+sovereign bench engine-conformance judge $records $scenario_flag --out "$out" >"$out/judge.log" 2>&1 || rc=$?
 cat "$out/judge.log"
 say "judged into $out (judge exit $rc: 0 as predicted, 3 a verdict differs, 4 nothing judged)"
 # Every check watched failing on a perturbed copy of a cell that passed.

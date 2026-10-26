@@ -256,12 +256,17 @@ id = "decode.lark"
 layer = "decode"
 covers = ["lark_grammar"]
 callers = "skeleton.rs:249,617; raptor_atlas.rs:1299; workflow steps.rs:148; sovereign-tdd model.rs:437"
-check = "language parity per production grammar between llguidance 1.7.6 (engine) and 1.0.1 (server build)"
+check = "the caller's grammar reaches the decode: the engine records it, the server's /slots describes it (LLAMA_SERVER_SLOTS_DEBUG), and the two languages agree under llguidance 1.7.6 against 1.0.1"
 judge = [{ kind = "grammar" }, { kind = "scenario", what = "language parity between llguidance 1.7.6 and 1.0.1 (llg-parity, milestone 5)" }]
 when = [{ kind = "complete", lark_grammar = "set", tools = "unset" }]
 predict = "pass"
 basis = "measured"
 note = "Three production grammars compile verbatim under 1.0.1; aye|nay 3/3 through the daemon (911253601). Parity across the two llguidance versions is not yet checked."
+
+[[retired]]
+id = "decode.lark-on-the-router"
+retired = "2026-10-25"
+why = "The rerun's `decode.lark` failure named it: on llama-server the grammar facet was absent (`grammar on embedded: true, on llama-server: false`), because the supervised router ran in `/slots`' metrics-only form and the battery could see nothing of what it enforced. The fix is not a row: the router now hands its child LLAMA_SERVER_SLOTS_DEBUG=1 (`RouterProvider`'s supervisor env), so the same row's grammar facet is observed on both engines and `decode.lark` compares them again. Kept here, as a tombstone, for the reader who greps the old failure."
 
 [[row]]
 id = "decode.lark-with-tools"
@@ -472,13 +477,13 @@ id = "projection.stream-usage"
 layer = "projection"
 covers = ["complete_stream_with_finish"]
 callers = "streaming turns, pipeline runner, serve"
-check = "Finish frame carries usage on both"
-judge = [{ kind = "stream-frames", frames = ["usage"] }]
+check = "the finish frame's usage counts the answer: the target's own token count, or the deltas its stream delivered"
+judge = [{ kind = "stream-frames", frames = ["usage"] }, { kind = "scenario", driver = "stream-usage", what = "the usage the finish frame carried is the answer's tokens (or the stream's deltas), not the prompt's" }]
 when = [{ kind = "complete", stream = "=true" }]
-predict = "fail:silent"
-basis = "read"
-note = "The client never sets stream_options.include_usage, so llama-server sends no usage (LS server-task.cpp:502)."
-fix = "oicp-client: send include_usage"
+predict = "pass"
+basis = "measured"
+note = "Re-predicted pass 2026-10-25 (es-c2-battery-rejudge-fix) from the saved rerun (battery-20261025-191102): the frame is present on both targets, and its completion count is the answer's on all three streaming cases measured (embedded 335/63/64, llama-server 495/61/64 against their own answers). The earlier `fail:silent` rested on the client never setting stream_options.include_usage; it does now. The scenario accepts either count the answer can be counted two ways by: the target's tokenizer count, or the token frames the same stream delivered (llama-server's count is what it evaluated, which a draft head makes larger)."
+fix = "done: the engine sends include_usage and llama-server honours it; the row now has a scenario that reads what the frame counted rather than only that the kind was present."
 
 [[row]]
 id = "projection.stream-tool-calls"
@@ -563,12 +568,12 @@ layer = "cost"
 covers = ["admission"]
 callers = "admission::stamp, streaming.rs:985,1392,2959; call_census.rs:258"
 check = "under predicted overload, an admitted call parks and an unadmitted one is shed"
-judge = [{ kind = "scenario", driver = "admission", what = "an admitted call is served after the bound where a fresh one behind it is shed (or, against the router, both are served and neither sheds)" }]
+judge = [{ kind = "scenario", driver = "admission-shape", what = "the admitted call is served; whether the fresh one behind it is shed is the sentence the row records as a named difference (the engine sheds it, the router does not)" }]
 when = [{ method = "=\"admission\"" }]
 predict = "fail:differs"
 basis = "read"
 fix = "decided 2026-10-10: admission belongs to the scheduler above the engine (ARCH 12); it sheds from the server's /slots occupancy rather than an engine-internal prediction"
-note = "Driven since 2026-10-25 (es-c2-battery-rejudge, L I3): one slot, a long held call, then a second arriving behind it, the first carrying a `turn_admission` the replay route stamps onto the request. The engine parks the admitted caller past its bound and sheds the fresh one (`model_slot.rs:1316-1403`). Predicted `fail:differs` against the router: the engine client never sends `turn_admission` for a plain remote call (`outbound.rs`), and llama-server queues everything without shedding, so a remote target serves both where the engine sheds one. The scenario grades each target on its own (`admitted` served and `shed` present on the engine; both served, no shed, on the router), so the prediction is the verdict the difference predicts."
+note = "Driven since 2026-10-25 (es-c2-battery-rejudge, L I3): one slot, a long held call, then a second arriving behind it, the first carrying a `turn_admission` the replay route stamps onto the request. The engine parks the admitted caller past its bound and sheds the fresh one (`model_slot.rs:1316-1403`). Re-judged 2026-10-25 (es-c2-battery-rejudge-fix) after the rerun: the scenario compared the ENGINE shape against the router records, charging the router for not being the engine; `admission-shape` now grades each target on its own, so the router both-served-no-shed answer is the verdict `fail:differs` predicts. The bound itself is the engine scheduler own (ARCH 12), so the row is a named difference, not a defect."
 
 # ── host ────────────────────────────────────────────────────────────────
 
