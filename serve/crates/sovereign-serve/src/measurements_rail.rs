@@ -69,8 +69,7 @@ const PAYLOAD_WIRE: &str = "wire";
 
 /// Wrap one record as a rail payload, or say why it cannot travel.
 ///
-/// The refusals are sentences because they reach an operator through
-/// `svrn mesh bench`'s publish note, and "the gossip buffer rejected the
+/// The refusals are sentences, because "the gossip buffer rejected the
 /// write" was never something a person could act on.
 pub fn to_payload(record: &mm::MeasurementRecord) -> Result<Payload, String> {
     let Some(bytes) = mm::to_wire(record) else {
@@ -102,8 +101,8 @@ pub fn from_payload(payload: &Payload) -> Option<mm::MeasurementRecord> {
 /// cw-rails signs with its node key and refuses a node that is not in a mesh
 /// yet — its sentence names the verb that fixes it, and it is passed through
 /// rather than restated (ARCH §10.6). Nothing is lost by a refusal:
-/// `svrn mesh bench` writes `~/.svrnmesh/mesh-measurements.json` before it
-/// ever publishes, and [`reconcile_loop`] carries the file onto the journal
+/// the record stays in `~/.svrnmesh/mesh-measurements.json`, and
+/// [`reconcile_loop`] carries the file onto the journal
 /// once cw-rails can author on it. An absent cw-rails is a named absence.
 pub async fn publish(base: &str, record: &mm::MeasurementRecord) -> Result<String, RailDoorError> {
     let payload = to_payload(record).map_err(RailDoorError::Refused)?;
@@ -210,9 +209,7 @@ pub fn read(admission: &Admission, exclude_actor: Option<&str>) -> RailMeasureme
     // unbounded growth. A journal has no such cap — it is append-only and
     // forgets nothing — so the cap is applied HERE, per publisher per
     // configuration, against the SAME constant (ARCH §10.6). Without it a
-    // reader would see deeper history than the publisher's own
-    // `mesh bench --history` shows, and the gap would widen every time
-    // anybody re-benched a configuration they had already measured.
+    // reader would see deeper history than the publisher's own file keeps.
     //
     // This is retention, not a refusal: what is dropped is the OLDEST runs of
     // a configuration whose newest eight are all here, so it is never the
