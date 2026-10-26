@@ -11461,12 +11461,6 @@ lines = 825
 note = ""
 
 [[module]]
-path = "shared/crates/sovereign-contracts/src/launch/rpc_worker_flag.rs"
-context = "kernel"
-lines = 63
-note = "moved from sovereign-daemon bootstrap.rs (pb-serve-distributes)"
-
-[[module]]
 path = "shared/crates/sovereign-contracts/src/lessons.rs"
 context = "kernel"
 lines = 139

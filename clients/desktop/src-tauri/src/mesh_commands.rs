@@ -202,7 +202,6 @@ pub async fn mesh_get_placement(
         "resident": primary.get("resident"),
         "transitioning": primary.get("transitioning"),
         "placement": primary.get("placement"),
-        "rpc_worker": status.get("rpc_worker"),
     })))
 }
 

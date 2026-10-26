@@ -122,11 +122,10 @@ const HELP: help::Help = help::Help {
     summary: "Long-running OICP server with managed inference + MCP tools.",
     sections: &[
         help::HelpSection::Usage(
-            "sovereign-daemon [run] [--config <path>] [--rpc-worker[=<bind>]]",
+            "sovereign-daemon [run] [--config <path>]",
         ),
         help::HelpSection::Flags(&[
             ("--config <path>", "Override the default `~/.svrnmesh/config.toml` path."),
-            ("--rpc-worker[=<bind>]", "Lend this node's GPU to the mesh: serve an llama.cpp RPC worker so peers can place layers here. Default bind 127.0.0.1:50052 — members reach the worker over the encrypted mesh tunnel, so no LAN bind is needed; a non-loopback bind is refused unless SOVEREIGN_RPC_ALLOW_PLAINTEXT_LAN=1 acknowledges it. This only OFFERS the GPU — unlike `[shared_model] role = \"anchor\"`, it does not also turn on peer discovery or enter the host election."),
         ]),
         help::HelpSection::Subcommands(&[
             ("(bare)",     "Run the daemon in the foreground. Requires an existing config (`svrn setup`). Equivalent to `run`."),

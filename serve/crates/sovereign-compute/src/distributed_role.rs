@@ -1,22 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! A node's shared-model role and `--rpc-worker` flag, translated into the
-//! RPC env contract the loader's consumers read (the worker bind, discovery,
-//! the anchor eligibility profile, the quorum and shard-fetch knobs). Moved
+//! A node's shared-model role, translated into the RPC env contract the
+//! loader's consumers read (discovery, the anchor eligibility profile, the
+//! quorum and shard-fetch knobs). The worker bind (`SOVEREIGN_RPC_SERVE`) and
+//! `--rpc-worker` were deleted with the mesh fabric (es-g4-delete-mesh-fabric). Moved
 //! from the daemon's bootstrap (pb-serve-distributes): the process that
 //! loads the engine applies it before it decides anything.
-
-/// Apply `--rpc-worker` to the env contract the RPC consumers read.
-///
-/// Runs BEFORE [`apply_shared_model_role_to_env`], which only fills
-/// `SOVEREIGN_RPC_SERVE` in when it is unset — so an explicit flag beats the
-/// configured role, matching how an explicit env var already beats both.
-pub fn apply_rpc_worker_flag(args: &[String]) {
-    let Some(bind) = sovereign_contracts::launch::rpc_worker_flag(args) else {
-        return;
-    };
-    std::env::set_var("SOVEREIGN_RPC_SERVE", &bind);
-    tracing::info!(bind = %bind, "--rpc-worker → SOVEREIGN_RPC_SERVE");
-}
 
 /// Translate `[shared_model] role` into the RPC env contract that the
 /// three decoupled RPC consumers already read — the inference serve
@@ -52,34 +40,6 @@ pub fn apply_shared_model_role_to_env(cfg: &sovereign_contracts::setup_config::S
     // distribute) until this node is the host. So "discover" now means
     // "participates in the host election", which every anchor does.
     let discover = serve;
-    // The plaintext-LAN acknowledgement, carried into the env contract BEFORE
-    // any bind is resolved — `RpcServe` is the one decider and it reads the
-    // env half, so a config that acknowledges must be visible to it whether
-    // the bind came from the role below or from an explicit variable. Env wins
-    // if pre-set, matching every other key in this section.
-    if cfg.allow_plaintext_lan
-        && std::env::var_os(sovereign_contracts::launch::RPC_ALLOW_PLAINTEXT_LAN_ENV).is_none()
-    {
-        std::env::set_var(
-            sovereign_contracts::launch::RPC_ALLOW_PLAINTEXT_LAN_ENV,
-            "1",
-        );
-        tracing::warn!(
-            "shared-model: `[shared_model] allow_plaintext_lan = true` — a non-loopback \
-             RPC bind will be accepted; the ggml worker authenticates nothing"
-        );
-    }
-    if serve && std::env::var_os("SOVEREIGN_RPC_SERVE").is_none() {
-        std::env::set_var(
-            "SOVEREIGN_RPC_SERVE",
-            sovereign_contracts::launch::DEFAULT_RPC_BIND,
-        );
-        tracing::info!(
-            role = ?cfg.role,
-            bind = sovereign_contracts::launch::DEFAULT_RPC_BIND,
-            "shared-model: anchor role → SOVEREIGN_RPC_SERVE"
-        );
-    }
     // Anchor-tier worker eligibility: a host treats its fellow anchors with the
     // stricter `EligibilityConfig::anchor` profile (slower settle, quarantine on
     // first flap), since a flapping anchor can GGML_ABORT the host mid-decode.

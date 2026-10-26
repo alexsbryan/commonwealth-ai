@@ -98,13 +98,11 @@ mod standalone;
 mod vram_plan;
 mod warm_cache;
 
-/// The loader's RPC env contract: `--rpc-worker` and the `[shared_model]`
-/// role, translated into the env the worker bind, discovery and the host's
-/// knobs read. A process hosting serve's assembly applies it before anything
-/// reads that env (pb-serve-distributes).
-pub use sovereign_compute::distributed_role::{
-    apply_rpc_worker_flag, apply_shared_model_role_to_env,
-};
+/// The loader's RPC env contract: the `[shared_model]` role, translated into
+/// the env the shared-model fleet and the host's knobs read. A process hosting
+/// serve's assembly applies it before anything reads that env
+/// (pb-serve-distributes).
+pub use sovereign_compute::distributed_role::apply_shared_model_role_to_env;
 
 /// The NER kind's one handle per process, loaded on first ask: what a process
 /// hosting serve's assembly hands svrn for its own ingest and retrieval

@@ -7,7 +7,7 @@
 //!   (the `MembershipReader` port pb-serve-ranks and pb-mesh-exit-transport
 //!   reuse).
 //! - [`spawn_registrations`] puts serve's origins in cw-rails' origin table
-//!   (rpc, `/internal/v1/models/*`; phase-b-19, and the
+//!   (`/internal/v1/models/*`; phase-b-19, and the
 //!   member client on `cwth/client/0`, pb-serve-ranks), through the one
 //!   register/renew loop, so the flip turns none of them off.
 //!
@@ -26,7 +26,7 @@ use kernel_types::NodeId;
 use mesh_reach::rails::RailsTransport;
 use mesh_reach::{PeerContact, PeerTransport};
 use oicp_types::capabilities::{
-    AnchorProfile, AvailableResources, ComputeType, GpuInfo, HardwareProfile, NodeCapabilities,
+    AvailableResources, ComputeType, GpuInfo, HardwareProfile, NodeCapabilities,
 };
 use oicp_types::origin::{Admit, Framing, OriginRegistration};
 use oicp_types::FederatedMeshDescriptor;
@@ -359,18 +359,13 @@ impl sovereign_contracts::venue_host::VenueHost for RailsVenues {
 /// serve's origins as cw-rails' origin table takes them: the model-transfer
 /// prefix on `cwth/http/0` at serve's listener, its member
 /// client (`crate::openai_face`) whole on `cwth/client/0` at that
-/// listener (`member`), where the Inference and StatusProbe classes arrive,
-/// and, when
-/// this node lends a GPU (`SOVEREIGN_RPC_SERVE` names a bind), its ggml rpc
-/// worker on `cwth/rpc/0`, declaring the anchor record peers' discovery reads.
+/// listener (`member`), where the Inference and StatusProbe classes arrive.
 /// The `cwth/http/0` one declares the loader's VRAM figure ([`vram_claims`]).
+/// The ggml rpc worker on `cwth/rpc/0` was deleted with the mesh fabric
+/// (es-g4-delete-mesh-fabric): a distributed model's peers are static
+/// endpoints, not origins found on the roster.
 pub fn registrations(listen: SocketAddr, member: Option<SocketAddr>) -> Vec<OriginRegistration> {
-    registrations_for(
-        listen,
-        member,
-        sovereign_contracts::launch::RpcServe::from_env(),
-        local_vram_gb(),
-    )
+    registrations_for(listen, member, local_vram_gb())
 }
 
 /// This node's GPU memory in whole GB from the published GPU probe
@@ -386,7 +381,6 @@ fn local_vram_gb() -> Result<Option<u32>, String> {
 fn registrations_for(
     listen: SocketAddr,
     member: Option<SocketAddr>,
-    rpc: sovereign_contracts::launch::RpcServe,
     vram_gb: Result<Option<u32>, String>,
 ) -> Vec<OriginRegistration> {
     let mut out = vec![OriginRegistration {
@@ -396,7 +390,7 @@ fn registrations_for(
         admit: Admit::Members(Vec::new()),
         framing: Framing::Http,
         ttl_secs: Some(ORIGIN_TTL_SECS),
-        claims: Some(vram_claims(vram_gb.clone().ok().flatten())),
+        claims: Some(vram_claims(vram_gb.ok().flatten())),
         namespaces: Vec::new(),
     }];
     match member {
@@ -419,22 +413,6 @@ fn registrations_for(
         }),
         None => warn!(target: TARGET, "no member client: serve registers nothing on cwth/client/0"),
     }
-    match rpc.port() {
-        Some(port) if rpc.is_serving() => out.push(OriginRegistration {
-            alpn: String::from_utf8_lossy(mesh_reach::alpn::RPC_ALPN).into_owned(),
-            prefixes: Vec::new(),
-            port,
-            admit: Admit::Members(Vec::new()),
-            // ggml's rpc-server speaks raw bytes, not HTTP.
-            framing: Framing::Bytes,
-            ttl_secs: Some(ORIGIN_TTL_SECS),
-            claims: anchor_claims(port, rpc.binds_past_loopback(), vram_gb),
-            namespaces: Vec::new(),
-        }),
-        _ => {
-            debug!(target: TARGET, "no rpc worker bind: serve lends no GPU and registers no rpc origin")
-        }
-    }
     out
 }
 
@@ -454,44 +432,6 @@ fn vram_claims(vram_gb: Option<u32>) -> NodeCapabilities {
         .into_iter()
         .collect();
     claims
-}
-
-/// The anchor record this node declares through its rpc registration, which
-/// cw-rails merges into its gossiped capabilities (`origins::merge_declared`).
-/// Every other number is zero, as cw-rails' own report is: this declaration
-/// claims the anchor tier and nothing about inference. An unknown VRAM
-/// figure declares no anchor rather than a CPU-only one.
-fn anchor_claims(
-    rpc_port: u16,
-    rpc_direct: bool,
-    vram_gb: Result<Option<u32>, String>,
-) -> Option<NodeCapabilities> {
-    let vram_gb = match vram_gb {
-        // `0` for a CPU-only anchor, the field's documented reading.
-        Ok(vram_gb) => vram_gb.unwrap_or(0),
-        Err(why) => {
-            warn!(target: TARGET, %why, "GPU memory unknown: the rpc origin declares no anchor record");
-            return None;
-        }
-    };
-    Some(NodeCapabilities {
-        anchor: Some(AnchorProfile {
-            can_anchor: true,
-            vram_gb,
-            model_resident: sovereign_contracts::launch::SharedModelFleet::from_env()
-                .model_id()
-                .map(str::to_string),
-            rpc_port: Some(rpc_port),
-            // cw-rails forwards `cwth/rpc/0` to the worker: a host bridges to
-            // it when no direct address answers.
-            rpc_iroh: true,
-            // Only a bind past loopback (plaintext LAN, operator-allowed) is
-            // reachable at this node's own address; any other worker is
-            // reached over the bridge, which proves the member.
-            rpc_direct,
-        }),
-        ..zero_claims()
-    })
 }
 
 /// A declaration with every number zero and no anchor.

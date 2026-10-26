@@ -15,8 +15,8 @@ pub(crate) async fn serve(args: ServeArgs) -> i32 {
     info!(target: "serve", data_dir = %args.data_dir.display(), listen = %args.listen, "serve starting");
     let config_path = SetupConfig::path_in(&args.data_dir);
     // The loader's env contract, before the engine is built: the
-    // `[shared_model]` role binds this node's rpc worker and arms discovery,
-    // as svrn's boot applies it for a stock node (pb-serve-distributes-
+    // `[shared_model]` role names the fleet this node's primary turns route
+    // to, as svrn's boot applies it for a stock node (pb-serve-distributes-
     // standalone). A config that does not load refuses in `assemble` below.
     if let Ok(config) = SetupConfig::load_from(&config_path) {
         crate::apply_shared_model_role_to_env(&config.shared_model);

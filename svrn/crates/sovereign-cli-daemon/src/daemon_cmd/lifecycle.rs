@@ -578,7 +578,7 @@ mod stop_daemon_tests {
 /// This is the dev-workflow counterpart to `svrn setup`'s
 /// launchd/systemd registration — when you don't want a service
 /// manager owning lifecycle, `start` gives you a one-liner.
-pub(crate) async fn start_daemon(args: &[String]) -> i32 {
+pub(crate) async fn start_daemon() -> i32 {
     if wait_for_ready(std::time::Duration::from_millis(200)).await {
         let pid_hint = read_daemon_pid()
             .map(|p| format!(" (pid {p})"))
@@ -716,15 +716,6 @@ pub(crate) async fn start_daemon(args: &[String]) -> i32 {
 
     let mut cmd = std::process::Command::new(&exe);
     cmd.arg("daemon").arg("run");
-    // The detached child is the process that actually serves, so flags that
-    // configure serving have to travel to it. `start` returns as soon as the
-    // child is ready; anything applied only in this process is discarded with
-    // it — which would make `daemon start --rpc-worker` silently start a
-    // daemon that lends nothing.
-    if let Some(bind) = super::bootstrap::rpc_worker_flag(args) {
-        cmd.arg(format!("--rpc-worker={bind}"));
-        eprintln!("  lending this node's GPU to the mesh on {bind}");
-    }
     cmd.stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::from(out_file))
         .stderr(std::process::Stdio::from(err_file));
@@ -975,7 +966,7 @@ extern "C" {
 /// who actually wants strict launchd accounting can run via
 /// `launchctl kickstart -k gui/$(id -u)/com.svrnmesh.daemon`
 /// directly.
-pub(crate) async fn restart_daemon(args: &[String]) -> i32 {
+pub(crate) async fn restart_daemon() -> i32 {
     eprintln!("restarting the daemon …");
 
     // One atomic `restart` beats stop-then-start when a manager owns
@@ -1005,7 +996,7 @@ pub(crate) async fn restart_daemon(args: &[String]) -> i32 {
         // we'd just race the old one for :9741.
         return stop_rc;
     }
-    start_daemon(args).await
+    start_daemon().await
 }
 
 /// `svrn daemon reload` — POST /v1/admin/reload. Hot-reloads

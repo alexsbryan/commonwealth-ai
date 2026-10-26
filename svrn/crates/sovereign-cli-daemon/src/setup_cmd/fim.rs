@@ -600,9 +600,9 @@ async fn bring_daemon_up(plan: &Plan) -> Result<(), String> {
     // completion slot, not offering its GPU to the mesh. Whatever the operator's
     // config says about serving still applies via the role translation.
     let rc = if running {
-        crate::daemon_cmd::lifecycle::restart_daemon(&[]).await
+        crate::daemon_cmd::lifecycle::restart_daemon().await
     } else {
-        crate::daemon_cmd::lifecycle::start_daemon(&[]).await
+        crate::daemon_cmd::lifecycle::start_daemon().await
     };
     if rc == 0 {
         return Ok(());

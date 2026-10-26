@@ -135,12 +135,6 @@ pub fn notes_tier_fns(
     (notes_embed, notes_gliner)
 }
 
-/// The `--rpc-worker` parse and its default bind are the launch contract's
-/// (`sovereign_contracts::launch`). The role → RPC env translation is the
-/// loader's (`sovereign_compute::distributed_role`), which the distribution
-/// hands svrn through `HostedServe::env_contract` (pb-serve-distributes).
-pub use sovereign_contracts::launch::rpc_worker_flag;
-
 /// Spawn the deferred slot-alias push onto the router that ranks this node's
 /// turns, through its sink; `None`: nothing ranks here, nothing to push.
 pub fn spawn_slot_alias_push(

@@ -284,11 +284,6 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
                 inbound_ingest: convergence_arm(inbound.map(|t| now - t)),
             }
         },
-        rpc_worker: rpc_worker_port().map(|port| RpcWorkerStatus {
-            port,
-            iroh: state.rpc_iroh_accept(),
-            direct: sovereign_core::launch::RpcServe::from_env().binds_past_loopback(),
-        }),
         serving: crate::serve_client::ServingPath::decided().map(|p| p.status_line()),
         serve_reach: crate::provider::serve_reach(),
     })
@@ -362,48 +357,6 @@ fn peak_rss_mb() -> Option<u64> {
     None
 }
 
-/// The TCP port this node's in-process RPC inference worker is serving, parsed
-/// from `SOVEREIGN_RPC_SERVE` (e.g. `127.0.0.1:50052` → 50052) **and only when a
-/// worker is actually accepting on it**. `None` when this node is not configured
-/// as a worker, or is configured but the worker isn't live — e.g. ggml tore its
-/// accept loop down on a transient `accept()` error and the supervisor hasn't
-/// re-bound yet. Advertised on `/status` for host auto-discovery, so this gate
-/// stops us from publishing a dead port that hosts would connect to and skip
-/// every discovery cycle (the second half of the worker-resilience fix; the
-/// first half is the supervisor restart in `sovereign-inference`).
-fn rpc_worker_port() -> Option<u16> {
-    let serve = sovereign_core::launch::RpcServe::from_env();
-    let port = serve.port()?;
-    rpc_worker_listening(serve.bind()?).then_some(port)
-}
-
-/// True when a TCP connection to the configured RPC bind address succeeds — i.e.
-/// a worker is genuinely accepting there, not merely configured. This is exactly
-/// the promise `/status` makes ("a peer can reach this RPC port"), so we verify
-/// it directly rather than trusting the env var. `0.0.0.0` / `::` / empty hosts
-/// are probed on loopback. Short localhost connect; pure over the bind string so
-/// it is unit-testable without touching the process environment.
-fn rpc_worker_listening(bind: &str) -> bool {
-    use std::net::{TcpStream, ToSocketAddrs};
-    use std::time::Duration;
-    let Some((host, port_str)) = bind.trim().rsplit_once(':') else {
-        return false;
-    };
-    let Ok(port) = port_str.trim().parse::<u16>() else {
-        return false;
-    };
-    let host = match host.trim() {
-        "" | "0.0.0.0" | "::" | "[::]" | "*" => "127.0.0.1",
-        h => h,
-    };
-    match (host, port).to_socket_addrs() {
-        Ok(addrs) => addrs
-            .into_iter()
-            .any(|addr| TcpStream::connect_timeout(&addr, Duration::from_millis(200)).is_ok()),
-        Err(_) => false,
-    }
-}
-
 #[derive(Debug, Serialize)]
 pub struct StatusResponse {
     pub node_id: String,
@@ -414,9 +367,6 @@ pub struct StatusResponse {
     /// The notes-rail convergence liveness read (fix 9). Always
     /// present; a pre-install poll reads `never` honestly.
     pub convergence: ConvergenceStatus,
-    /// Present when this node serves an in-process RPC inference worker.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub rpc_worker: Option<RpcWorkerStatus>,
     /// Where serving lives, as decided at boot: `serve`, or
     /// `serve (this process)` (pb-svrn-dials-serve, pb-stock-binary).
     /// Absent where no boot decided (the desktop, tests).
@@ -459,24 +409,6 @@ pub struct ProcessStatus {
     pub rss_mb: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub peak_rss_mb: Option<u64>,
-}
-
-/// Advertised RPC inference-worker endpoint for mesh auto-discovery.
-#[derive(Debug, Serialize)]
-pub struct RpcWorkerStatus {
-    pub port: u16,
-    /// True when this worker's iroh acceptor also routes the RPC ALPN —
-    /// a cross-network host may reach the rpc-server through a mesh
-    /// tunnel instead of the raw `ip:port`. Omitted when false, so the
-    /// JSON is byte-identical for non-iroh workers (additive wire).
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
-    pub iroh: bool,
-    /// True when the worker binds past loopback (plaintext LAN, operator-
-    /// allowed), so a host may dial `port` at this node's address; false
-    /// means the bridge is the only path that reaches it. Always written:
-    /// its absence is how a host knows the daemon predates the declaration
-    /// (pc-rpc-probe-identity).
-    pub direct: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -651,43 +583,6 @@ pub struct KnowledgeStatus {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::net::TcpListener;
-
-    #[test]
-    fn rpc_worker_listening_reflects_actual_listener() {
-        // A live listener on an ephemeral port reads as listening: connect_timeout
-        // completes the kernel handshake even before the app calls accept().
-        let live = TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = live.local_addr().unwrap().port();
-        assert!(
-            rpc_worker_listening(&format!("0.0.0.0:{port}")),
-            "0.0.0.0 form must probe loopback and see the listener"
-        );
-        assert!(
-            rpc_worker_listening(&format!("127.0.0.1:{port}")),
-            "explicit-host form must connect too"
-        );
-
-        // Once freed, the same port reads as NOT listening — this is the bug we
-        // fixed: SOVEREIGN_RPC_SERVE set, but no worker accepting => don't advertise.
-        drop(live);
-        assert!(
-            !rpc_worker_listening(&format!("0.0.0.0:{port}")),
-            "a configured-but-dead port must not be advertised"
-        );
-    }
-
-    #[test]
-    fn rpc_worker_listening_rejects_malformed_bind() {
-        assert!(!rpc_worker_listening("not-a-bind"));
-        assert!(!rpc_worker_listening("0.0.0.0:not-a-port"));
-        assert!(!rpc_worker_listening(""));
-    }
-}
-
-#[cfg(test)]
 mod process_status_tests {
     use super::*;
 
@@ -832,31 +727,6 @@ mod process_status_tests {
                 "served_total": 5,
                 "last_request_at": 1786549000,
             })
-        );
-    }
-
-    #[test]
-    fn rpc_worker_iroh_flag_is_additive_on_the_wire() {
-        // false → key omitted entirely: byte-identical JSON to pre-task-6
-        // workers, so old hosts parse it unchanged.
-        let off = serde_json::to_value(RpcWorkerStatus {
-            port: 50052,
-            iroh: false,
-            direct: false,
-        })
-        .unwrap();
-        assert_eq!(off, serde_json::json!({ "port": 50052, "direct": false }));
-        // true → advertised; hosts read it with `.get("iroh")` off the
-        // opaque JSON, absent-means-false.
-        let on = serde_json::to_value(RpcWorkerStatus {
-            port: 50052,
-            iroh: true,
-            direct: true,
-        })
-        .unwrap();
-        assert_eq!(
-            on,
-            serde_json::json!({ "port": 50052, "iroh": true, "direct": true })
         );
     }
 }
