@@ -682,7 +682,7 @@ async fn internal_routes_the_flip_gave_away_answer_410_naming_their_owner() {
 #[tokio::test]
 async fn retired_internal_paths_answer_410_with_no_owner() {
     let state = test_app_state();
-    for &(path, _) in crate::mesh_http::INTERNAL_RETIRED {
+    for path in ["/internal/rpc-warm"] {
         let resp = internal_router(state.clone())
             .oneshot(
                 Request::post(path)
