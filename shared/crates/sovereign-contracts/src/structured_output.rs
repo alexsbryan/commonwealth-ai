@@ -3,8 +3,7 @@
 //! remote client before it sends one (`oicp_client`
 //! `chat_wire::write_structured_output`); the embedded engine that also
 //! applied it was deleted (es-g2). One decider, so a schema means one
-//! language whichever host compiles it
-//! (`decode.json-schema` in bench/lanes/engine-swap/conformance.toml).
+//! language whichever host compiles it.
 
 use serde_json::Value;
 

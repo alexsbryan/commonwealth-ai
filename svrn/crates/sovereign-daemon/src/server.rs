@@ -121,7 +121,7 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
                 "/internal/inference/warmup",
                 post(routes_internal::inference_warmup),
             )
-            // The engine conformance battery's replay: inference on
+            // The engine replay (engine_replay.rs): inference on
             // request, so operator-only, beside warmup.
             .route(
                 "/internal/engine/replay",

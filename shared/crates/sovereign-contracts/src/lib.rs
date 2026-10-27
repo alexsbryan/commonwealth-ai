@@ -48,7 +48,7 @@ pub mod double;
 pub mod drift_fingerprint;
 pub mod engine_config;
 /// What an engine did with one request, recorded where it did it, for the
-/// engine conformance battery.
+/// daemon's replay route.
 pub mod engine_observe;
 /// serve's engine-state wire (pb-svrn-dials-serve).
 pub mod engine_state;

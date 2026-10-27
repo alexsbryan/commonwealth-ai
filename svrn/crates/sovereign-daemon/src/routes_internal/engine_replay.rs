@@ -3,8 +3,8 @@
 //! daemon's local engine and return what it answered and what the engine did
 //! on the way (`sovereign_contracts::engine_observe`).
 //!
-//! It is the engine conformance battery's way in (`bench/lanes/engine-swap/`,
-//! `svrn bench engine-conformance`). The call goes to the same provider the
+//! The router's e2e test (`sovereign-stock` `llama_server_router_e2e`) asks
+//! host truth through it. The call goes to the same provider the
 //! daemon serves from, with an observation sink installed, so what comes back
 //! is what the code that runs did, not a copy of it. It runs inference on
 //! request, so it is mounted with `/internal/inference/warmup` on the

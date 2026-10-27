@@ -1308,7 +1308,7 @@ which adds admission, the router and the compute-child layer (`kind =
 distributed_primary` are refused by name since the embedded engine was
 deleted, ENGINE_SWAP_PLAN G2); a reload re-wraps the running compute children instead of spawning new ones.
 
-**The engine conformance battery measures the engine that serves.**
+**The replay route asks the engine that serves.**
 `POST /internal/engine/replay`, on the operator listener beside
 `/internal/inference/warmup`, runs one provider call with a
 `sovereign_contracts::engine_observe` sink installed and returns the answer
@@ -1317,27 +1317,14 @@ and what the engine recorded on the way. Its `probe` method is
 logprobs, on a context of the slot's own parameters (the embedded engine's
 implementation went with it, ENGINE_SWAP_PLAN G2; the router forwards the call
 to its remote half). The default refuses, and the wrappers on the daemon's path forward it.
-`bench/lanes/engine-swap/battery.sh` drives the case bank through it per
-target, and `svrn bench engine-conformance judge` holds the records to
-`conformance.toml`. Rows whose oracle is a language rather than a record take
-their verdict from `--scenario`: `bench/lanes/engine-swap/llg-parity`, a
-standalone crate pinned to llama-server's llguidance, judges the committed corpus
-(`serve/crates/sovereign-inference/tests/fixtures/llg-parity/corpus.jsonl`; its
-engine-side writer went with the engine, G2) and emits one verdict per row. Three scenarios the battery drives itself are graded from the record's
-own facets (`bench/crates/sovereign-cli-bench/src/bench_cmd/engine_conformance/scenario.rs`), named by a row's
-`judge.driver`: `split-line` (the typed stream cut across two byte chunks,
-read through the shipped SSE reader), `admission` (a long held call with a
-`turn_admission`, a fresh one behind it: the engine serves the admitted and
-sheds the fresh) and `lifecycle`. Two replay methods are the instruments
-behind them: `stream_fault` returns a stream cut mid-line or corrupted with a
-mid-stream error datum, and `host_lifecycle` calls `warmup_primary`,
+`stream_fault` returns a stream cut mid-line or corrupted with a mid-stream
+error datum, and `host_lifecycle` calls `warmup_primary`,
 `load_extra_slot` and `unload_extra_slot` once each and reports how each
 ended beside the router's `/models` state — `host` itself stays read-only
-(ARCH 1). `battery.sh`'s `embedded` target now writes `kind = "llama"`
-explicitly (the resident is `llama-server` since the host flip) and its
-`llama-server` / `llama-server-default-embed` targets let the daemon
-supervise its own router. A retired row is a `[[retired]]` table (`id`,
-`retired`, `why`), not a live row with no check.
+(ARCH 1). `sovereign-stock`'s ignored e2e `llama_server_router_e2e` asks
+host truth through it (`host`, `rerank_model_id`, `rerank_batch`,
+`count_tokens`, `count_tokens_exact`). The engine conformance battery that
+drove it against the embedded engine was retired with that engine.
 
 **A remote engine off this machine is a third party.** `build_remote` builds
 one shape, `oicp_client::SplitInferenceProvider::engine` (`far_end.rs`), which

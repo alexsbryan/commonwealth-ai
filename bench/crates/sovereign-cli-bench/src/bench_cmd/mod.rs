@@ -35,7 +35,6 @@ mod book_report;
 pub(crate) mod chaos_monkey;
 mod desktop_bridge;
 mod discover;
-mod engine_conformance;
 mod enron;
 mod er_score;
 mod faithfulness;
@@ -116,10 +115,6 @@ const HELP: Help = Help {
             (
                 "promote",
                 "Fidelity-Flywheel write side: propose a retrieval scaffolding change, gate it on a held-out pool via paired baseline/candidate arms, apply it on a pass (atoms-decoupled, in-process).",
-            ),
-            (
-                "engine-conformance",
-                "Judge embedded-vs-remote engine conformance records against bench/lanes/engine-swap/conformance.toml; one verdict per row and target beside its prediction.",
             ),
             (
                 "book-report",
@@ -215,7 +210,6 @@ pub async fn run_bench(args: &[String]) -> i32 {
         "situated" => situated::cmd_situated(&args[1..]).await,
         "obsidian" => obsidian::cmd_obsidian(&args[1..]).await,
         "parity-compare" => parity_compare::cmd_parity_compare(&args[1..]).await,
-        "engine-conformance" => engine_conformance::cmd_engine_conformance(&args[1..]).await,
         "scaffold" => scaffold::cmd_scaffold(&args[1..]).await,
         "uap" => uap::cmd_uap(&args[1..]).await,
         "faithfulness" => faithfulness::cmd_faithfulness(&args[1..]).await,

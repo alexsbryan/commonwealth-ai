@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Projection tests: llama-server's responses through the client's real
-//! parsing code, judged as the conformance battery judges the engine's
-//! (`bench/lanes/engine-swap/conformance.toml`, the `projection.*` rows).
+//! parsing code.
 //!
-//! The bodies are llama-server's shapes at the battery's pinned revision
+//! The bodies are llama-server's shapes at a pinned revision
 //! (`target/llama-server-vanilla/llama.cpp-035e227…`): a chunk per message
 //! diff (`server-chat.cpp:607`), the finish chunk and the usage chunk
 //! (`server-task.cpp:462-520`), and an error as one `data:` line carrying
@@ -166,7 +165,7 @@ async fn stream(url: &str, request: &CompletionRequest) -> (String, StreamFrame)
 /// llama-server moves thinking into `reasoning_content` (its default
 /// reasoning format). The engine returns it inline, opening the text with
 /// the `<think>` its prompt left open, and every caller (the adapter's
-/// `parse_reply` and `stream_turn`, the battery's judge) splits it from there.
+/// `parse_reply` and `stream_turn`) splits it from there.
 /// Before this the client read `content` alone and the thinking was lost.
 #[tokio::test]
 async fn a_reasoning_reply_reaches_the_caller_as_the_engines_think_block() {

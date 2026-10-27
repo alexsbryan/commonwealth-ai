@@ -8,9 +8,8 @@
 //! `grammar` — follows from the preset and the router's port
 //! ([`RouterPreset::engine_section`]); none of it is configured.
 //!
-//! The settings were watched working in the conformance battery
-//! (`bench/lanes/engine-swap/battery.sh`, svrn-docs
-//! ENGINE_CONFORMANCE_ISSUES.md C16); the plan is svrn-docs
+//! The settings were watched working in the engine conformance battery,
+//! since retired (svrn-docs ENGINE_CONFORMANCE_ISSUES.md C16); the plan is svrn-docs
 //! ENGINE_SWAP_PLAN.md, step 1.
 
 use std::collections::BTreeMap;

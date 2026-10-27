@@ -441,8 +441,8 @@ fn the_daemon_serves_through_its_router_and_takes_it_down_when_killed() {
     );
 
     // Host truth (ENGINE_SWAP_PLAN A1, A5): what the daemon reports about
-    // its engine is what the router says, asked through the replay route the
-    // conformance battery uses.
+    // its engine is what the router says, asked through the daemon's replay
+    // route.
     let replay = |method: &str, input: Value| -> Value {
         let r = post_json(
             &format!("http://127.0.0.1:{svrn}/internal/engine/replay"),

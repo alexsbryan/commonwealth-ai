@@ -22,7 +22,7 @@ pub use sovereign_contracts::setup_config::StructuredOutputMode;
 /// token estimators; sending it put the whole agent history in one user turn
 /// labelled `Tool[id]:`, and the model ran on inside its own tool call,
 /// writing fake results and turns (e2e-swe arm D, 2026-10-09).
-/// Record the body this client sends, for the engine conformance battery
+/// Record the body this client sends, for the daemon's replay route
 /// (`engine_observe`); a no-op unless a sink is installed.
 pub(crate) fn observe_wire_request(body: &Value) {
     sovereign_contracts::engine_observe::observe(|| {

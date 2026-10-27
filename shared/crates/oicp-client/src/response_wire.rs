@@ -424,27 +424,6 @@ impl SseReader {
     }
 }
 
-/// Read an SSE stream delivered as byte chunks through the client's own
-/// reader, and return every text delta (the tail included) and the terminal
-/// frame. One reader for the wire, so a battery that cuts a line across two
-/// chunks and a client that receives one read the stream by the same rules
-/// (ARCH 8) — this exists so the engine conformance battery's
-/// `projection.stream-split-line` and `projection.stream-error` drive the
-/// shipped reader rather than a second copy of it.
-pub fn read_sse_chunks<'a>(
-    chunks: impl IntoIterator<Item = &'a [u8]>,
-    inline_reasoning: bool,
-) -> (Vec<String>, StreamFrame) {
-    let mut reader = SseReader::new(inline_reasoning);
-    let mut deltas = Vec::new();
-    for chunk in chunks {
-        deltas.extend(reader.push(chunk));
-    }
-    let (tail, terminal) = reader.finish();
-    deltas.extend(tail);
-    (deltas, terminal)
-}
-
 /// The untyped stream: each byte chunk's text as one item, and a failed
 /// stream as a final `Err`.
 pub(crate) fn text_stream<B, E>(
