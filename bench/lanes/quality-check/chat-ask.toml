@@ -96,7 +96,8 @@ ceiling_floor_ms = 250
 [bank]
 id = "chat-ask"
 # Ingested FROM SOURCE each run into `qc-arch-tour-<fingerprint8>`, which is
-# deleted first. The desktop's upload of this same file makes 10 chunks and
+# deleted first and removed when the lane ends (a corpus left installed is
+# searched by every turn that names none). The desktop's upload of this same file makes 10 chunks and
 # this path makes 40 — the lane says which path it measures, and asserting
 # the count is how a silent chunker change is caught.
 fixture = "docs/ARCHITECTURE_TOUR.md"

@@ -576,6 +576,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     // below it is a claim about a turn over THIS corpus.
     let ingest_ok = ingest_row(&mut report, &repo, &bank, &corpus).await;
     if !ingest_ok {
+        remove_corpus(&corpus);
         // Asking questions of a corpus that did not ingest measures the
         // ingest failure twice and the turn not at all.
         report.cannot_judge(
@@ -637,7 +638,31 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     // ── Row: per-stage baseline (TRACKED) ──────────────────────────
     baseline_row(&mut report, &ctx, &per_question);
 
+    remove_corpus(&corpus);
     report.finish()
+}
+
+/// Remove this lane's corpus from the daemon. The lane ingests it from
+/// source each run, so nothing needs it afterwards, and a corpus left
+/// installed is searched by every turn that names none: one was left per
+/// stack fingerprint until 2026-10-26, and that fan-out over 252 installed
+/// corpora is what made the throughput lane's plain turn take ~513 s. Best
+/// effort: a failed removal is traced, and the next run removes it first.
+fn remove_corpus(corpus: &str) {
+    let svrn = std::env::current_exe()
+        .map_err(|e| format!("current_exe: {e}"))
+        .and_then(|exe| sovereign_cli_base::dispatcher::dispatcher_exe(&exe));
+    let status = svrn.and_then(|svrn| {
+        std::process::Command::new(&svrn)
+            .args(["corpus", "remove", corpus, "--yes"])
+            .status()
+            .map_err(|e| format!("spawn {}: {e}", svrn.display()))
+    });
+    match status {
+        Ok(s) if s.success() => tracing::debug!(lane = LANE, corpus, "lane corpus removed"),
+        Ok(s) => tracing::warn!(lane = LANE, corpus, code = ?s.code(), "lane corpus not removed"),
+        Err(e) => tracing::warn!(lane = LANE, corpus, error = %e, "lane corpus not removed"),
+    }
 }
 
 /// The titles `svrn corpus search <id> <query> --limit <n> --json` returns:
@@ -708,9 +733,7 @@ async fn ingest_row(
 
     // Delete first. A corpus that survived the last run would make the
     // chunk count a claim about history rather than about this ingest.
-    let _ = std::process::Command::new(&svrn)
-        .args(["corpus", "remove", corpus, "--yes"])
-        .status();
+    remove_corpus(corpus);
 
     let t0 = Instant::now();
     let staged_dir = staged.path().to_string_lossy().into_owned();
