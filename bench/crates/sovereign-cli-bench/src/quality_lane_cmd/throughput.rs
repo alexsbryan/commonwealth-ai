@@ -640,8 +640,13 @@ async fn e2e_row(
     let mut failures: Vec<String> = Vec::new();
     for i in 0..bank.e2e_runs {
         match e2e_once(&client, &bank.e2e_question).await {
-            Ok((ms, chars)) => {
-                eprintln!("  [{LANE}] e2e run {}/{} — {ms} ms", i + 1, bank.e2e_runs);
+            Ok((ms, runtime_ms, chars)) => {
+                eprintln!(
+                    "  [{LANE}] e2e run {}/{} — {ms} ms wall (the runtime's total_ms: {})",
+                    i + 1,
+                    bank.e2e_runs,
+                    runtime_ms.map_or("absent".to_string(), |v| v.to_string())
+                );
                 if chars == 0 {
                     failures.push(format!("run {} came back empty", i + 1));
                 } else {
@@ -668,24 +673,30 @@ async fn e2e_row(
         return;
     };
     metrics.push((
-        "e2e.total_latency_ms".to_string(),
+        "e2e.wall_ms".to_string(),
         LaneMetric::lower_is_better(med, 0.30),
     ));
     report.passed(
         "e2e",
         format!(
-            "{} plain turns completed; median total_latency_ms {med:.0} (tracked, no bar)",
+            "{} plain turns completed; median wall {med:.0} ms (tracked, no bar)",
             latencies.len()
         ),
     );
 }
 
-/// One plain turn. Returns `(total_latency_ms, visible chars)`.
+/// One plain turn. Returns `(wall ms, the runtime's total_ms, visible chars)`.
 ///
-/// `total_latency_ms` is the runtime's OWN number off the provenance block,
-/// not this process's wall clock — the wall clock also times the HTTP hop and
-/// this lane is about the engine, not about the loopback.
-async fn e2e_once(client: &TurnClient, question: &str) -> Result<(u64, usize), String> {
+/// The wall clock is what a user waits for. The provenance block's
+/// `total_ms` is measured from the synthesis spawn and so excludes retrieval
+/// (streaming.rs, `turn_started`): on 2026-10-26 a turn that fanned out over
+/// 252 corpora took about 513 s of wall time and reported 40.8 s there. It is
+/// printed beside the wall time, not used as it. The loopback hop the wall
+/// clock adds is milliseconds.
+async fn e2e_once(
+    client: &TurnClient,
+    question: &str,
+) -> Result<(u64, Option<u64>, usize), String> {
     // No allow-list. The daemon REFUSES an empty one ("enabled_corpora names
     // no corpus — an empty allow-list would search nothing"), so "no corpus"
     // here means what it means for `chat ask`: no corpus was NAMED, and the
@@ -711,13 +722,8 @@ async fn e2e_once(client: &TurnClient, question: &str) -> Result<(u64, usize), S
         .await
         .map_err(|e| format!("run_turn: {e}"))?;
     let wall = t0.elapsed().as_millis() as u64;
-    let ms = outcome
-        .provenance
-        .as_ref()
-        .and_then(|p| p.total_ms)
-        .filter(|v| *v > 0)
-        .unwrap_or(wall);
-    Ok((ms, outcome.text.trim().len()))
+    let runtime_ms = outcome.provenance.as_ref().and_then(|p| p.total_ms);
+    Ok((wall, runtime_ms, outcome.text.trim().len()))
 }
 
 fn median(mut xs: Vec<f64>) -> Option<f64> {

@@ -50,7 +50,8 @@ pub struct Provenance {
     /// populated once the streaming path captures it).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ttft_ms: Option<u64>,
-    /// Total turn latency (ms). Maps from `total_latency_ms`.
+    /// Maps from `total_latency_ms`, which is not always the whole turn: on
+    /// a KnowledgeQuery it excludes retrieval (see that field's doc).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub total_ms: Option<u64>,
     /// OpenAI-style finish reason ("stop", "length", "error", …). The

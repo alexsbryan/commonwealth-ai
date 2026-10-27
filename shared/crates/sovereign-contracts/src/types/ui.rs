@@ -86,7 +86,11 @@ pub struct ResponseProvenance {
     pub inference_backend: String,
     /// Debug-rendered OICP `match_quality` from the completion's `oicp_meta`; `None` when no OICP metadata was attached.
     pub oicp_match: Option<String>,
-    /// Whole-turn wall clock, milliseconds.
+    /// The turn's latency as its handler times it, milliseconds. Not always
+    /// the whole turn: the streaming KnowledgeQuery path starts the clock at
+    /// the synthesis spawn, after retrieval (runtime/streaming.rs,
+    /// `turn_started`), and the non-streaming one reports the synthesis
+    /// call's own latency. The stage ledger's `total_ms` is the whole turn.
     pub total_latency_ms: u64,
     /// Total tokens the turn consumed, as reported by the provider.
     pub tokens_used: usize,

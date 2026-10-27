@@ -148,7 +148,9 @@ bars_deferred = true
 #
 # The probe talks to `/v1/chat/completions` and so measures the ENGINE. This
 # arm goes through the runtime — router, policy, synthesis — with no corpus
-# attached, and records `provenance.total_latency_ms`. A turn that errors or
+# named, so retrieval fans out over every installed corpus, and records the
+# turn's wall time (`e2e.wall_ms`); the runtime's `total_latency_ms` starts
+# after retrieval and is printed beside it, not used. A turn that errors or
 # comes back empty is a catastrophe and fails HARD; the latency itself is
 # TRACKED, because the order pre-registered no bar for it.
 [e2e]
