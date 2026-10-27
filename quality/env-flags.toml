@@ -881,52 +881,12 @@ shadows = "shared_model.model_id"
 purpose = "Shared model id primary turns route to; written from [shared_model] model_id by sovereign_serve::apply_shared_model_to_env unless already set, read by rank via SharedModelFleet::from_env."
 
 [[flag]]
-name = "SOVEREIGN_SHARED_MODEL_HOST_NODE_ID"
-cluster = "mesh"
-default = "unset"
-status = "shipped"
-shadows = "shared_model.host_node_id"
-purpose = "Distributed-inference host node id override."
-
-[[flag]]
 name = "SOVEREIGN_RPC_DISCOVER"
 cluster = "mesh"
 default = "unset"
 status = "shipped"
 shadows = "shared_model.role"
 purpose = "Discover half of the shared-model role."
-
-[[flag]]
-name = "SOVEREIGN_RPC_QUORUM_ANCHORS"
-cluster = "mesh"
-default = "unset"
-status = "shipped"
-shadows = "shared_model.quorum_anchors"
-purpose = "Anchor quorum for the pooled shared model."
-
-[[flag]]
-name = "SOVEREIGN_RPC_MIN_POOLED_GB"
-cluster = "mesh"
-default = "unset"
-status = "shipped"
-shadows = "shared_model.min_pooled_gb"
-purpose = "Minimum pooled VRAM before the shared model loads."
-
-[[flag]]
-name = "SOVEREIGN_RPC_HEADROOM"
-cluster = "mesh"
-default = "unset"
-status = "shipped"
-shadows = "shared_model.headroom"
-purpose = "Per-device VRAM headroom for the byte-aware shard split (env wins when pre-set, setup_config.rs)."
-
-[[flag]]
-name = "SOVEREIGN_RPC_SHARD_FETCH"
-cluster = "mesh"
-default = "unset"
-status = "shipped"
-shadows = "shared_model.shard_fetch"
-purpose = "Shard-fetch strategy for distributed model load."
 
 [[flag]]
 name = "SOVEREIGN_IROH_RELAY_ONLY"
@@ -1674,12 +1634,52 @@ purpose = "Chose which reader read declared documents: window (the default from 
 replacement = "retired: the window reader is the one reader; the passes reader was deleted (3058feb36)"
 
 [[flag]]
+name = "SOVEREIGN_RPC_HEADROOM"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Per-device VRAM headroom for the byte-aware shard split."
+replacement = "retired: the shard-split headroom went with the mesh fabric and svrn mesh plan (b585dbf4d, d492ab930)"
+
+[[flag]]
+name = "SOVEREIGN_RPC_MIN_POOLED_GB"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Minimum pooled VRAM before the shared model loads."
+replacement = "retired: the pooled-memory gate went with the mesh fabric (b585dbf4d)"
+
+[[flag]]
+name = "SOVEREIGN_RPC_QUORUM_ANCHORS"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Anchor quorum for the pooled shared model."
+replacement = "retired: the anchor quorum went with the mesh fabric (b585dbf4d); the shared-model fleet reads only SOVEREIGN_SHARED_MODEL_ID"
+
+[[flag]]
+name = "SOVEREIGN_RPC_SHARD_FETCH"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Shard-fetch strategy for distributed model load."
+replacement = "retired: the shard fetch went with the mesh fabric (b585dbf4d)"
+
+[[flag]]
 name = "SOVEREIGN_SERVER_PATH"
 cluster = "removed"
 default = "no effect"
 status = "removed"
 purpose = "Mobile host's path to the sovereign server binary."
 replacement = "retired: the mobile host that read it was deleted (efa709871)"
+
+[[flag]]
+name = "SOVEREIGN_SHARED_MODEL_HOST_NODE_ID"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Distributed-inference host node id override."
+replacement = "retired: the distributed-inference host pin went with the mesh fabric (b585dbf4d)"
 
 [[flag]]
 name = "SOVEREIGN_SUFFICIENCY_CHARS"

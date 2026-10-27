@@ -20,9 +20,9 @@ pub async fn read_served_self(
     }
 }
 
-/// Read serve's self-report as [`read_engine_state`] reads its engine state:
-/// unreachable and did-not-answer-in-time stay apart (svrn's follower, whose
-/// last read `/status` names, pc-split-deploy-honesty-serve-reach).
+/// Read serve's self-report, bounded: unreachable and did-not-answer-in-time
+/// stay apart (svrn's follower, whose last read `/status` names,
+/// pc-split-deploy-honesty-serve-reach).
 pub async fn served_self_read(
     base: &str,
 ) -> EngineStateRead<sovereign_contracts::engine_state::ServedSelf> {
@@ -44,34 +44,19 @@ pub fn default_serve_base() -> String {
     )
 }
 
-/// What reading serve's engine state found. The absences stay apart
-/// (principle 6): "no workers yet" is an [`EngineStateRead::Answered`]
-/// whose `rpc_workers` is empty, and it is never the same answer as a
-/// serve that is not there or one that did not answer in time. Moved from
-/// the svrn daemon's `serve_client` when its `/v1/mesh/status` went
-/// (pb-mesh-exit-transport); `svrn mesh plan|bench` read it now. `T` is
-/// what was read: the engine state, or serve's self-report
-/// ([`served_self_read`]), through the one bounded reader.
+/// What reading serve found. The absences stay apart (principle 6): a serve
+/// that is not there is never the same answer as one that did not answer in
+/// time. Moved from the svrn daemon's `serve_client` (pb-mesh-exit-transport).
+/// `T` is what was read: serve's self-report ([`served_self_read`]), or `()`
+/// where only the outcome is kept (svrn's `ServeReach`).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum EngineStateRead<T = sovereign_contracts::engine_state::EngineState> {
-    /// serve answered its cached view.
+pub enum EngineStateRead<T> {
+    /// serve answered.
     Answered(T),
     /// Nothing answered at the base, or what answered refused or was unreadable.
     Unreachable(String),
     /// serve did not answer within the bound.
     DidNotAnswerInTime,
-}
-
-/// Read serve's engine state, bounded like every other status read of serve
-/// (`crate::reach::PROBE_TIMEOUT`, 2 s): a cached view on serve's side does
-/// not bound the dial to it (the rule minted on 2026-07-30).
-pub async fn read_engine_state(base: &str) -> EngineStateRead {
-    read_bounded(
-        base,
-        sovereign_contracts::engine_state::ENGINE_STATE_PATH,
-        "engine state",
-    )
-    .await
 }
 
 /// GET `path` from serve at `base` within `crate::reach::PROBE_TIMEOUT`;
@@ -112,15 +97,15 @@ async fn read_bounded<T: serde::de::DeserializeOwned + std::fmt::Debug>(
 mod tests {
     use super::*;
 
-    /// A stub serve on a free loopback port whose engine-state route waits
-    /// `hold` before it answers the empty view.
+    /// A stub serve on a free loopback port whose self-report route waits
+    /// `hold` before it answers the default report.
     async fn stub_serve(hold: std::time::Duration) -> String {
         use axum::routing::get;
         let app = axum::Router::new().route(
-            sovereign_contracts::engine_state::ENGINE_STATE_PATH,
+            sovereign_contracts::engine_state::SERVED_SELF_PATH,
             get(move || async move {
                 tokio::time::sleep(hold).await;
-                axum::Json(sovereign_contracts::engine_state::EngineState::default())
+                axum::Json(sovereign_contracts::engine_state::ServedSelf::default())
             }),
         );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -133,9 +118,12 @@ mod tests {
     async fn a_serve_that_holds_the_route_past_the_bound_is_named_not_waited_on() {
         let base = stub_serve(std::time::Duration::from_secs(30)).await;
         let started = std::time::Instant::now();
-        let read = read_engine_state(&base).await;
+        let read = served_self_read(&base).await;
         let took = started.elapsed();
-        assert_eq!(read, EngineStateRead::DidNotAnswerInTime);
+        assert!(
+            matches!(read, EngineStateRead::DidNotAnswerInTime),
+            "got {read:?}"
+        );
         assert!(
             took < crate::reach::PROBE_TIMEOUT + std::time::Duration::from_secs(1),
             "the read waited {took:?}, past the bound plus 1 s"
@@ -143,10 +131,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_serve_that_answers_is_read_and_holds_no_workers_yet() {
+    async fn a_serve_that_answers_is_read() {
         let base = stub_serve(std::time::Duration::ZERO).await;
-        match read_engine_state(&base).await {
-            EngineStateRead::Answered(state) => assert!(state.rpc_workers.is_empty()),
+        match served_self_read(&base).await {
+            EngineStateRead::Answered(served) => assert!(served.resident_slots.is_empty()),
             other => panic!("expected an answer, got {other:?}"),
         }
     }
@@ -157,7 +145,7 @@ mod tests {
         let base = format!("http://{}", listener.local_addr().unwrap());
         drop(listener);
         assert!(matches!(
-            read_engine_state(&base).await,
+            served_self_read(&base).await,
             EngineStateRead::Unreachable(_)
         ));
     }

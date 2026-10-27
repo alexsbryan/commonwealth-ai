@@ -5266,25 +5266,18 @@ reads the advertised benchmark and nothing else, so unhardcoding
 on every candidate of every request. The hardcoded switch is not the
 blocker; the missing rate card is.
 
-**Shared-model fleet churn/failover hardening (Phase 3).** A fleet sharing one
-distributed primary stratifies into anchors (hold the RPC layer-split) + a
-consumer ring. Anchors advertise `NodeCapabilities.anchor` (`AnchorProfile{
-can_anchor, vram_gb, model_resident }`, populated env-derived in
-`build_local_capabilities`); `discover_rpc_workers` filters candidates to
-`can_anchor` so a casual peer never joins the split, and anchors get the
-stricter `worker_eligibility::EligibilityConfig::anchor` profile (settle 300s,
-quarantine on first flap). The RPC reload loop (`daemon_cmd::bootstrap`) does
-**shrink-fast-prune** — an anchor dropping out of the loaded set reloads
-immediately (prune before `GGML_ABORT`) while pure grows keep the 20s debounce.
-**Host failover:** every anchor runs the discovery loop but only the elected
-host distributes — `partition::should_host(self, host_node_id_pin, eligible_anchors)`
-(pin wins while eligible, else `elect_leader`), re-evaluated each tick over
-gossiped membership, published to `GET /v1/mesh/status` (`shared_model_host`) so
-the mesh soak asserts the `shared_model_single_host` no-split-brain invariant.
-Split-brain during convergence is bounded by the eligibility settle + the
-quorum/pooled-memory gate (`InsufficientCluster` → "forming") + consumer
-local-fallback. NOTE: the demoted-host model-teardown + full failover timing are
-multi-box-only to validate (run `scripts/mesh-soak.sh`).
+**Shared-model fleet (what is left of it).** `[shared_model] model_id` is
+published as `SOVEREIGN_SHARED_MODEL_ID` (`sovereign_serve::apply_shared_model_to_env`)
+and read once by serve's ranking (`SharedModelFleet::from_env`, `rank.rs`) to route
+primary turns to the mesh peer serving that model. The RPC layer-split it once
+fed went with the mesh fabric (b585dbf4d, decision engine-swap-8): RPC-worker
+discovery, the `worker_eligibility` settle/quarantine profiles, the reload loop,
+the host election and quorum/pooled-memory gate, and the `rpc_workers` rows of
+serve's engine state. A config still setting `host_node_id`, `quorum_anchors`,
+`min_pooled_gb`, `headroom`, `allow_plaintext_lan` or `shard_fetch` loads, and
+startup warns once per key (`SharedModelSection::retired_keys`).
+`kernel_types::partition::should_host`, the election, remains with no
+production caller.
 
 **Discovery never probes a worker over the link that worker's own tensors are
 saturating (`daemon::reaffirm_plan`).** Gossip-Online membership — not a probe —

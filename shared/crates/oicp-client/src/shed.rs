@@ -20,8 +20,9 @@ pub(crate) struct Refusal {
 impl Refusal {
     /// The refusal as the error callers see. A shed is reported AS a shed,
     /// typed: the caller needs "busy", not "broken", to decide whether to come
-    /// back or route elsewhere (§18.3), and this is the variant the in-process
-    /// engine returns for the same refusal.
+    /// back or route elsewhere (§18.3). serve's OpenAI adapter answers it as
+    /// a 503 with `Retry-After` (`inference_adapter::provider_error::
+    /// map_provider_error`).
     pub(crate) fn into_error(self, what: &str) -> Error {
         match self.shed_spent {
             None => Error::Inference(format!(

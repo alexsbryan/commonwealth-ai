@@ -30,9 +30,8 @@ uuid = { workspace = true }
 # `guest_lender.rs` publishes the `GuestLenderSource` port as an async trait
 # (SERVING_BOUNDARY.md "The five entries" (a)).
 async-trait = { workspace = true }
-# The four leavers moved host-side by domains dm-serving-move-leaves.
-# `worker_eligibility` keys on `kernel_types::NodeId` and `model_fetch` on
-# `oicp_types::model_transfer` (phase-b pb-serve-sheds-core retired the
+# The leavers moved host-side by domains dm-serving-move-leaves.
+# `model_fetch` keys on `oicp_types::model_transfer` (phase-b pb-serve-sheds-core retired the
 # `commonwealth-core` edge; tests/main/sheds_commonwealth.rs pins it);
 # `source_content_validator` names the tool-call parser, now reached from
 # `oicp-types` (domains REVIEW-build-serving-drop-inference);

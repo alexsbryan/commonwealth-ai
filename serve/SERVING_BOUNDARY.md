@@ -77,7 +77,7 @@ daemon-side half of the argument. Leading with what was wrong:
 - **Rule 4's count was one import; it is four files and three kinds.** The OpenAI wire types in
   `inference_adapter` and `prompt_compactor` go to `oicp-types` — their defining modules import
   nothing but serde and an `oicp-types` path. The `LocalInferenceService` port collapses (next
-  bullet). `EMBEDDED_FEATURES`, read by `oicp_synthesis`, moves beside it, and
+  bullet). `EMBEDDED_FEATURES` (now `ROUTER_FEATURES`), read by `oicp_synthesis`, moves beside it, and
   `rpc_warm_http` is a route shell whose shard-warmer port stops taking `AppState`.
 - **`LocalInferenceService` is a second inference port** (design item D7). Ten of its fifteen
   methods exist by name on `sovereign_contracts::traits::InferenceProvider`, a leaf; it was

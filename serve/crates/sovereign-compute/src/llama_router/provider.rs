@@ -158,19 +158,19 @@ impl RouterProvider {
     }
 }
 
-/// A daemon call with the penalties the embedded engine samples it with.
+/// A daemon call with the slot family's quirk penalties.
 ///
 /// The arithmetic is not this function's: the pairing function beside
 /// `ModelQuirks` answers it
-/// (`sovereign_contracts::model_family::quirks_repeat_penalties`, which
-/// the embedded quirks sampler also calls), and asking it is what keeps
-/// the two engines on one decider instead of two — the
-/// drift between them was the whole of the 2026-10-25 finding. So is the
-/// "which requests are sampled from the quirks at all" question: the
-/// embedded engine samples a conversation with no `sampling_mode` as
-/// llama-server does (llama.cpp's defaults, the GGUF's, then the
-/// client's), and that call answers none, so the router passes it
-/// untouched too. A caller's own value stands.
+/// (`sovereign_contracts::model_family::quirks_repeat_penalties`, whose
+/// one production caller this is). The embedded quirks sampler called it
+/// too until that engine was deleted (es-g2); the drift between the two
+/// was the 2026-10-25 finding. So is the "which requests are sampled from
+/// the quirks at all" question
+/// (`sovereign_contracts::types::is_server_default_shape`): a conversation
+/// with no `sampling_mode` goes as llama-server samples it (llama.cpp's
+/// defaults, the GGUF's, then the client's), untouched. A caller's own
+/// value stands.
 fn slot_penalties<'a>(
     request: &'a CompletionRequest,
     code_model: Option<&str>,

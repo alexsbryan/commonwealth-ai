@@ -119,7 +119,7 @@ pub mod features {
     /// Deliberately an `x:` extension, NOT a `REGISTERED` string — it is a
     /// Commonwealth-local capability pending a spec revision, so
     /// `is_valid` admits it via the `x:` prefix without touching the
-    /// conformance registry. Advertised in `EMBEDDED_FEATURES`; the mesh
+    /// conformance registry. Advertised in `ROUTER_FEATURES`; the mesh
     /// scheduler excludes peers that don't advertise it from forced-choice
     /// dispatch (SLOT_POLICY §6).
     pub const X_FORCED_CHOICE: &str = "x:forced_choice";
@@ -132,39 +132,49 @@ pub mod features {
     /// schema, so routing excludes it (`CompletionRequest::forced_choice_feature`).
     pub const X_FORCED_CHOICE_WAVE: &str = "x:forced_choice_wave";
 
-    /// OICP v0.4 §2.1 features the *embedded* llama.cpp inference path
-    /// honours. The embedded sampler enforces JSON-Schema and Lark grammars
-    /// and the sampler allow-lists, consumes the `oicp` request envelope,
-    /// honours `think_budget`, and stamps model fingerprints — the full set.
+    /// OICP v0.4 §2.1 features a node serving through its llama-server
+    /// router honours, and so does a Commonwealth host it forwards to (which
+    /// serves through its own). Each has its serving path:
     ///
-    /// One source of truth for "what the embedded path can do": the HTTP
-    /// `/oicp/v1/capabilities` route (`sovereign-api`'s `routes_oicp::
-    /// apply_v04_enrichment`) and the mesh gossip manifest
-    /// (`sovereign-serving-host`'s `oicp_synthesis::build_self_manifest`)
-    /// both advertise this identical set rather than re-deriving it
-    /// (SLOT_POLICY §6). It lives here, in the shared leaf both sides already
-    /// name, because the host may not reach the API crate (SERVING_BOUNDARY.md
-    /// rule 4) and the API crate may not reach the host.
-    pub const EMBEDDED_FEATURES: &[&str] = &[
+    /// - `constraint:json_schema`, `constraint:json_object`:
+    ///   `oicp_client::chat_wire::write_structured_output` (`response_format`).
+    /// - `constraint:lark`, `constraint:allowlist:url`,
+    ///   `constraint:allowlist:evidence_id`: `chat_wire::write_constraints`,
+    ///   one llguidance `grammar` (the router's client is
+    ///   `GrammarSupport::Llguidance`), refused where it cannot ride.
+    /// - `think_budget`: `chat_wire::write_thinking`.
+    /// - `oicp:request_properties`: the envelope serve's routing reads
+    ///   (`peer_inference`, `slot_select`).
+    /// - `x:forced_choice`: `oicp_client`'s `forced_choice_by_logprobs`.
+    ///
+    /// Two features are not here because nothing serves them:
+    /// `x:forced_choice_wave` (no wave path since the embedded engine was
+    /// deleted, es-g2, so a wave request finds no node rather than one that
+    /// fails it), and `constraint:allowlist:cmd_prefix`: `cmd_prefix` reaches
+    /// llama-server as a field it ignores, so nothing enforces it.
+    ///
+    /// One source of truth: the HTTP `/oicp/v1/capabilities` route (svrn's
+    /// `routes_oicp::apply_v04_enrichment`) and the mesh gossip manifest
+    /// (`sovereign-serving-host`'s `oicp_synthesis::manifest_of`, every engine
+    /// but one forwarding to a third party) both advertise this set rather
+    /// than re-deriving it (SLOT_POLICY §6). It lives here, in the shared leaf
+    /// both sides already name, because the host may not reach the daemon
+    /// crate (SERVING_BOUNDARY.md rule 4) and the daemon may not reach the host.
+    pub const ROUTER_FEATURES: &[&str] = &[
         CONSTRAINT_JSON_SCHEMA,
         CONSTRAINT_JSON_OBJECT,
         CONSTRAINT_LARK,
         CONSTRAINT_ALLOWLIST_URL,
         CONSTRAINT_ALLOWLIST_EVIDENCE_ID,
-        CONSTRAINT_ALLOWLIST_CMD_PREFIX,
         THINK_BUDGET,
         OICP_REQUEST_PROPERTIES,
-        // Commonwealth-local: the embedded path answers the forced-choice
-        // sentinel with a one-pass calibrated distribution (see model_slot).
         X_FORCED_CHOICE,
-        // ... and a wave of them off one decoded prompt (model_slot, decide_wave).
-        X_FORCED_CHOICE_WAVE,
     ];
 
     /// What an OpenAI-compatible backend honours whatever is behind it (a
     /// spawned llama-server, a hosted vendor): structured output and the
-    /// routing envelope. Lark grammars, the sampler allow-lists and the
-    /// forced-choice sentinel are the embedded path's alone.
+    /// routing envelope. Lark grammars, the allow-lists and the forced-choice
+    /// sentinel ride only to the router ([`ROUTER_FEATURES`]).
     pub const OPENAI_COMPATIBLE_FEATURES: &[&str] = &[
         CONSTRAINT_JSON_SCHEMA,
         CONSTRAINT_JSON_OBJECT,
@@ -535,7 +545,7 @@ mod tests {
             assert!(features::REGISTERED.contains(&f), "{f} not registered");
             assert!(features::is_valid(f));
             assert!(
-                !features::EMBEDDED_FEATURES.contains(&f)
+                !features::ROUTER_FEATURES.contains(&f)
                     && !features::OPENAI_COMPATIBLE_FEATURES.contains(&f),
                 "{f}: registered only; each row's own work turns it on"
             );

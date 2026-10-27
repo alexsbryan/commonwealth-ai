@@ -57,7 +57,6 @@ use sovereign_serving_host::openai_http::{self, ChunkHeader};
 use sovereign_serving_host::slot_manifest::CoreSlotManifest;
 use tracing::{debug, error, info, warn};
 
-mod engine_state;
 mod fetch_model;
 mod fetch_ner;
 /// The holder's guest-link door (moved from the svrn daemon, pb-mesh-exit-mesh).
@@ -94,22 +93,6 @@ pub use shared_model::apply_shared_model_to_env;
 /// hosting serve's assembly hands svrn for its own ingest and retrieval
 /// (pb-serve-distributes), the same handle serve's `/v1/ner` reads.
 pub use sovereign_compute::ner::served_ner;
-
-/// This process's RPC-worker eligibility rows, as `/v1/mesh/status` reports
-/// them: what a process hosting serve's assembly hands svrn's status route
-/// (pb-serve-ranks-discovery). Empty where no discovery loop runs here.
-pub fn rpc_worker_views() -> Vec<serde_json::Value> {
-    sovereign_serving_host::worker_eligibility::global()
-        .map(|e| e.status_views(std::time::Instant::now()))
-        .unwrap_or_default()
-        .into_iter()
-        .filter_map(|view| {
-            serde_json::to_value(&view)
-                .map_err(|e| tracing::warn!(target: "serve", error = %e, endpoint = %view.endpoint, "an RPC-worker row did not serialise; left out of the status view"))
-                .ok()
-        })
-        .collect()
-}
 
 /// The run lock's name inside the data root (`host_kit::RunLock`): one
 /// `serve` per root. The daemon's and cw-rails' locks are their own.
@@ -430,10 +413,6 @@ pub fn bundles(provider: Arc<dyn InferenceProvider>) -> Vec<RouteBundle> {
         ),
         openai_bundle(adapter),
         sovereign_compute::setup_reads::bundle(),
-        RouteBundle::new("serve_engine_state").route(
-            sovereign_contracts::engine_state::ENGINE_STATE_PATH,
-            get(engine_state::engine_state),
-        ),
     ]
 }
 

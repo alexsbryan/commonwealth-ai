@@ -966,12 +966,6 @@ lines = 288
 note = ""
 
 [[module]]
-path = "serve/crates/sovereign-serving-host/src/worker_eligibility.rs"
-context = "serving"
-lines = 1195
-note = "was compute; sovereign-serving-host — SERVING_BOUNDARY.md corrections (2026-09-14)"
-
-[[module]]
 path = "cmnwlth/crates/sovereign-pods/src/worker_http.rs"
 context = "compute"
 lines = 2046

@@ -1159,8 +1159,10 @@ prompt as branches; the embedded engine rendered each branch as the single
 request it stands for, decoded the shared token prefix once, restored that
 sequence state before each branch and read each distribution as a single forced
 choice does, so every answer equalled its single request's. It was the only host
-that advertised the feature, and it was deleted (ENGINE_SWAP_PLAN G2). No ingest
-path issues a wave since the passes reader was deleted (2026-10-16).
+that answered the feature, and it was deleted (ENGINE_SWAP_PLAN G2); a node
+serving through its router still advertises it (`oicp_types::features::
+ROUTER_FEATURES`), and nothing answers it. No ingest path issues a wave since the
+passes reader was deleted (2026-10-16).
 
 **Retrieval** is `runtime/retrieval_pipeline.rs`, a step ledger where every
 step accounts for what it did to the pool. `apply_atlas_grounding` is a CALLER

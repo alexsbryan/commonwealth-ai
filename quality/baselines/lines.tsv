@@ -76,7 +76,7 @@
 66	distributions/crates/sovereign-onprem
 302	distributions/crates/sovereign-onprem::tests
 130	distributions/crates/sovereign-stock
-7584	distributions/crates/sovereign-stock::tests
+7510	distributions/crates/sovereign-stock::tests
 89491	ingest/crates/corpus-engine
 52144	ingest/crates/corpus-engine::tests
 723	ingest/crates/sovereign-authoring-harness
@@ -108,10 +108,10 @@
 1426	serve/crates/sovereign-inference::tests
 2561	serve/crates/sovereign-scheduler
 2344	serve/crates/sovereign-scheduler::tests
-3765	serve/crates/sovereign-serve
+3746	serve/crates/sovereign-serve
 1359	serve/crates/sovereign-serve::tests
-5168	serve/crates/sovereign-serving-host
-12808	serve/crates/sovereign-serving-host::tests
+4799	serve/crates/sovereign-serving-host
+12404	serve/crates/sovereign-serving-host::tests
 2969	shared/crates/commonwealth-rail-core
 818	shared/crates/commonwealth-rail-core::tests
 11384	shared/crates/corpus-engine-atlas-reader
@@ -150,7 +150,7 @@
 25	shared/crates/sovereign-peer-wire
 27	shared/crates/sovereign-time
 13	shared/crates/sovereign-time::tests
-4215	shared/crates/sovereign-turn-client
+4208	shared/crates/sovereign-turn-client
 1105	shared/crates/sovereign-turn-client::tests
 1505	shared/crates/sovereign-workflow
 1213	shared/crates/sovereign-workflow::tests

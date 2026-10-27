@@ -59,7 +59,9 @@ pub(super) const REGISTRY: &[(&str, Class, usize)] = &[
     // (pb-mesh-exit-transport): `read_engine_state` moved here from the
     // daemon's serve_client so `svrn mesh plan|bench` share it. 2 -> 1
     // (pc-split-deploy-honesty-serve-reach, cf4ead9cc): both reads go
-    // through one bounded reader.
+    // through one bounded reader. The engine-state read went with the
+    // RPC-worker rows it carried (decision engine-swap-8); the self-report
+    // read is the one left on that reader.
     ("shared/crates/sovereign-turn-client/src/serve_self.rs", Class::LocalDaemon, 1),
     // sovereign-mobile: the phone's ApiClient — one `reqwest::Client`, one
     // `TurnClient::new(base_url)` over the same client family the desktop

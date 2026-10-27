@@ -464,10 +464,15 @@ fn manifest_of(
     provider: &dyn InferenceProvider,
 ) -> ProviderManifest {
     // A hosted engine honours what any OpenAI-compatible backend does, and
-    // a peer's lark grammar or forced choice must not be sent to it.
+    // a peer's lark grammar or forced choice must not be sent to it. Every
+    // other locus serves through a llama-server router: this node's own
+    // (`OwnWeights`, `llama_router::provider`), or a Commonwealth host's it
+    // forwards to (`ForwardsOnBox`, `ForwardsOffBox`).
     let features = match provider.serving_locus() {
         ServingLocus::ForwardsToThirdParty => oicp_types::features::OPENAI_COMPATIBLE_FEATURES,
-        _ => oicp_types::features::EMBEDDED_FEATURES,
+        ServingLocus::OwnWeights | ServingLocus::ForwardsOnBox | ServingLocus::ForwardsOffBox => {
+            oicp_types::features::ROUTER_FEATURES
+        }
     };
     ProviderManifest {
         oicp_version: OICP_VERSION.to_string(),
@@ -478,12 +483,11 @@ fn manifest_of(
         models,
         knowledge: None,
         federation: None,
-        // Advertise the embedded path's honoured features over gossip so
-        // peers can negotiate (§2.1) instead of guessing — previously
-        // `Vec::new()`, which left the whole mesh blind to feature
-        // support and forced the forced-choice scheduler filter to fail
-        // open. Single source of truth is `oicp_types::features::EMBEDDED_FEATURES`
-        // (mesh nodes run the embedded llama.cpp path); the HTTP
+        // Advertise the honoured features over gossip so peers can
+        // negotiate (§2.1) instead of guessing — previously `Vec::new()`,
+        // which left the whole mesh blind to feature support and forced the
+        // forced-choice scheduler filter to fail open. Single source of
+        // truth is `oicp_types::features::ROUTER_FEATURES`; svrn's HTTP
         // `/oicp/v1/capabilities` route derives from the same const via
         // `apply_v04_enrichment`.
         features: features.iter().map(|s| s.to_string()).collect(),
@@ -798,13 +802,13 @@ mod self_manifest_tests {
     }
 
     #[test]
-    fn manifest_advertises_embedded_features_over_gossip() {
-        // SLOT_POLICY §6: the gossip manifest must carry the embedded
-        // path's honoured features (previously `Vec::new()`), so peers
-        // can negotiate `x:forced_choice` instead of the scheduler
-        // failing open. The list is the single-source-of-truth
-        // `EMBEDDED_FEATURES` const from `oicp-types`, shared with
-        // the HTTP `/oicp/v1/capabilities` route.
+    fn manifest_advertises_router_features_over_gossip() {
+        // SLOT_POLICY §6: the gossip manifest must carry the router's
+        // honoured features (previously `Vec::new()`), so peers can
+        // negotiate `x:forced_choice` instead of the scheduler failing
+        // open. The list is the single-source-of-truth `ROUTER_FEATURES`
+        // const from `oicp-types`, shared with the HTTP
+        // `/oicp/v1/capabilities` route.
         let stub = SlotStub {
             fast_id: "fast.Q4_0",
             primary_id: "primary.Q5_K_M",
@@ -822,11 +826,11 @@ mod self_manifest_tests {
         );
         assert_eq!(
             manifest.features,
-            oicp_types::features::EMBEDDED_FEATURES
+            oicp_types::features::ROUTER_FEATURES
                 .iter()
                 .map(|s| s.to_string())
                 .collect::<Vec<_>>(),
-            "gossip features must mirror oicp-types EMBEDDED_FEATURES"
+            "gossip features must mirror oicp-types ROUTER_FEATURES"
         );
     }
 

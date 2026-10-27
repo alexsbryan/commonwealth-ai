@@ -370,8 +370,10 @@ impl DaemonHost {
     }
 }
 
-/// The shared-model fleet this node belongs to — one reading of the two
-/// values that decide it, instead of three.
+/// The shared-model fleet this node belongs to — one reading of the value
+/// that decides it, instead of three. The anchor quorum that rode beside it
+/// (`SOVEREIGN_RPC_QUORUM_ANCHORS`) went with the mesh fabric: nothing read
+/// it (decision engine-swap-8).
 ///
 /// ## The split this closes
 ///
@@ -395,54 +397,36 @@ impl DaemonHost {
 /// Beside [`DaemonHost`], for the same reason: it is a fact about what this
 /// process IS, resolved once, and `launch.rs` is where those live. Phase 10's
 /// falsifier is *no `env::var` read selects behaviour after construction* —
-/// this is two more reads off that count, and the remaining work is to hold
+/// this is one more read off that count, and the remaining work is to hold
 /// the resolved value on the daemon rather than re-resolving it per request.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SharedModelFleet {
     /// This node answers from its own weights. Nothing is advertised, and
     /// `/v1/mesh/status` carries no shared-model section.
     Solo,
-    /// This node is in a fleet serving one model across pooled anchors.
+    /// This node routes its primary turns to a mesh peer serving one model.
     Member {
         /// The fleet's model id, trimmed and non-empty by construction.
         model_id: String,
-        /// Eligible anchors required before the host will distribute.
-        quorum_anchors: u32,
     },
 }
-
-/// Anchors required when nothing says otherwise — the historic
-/// `unwrap_or(1)` at the status site, named.
-pub const DEFAULT_QUORUM_ANCHORS: u32 = 1;
 
 impl SharedModelFleet {
     /// Resolve from the environment. **Call this once, at construction** —
     /// same rule as [`DaemonHost::from_env`], and for the same reason.
     pub fn from_env() -> Self {
-        Self::resolve(
-            std::env::var("SOVEREIGN_SHARED_MODEL_ID").ok().as_deref(),
-            std::env::var("SOVEREIGN_RPC_QUORUM_ANCHORS")
-                .ok()
-                .as_deref(),
-        )
+        Self::resolve(std::env::var("SOVEREIGN_SHARED_MODEL_ID").ok().as_deref())
     }
 
     /// THE decider, separated from the environment so it can be tested
-    /// against the inputs that produced the split — process env is global
+    /// against the input that produced the split — process env is global
     /// state and a test that sets it is a test that races its neighbours.
-    pub fn resolve(model_id: Option<&str>, quorum_anchors: Option<&str>) -> Self {
-        let Some(model_id) = model_id
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(str::to_string)
-        else {
-            return Self::Solo;
-        };
-        Self::Member {
-            model_id,
-            quorum_anchors: quorum_anchors
-                .and_then(|s| s.trim().parse().ok())
-                .unwrap_or(DEFAULT_QUORUM_ANCHORS),
+    pub fn resolve(model_id: Option<&str>) -> Self {
+        match model_id.map(str::trim).filter(|s| !s.is_empty()) {
+            Some(model_id) => Self::Member {
+                model_id: model_id.to_string(),
+            },
+            None => Self::Solo,
         }
     }
 
@@ -450,16 +434,7 @@ impl SharedModelFleet {
     pub fn model_id(&self) -> Option<&str> {
         match self {
             Self::Solo => None,
-            Self::Member { model_id, .. } => Some(model_id),
-        }
-    }
-
-    /// Anchors required before the host distributes. Defined for `Solo` too,
-    /// because a caller asking the question has a number to use either way.
-    pub fn quorum_anchors(&self) -> u32 {
-        match self {
-            Self::Solo => DEFAULT_QUORUM_ANCHORS,
-            Self::Member { quorum_anchors, .. } => *quorum_anchors,
+            Self::Member { model_id } => Some(model_id),
         }
     }
 }
@@ -474,46 +449,28 @@ mod tests {
     #[test]
     fn a_whitespace_model_id_is_not_a_fleet() {
         assert_eq!(
-            SharedModelFleet::resolve(Some("  "), None),
+            SharedModelFleet::resolve(Some("  ")),
             SharedModelFleet::Solo
         );
-        assert_eq!(
-            SharedModelFleet::resolve(Some(""), None),
-            SharedModelFleet::Solo
-        );
-        assert_eq!(
-            SharedModelFleet::resolve(None, Some("3")),
-            SharedModelFleet::Solo
-        );
+        assert_eq!(SharedModelFleet::resolve(Some("")), SharedModelFleet::Solo);
+        assert_eq!(SharedModelFleet::resolve(None), SharedModelFleet::Solo);
     }
 
     /// A named id is trimmed once, here, so no downstream reader has to.
     #[test]
-    fn a_named_fleet_carries_a_trimmed_id_and_its_quorum() {
+    fn a_named_fleet_carries_a_trimmed_id() {
         assert_eq!(
-            SharedModelFleet::resolve(Some(" qwen3.8-27b \n"), Some(" 3 ")),
+            SharedModelFleet::resolve(Some(" qwen3.8-27b \n")),
             SharedModelFleet::Member {
                 model_id: "qwen3.8-27b".to_string(),
-                quorum_anchors: 3,
             }
         );
-        // An unparseable quorum falls back rather than refusing the fleet —
-        // matching the `unwrap_or(1)` the status site always had.
-        assert_eq!(
-            SharedModelFleet::resolve(Some("m"), Some("not-a-number")).quorum_anchors(),
-            DEFAULT_QUORUM_ANCHORS
-        );
+        assert_eq!(SharedModelFleet::resolve(Some("m")).model_id(), Some("m"));
     }
 
-    /// `Solo` still answers the quorum question, so a caller never has to
-    /// invent a number when there is no fleet.
     #[test]
-    fn solo_has_no_model_and_the_default_quorum() {
+    fn solo_has_no_model() {
         assert_eq!(SharedModelFleet::Solo.model_id(), None);
-        assert_eq!(
-            SharedModelFleet::Solo.quorum_anchors(),
-            DEFAULT_QUORUM_ANCHORS
-        );
     }
 
     fn v(args: &[&str]) -> Vec<String> {

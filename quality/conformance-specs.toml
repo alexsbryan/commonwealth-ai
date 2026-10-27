@@ -465,20 +465,24 @@ landed = '''commonwealth-core::mesh::tests::gossip_auth::a_proof_cannot_be_repla
 [[spec]]
 id = "FE-133"
 family = "FE"
-status = "landed"
+status = "subject-deleted"
 clause = '''A host preparing a distributed load MUST be able to ask a participant to seed its portion **before** the load begins, and MUST distribute only to participants that pass an eligibility profile — a settling period plus quarantine on instability, surfaced to the operator.'''
-target = '''serve/crates/sovereign-serving-host/src/worker_eligibility.rs:625::eligible'''
-existing = '''serve/crates/sovereign-serving-host/src/worker_eligibility.rs:748::stable_worker_eligible_after_settle'''
-landed = '''sovereign-serving-host::worker_eligibility::tests::stable_worker_eligible_after_settle'''
+# 2026-10-26. `sovereign-serving-host/src/worker_eligibility.rs` was deleted
+# with no writer: RPC-worker discovery went with the mesh fabric (b585dbf4d,
+# decision engine-swap-8). The covering test went with it. The clause is an
+# open gap again, not a covered one.
+retired = '''subject deleted (worker_eligibility.rs, no writer since b585dbf4d) — the clause is now an open gap, not a covered one'''
+target = '''serve/crates/sovereign-serving-host/src/'''
 
 [[spec]]
 id = "FE-135"
 family = "FE"
-status = "landed"
+status = "subject-deleted"
 clause = '''Where a topology stratifies into anchors (holding the split) and consumers, anchors MUST advertise their anchor profile, and the candidate filter MUST exclude non-anchors so a casual peer never joins the split. Anchors MUST get the stricter eligibility profile.'''
-target = '''serve/crates/sovereign-serving-host/src/worker_eligibility.rs:218::EligibilityConfig::anchor'''
-existing = '''serve/crates/sovereign-serving-host/src/worker_eligibility.rs:734::anchor_profile_is_stricter_than_default'''
-landed = '''sovereign-serving-host::worker_eligibility::tests::anchor_profile_is_stricter_than_default'''
+# 2026-10-26. Deleted with FE-133's subject (`worker_eligibility.rs`, whose
+# `EligibilityConfig::anchor` was the stricter profile).
+retired = '''subject deleted (worker_eligibility.rs, no writer since b585dbf4d) — the clause is now an open gap, not a covered one'''
+target = '''serve/crates/sovereign-serving-host/src/'''
 
 [[spec]]
 id = "FE-137"

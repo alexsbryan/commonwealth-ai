@@ -5,7 +5,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 
 use kernel_types::NodeId;
-use oicp_types::features::{self, EMBEDDED_FEATURES};
+use oicp_types::features::{self, ROUTER_FEATURES};
 use oicp_types::{
     Capability, CapabilityClaim, CapabilityHint, CapabilityProfile, CorpusDescriptor,
     EvidenceEndpoints, FederatedMeshDescriptor, FederationManifest, IngestEndpoints,
@@ -98,12 +98,12 @@ pub(crate) fn synthesize_default_claims(
     }
 }
 
-// `EMBEDDED_FEATURES` lives in `oicp-types::features` (moved by domains
+// `ROUTER_FEATURES` lives in `oicp-types::features` (moved by domains
 // REVIEW-build-serving-move-synthesis): the serving host's gossip manifest
 // (`oicp_synthesis::build_self_manifest`) reads the identical set, and the
-// host may not name `sovereign-api` (SERVING_BOUNDARY.md rule 4). Imported
+// host may not name the daemon (SERVING_BOUNDARY.md rule 4). Imported
 // above through the `oicp_types::features` re-export — one
-// source of truth for "what the embedded path can do" (SLOT_POLICY §6).
+// source of truth for "what the router serves" (SLOT_POLICY §6).
 
 /// Conservative feature set for the standalone-Commonwealth orchestrator
 /// path, which may front heterogeneous backends: only what any
@@ -152,7 +152,7 @@ async fn apply_v04_enrichment(
 ) -> Result<(), crate::ledger_port::LedgerAbsent> {
     // §2 features.
     let mut feats: Vec<String> = if embedded {
-        EMBEDDED_FEATURES
+        ROUTER_FEATURES
     } else {
         HUB_FEATURES
     }
@@ -532,18 +532,18 @@ mod tests {
 
     #[test]
     fn feature_sets_are_registered_and_hub_is_a_subset() {
-        for f in EMBEDDED_FEATURES.iter().chain(HUB_FEATURES) {
+        for f in ROUTER_FEATURES.iter().chain(HUB_FEATURES) {
             assert!(
                 features::is_valid(f),
                 "advertised feature {f} is registered"
             );
         }
-        // The hub is more conservative than embedded: every hub feature
-        // is also honoured by the embedded path.
+        // The hub is more conservative than the router: every hub feature
+        // is also honoured by the router.
         for f in HUB_FEATURES {
-            assert!(EMBEDDED_FEATURES.contains(f), "hub feature {f} ⊆ embedded");
+            assert!(ROUTER_FEATURES.contains(f), "hub feature {f} ⊆ router");
         }
-        // Lark + allow-lists are embedded-only.
+        // Lark + allow-lists ride only to the router.
         assert!(!HUB_FEATURES.contains(&features::CONSTRAINT_LARK));
     }
 

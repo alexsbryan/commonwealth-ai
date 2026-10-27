@@ -206,42 +206,34 @@ pub struct CompletionRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assistant_prefix: Option<String>,
 
-    /// Structural constraint on the `cmd` field of `exec_command` tool
-    /// calls (R2). When set, `inference_adapter::tool_envelope_schema_for`
-    /// decorates the `cmd` parameter schema with a `pattern: "^<literal-prefix>"`
-    /// and `JsonConstraint`'s string-body walker masks any byte that
-    /// wouldn't extend the literal prefix until it is fully emitted.
-    /// After the prefix point, normal string-body sampling resumes.
+    /// Literal prefix for the `cmd` field of an `exec_command` tool call
+    /// (R2). Nothing enforces it today: `inference_adapter::
+    /// build_completion_request` threads it here and it keeps the turn on
+    /// the Hermes path (`inference_adapter::conversation::
+    /// hermes_path_reason`), but `oicp_client` sends it as a `cmd_prefix`
+    /// field that llama-server ignores. The walker that masked the `cmd`
+    /// string to the prefix went with the embedded engine (es-g2).
     ///
-    /// Set by frontdoor's `apply_read_attractor_nudge_chat` when it
-    /// fires — the model's only legal continuation is the canonical
-    /// `apply_patch <<'EOF'\n*** Begin Patch\n*** Add File: ` opener
-    /// followed by free-form body. Doesn't compose with
-    /// `assistant_prefix` — pick one mechanism per turn.
+    /// Doesn't compose with `assistant_prefix` — pick one mechanism per turn.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cmd_prefix: Option<String>,
-    /// URL allowlist for grammar-constrained URL emission. When
-    /// `Some`, the inference sampler installs a logit-mask constraint
-    /// that prevents the model from emitting any HTTP/HTTPS URL outside
-    /// this list — byte-by-byte, via the trie-walking state machine in
-    /// `sovereign_inference::url_constraint::UrlAllowlistConstraint`.
+    /// URL allowlist for grammar-constrained URL emission. When `Some`,
+    /// the model may emit no HTTP/HTTPS URL outside this list:
+    /// `chat_wire::write_constraints` sends it to llama-server as one
+    /// llguidance `grammar` (`decode_allowlist::llguidance_lark`), and
+    /// refuses the request where that grammar cannot ride (beside tools, a
+    /// Lark grammar or a `response_format`). Prose passes through.
     ///
-    /// Used by tool-call result-rendering paths (search_gym runner,
-    /// future production `SearchTool` integration) to make URL
-    /// fabrication structurally impossible: the model literally cannot
-    /// sample a token that would extend the cursor past a valid trie
-    /// edge. Prose tokens pass through; URL-shaped tokens that don't
-    /// match the trie get clamped to `-INFINITY`.
+    /// Set by svrn's frontdoor from the turn's tool results
+    /// (`apply_url_allowlist_from_tool_results`, called from
+    /// `routes_inference.rs`) and by deep research's drafting call
+    /// (`deep_research::port`), so a URL the tools never returned cannot be
+    /// written.
     ///
     /// `None` (default) leaves URL emission unconstrained. Empty list
     /// is treated as "no URLs allowed" — useful for tool-result
     /// renderings that contained zero URLs and where any URL emission
     /// is automatically a fabrication.
-    ///
-    /// Wire path: extracted from the OpenAI request body's
-    /// `url_allowlist` field in `routes_inference.rs`; sent on by
-    /// `chat_wire::write_constraints` as one llguidance `grammar`
-    /// (`decode_allowlist::llguidance_lark`), refused where it cannot ride.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url_allowlist: Option<Vec<String>>,
     /// Evidence-id allowlist for sampler-side citation faithfulness
@@ -264,23 +256,16 @@ pub struct CompletionRequest {
     /// in `frontdoor.rs`); sent on by `chat_wire::write_constraints`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence_id_allowlist: Option<Vec<String>>,
-    /// Lark grammar that constrains the model's per-turn output.
-    /// Mutually exclusive with `structured_output`: when both are
-    /// set the lark path wins (this is the newer mechanism).
-    ///
-    /// Set by `sovereign_serving_host::inference_adapter::build_completion_request`
-    /// when `tools.is_some()` and `tool_choice != Some("none")` AND
-    /// the `SOVEREIGN_ALTERNATION_GRAMMAR` env var is truthy. The
-    /// rendered grammar is the alternation shape
-    /// `start: text_branch | tool_envelope`, which lets the model
-    /// emit either a parseable tool-call envelope OR plain text;
-    /// closes the `parse_failed_envelope` + `loop_trap` failure
-    /// classes the agent-bench scanner surfaced on 2026-05-21.
-    ///
-    /// Nothing builds that alternation grammar since the embedded
-    /// engine was deleted; a caller's own grammar is forwarded as sent.
+    /// Lark grammar that constrains the model's per-turn output. Set by
+    /// svrn's document-skeleton and RAPTOR-atlas calls
+    /// (`document_asset::skeleton`, `raptor_atlas`); a caller's own grammar
+    /// is forwarded as sent (`inference_adapter::build_completion_request`).
     /// `chat_wire::write_constraints` sends it to llama-server as an
-    /// llguidance `grammar`, dropped (traced) beside tools.
+    /// llguidance `grammar`. Beside a `structured_output` it does not win:
+    /// against a `response_format` (llama-server would let the grammar
+    /// override it) the pair is refused, and beside tools, which is how the
+    /// tool-use structured-output modes send a schema, the grammar is
+    /// dropped and the drop traced.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lark_grammar: Option<String>,
 

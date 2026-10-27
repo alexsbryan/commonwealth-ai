@@ -17,8 +17,8 @@ use crate::{error_excerpt, RemoteApiProvider};
 pub use sovereign_contracts::setup_config::StructuredOutputMode;
 
 /// The `messages` a request goes out as. A conversation goes whole, so the
-/// far end's chat template renders its roles, calls and results, as the
-/// embedded engine does. On that shape `prompt` is a flattened copy kept for
+/// far end's chat template renders its roles, calls and results itself.
+/// On that shape `prompt` is a flattened copy kept for
 /// token estimators; sending it put the whole agent history in one user turn
 /// labelled `Tool[id]:`, and the model ran on inside its own tool call,
 /// writing fake results and turns (e2e-swe arm D, 2026-10-09).
@@ -239,10 +239,10 @@ pub(crate) fn narrow_tool_choice(body: &mut Value, host: GrammarSupport) -> Resu
 /// ignores) folded to the alphabet OpenAI accepts for a schema or function
 /// name. Untitled, it is `structured`.
 ///
-/// The schema goes out with the closed-object default the embedded engine
-/// compiles it with (`structured_output::default_additional_properties_false`):
-/// a host follows JSON Schema, where an undeclared property is allowed
-/// (`decode.json-schema`).
+/// The schema goes out closed where it does not say otherwise
+/// (`structured_output::default_additional_properties_false`, whose one
+/// production caller this is): a host follows JSON Schema, where an
+/// undeclared property is allowed (`decode.json-schema`).
 pub(crate) fn write_structured_output(
     body: &mut Value,
     schema: &Value,

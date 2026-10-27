@@ -121,10 +121,9 @@ async fn own_root() -> (tokio::sync::MutexGuard<'static, ()>, tempfile::TempDir)
 #[tokio::test]
 async fn the_first_primary_turn_after_cold_start_goes_to_the_shared_model() {
     let (_held, _root) = own_root().await;
-    crate::apply_shared_model_to_env(&sovereign_contracts::setup_config::SharedModelSection {
-        model_id: Some("shared-model".to_string()),
-        ..Default::default()
-    });
+    let mut section = sovereign_contracts::setup_config::SharedModelSection::default();
+    section.model_id = Some("shared-model".to_string());
+    crate::apply_shared_model_to_env(&section);
     let saw = Arc::new(Mutex::new(Vec::new()));
     let local = Arc::new(Holds {
         id: "shared-model",
@@ -154,9 +153,10 @@ async fn the_first_primary_turn_after_cold_start_goes_to_the_shared_model() {
 #[tokio::test]
 async fn an_explicit_shared_model_env_wins_over_the_config_and_empty_publishes_nothing() {
     let (_held, _root) = own_root().await;
-    let section = |id: &str| sovereign_contracts::setup_config::SharedModelSection {
-        model_id: Some(id.to_string()),
-        ..Default::default()
+    let section = |id: &str| {
+        let mut section = sovereign_contracts::setup_config::SharedModelSection::default();
+        section.model_id = Some(id.to_string());
+        section
     };
     crate::apply_shared_model_to_env(&section(""));
     assert_eq!(std::env::var_os("SOVEREIGN_SHARED_MODEL_ID"), None);

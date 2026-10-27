@@ -387,25 +387,15 @@ pub struct KnownMeshDto {
     pub last_seen_unix: u64,
 }
 
-/// The client's read of `GET /v1/mesh/status` — the fields a client that
-/// does not link the daemon reads off `sovereign_daemon::mesh_http::
-/// StatusResponse`, deserialised from the SAME bytes (serde ignores the
-/// rest).
-///
-/// NOT a relocation, and named so rather than buried: `StatusResponse`
-/// closes over two runtime records that have no home at this layer —
-/// `rpc_workers: Vec<worker_eligibility::WorkerStatusView>` (the
-/// eligibility state machine's own view) and `iroh_transport:
-/// Vec<daemon::MemberReach>` (over `commonwealth_media::PeerTransportPath`,
-/// cross-family). The route keeps the whole type; this is the subset a
-/// client is owed. `node_class` / `entry_node` are flat strings the route
-/// already carried; the transport rows come down as [`MemberReachView`],
-/// which flattens the one cross-family type it closes over. The two cannot
-/// drift silently: `sovereign-mesh`'s `wire_view_drift` test serialises the
-/// real `StatusResponse` and parses this from it, field by field (ARCH
-/// principle 5 — a pin with a failing input you can name). A field a client
-/// needs that is not here is added HERE and pinned there, never read off a
-/// second parse.
+/// The client's read of `GET /v1/mesh/status`: the fields a client reads off
+/// cw-rails' answer (`commonwealth_rails::api::status`, svrn's route until
+/// pb-mesh-exit-transport), deserialised from the same bytes (serde ignores
+/// the rest). The route builds its answer as JSON; this is the subset a
+/// client is owed. The RPC-worker rows the svrn route once carried went with
+/// the mesh fabric (decision engine-swap-8), and nothing reads them. The
+/// transport rows come down as [`MemberReachView`], which flattens the one
+/// cross-family type it closes over. A field a client needs that is not here
+/// is added HERE, never read off a second parse.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MeshStatusSummary {
     /// The daemon is in a mesh and serving it.

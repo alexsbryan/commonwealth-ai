@@ -200,14 +200,15 @@ pub(super) const REGISTRY_TAIL: &[(&str, Class, usize)] = &[
     ("serve/crates/sovereign-compute/src/setup_planner.rs", Class::InboundOnly, 1),
 
     // ---- serve, dialed by the svrn daemon (pb-svrn-dials-serve) ----
-    // serve_client: the engine-state, served-self, forwarded-GET and reload
-    // reads, each to serve's loopback base (venue::DEFAULT_SERVE_PORT or
+    // serve_client: the served-self, forwarded-GET and reload reads, each to
+    // serve's loopback base (venue::DEFAULT_SERVE_PORT or
     // SOVEREIGN_SERVE_PORT). 4 -> 5 at pb-serve-distributes (30ac18fda,
     // reconciled at pb-cli-llm-bench-move): `forward_stream` builds its own
     // client for the model-transfer byte stream, to the same loopback base.
     // 5 -> 4 at pb-meshapp-rest: the served-self read moved to
     // sovereign-turn-client/src/serve_self.rs (row there). 4 -> 3 at
-    // pb-mesh-exit-transport: `read_engine_state` moved there too.
+    // pb-mesh-exit-transport: `read_engine_state` moved there too, and went
+    // with the RPC-worker rows it read (decision engine-swap-8).
     ("svrn/crates/sovereign-daemon/src/serve_client.rs", Class::LocalDaemon, 3),
     // fetch-model's peer client moved here, whole, from sovereign-cli-mesh's
     // mesh_cmd.rs (c2529c94c): the mesh row went 8 -> 7, same class.

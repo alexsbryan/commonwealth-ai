@@ -375,88 +375,56 @@ impl NodeClass {
     }
 }
 
-/// `[shared_model]` — opt-in participation in a mesh-hosted shared
-/// primary model (e.g. a desktop fleet collectively running one big
-/// model across an RPC layer-split, like GLM-5.2). Off by default: the
-/// zero value is `role = "consumer"` with no `model_id`, which is
-/// inert. The node's `[models] primary` stays its LOCAL model and the
-/// always-available fallback; this section is an overlay that, when a
-/// shared model is actually available on the mesh, routes the primary
-/// turn into it instead (see the desktop-fleet plan).
+/// `[shared_model]` — route this node's primary turns to the mesh peer
+/// serving one shared model. Off by default: the zero value is
+/// `role = "consumer"` with no `model_id`, which is inert. The node's
+/// `[models] primary` stays its LOCAL model and the always-available
+/// fallback. `model_id` is published as `SOVEREIGN_SHARED_MODEL_ID`
+/// (`sovereign_serve::apply_shared_model_to_env`), which serve's ranking
+/// reads (decision engine-swap-8).
+///
+/// The keys that configured the RPC layer-split (`host_node_id`,
+/// `quorum_anchors`, `min_pooled_gb`, `headroom`, `allow_plaintext_lan`,
+/// `shard_fetch`) went with the mesh fabric. A config that still sets one
+/// loads, and startup names it ([`SharedModelSection::retired_keys`]).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SharedModelSection {
-    /// This node's role in the shared-model cluster.
+    /// This node's role in the shared-model cluster. Read today by `svrn
+    /// doctor`'s containment check (`containment::classify_containment`) and
+    /// the desktop's config mirror.
     #[serde(default)]
     pub role: SharedModelRole,
     /// The shared model's id, as advertised in peers' `loaded_models`.
     /// `None` ⇒ not participating (the section is inert).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_id: Option<String>,
-    /// The designated host — the node that owns the loaded distributed
-    /// instance. `None` ⇒ discover from the mesh; set explicitly to
-    /// pin the always-on anchor as host (the v1 recommendation).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub host_node_id: Option<String>,
-    /// Minimum eligible anchors before the host attempts the distributed
-    /// load and advertises the model available — the quorum gate. Below
-    /// it the cluster reports "forming (k/N)".
-    #[serde(default = "default_quorum_anchors")]
-    pub quorum_anchors: u32,
-    /// Optional explicit floor (GB) on pooled anchor memory. The host
-    /// always gates on the computed `sum(anchor_vram) >= model_size × 1.2`;
-    /// set this to require headroom beyond that. `None` ⇒ computed check
-    /// only.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub min_pooled_gb: Option<f64>,
-    /// Memory headroom FACTOR the host gates and places against: it requires
-    /// `pooled >= model_size × headroom`. Default 1.2 (20% for KV + compute
-    /// buffers). `svrn mesh plan` reads this SAME value as its default headroom,
-    /// so the plan you preview uses the headroom the load executes with. Lower
-    /// packs tighter (more aggressive); higher is safer. Env `SOVEREIGN_RPC_HEADROOM`
-    /// wins if pre-set.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub headroom: Option<f64>,
-    /// Acknowledge that this node's tensor-split RPC port may be bound where
-    /// other hosts can reach it. The worker authenticates nothing and
-    /// encrypts nothing, so a non-loopback `SOVEREIGN_RPC_SERVE` is REFUSED
-    /// unless this is `true` — members already reach the worker over the
-    /// encrypted mesh tunnel, which needs no LAN bind. Env
-    /// `SOVEREIGN_RPC_ALLOW_PLAINTEXT_LAN` wins if pre-set.
-    #[serde(default)]
-    pub allow_plaintext_lan: bool,
-    /// How anchors fetch their shard of the model — the host emits this as
-    /// `SOVEREIGN_RPC_SHARD_FETCH`. Defaults to [`ShardFetch::Ranges`] (each
-    /// node pulls only its slice), which is required whenever no single node
-    /// can hold the whole GGUF — the desktop-fleet case (e.g. a 440 GB model on
-    /// 64 GB nodes).
-    #[serde(default)]
-    pub shard_fetch: ShardFetch,
+    /// Every other key the section carried, by name, so startup can name a
+    /// retired one rather than ignore it. Never written back.
+    #[serde(flatten, default, skip_serializing)]
+    unread: BTreeMap<String, serde::de::IgnoredAny>,
 }
 
-/// How a shared-model anchor obtains its shard of the GGUF.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ShardFetch {
-    /// Range-GET only this node's tensors (`O(model/N)` disk). Required when no
-    /// node can hold the whole GGUF; the desktop-fleet default. NOTE: this is
-    /// the least-validated distributed path — built + unit-tested, not yet
-    /// proven cross-machine at scale.
-    #[default]
-    Ranges,
-    /// Fetch the whole GGUF to disk, then warm this node's shard from it. Needs
-    /// full-model disk per anchor; simpler, and the path closest to what's been
-    /// validated cross-machine.
-    Whole,
-}
+/// The `[shared_model]` keys the mesh fabric read, deleted with it
+/// (b585dbf4d, d492ab930; decision engine-swap-8). Setting one has no effect.
+pub const RETIRED_SHARED_MODEL_KEYS: &[&str] = &[
+    "host_node_id",
+    "quorum_anchors",
+    "min_pooled_gb",
+    "headroom",
+    "allow_plaintext_lan",
+    "shard_fetch",
+];
 
-impl ShardFetch {
-    /// The `SOVEREIGN_RPC_SHARD_FETCH` value the host advertises to the RPC
-    /// warm/load path.
-    pub fn as_env(self) -> &'static str {
-        match self {
-            ShardFetch::Ranges => "ranges",
-            ShardFetch::Whole => "whole",
-        }
+impl SharedModelSection {
+    /// The [`RETIRED_SHARED_MODEL_KEYS`] this section sets, in table order.
+    /// Startup warns on each (`sovereign_serve::apply_shared_model_to_env`)
+    /// and does not refuse: a peer's existing config may still carry them.
+    pub fn retired_keys(&self) -> Vec<&'static str> {
+        RETIRED_SHARED_MODEL_KEYS
+            .iter()
+            .copied()
+            .filter(|key| self.unread.contains_key(*key))
+            .collect()
     }
 }
 
@@ -475,12 +443,6 @@ pub enum SharedModelRole {
     /// Own the loaded distributed instance and serve it to the fleet.
     /// Implies `Anchor` (the host also holds a shard).
     Host,
-}
-
-/// Default quorum: a single anchor (the assumed always-on 128 GB+ box)
-/// is enough to attempt a load; raise for larger cores.
-fn default_quorum_anchors() -> u32 {
-    1
 }
 
 /// `[memory]` top-level section. Currently only nests

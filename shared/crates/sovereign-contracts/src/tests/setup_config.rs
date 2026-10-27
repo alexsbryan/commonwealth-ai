@@ -671,3 +671,37 @@ fn the_hosted_pair_loads_on_both_engines_and_its_voiceless_form_is_refused() {
         Some(std::path::Path::new("/m/Qwen3-Embedding-0.6B-Q8_0.gguf"))
     );
 }
+
+/// A `[shared_model]` key the mesh fabric read still loads, and is named so
+/// startup can warn on it (`sovereign_serve::apply_shared_model_to_env`).
+/// Failing input: drop the flattened catch-all from `SharedModelSection` and
+/// `host_node_id` is ignored without a word again.
+#[test]
+fn a_retired_shared_model_key_is_named_and_a_live_one_is_not() {
+    let whole: SetupConfig = toml::from_str(
+        "[models]\nprimary = \"/m/p.gguf\"\nembed = \"/m/e.gguf\"\n\n\
+         [shared_model]\nrole = \"host\"\nhost_node_id = \"n1\"\n",
+    )
+    .expect("a config setting a retired key still loads");
+    assert_eq!(whole.shared_model.retired_keys(), ["host_node_id"]);
+
+    let retired: SharedModelSection = toml::from_str(
+        "role = \"anchor\"\nmodel_id = \"m\"\nhost_node_id = \"n1\"\nshard_fetch = \"ranges\"\n\
+         quorum_anchors = 3\nheadroom = 1.2\n",
+    )
+    .expect("a retired key still parses");
+    assert_eq!(
+        retired.retired_keys(),
+        ["host_node_id", "quorum_anchors", "headroom", "shard_fetch"]
+    );
+    assert_eq!(retired.role, SharedModelRole::Anchor);
+    assert_eq!(retired.model_id.as_deref(), Some("m"));
+
+    let live: SharedModelSection =
+        toml::from_str("role = \"anchor\"\nmodel_id = \"m\"\n").expect("parse");
+    assert!(live.retired_keys().is_empty(), "{:?}", live.retired_keys());
+
+    // Never written back: a save drops what nothing reads.
+    let saved = toml::to_string(&retired).expect("serialise");
+    assert!(!saved.contains("host_node_id"), "{saved}");
+}

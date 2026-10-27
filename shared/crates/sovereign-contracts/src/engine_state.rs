@@ -1,17 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `serve`'s engine-state wire: the RPC workers serve's discovery holds,
-//! which `svrn mesh plan|bench` read (pb-svrn-dials-serve). serve produces it
-//! and the daemon consumes it, so the shape lives in the serving contract.
+//! `serve`'s loopback wire to the svrn daemon: serve's self-report, the
+//! reload it answers, and [`Lap`], which times one loopback request on either
+//! side under one target. serve produces them and the daemon consumes them,
+//! so the shapes live in the serving contract.
 //!
-//! The loader's cached device-memory reading and the pinned RPC block split
-//! were the embedded engine's, and went with it (ENGINE_SWAP_PLAN G2).
-//!
-//! [`Lap`] times one loopback request on either side under one target.
+//! The engine-state route (`/v1/engine/state`) carried only the RPC-worker
+//! eligibility rows, and went with them: nothing wrote a row once the mesh
+//! fabric's discovery was deleted (b585dbf4d, decision engine-swap-8).
 
 use serde::{Deserialize, Serialize};
-
-/// Where serve answers the engine state.
-pub const ENGINE_STATE_PATH: &str = "/v1/engine/state";
 
 /// Where serve rebuilds its provider from the config on disk, through the one
 /// serving assembly's `ReloadFactory`. The svrn daemon's `/v1/admin/reload`
@@ -23,18 +20,6 @@ pub const RELOAD_PATH: &str = "/v1/engine/reload";
 pub struct EngineReloaded {
     /// `model_id` of every resident slot after the swap.
     pub resident_models: Vec<String>,
-}
-
-/// What the loader last saw.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct EngineState {
-    /// The RPC workers this process's discovery holds, one eligibility row
-    /// each (`sovereign_serving_host::worker_eligibility`'s status view:
-    /// `node_id`, `endpoint`, …). svrn's `/v1/mesh/status` carried them
-    /// until pb-mesh-exit-transport; `svrn mesh plan|bench` read them here.
-    /// Empty where no discovery loop runs.
-    #[serde(default)]
-    pub rpc_workers: Vec<serde_json::Value>,
 }
 
 /// Where serve answers what its provider says about itself.

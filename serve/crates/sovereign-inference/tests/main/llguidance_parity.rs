@@ -13,9 +13,9 @@
 //! id. Feed bytes one at a time, asserting which next-byte choices
 //! the mask permits or rejects.
 //!
-//! Perf benches (§4 #6, #7) live in `examples/bench_*.rs` because
-//! they require a real `LlamaModel` / GGUF on disk; placeholder
-//! markers below document the intent.
+//! The perf benches (§4 #6, #7) needed a real `LlamaModel` and ran as
+//! `examples/bench_constraint.rs`, which was deleted with the embedded
+//! engine (es-g2, 18393dca7); nothing here measures decode speed.
 
 use llguidance::{api::TopLevelGrammar, toktrie::ApproximateTokEnv, Matcher, ParserFactory};
 use sovereign_contracts::structured_output::default_additional_properties_false;
@@ -649,21 +649,13 @@ fn additional_properties_walker_does_not_rescue_a_broken_oneof() {
     );
 }
 
-// ─── §4 perf benches — superseded by `examples/bench_constraint.rs` ───
+// ─── §4 perf benches ───────────────────────────────────────────────────
 //
 // The two perf questions (decode tok/s parity + `compute_ff_tokens`
-// yield) now have a real runnable harness:
-//
-//   cargo run --release -p sovereign-inference --example bench_constraint -- \
-//       --model <gguf> --engine both --iters 5 --gen-tokens 200
-//
-// First smoke run (Qwen3.5-2B Metal, 2026-05-22): llguidance was
-// 2.5× faster on decode tok/s and `ff_yield = 0.00` (every
-// `compute_ff_tokens` call returned empty under `ApproximateTokEnv`).
-// See `LLGUIDANCE_MIGRATION_AUDIT.md` §3.C/§3.G smoke note.
-//
-// The `bench all --synth` regression gate (audit §4.2) is the
-// canonical end-to-end test.
+// yield) were answered by `examples/bench_constraint.rs`, deleted with the
+// embedded engine (es-g2, 18393dca7). Its first smoke run (Qwen3.5-2B
+// Metal, 2026-05-22) found llguidance 2.5× faster on decode tok/s and
+// `ff_yield = 0.00`. See `LLGUIDANCE_MIGRATION_AUDIT.md` §3.C/§3.G.
 
 // ─── F3 — the planner's plan schema ────────────────────────────────────
 //

@@ -100,26 +100,19 @@ pub struct ChatCompletionRequest {
     /// assistant message, which it prefills after the template renders.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assistant_prefix: Option<String>,
-    /// Commonwealth extension: structural cmd-prefix constraint (R2).
-    /// When set, the inference layer's tool-envelope schema injects a
-    /// `pattern: "^<literal-prefix>"` on the `cmd` parameter of any
-    /// `exec_command` tool so the grammar mask forces the literal
-    /// prefix as the start of the cmd string. Frontdoor nudges set
-    /// this to commit the model to a known-good action shape.
+    /// Commonwealth extension: literal prefix for an `exec_command` call's
+    /// `cmd` (R2). Threaded onto `CompletionRequest.cmd_prefix` by
+    /// `build_completion_request`; nothing enforces it since the embedded
+    /// engine was deleted (see that field).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cmd_prefix: Option<String>,
     /// Commonwealth extension: URL allowlist for grammar-constrained
-    /// URL emission. When non-empty, the inference sampler installs a
-    /// logit-mask constraint that prevents the model from emitting any
-    /// HTTP/HTTPS URL outside this list — byte-by-byte, via the
-    /// trie-walking state machine in
-    /// `sovereign_inference::url_constraint::UrlAllowlistConstraint`.
-    /// Used by tool-result rendering paths (search-gym runner,
-    /// production SearchTool) to make URL fabrication structurally
-    /// impossible: prose tokens pass through, URL-shaped tokens that
-    /// don't match the trie get clamped to `-INFINITY`. Wire path:
-    /// extracted here, threaded onto `CompletionRequest.url_allowlist`
-    /// by `build_completion_request`, sent on by `chat_wire::write_constraints`.
+    /// URL emission. When `Some`, the model may emit no HTTP/HTTPS URL
+    /// outside this list; prose passes through. Wire path: extracted
+    /// here, threaded onto `CompletionRequest.url_allowlist` by
+    /// `build_completion_request`, sent on by `chat_wire::write_constraints`
+    /// as one llguidance `grammar` (`decode_allowlist::llguidance_lark`),
+    /// refused where it cannot ride.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url_allowlist: Option<Vec<String>>,
     /// Commonwealth extension (Tier 2 of tool-framework expansion):

@@ -8,7 +8,18 @@
 /// Publish the shared model this node routes its primary turns into. An
 /// explicitly-set `SOVEREIGN_SHARED_MODEL_ID` wins; an empty id publishes
 /// nothing. A process hosting serve's assembly calls this before `rank`.
+///
+/// Each retired `[shared_model]` key the config still sets is named in a
+/// warning, never refused: a peer's existing config may carry them, and
+/// they decide nothing now.
 pub fn apply_shared_model_to_env(cfg: &sovereign_contracts::setup_config::SharedModelSection) {
+    for key in cfg.retired_keys() {
+        tracing::warn!(
+            key,
+            "shared-model: [shared_model] {key} has no effect since the mesh fabric was deleted \
+             (decision engine-swap-8); remove it from the config"
+        );
+    }
     let Some(id) = cfg.model_id.as_deref().filter(|id| !id.is_empty()) else {
         tracing::debug!("shared-model: no [shared_model] model_id; primary turns route locally");
         return;
