@@ -100,20 +100,17 @@ impl RemoteApiProvider {
         // Off in every spelling: DeepSeek reasons unless told `thinking:
         // disabled`, spending the one token on it and answering no logprobs.
         crate::chat_wire::write_thinking(&mut body, Some(0), Some(false));
-        crate::chat_wire::observe_wire_request(&body);
         let response = self
             .send_honouring_shed(
                 || admitted.post(url).json(&body),
                 "Forced-choice logprobs request",
             )
             .await?;
-        let status = response.status().as_u16();
         let raw = response.text().await.map_err(|e| {
             Error::Inference(format!(
                 "Failed to read forced-choice logprobs response: {e}"
             ))
         })?;
-        crate::chat_wire::observe_wire_response(status, &raw);
         let answer: Value = serde_json::from_str(&raw).map_err(|e| {
             Error::Inference(format!(
                 "Failed to parse forced-choice logprobs response: {e}"

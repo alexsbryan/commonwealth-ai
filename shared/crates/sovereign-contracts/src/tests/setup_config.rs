@@ -705,3 +705,28 @@ fn a_retired_shared_model_key_is_named_and_a_live_one_is_not() {
     let saved = toml::to_string(&retired).expect("serialise");
     assert!(!saved.contains("host_node_id"), "{saved}");
 }
+
+/// `[engine] capture` fed the retired conformance battery: a config that
+/// still sets it loads, and the key is named so serving assembly can warn
+/// on it (`sovereign_compute::assembly::ReloadFactory::build`). Failing
+/// input: drop the flattened catch-all from `EngineSection` and `capture`
+/// is ignored without a word.
+#[test]
+fn a_retired_engine_key_is_named_and_a_live_one_is_not() {
+    let whole: SetupConfig = toml::from_str(
+        "[models]\nprimary = \"/m/p.gguf\"\nembed = \"/m/e.gguf\"\n\n\
+         [engine]\nkind = \"llama-server\"\ncapture = \"/tmp/calls.jsonl\"\n",
+    )
+    .expect("a config setting a retired key still loads");
+    assert_eq!(whole.engine.retired_keys(), ["capture"]);
+    assert_eq!(whole.engine.kind, EngineKind::LlamaServer);
+
+    let live: EngineSection =
+        toml::from_str("kind = \"remote\"\ncontext_size = 4096\n").expect("parse");
+    assert!(live.retired_keys().is_empty(), "{:?}", live.retired_keys());
+    assert_eq!(live.context_size, 4096);
+
+    // Never written back: a save drops what nothing reads.
+    let saved = toml::to_string(&whole.engine).expect("serialise");
+    assert!(!saved.contains("capture"), "{saved}");
+}

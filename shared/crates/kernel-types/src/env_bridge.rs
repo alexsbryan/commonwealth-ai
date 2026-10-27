@@ -89,6 +89,7 @@ pub const REMOVED_ENV: &[RemovedEnv] = &[
     RemovedEnv { name: "SOVEREIGN_RPC_MIN_POOLED_GB", instead: "retired: the pooled-memory gate went with the mesh fabric (b585dbf4d)" },
     RemovedEnv { name: "SOVEREIGN_RPC_QUORUM_ANCHORS", instead: "retired: the anchor quorum went with the mesh fabric (b585dbf4d); the shared-model fleet reads only SOVEREIGN_SHARED_MODEL_ID" },
     RemovedEnv { name: "SOVEREIGN_RPC_SHARD_FETCH", instead: "retired: the shard fetch went with the mesh fabric (b585dbf4d)" },
+    RemovedEnv { name: "SOVEREIGN_ROUTER_SLOTS_DEBUG", instead: "retired: nothing reads the router's /slots task description since the engine conformance battery was retired (1ea29871a)" },
     RemovedEnv { name: "SOVEREIGN_SERVER_PATH", instead: "retired: the mobile host that read it was deleted (efa709871)" },
     RemovedEnv { name: "SOVEREIGN_SHARED_MODEL_HOST_NODE_ID", instead: "retired: the distributed-inference host pin went with the mesh fabric (b585dbf4d)" },
     RemovedEnv { name: "SOVEREIGN_SUFFICIENCY_CHARS", instead: "retired with SOVEREIGN_AGENTIC_KQ's loop (cc78b933b)" },

@@ -13,6 +13,8 @@
 //! `sovereign_compute::engine_factory`, layers up, because it has to
 //! name `EmbeddedLlamaCpp` and this must not.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 /// Which inference engine serves this node.
@@ -227,16 +229,34 @@ pub struct EngineSection {
     /// the URL and evidence-id allow-lists. Unset is `sovereign`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grammar: Option<GrammarSupport>,
-    /// A file to append every model call to, for the engine conformance
-    /// battery's case bank (`bench/lanes/engine-swap/`). Unset captures
-    /// nothing.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub capture: Option<std::path::PathBuf>,
     /// `kind = "llama-server"` only: run this llama-server binary instead of
     /// the one shipped beside the daemon. A development override; the
     /// release check is skipped for it and `/status` names it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub server_binary: Option<std::path::PathBuf>,
+    /// Every other key the section carried, by name, so startup can name a
+    /// retired one rather than ignore it ([`Self::retired_keys`]). Filled
+    /// by deserialization only; never written back.
+    #[serde(flatten, default, skip_serializing)]
+    pub unread: BTreeMap<String, serde::de::IgnoredAny>,
+}
+
+/// The `[engine]` keys whose only reader was the engine conformance battery,
+/// retired with it (1ea29871a). Setting one has no effect.
+pub const RETIRED_ENGINE_KEYS: &[&str] = &["capture"];
+
+/// The `retired` keys a section's flattened catch-all holds, in `retired`'s
+/// order: the one reading behind [`EngineSection::retired_keys`] and
+/// `SharedModelSection::retired_keys`.
+pub(crate) fn retired_keys_in(
+    unread: &BTreeMap<String, serde::de::IgnoredAny>,
+    retired: &[&'static str],
+) -> Vec<&'static str> {
+    retired
+        .iter()
+        .copied()
+        .filter(|key| unread.contains_key(*key))
+        .collect()
 }
 
 /// How a host takes a decode constraint. A property of the SERVER: nothing
@@ -277,6 +297,12 @@ fn default_engine_context_size() -> u32 {
 }
 
 impl EngineSection {
+    /// The [`RETIRED_ENGINE_KEYS`] this section sets. Serving assembly warns
+    /// on each and does not refuse: an existing config may still carry them.
+    pub fn retired_keys(&self) -> Vec<&'static str> {
+        retired_keys_in(&self.unread, RETIRED_ENGINE_KEYS)
+    }
+
     /// The embed GGUF this engine serves WITHOUT a `[models]` section: a
     /// remote engine's `embed_path`, and a router node's — the router runs
     /// that GGUF in its own supervised process as the preset's one section
@@ -373,8 +399,8 @@ impl Default for EngineSection {
             structured_output: None,
             embed_inputs: None,
             grammar: None,
-            capture: None,
             server_binary: None,
+            unread: BTreeMap::new(),
         }
     }
 }

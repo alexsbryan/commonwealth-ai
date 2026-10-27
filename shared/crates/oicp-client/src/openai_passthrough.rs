@@ -509,13 +509,6 @@ impl InferenceProvider for OpenAiPassthrough {
         self.local.warmup_primary().await
     }
 
-    async fn probe_logprobs(
-        &self,
-        probe: &sovereign_contracts::engine_observe::ProbeRequest,
-    ) -> Result<sovereign_contracts::engine_observe::ProbeAnswer> {
-        self.local.probe_logprobs(probe).await
-    }
-
     fn capabilities(&self) -> ProviderCapabilities {
         self.local.capabilities()
     }

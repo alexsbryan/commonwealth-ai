@@ -1121,7 +1121,6 @@ impl InferenceProvider for RemoteApiProvider {
         let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
         let mut body = self.build_request(request)?;
         response_wire::ask_to_stream(&mut body);
-        chat_wire::observe_wire_request(&body);
 
         let lap = sovereign_contracts::engine_state::Lap::start("client", "chat");
         let response = self
@@ -1132,7 +1131,6 @@ impl InferenceProvider for RemoteApiProvider {
             .await?;
         lap.mark("headers");
 
-        let status = response.status().as_u16();
         let byte_stream = response.bytes_stream();
         let inline_reasoning = response_wire::inlines_reasoning(request);
         // Carry parser state across the byte-stream's filter_map by
@@ -1142,45 +1140,35 @@ impl InferenceProvider for RemoteApiProvider {
         // mutable state across yields cleanly. Channel-driven actor
         // keeps the parser straightforward.
         let (tx, rx) = tokio::sync::mpsc::channel::<StreamFrame>(32);
-        tokio::spawn(sovereign_contracts::engine_observe::carry_future(
-            async move {
-                use futures::StreamExt;
-                let mut byte_stream = byte_stream;
-                let mut reader = response_wire::SseReader::new(inline_reasoning);
-                // The raw stream, kept only while a conformance sink is installed.
-                let mut raw = sovereign_contracts::engine_observe::is_observing().then(String::new);
-                while !reader.ended() {
-                    let bytes = match byte_stream.next().await {
-                        Some(Ok(bytes)) => bytes,
-                        Some(Err(e)) => {
-                            reader.fail(format!("the stream broke: {e}"));
-                            break;
-                        }
-                        None => break,
-                    };
-                    lap.first("first byte");
-                    if let Some(raw) = raw.as_mut() {
-                        raw.push_str(&String::from_utf8_lossy(&bytes));
+        tokio::spawn(async move {
+            use futures::StreamExt;
+            let mut byte_stream = byte_stream;
+            let mut reader = response_wire::SseReader::new(inline_reasoning);
+            while !reader.ended() {
+                let bytes = match byte_stream.next().await {
+                    Some(Ok(bytes)) => bytes,
+                    Some(Err(e)) => {
+                        reader.fail(format!("the stream broke: {e}"));
+                        break;
                     }
-                    for text in reader.push(&bytes) {
-                        lap.first("first frame parsed");
-                        if tx.send(StreamFrame::Token(text)).await.is_err() {
-                            return;
-                        }
-                    }
-                }
-                if let Some(raw) = raw {
-                    chat_wire::observe_wire_response(status, &raw);
-                }
-                let (tail, terminal) = reader.finish();
-                for text in tail {
+                    None => break,
+                };
+                lap.first("first byte");
+                for text in reader.push(&bytes) {
+                    lap.first("first frame parsed");
                     if tx.send(StreamFrame::Token(text)).await.is_err() {
                         return;
                     }
                 }
-                let _ = tx.send(terminal).await;
-            },
-        ));
+            }
+            let (tail, terminal) = reader.finish();
+            for text in tail {
+                if tx.send(StreamFrame::Token(text)).await.is_err() {
+                    return;
+                }
+            }
+            let _ = tx.send(terminal).await;
+        });
         Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)))
     }
 

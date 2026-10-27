@@ -217,10 +217,9 @@ async fn apply_v04_enrichment(
         // v0.6 §2.13: every span carries the locator its text's writer kept
         // beside it (`oicp_evidence::locator_at`): a transcript's turns today.
         feats.push(features::KNOWLEDGE_LOCATOR.to_string());
-        // v0.6 §2.17: search and verify run under their `priority`, held at
-        // the embed slot and the generation slots' admission
-        // (`sovereign_inference::priority_gate`).
-        feats.push(features::KNOWLEDGE_PRIORITY.to_string());
+        // v0.6 §2.17 `knowledge:priority` is not advertised: the engine slots
+        // that held a background request's step were deleted with the engine
+        // (es-g2), and nothing in front of the router holds one.
         // v0.6 §2.11: sentences from the sentence index
         // (`routes_knowledge_sentences`), scored by the data file's scorer,
         // advertised beside it below; not offered when the file does not read.

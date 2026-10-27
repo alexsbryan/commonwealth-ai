@@ -420,11 +420,7 @@ impl SharedModelSection {
     /// Startup warns on each (`sovereign_serve::apply_shared_model_to_env`)
     /// and does not refuse: a peer's existing config may still carry them.
     pub fn retired_keys(&self) -> Vec<&'static str> {
-        RETIRED_SHARED_MODEL_KEYS
-            .iter()
-            .copied()
-            .filter(|key| self.unread.contains_key(*key))
-            .collect()
+        crate::engine_config::retired_keys_in(&self.unread, RETIRED_SHARED_MODEL_KEYS)
     }
 }
 

@@ -61,8 +61,9 @@ fn empty_knowledge_response() -> KnowledgeSearchResponse {
     }
 }
 
-/// `POST /v1/knowledge/search`, its model work run under the request's
-/// `priority` (v0.6 §2.17; the engine's `priority_gate` holds it).
+/// `POST /v1/knowledge/search`, run under the request's `priority` (v0.6
+/// §2.17), which nothing holds since the engine was deleted; the daemon does
+/// not advertise `knowledge:priority`.
 pub async fn knowledge_search(
     state: State<AppState>,
     attached: Option<axum::Extension<sovereign_contracts::principal::AttachedPrincipal>>,

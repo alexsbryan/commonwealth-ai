@@ -297,8 +297,8 @@ fn the_remote_engine_builds_with_no_weights() {
         structured_output: None,
         embed_inputs: None,
         grammar: None,
-        capture: None,
         server_binary: None,
+        unread: Default::default(),
     };
     // Deliberately absent paths: if this engine touched a GGUF the
     // build would fail, and that failure is the assertion.
@@ -339,8 +339,8 @@ fn a_separate_embedding_server_is_wired_to_its_own_model() {
         structured_output: None,
         embed_inputs: None,
         grammar: None,
-        capture: None,
         server_binary: None,
+        unread: Default::default(),
     };
     let built = build_engine(&config).expect("split chat/embed builds without I/O");
     assert_eq!(

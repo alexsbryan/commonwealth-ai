@@ -21,7 +21,6 @@ pub use oicp_types as oicp;
 pub mod admission_wire;
 pub mod ask_discipline;
 pub mod baselines;
-pub mod call_scope;
 /// `.sovereign/sovereign.toml` — the per-project watcher configuration. Moved
 /// down from `corpus-engine` so a caller that only reads the operator's
 /// watcher posture does not link the knowledge engine; corpus-engine
@@ -47,9 +46,6 @@ pub mod double;
 /// the code-intelligence crate.
 pub mod drift_fingerprint;
 pub mod engine_config;
-/// What an engine did with one request, recorded where it did it, for the
-/// daemon's replay route.
-pub mod engine_observe;
 /// serve's engine-state wire (pb-svrn-dials-serve).
 pub mod engine_state;
 /// Who waits on the request a call serves (OICP v0.6 §2.17), carried with

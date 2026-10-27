@@ -185,7 +185,7 @@ pub fn build_engine(config: &SetupConfig) -> Result<BuiltEngine, String> {
         engine = %kind,
         "constructing the inference engine"
     );
-    let built = match &kind {
+    match &kind {
         EngineKind::Llama => {
             tracing::error!(
                 target: "engine_factory",
@@ -224,14 +224,7 @@ pub fn build_engine(config: &SetupConfig) -> Result<BuiltEngine, String> {
             };
             builder.build(&config.engine)
         }
-    }?;
-    Ok(BuiltEngine {
-        provider: crate::engine_capture::wrap_if_requested(
-            built.provider,
-            config.engine.capture.as_deref(),
-        ),
-        ..built
-    })
+    }
 }
 
 /// The refusal for `kind = "llama"`: what it was and what serves instead.

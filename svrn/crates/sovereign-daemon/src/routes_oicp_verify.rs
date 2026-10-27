@@ -182,8 +182,9 @@ impl Retrieval<'_> {
     }
 }
 
-/// `POST /oicp/v1/verify`, its model work run under the request's `priority`
-/// (v0.6 §2.17; the engine's `priority_gate` holds it).
+/// `POST /oicp/v1/verify`, run under the request's `priority` (v0.6 §2.17),
+/// which nothing holds since the engine was deleted; the daemon does not
+/// advertise `knowledge:priority`.
 pub async fn verify(
     state: State<AppState>,
     principal: Option<Extension<AttachedPrincipal>>,

@@ -674,20 +674,6 @@ pub trait InferenceProvider: Send + Sync {
         Ok(())
     }
 
-    /// Greedy steps with each step's top-k log-probabilities, on a context
-    /// of its own: the engine conformance battery's compute instrument
-    /// (`bench/lanes/engine-swap/conformance.toml`, `compute.logits`). Only
-    /// an engine that holds the weights can answer; the default refuses, and
-    /// a provider that wraps another forwards it.
-    async fn probe_logprobs(
-        &self,
-        _probe: &crate::engine_observe::ProbeRequest,
-    ) -> Result<crate::engine_observe::ProbeAnswer> {
-        Err(Error::NotImplemented(
-            "probe_logprobs: this provider holds no weights to probe".into(),
-        ))
-    }
-
     /// Descriptive metadata (models, relative speed/reasoning, feature support) for display and coarse routing.
     fn capabilities(&self) -> ProviderCapabilities;
 

@@ -19,8 +19,10 @@
 //!   is switched off. This is where an engine lies most easily, because
 //!   every method involved has a plausible-looking default.
 //! - [`check_serving`] drives a real request and needs an engine that can
-//!   actually answer. Run it against the in-process reference engine in
-//!   CI and against a live engine in a smoke lane.
+//!   actually answer. The unit tests below run it against test doubles
+//!   (`EchoEngine` must pass, `DishonestEngine` must fail), and the
+//!   `custom_engine` example runs it against its own engine; no test runs
+//!   it against a shipped engine.
 //!
 //! Both return the violations they found rather than panicking, so a
 //! caller can report all of them at once — a checker that stops at the

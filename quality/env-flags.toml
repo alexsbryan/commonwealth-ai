@@ -631,13 +631,6 @@ status = "guard"
 purpose = "Skip the model-fit VRAM check before load."
 
 [[flag]]
-name = "SOVEREIGN_ROUTER_SLOTS_DEBUG"
-cluster = "inference"
-default = "1 (on)"
-status = "guard"
-purpose = "Hand the supervised llama-server router LLAMA_SERVER_SLOTS_DEBUG, so its `/slots` describes each task rather than only its metrics. The conformance battery's grammar rows read the grammar the router enforced from that description; set 0 to serve the metrics-only form."
-
-[[flag]]
 name = "SOVEREIGN_EXACTVAL_FIX"
 cluster = "inference"
 default = "on"
@@ -1664,6 +1657,14 @@ default = "no effect"
 status = "removed"
 purpose = "Shard-fetch strategy for distributed model load."
 replacement = "retired: the shard fetch went with the mesh fabric (b585dbf4d)"
+
+[[flag]]
+name = "SOVEREIGN_ROUTER_SLOTS_DEBUG"
+cluster = "removed"
+default = "no effect"
+status = "removed"
+purpose = "Handed the supervised llama-server router LLAMA_SERVER_SLOTS_DEBUG, so its `/slots` described each task, for the conformance battery's grammar rows."
+replacement = "retired: nothing reads the router's /slots task description since the engine conformance battery was retired (1ea29871a)"
 
 [[flag]]
 name = "SOVEREIGN_SERVER_PATH"

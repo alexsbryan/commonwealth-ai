@@ -3,7 +3,7 @@
 #   cargo run -p xtask -- clone-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- clone-gate --tighten
-13879	(total covered lines)
+13836	(total covered lines)
 16	bench/crates/sovereign-cli-bench/src/bench_cmd/ablate.rs <-> bench/crates/sovereign-cli-bench/src/bench_cmd/adjudicate.rs
 99	bench/crates/sovereign-cli-bench/src/bench_cmd/ablate.rs <-> bench/crates/sovereign-cli-bench/src/bench_cmd/adjudicate.rs <-> bench/crates/sovereign-cli-bench/src/bench_cmd/chaos_monkey.rs <-> bench/crates/sovereign-cli-bench/src/bench_cmd/faithfulness.rs <-> bench/crates/sovereign-cli-bench/src/bench_cmd/verifier.rs <-> svrn/crates/sovereign-cli-llm/src/judge_replay.rs
 16	bench/crates/sovereign-cli-bench/src/bench_cmd/book_report.rs <-> bench/crates/sovereign-cli-bench/src/bench_cmd/vault_report.rs
@@ -290,10 +290,7 @@
 18	quality/xtask/src/boundary_gate.rs <-> quality/xtask/src/layer_gate.rs
 54	quality/xtask/src/clock_gate.rs <-> quality/xtask/src/layout_gate.rs
 54	quality/xtask/src/judge_funnel_gate.rs <-> quality/xtask/src/lifecycle_gate.rs
-24	serve/crates/sovereign-compute/src/engine_capture.rs <-> serve/crates/sovereign-compute/src/llama_router/provider.rs
-24	serve/crates/sovereign-compute/src/engine_capture.rs <-> serve/crates/sovereign-compute/src/llama_router/provider.rs <-> svrn/crates/sovereign-cli-llm/src/probe_cmd/resource_meter.rs
-16	serve/crates/sovereign-compute/src/engine_capture.rs <-> serve/crates/sovereign-compute/src/manager.rs
-28	serve/crates/sovereign-compute/src/engine_capture.rs <-> svrn/crates/sovereign-cli-llm/src/probe_cmd/resource_meter.rs
+16	serve/crates/sovereign-compute/src/llama_router/provider.rs <-> svrn/crates/sovereign-cli-llm/src/probe_cmd/resource_meter.rs
 24	serve/crates/sovereign-compute/src/manager.rs <-> svrn/crates/sovereign-cli-llm/src/probe_cmd/resource_meter.rs
 18	serve/crates/sovereign-serving-host/src/admission.rs <-> svrn/crates/sovereign-daemon/src/admission/layers.rs
 36	serve/crates/sovereign-serving-host/src/fim_http.rs <-> svrn/crates/sovereign-daemon/src/openai_http.rs

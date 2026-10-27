@@ -252,6 +252,15 @@ pub fn assemble_serving(config: &SetupConfig) -> Result<ServingParts, AssemblyEr
 impl ReloadFactory {
     /// Plan, admit and build.
     pub fn build(self: &Arc<Self>, config: &SetupConfig) -> Result<ServingParts, AssemblyError> {
+        // Named, never refused: an existing config may still carry one.
+        for key in config.engine.retired_keys() {
+            tracing::warn!(
+                target: "serving_assembly",
+                key,
+                "[engine] {key} has no effect since the engine conformance battery was retired \
+                 (1ea29871a); remove it from the config"
+            );
+        }
         // A hosted pair is SERVED, by the router: every model process is the
         // router's now (ENGINE_SWAP_PLAN A6), so the vendor chat stays remote
         // and the embedding GGUF becomes its one preset section. Moved here,
@@ -411,17 +420,14 @@ impl ReloadFactory {
             None => None,
         };
         let router = running_router.or_else(|| started_router.clone());
-        // The remote half is built from the live router's section; capture,
-        // a property of the node, carries over.
+        // The remote half is built from the live router's section.
         let engine_config = match (&router, &plan.router) {
             (Some(live_router), Some(preset)) => {
                 let mut derived = config.clone();
-                let capture = derived.engine.capture.take();
                 derived.engine = match is_hosted_pair(config) {
                     true => preset.hosted_pair_section(&live_router.endpoint_v1(), &config.engine),
                     false => preset.engine_section(&live_router.endpoint_v1()),
                 };
-                derived.engine.capture = capture;
                 // A one-section preset serves no chat model: 0 is "no chat context here",
                 // the key `unhostable_on_router` reads as a served one-section preset.
                 if preset.primary().is_none() {

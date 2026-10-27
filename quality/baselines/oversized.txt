@@ -53,7 +53,7 @@
 1232	ingest/crates/sovereign-pipeline/src/enrich_cmd/init.rs
 1546	serve/crates/sovereign-scheduler/src/decision_log.rs
 1394	serve/crates/sovereign-scheduler/src/scheduler_core.rs
-1394	serve/crates/sovereign-serving-host/src/inference_adapter.rs
+1388	serve/crates/sovereign-serving-host/src/inference_adapter.rs
 1292	serve/crates/sovereign-serving-host/src/oicp_synthesis.rs
 4827	serve/crates/sovereign-serving-host/src/peer_inference.rs
 1361	shared/crates/corpus-engine-scip/src/converge.rs
@@ -63,7 +63,7 @@
 1289	shared/crates/corpus-index/src/index/search.rs
 1568	shared/crates/kernel-types/src/quality/instruments.rs
 2448	shared/crates/oicp-client/src/lib.rs
-1939	shared/crates/sovereign-contracts/src/setup_config.rs
+1935	shared/crates/sovereign-contracts/src/setup_config.rs
 1540	shared/crates/sovereign-contracts/src/skills.rs
 2088	shared/crates/sovereign-contracts/src/traits.rs
 1800	shared/crates/sovereign-contracts/src/types/mod.rs

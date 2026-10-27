@@ -70,8 +70,6 @@ libc = "0.2"
 
 [dev-dependencies]
 tempfile = { workspace = true }
-# `engine_capture`'s test records through `double::TestProvider`.
-sovereign-contracts = { workspace = true, features = ["test-fixtures"] }
 tower = { workspace = true, features = ["util"] }
 
 [lints]
