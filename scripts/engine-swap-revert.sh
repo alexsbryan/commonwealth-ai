@@ -18,6 +18,9 @@ if [ -z "$pre" ] || [ -z "$post" ]; then
   exit 2
 fi
 echo "engine-swap-revert: reversing G, ${pre%"${pre#?????????}"}..${post%"${post#?????????}"}, outside ralph/" >&2
-git diff --binary "$post" "$pre" -- . ':(exclude)ralph' | git apply -3 --index
+# apply --index trusts stat data: after a rebuild or a fresh checkout's touch it
+# refuses every file as "does not match index" (es-g-revert-drill, 158 files).
+git update-index -q --refresh >/dev/null || :
+git diff --binary "$post" "$pre" -- . ':(exclude)ralph' | git apply -3 --index --whitespace=nowarn
 git diff --cached --shortstat
 echo "engine-swap-revert: applied; commit it, set [engine] kind = \"llama\", rebuild the workspace" >&2
