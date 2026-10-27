@@ -25,7 +25,7 @@ use crate::oicp::CapabilityProfile;
 
 /// Detected hardware capabilities used for model loading decisions.
 ///
-/// Detection itself stays where the probe is: `sovereign_inference::hardware::
+/// Detection itself stays where the probe is: `sovereign_compute::hardware::
 /// detect_hardware()` reads `sysinfo` and the shipped llama-server's devices,
 /// neither of which belongs at this layer. An inherent `impl` cannot cross a
 /// crate boundary, which is why `detect` is a free function there rather than

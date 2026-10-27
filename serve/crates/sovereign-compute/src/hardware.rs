@@ -86,7 +86,7 @@ fn detect_gpu() -> (bool, Option<String>, Option<u64>, bool) {
         // reading names no GPU and no memory; the probe warned why.
         #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
         {
-            let seen = crate::gpu_probe::observed();
+            let seen = sovereign_inference::gpu_probe::observed();
             match seen.first_gpu() {
                 Ok(Some(dev)) => (
                     true,

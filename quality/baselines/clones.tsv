@@ -290,11 +290,11 @@
 18	quality/xtask/src/boundary_gate.rs <-> quality/xtask/src/layer_gate.rs
 54	quality/xtask/src/clock_gate.rs <-> quality/xtask/src/layout_gate.rs
 54	quality/xtask/src/judge_funnel_gate.rs <-> quality/xtask/src/lifecycle_gate.rs
-24	serve/crates/sovereign-compute/src/llama_router/provider.rs <-> serve/crates/sovereign-inference/src/engine_capture.rs
-24	serve/crates/sovereign-compute/src/llama_router/provider.rs <-> serve/crates/sovereign-inference/src/engine_capture.rs <-> svrn/crates/sovereign-cli-llm/src/probe_cmd/resource_meter.rs
-16	serve/crates/sovereign-compute/src/manager.rs <-> serve/crates/sovereign-inference/src/engine_capture.rs
+24	serve/crates/sovereign-compute/src/engine_capture.rs <-> serve/crates/sovereign-compute/src/llama_router/provider.rs
+24	serve/crates/sovereign-compute/src/engine_capture.rs <-> serve/crates/sovereign-compute/src/llama_router/provider.rs <-> svrn/crates/sovereign-cli-llm/src/probe_cmd/resource_meter.rs
+16	serve/crates/sovereign-compute/src/engine_capture.rs <-> serve/crates/sovereign-compute/src/manager.rs
+28	serve/crates/sovereign-compute/src/engine_capture.rs <-> svrn/crates/sovereign-cli-llm/src/probe_cmd/resource_meter.rs
 24	serve/crates/sovereign-compute/src/manager.rs <-> svrn/crates/sovereign-cli-llm/src/probe_cmd/resource_meter.rs
-28	serve/crates/sovereign-inference/src/engine_capture.rs <-> svrn/crates/sovereign-cli-llm/src/probe_cmd/resource_meter.rs
 18	serve/crates/sovereign-serving-host/src/admission.rs <-> svrn/crates/sovereign-daemon/src/admission/layers.rs
 36	serve/crates/sovereign-serving-host/src/fim_http.rs <-> svrn/crates/sovereign-daemon/src/openai_http.rs
 22	serve/crates/sovereign-serving-host/src/oicp_synthesis.rs <-> svrn/crates/sovereign-daemon/src/routes_oicp.rs

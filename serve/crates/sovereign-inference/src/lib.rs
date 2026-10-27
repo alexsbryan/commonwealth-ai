@@ -1,11 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pub mod capacity;
-pub mod cpu_compat;
-pub mod engine_capture;
 pub use sovereign_contracts::gguf_meta;
 pub use sovereign_contracts::gguf_validator;
 pub mod gpu_probe;
-pub mod hardware;
 // `remote.rs` was extracted wholesale to the `oicp-client` crate (pure-HTTP
 // OICP client, no llama.cpp). Re-exported here so `sovereign_inference::remote::*`
 // (RemoteApiProvider, SplitInferenceProvider, …) is unchanged for all callers.

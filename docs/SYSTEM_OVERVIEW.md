@@ -148,7 +148,7 @@ serve/crates/
 ├── serving-policy                 # Re-export shim for the serving-policy arithmetic (tier-0)
 ├── sovereign-compute              # Supervised compute-child boundary — crash isolation, not parallelism
 ├── sovereign-gliner               # GLiNER (ONNX) NER — the NER served kind's loader (sovereign-compute `ner`, once per process); port in sovereign-contracts `ner`, chunk adapter in corpus-engine
-├── sovereign-inference            # llama.cpp slots, remote OpenAI-compat, hybrid, idle residency
+├── sovereign-inference            # The shipped llama-server's GPU probe, the priority gate, the `remote` OICP client re-export (hardware, capacity, cpu_compat, engine_capture moved to sovereign-compute)
 ├── sovereign-scheduler            # Serving's pure tier — ranker, decision records, replay ("The two tiers", SERVING_BOUNDARY.md)
 ├── sovereign-serve                # `serve`, the model server binary — the OpenAI wire alone (no mesh, no cw-rails) over the one serving assembly
 └── sovereign-serving-host         # Serving's host tier — peer_inference, admission, turn_admission, entry_endpoint

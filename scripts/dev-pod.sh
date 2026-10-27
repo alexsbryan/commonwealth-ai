@@ -340,7 +340,7 @@ SUPPORTED_GPUS='A100|A6000|A40|A10|RTX 3090|RTX 4090|6000Ada|5880Ada|L40|H100|H2
 # 48 GB boxes for a loadout that needs 70, and the mismatch would surface after
 # the pull, the boot and the bill. They are now DERIVED from the loadout by the
 # same estimator the daemon's own boot preflight uses
-# (`sovereign_inference::capacity`, via `svrn daemon vram-plan`), so the box
+# (`sovereign_compute::capacity`, via `svrn daemon vram-plan`), so the box
 # that gets rented tracks whatever models are configured above.
 #
 # There is no fallback number here on purpose. If the estimator cannot be

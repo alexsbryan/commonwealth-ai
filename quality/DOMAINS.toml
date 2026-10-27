@@ -13573,13 +13573,13 @@ lines = 771
 note = "collaborative-ingestion planner: assigns ingest shards/work units across embed-model-compatible mesh peers. Moved here from sovereign-serving by REVIEW-build-knowledge-assignment (2026-09-15). It names commonwealth-core (mesh-foundation, tier 2), so corpus-engine (knowledge, tier 1) cannot host it; sovereign-grants is tier 2, already depends on corpus-engine, and owns the ShardManager/WorkQueueManager that consume its IngestionHandoff/WorkUnit output (shard_manager.rs:8, work_queue.rs:15-25)"
 
 [[module]]
-path = "serve/crates/sovereign-inference/src/capacity.rs"
+path = "serve/crates/sovereign-compute/src/capacity.rs"
 context = "unknown"
 lines = 747
 note = ""
 
 [[module]]
-path = "serve/crates/sovereign-inference/src/cpu_compat.rs"
+path = "serve/crates/sovereign-compute/src/cpu_compat.rs"
 context = "unknown"
 lines = 302
 note = ""
@@ -13711,7 +13711,7 @@ lines = 61
 note = ""
 
 [[module]]
-path = "serve/crates/sovereign-inference/src/hardware.rs"
+path = "serve/crates/sovereign-compute/src/hardware.rs"
 context = "unknown"
 lines = 130
 note = ""

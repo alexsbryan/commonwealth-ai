@@ -101,11 +101,11 @@
 63509	scripts
 2	serve/crates/serving-policy
 8876	serve/crates/sovereign-compute
-1848	serve/crates/sovereign-compute::tests
+2249	serve/crates/sovereign-compute::tests
 787	serve/crates/sovereign-gliner
 1340	serve/crates/sovereign-gliner::tests
-1404	serve/crates/sovereign-inference
-1827	serve/crates/sovereign-inference::tests
+772	serve/crates/sovereign-inference
+1426	serve/crates/sovereign-inference::tests
 2561	serve/crates/sovereign-scheduler
 2344	serve/crates/sovereign-scheduler::tests
 3765	serve/crates/sovereign-serve

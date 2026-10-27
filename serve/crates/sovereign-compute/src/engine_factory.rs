@@ -226,7 +226,7 @@ pub fn build_engine(config: &SetupConfig) -> Result<BuiltEngine, String> {
         }
     }?;
     Ok(BuiltEngine {
-        provider: sovereign_inference::engine_capture::wrap_if_requested(
+        provider: crate::engine_capture::wrap_if_requested(
             built.provider,
             config.engine.capture.as_deref(),
         ),

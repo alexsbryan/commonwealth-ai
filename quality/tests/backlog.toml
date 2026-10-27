@@ -862,7 +862,7 @@ found = "2026-08-25"
 class = "resource-ceiling"
 tier = 1
 surface = "rust-unit"
-target = "sovereign-inference/src/hardware.rs"
+target = "sovereign-compute/src/hardware.rs"
 failure = """Host memory ceiling root-caused after SIX OOM kills in 24 hours,
 four of them overnight. The accounting that would have predicted them existed
 nowhere — the daemon sized its loads against a figure that did not include what
@@ -879,7 +879,7 @@ found = "2026-08-24"
 class = "resource-ceiling"
 tier = 1
 surface = "rust-unit"
-target = "sovereign-inference/src/hardware.rs"
+target = "sovereign-compute/src/hardware.rs"
 failure = """THE DAEMON IS THE DESIGNATED OOM VICTIM ON THIS HOST, root-caused
 from the kernel log. It supersedes a half-explanation that blamed cargo builds.
 The daemon's OOM score makes it the first thing killed under pressure, which

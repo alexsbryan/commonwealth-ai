@@ -12487,6 +12487,7 @@ dependencies = [
  "sovereign-inference",
  "sovereign-serving-host",
  "sovereign-time",
+ "sysinfo 0.34.2",
  "tempfile",
  "tokio",
  "tokio-util",
@@ -12811,8 +12812,6 @@ dependencies = [
 name = "sovereign-inference"
 version = "0.8.0"
 dependencies = [
- "async-trait",
- "futures",
  "llguidance",
  "oicp-client",
  "oicp-types",
@@ -12820,8 +12819,6 @@ dependencies = [
  "serde_json",
  "sovereign-contracts",
  "sovereign-time",
- "sysinfo 0.34.2",
- "tempfile",
  "tokio",
  "tracing",
  "workspace-hack",
