@@ -6,11 +6,8 @@
 //! - [`RailsRoster`] is THE roster reader over cw-rails' `GET /v1/mesh/status`
 //!   (the `MembershipReader` port pb-serve-ranks and pb-mesh-exit-transport
 //!   reuse).
-//! - [`mesh_ports`] builds the `MeshPorts` compute's distribution runs over:
-//!   that roster, `mesh_reach::rails::RailsTransport` for every peer dial,
-//!   serve's own listener as the model origin.
 //! - [`spawn_registrations`] puts serve's origins in cw-rails' origin table
-//!   (rpc, `/internal/v1/models/*`, `/internal/rpc-warm`; phase-b-19, and the
+//!   (`/internal/v1/models/*`; phase-b-19, and the
 //!   member client on `cwth/client/0`, pb-serve-ranks), through the one
 //!   register/renew loop, so the flip turns none of them off.
 //!
@@ -21,7 +18,6 @@
 //! (phase-b-33) and runs none of this.
 
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -30,14 +26,13 @@ use kernel_types::NodeId;
 use mesh_reach::rails::RailsTransport;
 use mesh_reach::{PeerContact, PeerTransport};
 use oicp_types::capabilities::{
-    AnchorProfile, AvailableResources, ComputeType, GpuInfo, HardwareProfile, NodeCapabilities,
+    AvailableResources, ComputeType, GpuInfo, HardwareProfile, NodeCapabilities,
 };
 use oicp_types::origin::{Admit, Framing, OriginRegistration};
 use oicp_types::FederatedMeshDescriptor;
 use serde::Deserialize;
 use sovereign_contracts::daemon_wire::mesh::MemberStatus;
 use sovereign_contracts::membership::{MembershipEntry, MembershipReader};
-use sovereign_serving_host::rpc_discovery::{MeshNow, MeshPorts, ModelOrigin, RpcWorkerDiscovery};
 use tracing::{debug, info, warn};
 
 /// The trace target of every event here.
@@ -52,10 +47,7 @@ const ORIGIN_TTL_SECS: u64 = 60;
 const ORIGIN_RENEW_EVERY: Duration = Duration::from_secs(ORIGIN_TTL_SECS / 3);
 
 /// The HTTP paths serve answers for peers, registered on `cwth/http/0`.
-pub const PEER_PREFIXES: [&str; 2] = ["/internal/v1/models", RPC_WARM_PATH];
-
-/// The worker side of the shard warm (`crate::rpc_warm`).
-pub const RPC_WARM_PATH: &str = "/internal/rpc-warm";
+pub const PEER_PREFIXES: [&str; 1] = ["/internal/v1/models"];
 
 #[derive(Deserialize)]
 struct StatusDoc {
@@ -281,8 +273,7 @@ impl MembershipReader for RailsRoster {
 
 /// cw-rails' roster and reach door at `rails_base`, as the ports a program
 /// that is not the mesh endpoint reads the mesh through: the stock binary
-/// hands these to svrn's daemon (pb-mesh-exit-transport, phase-b-80 fork 1),
-/// the same pair [`mesh_ports`] builds for serve's distribution.
+/// hands these to svrn's daemon (pb-mesh-exit-transport, phase-b-80 fork 1).
 pub fn rails_ports(
     rails_base: &str,
 ) -> (
@@ -292,68 +283,6 @@ pub fn rails_ports(
     let roster = RailsRoster::new(rails_base);
     let transport: Arc<dyn PeerTransport> = Arc::new(RailsTransport::new(roster.base()));
     (Arc::new(roster), transport)
-}
-
-/// The mesh ports a standalone serve hands its distribution: cw-rails'
-/// roster, `RailsTransport` over cw-rails' reach door, and serve's own
-/// listener (`listen`) as the model origin. A cw-rails that does not answer
-/// makes every tick "the mesh is not up" (warned once, then `debug`).
-pub fn mesh_ports(roster: RailsRoster, listen: SocketAddr) -> MeshPorts {
-    let transport: Arc<dyn PeerTransport> = Arc::new(RailsTransport::new(roster.base()));
-    let reader = Arc::new(roster);
-    let told = Arc::new(AtomicBool::new(false));
-    let origin_base = format!("http://{}", origin_addr(listen));
-    MeshPorts {
-        mesh: Arc::new(move || {
-            let reader = Arc::clone(&reader);
-            let transport = Arc::clone(&transport);
-            let told = Arc::clone(&told);
-            Box::pin(async move {
-                match reader.read().await {
-                    Ok(r) => {
-                        told.store(false, Ordering::Relaxed);
-                        debug!(target: TARGET, mesh = %r.mesh_name, me = %r.self_id.to_hex(),
-                               members = r.members.len(), "rails roster read");
-                        Some(MeshNow {
-                            roster: reader as Arc<dyn MembershipReader<Dial = PeerContact>>,
-                            transport,
-                            self_id: r.self_id,
-                        })
-                    }
-                    Err(e) if !told.swap(true, Ordering::Relaxed) => {
-                        warn!(target: TARGET, error = %e,
-                              "no mesh: cw-rails' roster is unreadable, so serve distributes \
-                               nothing until it answers");
-                        None
-                    }
-                    Err(e) => {
-                        debug!(target: TARGET, error = %e, "no mesh: cw-rails' roster still unreadable");
-                        None
-                    }
-                }
-            })
-        }),
-        on_host_role: Arc::new(|am_host| {
-            info!(target: TARGET, am_host, "shared-model host role");
-        }),
-        discovery: Arc::new(RpcWorkerDiscovery::default()),
-        // Peers fetch model files through cw-rails (`/internal/v1/models` is
-        // registered on `cwth/http/0`); this raw base is the fallback a
-        // worker on this host reaches directly.
-        model_origin: Arc::new(move || {
-            let base = origin_base.clone();
-            Box::pin(async move {
-                ModelOrigin {
-                    internal_port: listen.port(),
-                    bases: vec![base],
-                }
-            })
-        }),
-        // No mesh credential: serve holds no mesh key. A peer's request
-        // reaches serve through cw-rails, which admits members only and
-        // forwards the verified identity with the origin's tie.
-        proof: Arc::new(|| Box::pin(async { None })),
-    }
 }
 
 /// The venues a standalone serve ranks, and the host its router asks: cw-rails'
@@ -427,31 +356,16 @@ impl sovereign_contracts::venue_host::VenueHost for RailsVenues {
     }
 }
 
-/// Where a peer on this host reaches serve's listener: an unspecified bind
-/// is reached on loopback.
-fn origin_addr(listen: SocketAddr) -> SocketAddr {
-    if listen.ip().is_unspecified() {
-        SocketAddr::from(([127, 0, 0, 1], listen.port()))
-    } else {
-        listen
-    }
-}
-
 /// serve's origins as cw-rails' origin table takes them: the model-transfer
-/// and rpc-warm prefixes on `cwth/http/0` at serve's listener, its member
+/// prefix on `cwth/http/0` at serve's listener, its member
 /// client (`crate::openai_face`) whole on `cwth/client/0` at that
-/// listener (`member`), where the Inference and StatusProbe classes arrive,
-/// and, when
-/// this node lends a GPU (`SOVEREIGN_RPC_SERVE` names a bind), its ggml rpc
-/// worker on `cwth/rpc/0`, declaring the anchor record peers' discovery reads.
+/// listener (`member`), where the Inference and StatusProbe classes arrive.
 /// The `cwth/http/0` one declares the loader's VRAM figure ([`vram_claims`]).
+/// The ggml rpc worker on `cwth/rpc/0` was deleted with the mesh fabric
+/// (es-g4-delete-mesh-fabric): a distributed model's peers are static
+/// endpoints, not origins found on the roster.
 pub fn registrations(listen: SocketAddr, member: Option<SocketAddr>) -> Vec<OriginRegistration> {
-    registrations_for(
-        listen,
-        member,
-        sovereign_contracts::launch::RpcServe::from_env(),
-        local_vram_gb(),
-    )
+    registrations_for(listen, member, local_vram_gb())
 }
 
 /// This node's GPU memory in whole GB from the published GPU probe
@@ -467,7 +381,6 @@ fn local_vram_gb() -> Result<Option<u32>, String> {
 fn registrations_for(
     listen: SocketAddr,
     member: Option<SocketAddr>,
-    rpc: sovereign_contracts::launch::RpcServe,
     vram_gb: Result<Option<u32>, String>,
 ) -> Vec<OriginRegistration> {
     let mut out = vec![OriginRegistration {
@@ -477,7 +390,7 @@ fn registrations_for(
         admit: Admit::Members(Vec::new()),
         framing: Framing::Http,
         ttl_secs: Some(ORIGIN_TTL_SECS),
-        claims: Some(vram_claims(vram_gb.clone().ok().flatten())),
+        claims: Some(vram_claims(vram_gb.ok().flatten())),
         namespaces: Vec::new(),
     }];
     match member {
@@ -500,22 +413,6 @@ fn registrations_for(
         }),
         None => warn!(target: TARGET, "no member client: serve registers nothing on cwth/client/0"),
     }
-    match rpc.port() {
-        Some(port) if rpc.is_serving() => out.push(OriginRegistration {
-            alpn: String::from_utf8_lossy(mesh_reach::alpn::RPC_ALPN).into_owned(),
-            prefixes: Vec::new(),
-            port,
-            admit: Admit::Members(Vec::new()),
-            // ggml's rpc-server speaks raw bytes, not HTTP.
-            framing: Framing::Bytes,
-            ttl_secs: Some(ORIGIN_TTL_SECS),
-            claims: anchor_claims(port, rpc.binds_past_loopback(), vram_gb),
-            namespaces: Vec::new(),
-        }),
-        _ => {
-            debug!(target: TARGET, "no rpc worker bind: serve lends no GPU and registers no rpc origin")
-        }
-    }
     out
 }
 
@@ -535,44 +432,6 @@ fn vram_claims(vram_gb: Option<u32>) -> NodeCapabilities {
         .into_iter()
         .collect();
     claims
-}
-
-/// The anchor record this node declares through its rpc registration, which
-/// cw-rails merges into its gossiped capabilities (`origins::merge_declared`).
-/// Every other number is zero, as cw-rails' own report is: this declaration
-/// claims the anchor tier and nothing about inference. An unknown VRAM
-/// figure declares no anchor rather than a CPU-only one.
-fn anchor_claims(
-    rpc_port: u16,
-    rpc_direct: bool,
-    vram_gb: Result<Option<u32>, String>,
-) -> Option<NodeCapabilities> {
-    let vram_gb = match vram_gb {
-        // `0` for a CPU-only anchor, the field's documented reading.
-        Ok(vram_gb) => vram_gb.unwrap_or(0),
-        Err(why) => {
-            warn!(target: TARGET, %why, "GPU memory unknown: the rpc origin declares no anchor record");
-            return None;
-        }
-    };
-    Some(NodeCapabilities {
-        anchor: Some(AnchorProfile {
-            can_anchor: true,
-            vram_gb,
-            model_resident: sovereign_contracts::launch::SharedModelFleet::from_env()
-                .model_id()
-                .map(str::to_string),
-            rpc_port: Some(rpc_port),
-            // cw-rails forwards `cwth/rpc/0` to the worker: a host bridges to
-            // it when no direct address answers.
-            rpc_iroh: true,
-            // Only a bind past loopback (plaintext LAN, operator-allowed) is
-            // reachable at this node's own address; any other worker is
-            // reached over the bridge, which proves the member.
-            rpc_direct,
-        }),
-        ..zero_claims()
-    })
 }
 
 /// A declaration with every number zero and no anchor.
@@ -612,31 +471,17 @@ fn zero_claims() -> NodeCapabilities {
 }
 
 /// serve on the node's mesh, through cw-rails alone (pb-serve-distributes-
-/// standalone): discovery and the warm orchestrator over its roster and
-/// reach, the worker's rpc-warm on serve's routes, the member client on a
-/// loopback port of its own, and serve's origins in cw-rails' origin table.
-/// The standalone serve and the stock binary's hosted serve both run this
-/// (pb-mesh-exit-transport), so a stock node offers members what a
-/// standalone serve does. With no cw-rails answering, every discovery tick
-/// scans nothing and the registrations retry; the OpenAI wire serves this
-/// node's own models.
+/// standalone): the member client on a loopback port of its own, and serve's
+/// origins in cw-rails' origin table. The standalone serve and the stock
+/// binary's hosted serve both run this (pb-mesh-exit-transport), so a stock
+/// node offers members what a standalone serve does. With no cw-rails
+/// answering, the registrations retry; the OpenAI wire serves this node's own
+/// models.
 pub async fn join(
     rails_base: &str,
     listen: SocketAddr,
     local: Arc<dyn sovereign_contracts::InferenceProvider>,
-    router: Arc<sovereign_serving_host::peer_inference::InferenceRouter>,
-    distribute: sovereign_serving_host::rpc_discovery::Distribute,
-    servable: sovereign_serving_host::state::ServableModelFilesReader,
-    routes: &mut Vec<host_kit::shell::RouteBundle>,
 ) {
-    let roster = RailsRoster::new(rails_base);
-    info!(target: TARGET, rails = %rails_base, "distribution over cw-rails' roster and reach");
-    distribute(mesh_ports(roster.clone(), listen), router);
-    routes.push(crate::rpc_warm::bundle(
-        servable,
-        roster,
-        Arc::new(crate::MeshRpcShardWarmer::new()),
-    ));
     // The member client on a loopback port of its own, registered whole on
     // cw-rails' `cwth/client/0`: a member's router reaches this node's
     // models there and nothing else of serve's. Without it serve still

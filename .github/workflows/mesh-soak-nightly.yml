@@ -62,37 +62,16 @@ jobs:
           # Read the CI test job's dependency cache; nightly never writes it.
           shared-key: workspace
           save-if: false
-      # See ci.yml's test job: the CMake tree is cached separately from
-      # rust-cache (whose cleanup would delete it); the guard forces a
-      # rebuild instead of a link failure if the tree is missing.
-      - name: Cache llama.cpp CMake tree
-        uses: actions/cache@v6
-        with:
-          path: target/llama-cmake-cache
-          key: llama-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
-      - name: Guard llama fingerprint vs missing CMake tree
-        shell: bash
-        run: |
-          if ! ls target/llama-cmake-cache/*/lib*/libllama.* >/dev/null 2>&1; then
-            rm -rf target/*/.fingerprint/llama-cpp-sys-4-* 2>/dev/null || true
-          fi
       # Full Linux native stack (mirrors ci.yml's check+test job — keep in sync):
-      # mold/clang are the pinned linker, the LunarG Vulkan SDK is a build
-      # dep of ggml (Linux hardcodes llama-cpp-4/vulkan), and `--bins`
-      # includes the Tauri desktop binary → webkit2gtk.
+      # mold/clang are the pinned linker, and `--bins` includes the Tauri
+      # desktop binary → webkit2gtk. No Vulkan SDK: no workspace crate builds
+      # ggml since ENGINE_SWAP_PLAN G3.
       - name: System deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y ca-certificates curl gnupg
-          curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
-            | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
-          curl -fsSL "https://packages.lunarg.com/vulkan/lunarg-vulkan-$(lsb_release -cs).list" \
-            | sudo tee /etc/apt/sources.list.d/lunarg-vulkan.list >/dev/null
-          sudo apt-get update
           sudo apt-get install -y \
             protobuf-compiler libprotobuf-dev cmake mold clang \
-            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
-            libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev
       - name: Build CLI
         run: cargo build --bins
       - name: Soak

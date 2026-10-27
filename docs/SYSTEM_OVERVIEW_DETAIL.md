@@ -53,8 +53,8 @@ commonwealth-ai/
 └── clients/mobile/          # Thin Tauri 2 mobile client (iOS + Android), tailnet or iroh dial-by-key
 ```
 
-Supporting directories outside the project tree: `vendor/` (pinned
-`llama-cpp-4`), `scripts/` (CI bench + corpus setup), `docs/`,
+Supporting directories outside the project tree: `vendor/` (patched
+`lance-linalg`), `scripts/` (CI bench + corpus setup), `docs/`,
 `clients/landing/`, `gym/`, `baselines/`, and `quality/xtask` (the
 docs-gate / arch-gate CI binaries, plus the workspace-hygiene
 generators in `xtask/tests/` — the requirement registry and the
@@ -3921,8 +3921,10 @@ adapters, cutoff legibility, conversation-history compaction — in
 
 **Which engine serves this node — `[engine]` (2026-08-30).** llama.cpp is the
 default engine, not the only one, and the choice is config rather than code.
-`sovereign_inference::engine_factory::build_engine(&SetupConfig)` is the ONE
-place that turns `[engine] kind` into an `Arc<dyn InferenceProvider>`; before
+`sovereign_compute::engine_factory::build_engine(&SetupConfig)` is the ONE
+place that turns `[engine] kind` into an `Arc<dyn InferenceProvider>` (it moved
+from `sovereign-inference` in ENGINE_SWAP_PLAN G1, beside the serving assembly
+that calls it); before
 it, five construction sites named `EmbeddedLlamaCpp` literally and `SetupConfig`
 had no key that could say otherwise.
 
@@ -4017,20 +4019,19 @@ had no key that could say otherwise.
   deliberately nonexistent `[models]` paths booted, served `/v1/chat/completions`
   (streaming and not), `/v1/embeddings` and `/v1/models`, opened zero GGUF file
   handles, and reported `loaded_models: []` on `/status`.
-- **What is NOT gated:** `llama-cpp-4` is still an unconditional dependency of
-  `sovereign-inference`, so every build compiles ggml regardless of `[engine]`.
-  Making it optional is a build-time win only, and measured 2026-08-30 it would
-  need `#[cfg]` at 65 downstream sites across 8 crates that name
-  `sovereign_inference::embedded` concretely. Deliberately not done.
+- **No build compiles ggml any more.** `llama-cpp-4` was an unconditional
+  dependency of `sovereign-inference` until the embedded engine was deleted
+  (ENGINE_SWAP_PLAN G2) and the vendored crates with it (G3).
 
 **Serving a model bigger than the GPU can hold — `qwen4exp` / Qwen3.8-Flash-Next
 (2026-08-27).** 176B total / ~6B active: a 125B transformer plus a **51.2B n-gram
 engram**, 103.7 GiB across four GGUF parts, on a 128 GB unified-memory box. Three
 facts make it work and each is easy to break.
 
-- **The arch is vendored ahead of upstream.** `LLM_ARCH_QWEN4EXP` comes from
-  ggml-org/llama.cpp#27742, pinned in `vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT`.
-  A build whose bundled llama.cpp predates it cannot load the model at all.
+- **The arch is pinned ahead of upstream.** `LLM_ARCH_QWEN4EXP` comes from
+  ggml-org/llama.cpp#27742; the llama-server's pin is
+  `serve/crates/sovereign-compute/llama-server/PIN.toml`. A build whose
+  llama.cpp predates it cannot load the model at all.
 - **26.8 GiB of it never reaches the GPU, and that is the only reason it fits.**
   `per_layer_token_embd` — one IQ4_NL tensor, `[160, 320001536]` — stays in the
   mmap on plain pageable CPU. Measured resident split: 81.9 GiB GTT + 27.0 GiB
@@ -4113,33 +4114,42 @@ section, and `[models]` may be absent on a router node because the preset is
 its model list. With neither, the node is refused at plan time rather than
 started serving nothing.
 
-**The distributed primary in a child (`[compute] distributed_primary`, default
-OFF).** The payoff the boundary was built for. Distributing a primary across
-mesh workers puts ggml's error-path-free RPC client inside the daemon: a worker
-that dies mid-decode (`ggml-rpc.cpp:491`), or one already gone when the
-prune-reload frees its buffers (`:386` — this killed the daemon live on
-2026-07-27, from the shrink-fast-prune path meant to protect it), SIGABRTs the
-whole process. In this mode the daemon **withholds the primary entirely**
-(`primary_path: None`, so no in-process path can lazily load it) and a
-`DynamicChildSlot` owns it instead. The division of labour is forced by reach:
-only the daemon can warm (the orchestrator needs the mesh member directory + the
-iroh transport), only the child should load. So the daemon plans + warms via
-`warm_distributed_primary` — the extracted shared tail of
-`resolve_placement_inner`, one code path for both — writes a
-`DistributionHandoff {endpoints, plan}` JSON, and spawns a child with
-`SOVEREIGN_RPC_ASSUME_WARMED=1` that pins that plan (`pin_shard_plan`) before
-loading via `EmbeddedLlamaCpp::load_single_distributed`. Shipping the *plan*, not
-just the worker list, is what extends the plan-agreement invariant across the
-process boundary: the shard cache is process-local, and a child that re-planned
-against post-warm VRAM would cut the blocks differently, miss every warm cache,
-and fall back to bulk weight send. Worker-set changes are **kill + respawn**, not
-reload — the discovery loop respawns the child instead of calling
-`reload_primary()`. `ComputeRoutedProvider` claims primary-class traffic (named
-primary, or unnamed at `Speed::Slow`/`Medium`; never unnamed `Speed::Fast`, which
-the in-process fast slot still owns) and never falls back to `inner` for it —
-the answer while the cluster re-forms is a fail-fast `ComputeUnavailable` → mesh
-cascade → clean 503. `/status` shows the primary as `mode: "child-distributed"`.
-Respawn acceptance: `distributed_primary_respawn_e2e.rs`.
+**The sampler policy is two numbers, and it stays (ENGINE_SWAP_PLAN C1).**
+The engine-swap plan asked whether the router needed the `ModelQuirks` tuple
+sampling on `llama-server`'s own defaults. Measured 2026-10-26: it does, but
+only two parameters moved — the primary slot's repeat 1.15 and frequency 0.1.
+Without them the router failed chat-ask q1 ("both halves answered") 0 of 3
+runs in all three quality checks that ran it; with them it passed 19 of 19.
+Nothing else in the tuple is sent and E1's performance bar passed without it,
+so the tuple is not a policy the router carries: it is
+`sovereign_contracts::model_family::quirks_repeat_penalties`, one pairing
+function beside `ModelQuirks` that the embedded sampler (`sampler.rs`, its
+penalties stage) and `llama_router::provider::slot_penalties` both call, and the rest of `ModelQuirks`'s sampling fields reach no server
+request. Which requests are sampled this way at all is likewise one decider,
+`sovereign_contracts::types::is_server_default_shape`: an OpenAI conversation
+with no explicit `sampling_mode` is llama-server's own to sample (llama.cpp's
+defaults, the GGUF's recommendations, then the client's) on both engines, and
+every other request carries the pair. The router sends nothing else — no
+temperature, top-k or top-p profile — and a caller's own value stands. DRY is
+not sent: llama-server counts the prompt in it and it garbled the verbatim
+quotes the citation call copies. `sampling_mode` stays on the wire as the
+caller's selector (the embedded engine's profile picker, and FIM's code mode),
+not as a router policy. Two unit tests pin the literal pair,
+`embedded::sampler::tests::the_sampler_policy_is_the_pair_the_measurement_moved`
+and `llama_router::provider::tests::a_daemon_call_carries_its_slot_penalties_and_a_conversation_does_not`,
+so a change to `ModelFamily::Unknown`'s defaults reopens the measurement
+instead of passing silently.
+
+**The distributed primary in a child (`[compute] distributed_primary`) is
+deleted.** It ran a mesh-sharded primary in a `DynamicChildSlot` so ggml's
+RPC aborts (`ggml-rpc.cpp:386`, the 2026-07-27 daemon kill) landed in a child;
+the daemon discovered workers, warmed their caches and handed the child a
+`DistributionHandoff`. The key was refused once the embedded engine went
+(ENGINE_SWAP_PLAN G2), and the slot, the handoff, discovery, the warm and the
+in-process containment guard were deleted with the mesh fabric
+(es-g4-delete-mesh-fabric). A model past one box is the router's own child over
+static `[compute] rpc_peers` (P F); the pure containment table stays in
+`sovereign-contracts` for `doctor`.
 
 **CPU-arch compatibility gate + crash capture (desktop).** Recurrent /
 linear-attention architectures — Qwen3.5 "Gated DeltaNet" (`qwen35`),
@@ -7238,7 +7248,7 @@ work pins the GPU while the user is chatting. Components:
   `build_daemon_provider` derive a model id the daemon never loaded, under a
   `model-notice` banner claiming a substitution that had not happened (ARCH
   principle 6). It was already wrong in attach mode before svt-3 made attach
-  universal. `sovereign_inference::cpu_compat` is shared, so the DECIDER does
+  universal. `sovereign_compute::cpu_compat` is shared, so the DECIDER does
   not move — only its caller, to the daemon's slot build, which has no such
   guard today (`grep choose_cpu_safe_chat_model svrn/crates/sovereign-cli-daemon`
   → zero hits). Until it lands the guard has no owner:
@@ -7498,12 +7508,10 @@ work pins the GPU while the user is chatting. Components:
 
   **`windows-vulkan` / `windows-cuda` moved to `sovereign-cli-daemon`.** They
   were desktop features forwarding to a `sovereign-inference` the app no
-  longer has, selecting a GPU backend for a process that loads no models. The
-  build that needs them is the SIDECAR's:
-  `SOVEREIGN_SIDECAR_FEATURES=windows-vulkan scripts/stage-daemon-sidecar.sh`.
-  NOT VERIFIED on this host — the Windows legs are commented out in
-  `desktop-release.yml` and this is a macOS box; the cross-check path is
-  `scripts/windows-crosscheck.sh` plus a native run.
+  longer has, selecting a GPU backend for a process that loads no models.
+  They were deleted outright in ENGINE_SWAP_PLAN G3 with the vendored llama
+  crates, and `SOVEREIGN_SIDECAR_FEATURES` with them: the GPU backend is the
+  llama-server's, chosen by build.sh's `--backend`.
 
   **One instrument bug, caught by running the check rather than reading it.**
   The prose written into `quality/ARCH_LAYERS.toml` to record this burn-down
@@ -8038,8 +8046,8 @@ cargo build --release --workspace          # bundled assets copied via build.rs
 # For LOCAL deployed-daemon iteration use scripts/dev-release.sh instead of
 # plain --release: same opt-level, but LTO/CGU=1 overridden via env — a
 # one-line change costs seconds instead of ~7.5 minutes. (A custom cargo
-# profile can't do this: llama-cpp-sys-4's build script panics under any
-# custom profile — see the script header.)
+# profile couldn't while llama-cpp-sys-4 was in the build — see the script
+# header; untried since that crate left in ENGINE_SWAP_PLAN G3.)
 cargo check  --workspace --all-targets      # what CI's `check` job runs
 # The user-facing CLI spans 4 binaries (dispatcher + 3 siblings) — rebuild
 # all of them (editing one + rebuilding only the dispatcher is a silent no-op):
@@ -8164,9 +8172,7 @@ everything rather than reporting "no changes."
 gates outside contributions. It is path-filtered behind a `changes` job,
 cancels superseded runs on main as well as PRs, restricts cache *writes* to
 main (many concurrent writers against GitHub's 10 GB budget were LRU-evicting
-each other — the mechanism behind the empty cache), keys the llama.cpp CMake
-tree on `llama-cpp-sys-4`'s version rather than the `Cargo.lock` hash
-(`Cargo.lock` churned 29× in July; that version has changed 4× ever), and
+each other — the mechanism behind the empty cache), and
 invokes `scripts/sovereign-test.sh` so CI and local share one definition of
 "the tests pass" — which also closed a real coverage hole, since bare
 `cargo test --workspace` had never exercised the `sovereign-cli/dev-tools`

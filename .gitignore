@@ -165,19 +165,11 @@ bench/lanes/faithfulness/obsidian_*.jsonl
 */.DS_Store
 
 # GGUF weight directories (261 GB). NOTE: this pattern is UNANCHORED, so it
-# matches a directory named `models` at ANY depth — that is deliberate for the
-# several places weights land, but it also silently swallowed
-# `vendor/llama-cpp-sys-4/llama.cpp/src/models/`, which is where llama.cpp keeps
-# one .cpp per model ARCHITECTURE (qwen35.cpp, deepseek4.cpp, …). 178 source
-# files vanished from the repo while `verify-vendored-llama-cpp.sh` still passed
-# locally, because the working tree was complete and only the COMMIT was short.
-# A peer cloning the repo got a llama.cpp with no architectures. Caught
-# 2026-08-03, before BeefyMac built against it.
+# matches a directory named `models` at ANY depth — deliberate for the several
+# places weights land, but it once swallowed 178 source files of the vendored
+# llama.cpp's `src/models/` (caught 2026-08-03). A vendored tree that carries
+# a `models/` source dir needs a `!vendor/**/models/` negation here.
 models/
-# Re-include the vendored C++ source. The negation targets the DIRECTORY, which
-# is the only form that works: git never descends into an excluded directory, so
-# `!.../src/models/*.cpp` alone would do nothing.
-!vendor/**/models/
 
 # ── Generated dev/analysis artifacts (never commit) ───────────────────────
 # Drift reports + their archaeology/rough sidecars and the agent-bench report

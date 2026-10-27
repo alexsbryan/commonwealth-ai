@@ -1306,8 +1306,8 @@ export async function meshDiagnostics(): Promise<import("./types").MeshDiagnosti
 }
 
 /** Shared-model placement from the daemon's /status: primary slot's
- *  mode (distributed/local), block split, worker endpoints, plus this
- *  node's rpc_worker advertisement. Opaque JSON by design — the daemon
+ *  mode (distributed/local), block split, worker endpoints. Opaque JSON
+ *  by design — the daemon
  *  owns the schema; null when unreachable or nothing resident. */
 export async function meshPlacement(): Promise<Record<string, unknown> | null> {
   return invoke("mesh_get_placement");

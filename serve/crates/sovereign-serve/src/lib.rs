@@ -62,32 +62,18 @@ mod fetch_model;
 mod fetch_ner;
 /// The holder's guest-link door (moved from the svrn daemon, pb-mesh-exit-mesh).
 pub mod guest_route;
-/// The live mesh `mesh plan|bench` read: cw-rails' roster beside serve's
-/// engine rows (pb-mesh-exit-transport).
-mod live_mesh;
 /// The measurement codec on cw-rails' `mesh-measurements` journal, and the
 /// reconcile loop that keeps the local file on it (pb-serve-placement).
 pub mod measurements_rail;
-/// `svrn mesh bench`: measure a placement's decode rate under the probe's
-/// validity guards and file the record (pb-serve-placement).
-mod mesh_bench;
 /// Placement measurements: what a placement was observed to do, keyed by
 /// model fingerprint × placement digest × machine witness (phase-b-22).
 pub mod mesh_measurements;
-/// `svrn mesh plan`: dry-run a model's split across a mesh, with what the
-/// placement measurements know about its speed (pb-serve-placement).
-mod mesh_plan;
-/// The CLI's side of measurement travel: publish a run, read peers' runs.
-mod mesh_travel;
 mod pod_snapshot_cmd;
 pub mod rails_mesh;
 /// serve ranks inference venues: the node's one router (pb-serve-ranks).
 mod rank;
 pub use rank::{rank, Ranking};
 mod reload;
-/// A model named by URL: fetched header-only so `plan` can read its tensors.
-mod remote_gguf;
-mod rpc_warm;
 mod self_report;
 /// `--setup-probe`: first-run setup's hardware probe and model planning,
 /// answered by the loader (pb-distribution-setup).
@@ -97,35 +83,17 @@ mod standalone;
 /// `svrn daemon vram-plan`: size a slot loadout and name the smallest card
 /// that holds it. Sizing is placement, so it is serve's (pb-distribution-setup).
 mod vram_plan;
-mod warm_cache;
 
-/// Exit past ggml's static destructors (the teardown SIGABRT, and on macOS
-/// the ggml-metal device sweeper's assertion): the loader's, so a process
-/// that hosts serve's assembly calls it on its way out, as `run` does
-/// (pb-serve-distributes).
-pub use sovereign_inference::fast_exit_skip_destructors;
-
-/// The loader's RPC env contract: `--rpc-worker` and the `[shared_model]`
-/// role, translated into the env the worker bind, discovery and the host's
-/// knobs read. A process hosting serve's assembly applies it before anything
-/// reads that env (pb-serve-distributes).
-pub use sovereign_compute::distributed_role::{
-    apply_rpc_worker_flag, apply_shared_model_role_to_env,
-};
+/// `[shared_model] model_id` → `SOVEREIGN_SHARED_MODEL_ID`, which `rank` reads
+/// to route primary turns to the shared model. A process hosting serve's
+/// assembly applies it before `rank` (decision engine-swap-8).
+mod shared_model;
+pub use shared_model::apply_shared_model_to_env;
 
 /// The NER kind's one handle per process, loaded on first ask: what a process
 /// hosting serve's assembly hands svrn for its own ingest and retrieval
 /// (pb-serve-distributes), the same handle serve's `/v1/ner` reads.
 pub use sovereign_compute::ner::served_ner;
-
-/// The worker side of distributed-inference auto-warm (the contracts port
-/// `RpcShardWarmer`): what a process hosting serve's assembly hands svrn's
-/// `/internal/rpc-warm` until the flip (pb-serve-distributes).
-pub use sovereign_compute::distributed_warm::MeshRpcShardWarmer;
-
-/// The mesh a process hosting serve's assembly hands its `distribute`: the
-/// composition root builds them from svrn's daemon (pb-serve-ranks-discovery).
-pub use sovereign_serving_host::rpc_discovery::{MeshNow, MeshPorts, ModelOrigin};
 
 /// This process's RPC-worker eligibility rows, as `/v1/mesh/status` reports
 /// them: what a process hosting serve's assembly hands svrn's status route
@@ -242,21 +210,30 @@ pub fn run(args: &[String]) -> i32 {
         }
     };
     let code = runtime.block_on(standalone::serve(parsed));
-    // Skip the ggml static destructors on the way out (the teardown SIGABRT
-    // the compute child dodges the same way).
-    sovereign_inference::fast_exit_skip_destructors(code)
+    std::process::exit(code)
 }
 
-/// The re-execs of a binary that loads weights: the compute child and the RPC
-/// worker re-exec `current_exe()`, so a process hosting serve's assembly
-/// routes them first, before tracing or a runtime (each builds its own). The
-/// setup probe is routed here too, so every loader answers it.
+/// The re-execs of a binary that loads weights: the compute child re-execs
+/// `current_exe()`, so a process hosting serve's assembly routes it first,
+/// before tracing or a runtime (it builds its own). The setup probe is routed
+/// here too, so every loader answers it, and the retired `--rpc-worker` is
+/// refused here by name.
 /// `Some(exit code)` when `args` is one of them. serve's `run` and the stock
 /// distribution's main both call it (FIVE_PROGRAMS §2c).
 pub fn child_launch(args: &[String]) -> Option<i32> {
     match Launch::parse(args, Launch::Bare) {
         Launch::ComputeChild { args } => Some(sovereign_compute::child_main::run(&args)),
-        Launch::RpcWorker { args } => Some(sovereign_inference::rpc_worker_main::run(&args)),
+        // The in-process ggml RPC worker was deleted with the embedded engine
+        // (ENGINE_SWAP_PLAN G2); refused by name rather than read as serve's
+        // own arguments.
+        Launch::RpcWorker { .. } => {
+            eprintln!(
+                "sovereign-serve: `--rpc-worker` is retired: the in-process RPC worker went with \
+                 the embedded engine. A distribution peer runs ggml-rpc-server under \
+                 `[compute] rpc_peer`."
+            );
+            Some(2)
+        }
         // First-run setup asks the loader, before any config exists
         // (pb-distribution-setup).
         Launch::SetupProbe { args } => Some(setup_probe::run(&args)),
@@ -266,19 +243,10 @@ pub fn child_launch(args: &[String]) -> Option<i32> {
 
 /// The subcommands `run` routes before the server's arguments. The dispatcher
 /// sends `svrn mesh <verb>` here for exactly these.
-/// `plan` and `bench` are placement measurement's (pb-serve-placement);
 /// `vram-plan` is sizing, which `svrn daemon vram-plan` execs here;
 /// `pod-snapshot` records or drops the pinned-pod snapshot `svrn pod up` and
 /// `svrn pod down` ask serve for (pb-mesh-dissolve).
-pub const WEIGHT_VERBS: &[&str] = &[
-    "warm-cache",
-    "fetch-model",
-    "fetch-ner",
-    "plan",
-    "bench",
-    "vram-plan",
-    "pod-snapshot",
-];
+pub const WEIGHT_VERBS: &[&str] = &["fetch-model", "fetch-ner", "vram-plan", "pod-snapshot"];
 
 fn run_weight_verb(verb: &str, rest: &[String]) -> i32 {
     let runtime = match tokio::runtime::Builder::new_multi_thread()
@@ -293,10 +261,7 @@ fn run_weight_verb(verb: &str, rest: &[String]) -> i32 {
     };
     runtime.block_on(async {
         match verb {
-            "warm-cache" => warm_cache::cmd_warm_cache(rest).await,
             "fetch-ner" => fetch_ner::cmd_fetch_ner(rest).await,
-            "plan" => mesh_plan::cmd_plan(rest).await,
-            "bench" => mesh_bench::cmd_bench(rest).await,
             "vram-plan" => vram_plan::run(rest),
             "pod-snapshot" => pod_snapshot_cmd::run(rest),
             _ => fetch_model::cmd_fetch_model(rest).await,
@@ -304,8 +269,7 @@ fn run_weight_verb(verb: &str, rest: &[String]) -> i32 {
     })
 }
 
-/// serve's allowlisted targets, without `llama_cpp`, whose level
-/// [`tracing_filter`] decides; a host takes the whole filter from there.
+/// serve's allowlisted targets.
 pub const DEFAULT_FILTER: &str = "serve=info,sovereign_serve=info,sovereign_compute=info,\
      sovereign_inference=info,sovereign_serving_host=info,host_kit=info,served_kind=info,llama_router=info,\
      engine_factory=info,serving_assembly=info,compute_child=info,rails_origins=info,transport=info";
@@ -313,32 +277,12 @@ pub const DEFAULT_FILTER: &str = "serve=info,sovereign_serve=info,sovereign_comp
 /// serve's log filter when `RUST_LOG` is unset, and the one a distribution
 /// hosting serve unions with its own: an allowlist of targets.
 ///
-/// Also carries `llama_cpp`, the LITERAL target every ggml/llama.cpp log line
-/// rides (`sovereign_inference::llama::ggml_log_cb`). Its absence silently
-/// defeated both the model-load-failure surface (a failed load reaching the
-/// operator as a bare "null result from llama cpp") and every
-/// `GGML_RPC_DEBUG=1` investigation (2026-07-27 distributed-inference crash
-/// hunt). [`llama_debug_requested`] cranks it to `debug`; otherwise `info`
-/// keeps routine load chatter out while WARN/ERROR still surface. The loader's
-/// knob, so the loader's filter (pb-serve-distributes; it was svrn's).
+/// It carried `llama_cpp`, the target the in-process engine's ggml log rode,
+/// with a debug crank (`SOVEREIGN_LLAMA_LOGS`, `GGML_RPC_DEBUG`); both went
+/// with the engine (ENGINE_SWAP_PLAN G2). The router's own output is
+/// `llama_router`'s.
 pub fn tracing_filter() -> String {
-    tracing_filter_for(llama_debug_requested())
-}
-
-fn tracing_filter_for(llama_debug: bool) -> String {
-    let llama_lvl = if llama_debug { "debug" } else { "info" };
-    format!("{DEFAULT_FILTER},llama_cpp={llama_lvl}")
-}
-
-/// True when the operator has asked for verbose ggml/llama.cpp output, by
-/// either our own knob (`SOVEREIGN_LLAMA_LOGS=1`) or llama.cpp's own
-/// documented RPC knob (`GGML_RPC_DEBUG`). Honouring the latter here is what
-/// makes `GGML_RPC_DEBUG=1` behave the way its upstream documentation
-/// promises: the var alone gates `LOG_DBG` inside ggml-rpc.cpp, but those
-/// lines are `GGML_LOG_DEBUG` and would still die at our callback and again
-/// at this filter. One env var, all three gates.
-pub fn llama_debug_requested() -> bool {
-    sovereign_inference::llama_logs::LlamaLogs::from_env().is_verbose()
+    DEFAULT_FILTER.to_string()
 }
 
 fn init_tracing() {
@@ -366,13 +310,6 @@ pub struct ServeAssembly {
     pub listen: SocketAddr,
     /// serve's hold on the data root; drop it only when serve stops.
     pub run_lock: host_kit::RunLock,
-    /// The distribution over this assembly's engine and distributed-primary
-    /// slot (compute's `distributed_discovery::distribute`), which a hosting
-    /// process starts once its mesh is up (pb-serve-distributes). A
-    /// standalone serve drops it, as it did before.
-    pub distribute: sovereign_serving_host::rpc_discovery::Distribute,
-    /// The files peers may fetch, where a worker's rpc-warm finds its model.
-    pub servable: sovereign_serving_host::state::ServableModelFilesReader,
     /// cw-rails' API base, the node's mesh endpoint, from the same config
     /// (`rails_kv::resolve_rails_base`, the one reader): where serve reads the
     /// roster and registers its origins (`rails_mesh::join`).
@@ -380,7 +317,7 @@ pub struct ServeAssembly {
 }
 
 /// serve's assembly, from its data root's lock to its last route: the lock,
-/// the config at `config_path`, llama.cpp's log route, the VRAM preflight,
+/// the config at `config_path`, the VRAM preflight,
 /// the mock engine's registration, the ONE serving assembly
 /// (`assemble_serving`), the cell and every bundle. serve's own `run` and the
 /// stock distribution both call it, so a stock install serves exactly what a
@@ -399,9 +336,7 @@ pub async fn assemble(
         e.to_string()
     })?;
     // serve is the loader, so the daemon's pre-load steps are its own
-    // (pb-svrn-dials-serve): llama.cpp's log reaches tracing, so a failed GGUF
-    // load names its cause, and the VRAM preflight reads serve's own sections.
-    sovereign_inference::llama::install_log_tracing();
+    // (pb-svrn-dials-serve): the VRAM preflight reads serve's own sections.
     if !sovereign_compute::preflight::check_vram_reporting(&config, config_path) {
         error!(target: "serve", config = %config_path.display(), "the VRAM preflight refused");
         return Err(format!(
@@ -411,7 +346,7 @@ pub async fn assemble(
     }
     // The model-free engine, selectable by `[engine] kind = "mock"` and by
     // nothing else (the registry refuses an unknown id, never substitutes).
-    if let Err(e) = sovereign_inference::engine_factory::register_engine(
+    if let Err(e) = sovereign_compute::engine_factory::register_engine(
         sovereign_compute::mock::MOCK_ENGINE,
         Arc::new(sovereign_compute::mock::MockEngine),
     ) {
@@ -456,25 +391,16 @@ pub async fn assemble(
     // The holder's side of a stored guest link: the base URL it reaches, over
     // the mesh tunnel serve opens and holds (`svrn chat` dials it).
     routes.push(guest_route::bundle());
-    // The engine the discovery loop redistributes, read through the cell a
-    // reload swaps (pb-serving-proofs (b)).
-    let engine = sovereign_compute::distributed_discovery::engine_cell(parts.llama);
     routes.push(reload::bundle(
         Arc::clone(&cell),
         parts.reload_factory,
         config_path.to_path_buf(),
-        Arc::clone(&engine),
     ));
     Ok(ServeAssembly {
         cell,
         routes,
         listen: (DEFAULT_LISTEN.0, sovereign_contracts::venue::serve_port()).into(),
         run_lock,
-        distribute: sovereign_compute::distributed_discovery::distribute(
-            sovereign_compute::distributed_discovery::engine_source(engine),
-            parts.distributed_primary,
-        ),
-        servable,
         rails_base,
     })
 }

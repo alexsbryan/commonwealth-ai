@@ -15,12 +15,12 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde::Serialize;
+use sovereign_compute::hardware::{self, detect_hardware};
 use sovereign_compute::setup_planner::{self as planner, SlotKind};
 use sovereign_contracts::daemon_wire::{
     ByomSource, FetchedBytes, FimPlan, HardwareProfile, PrimaryPlacement, ProbedPlan, SetupPlan,
     SlotConfig,
 };
-use sovereign_inference::hardware::{self, detect_hardware};
 
 /// A question and the function that answers it.
 type Question = (&'static str, fn(&[String]) -> i32);
@@ -36,11 +36,6 @@ const QUESTIONS: &[Question] = &[
 
 /// The probe's entry, routed by [`crate::child_launch`].
 pub(crate) fn run(args: &[String]) -> i32 {
-    // ggml logs go through `tracing` before detection touches a backend
-    // device: without it, Metal's library-compile lines land in the middle of
-    // an onboarding screen (the reason setup installed this before the probe
-    // moved here).
-    let _ = sovereign_inference::llama_logs::LlamaLogs::from_env().install_global();
     let (question, rest) = match args.split_first() {
         Some((q, rest)) => (q.as_str(), rest),
         None => ("", args),
@@ -214,7 +209,7 @@ fn placement(args: &[String]) -> i32 {
     };
     match sovereign_contracts::setup_config::SetupConfig::load_from(Path::new(config)) {
         Ok(cfg) => answer(&PrimaryPlacement {
-            child_owns_primary: sovereign_inference::engine_factory::child_owns_primary(&cfg),
+            child_owns_primary: sovereign_compute::engine_factory::child_owns_primary(&cfg),
         }),
         Err(e) => refuse(e),
     }

@@ -79,6 +79,7 @@ pub mod fim;
 pub mod fim_http;
 pub mod frame;
 pub mod gguf_meta;
+pub mod gguf_shards;
 pub mod gguf_validator;
 pub mod git;
 /// A guest grant the holder has accepted — `guest.json`, read by both the CLI and the daemon.

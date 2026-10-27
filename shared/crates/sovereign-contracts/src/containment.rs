@@ -83,10 +83,10 @@ pub fn classify_containment(
     // power-user path into the same hazard.
     //
     // It is only *new information* when the role does not already imply
-    // discovery. A serving role sets this very variable itself
-    // (`apply_shared_model_role_to_env`, which runs earlier in boot), so
-    // reading it unqualified means reading back something the daemon wrote
-    // sixty lines ago — which made the `Anchor` arm below unreachable and
+    // discovery. A serving role used to set this very variable itself (the
+    // daemon's `distributed_role`, deleted with the mesh fabric, decision
+    // engine-swap-8), so reading it unqualified read back something the daemon
+    // wrote earlier in boot — which made the `Anchor` arm below unreachable and
     // refused every anchor on the normal path, citing "declared host" at a node
     // that had declared nothing of the sort. Observed on BeefyMac 2026-07-29
     // with a verbatim `role = "anchor"` config.

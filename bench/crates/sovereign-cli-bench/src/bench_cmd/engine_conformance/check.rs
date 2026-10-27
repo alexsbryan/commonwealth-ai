@@ -179,10 +179,13 @@ fn unobserved(record: &CaseRecord, facet: &str) -> CellVerdict {
 impl Check {
     /// Whether the check reads only the target's record.
     pub fn target_only(&self) -> bool {
-        matches!(
-            self,
-            Check::AllowlistHeld | Check::ReasoningWithin { .. } | Check::HostTruth { .. }
-        )
+        match self {
+            Check::AllowlistHeld | Check::ReasoningWithin { .. } | Check::HostTruth { .. } => true,
+            Check::Scenario { driver, .. } => {
+                driver.as_deref() == Some(super::scenario::TARGET_ONLY_DRIVER)
+            }
+            _ => false,
+        }
     }
 
     /// Whether a difference on this pair would be judged by this check rather

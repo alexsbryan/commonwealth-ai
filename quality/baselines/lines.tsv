@@ -4,7 +4,7 @@
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- size-gate --tighten
 28629	bench/crates/sovereign-cli-bench
-5497	bench/crates/sovereign-cli-bench::tests
+5501	bench/crates/sovereign-cli-bench::tests
 8996	bench/crates/sovereign-eval
 4627	bench/crates/sovereign-eval::tests
 4	bench/lanes/agent-coding/problems/1.1-reverse-string/scaffold
@@ -46,8 +46,8 @@
 1840	cmnwlth/crates/commonwealth-work::tests
 6188	cmnwlth/crates/oicp-conformance
 393	cmnwlth/crates/oicp-conformance::tests
-10715	cmnwlth/crates/sovereign-cli-mesh
-3503	cmnwlth/crates/sovereign-cli-mesh::tests
+10703	cmnwlth/crates/sovereign-cli-mesh
+3501	cmnwlth/crates/sovereign-cli-mesh::tests
 2323	cmnwlth/crates/sovereign-pods
 2837	cmnwlth/crates/sovereign-pods::tests
 1131	code/crates/code-facts
@@ -73,10 +73,10 @@
 1869	code/crates/sovereign-work-atlas
 1263	code/crates/sovereign-work-atlas::tests
 61	distributions/crates/sovereign-hosted-ingest
-74	distributions/crates/sovereign-onprem
+66	distributions/crates/sovereign-onprem
 302	distributions/crates/sovereign-onprem::tests
-142	distributions/crates/sovereign-stock
-7649	distributions/crates/sovereign-stock::tests
+130	distributions/crates/sovereign-stock
+7584	distributions/crates/sovereign-stock::tests
 89491	ingest/crates/corpus-engine
 52144	ingest/crates/corpus-engine::tests
 723	ingest/crates/sovereign-authoring-harness
@@ -98,20 +98,20 @@
 2962	quality/arch-layers::tests
 6637	quality/xtask
 7341	quality/xtask::tests
-63553	scripts
+63509	scripts
 2	serve/crates/serving-policy
 8876	serve/crates/sovereign-compute
-2644	serve/crates/sovereign-compute::tests
+2249	serve/crates/sovereign-compute::tests
 787	serve/crates/sovereign-gliner
 1340	serve/crates/sovereign-gliner::tests
-11168	serve/crates/sovereign-inference
-17814	serve/crates/sovereign-inference::tests
+772	serve/crates/sovereign-inference
+1426	serve/crates/sovereign-inference::tests
 2561	serve/crates/sovereign-scheduler
 2344	serve/crates/sovereign-scheduler::tests
-9218	serve/crates/sovereign-serve
-3943	serve/crates/sovereign-serve::tests
-5525	serve/crates/sovereign-serving-host
-12999	serve/crates/sovereign-serving-host::tests
+3765	serve/crates/sovereign-serve
+1359	serve/crates/sovereign-serve::tests
+5168	serve/crates/sovereign-serving-host
+12808	serve/crates/sovereign-serving-host::tests
 2969	shared/crates/commonwealth-rail-core
 818	shared/crates/commonwealth-rail-core::tests
 11384	shared/crates/corpus-engine-atlas-reader
@@ -159,7 +159,7 @@
 1481	svrn/crates/corpus-mcp
 523	svrn/crates/corpus-mcp::tests
 15419	svrn/crates/sovereign-cli
-7840	svrn/crates/sovereign-cli-daemon
+7839	svrn/crates/sovereign-cli-daemon
 1567	svrn/crates/sovereign-cli-daemon::tests
 30653	svrn/crates/sovereign-cli-llm
 8297	svrn/crates/sovereign-cli-llm::tests
@@ -169,7 +169,7 @@
 58533	svrn/crates/sovereign-core
 40752	svrn/crates/sovereign-core::tests
 44934	svrn/crates/sovereign-daemon
-36927	svrn/crates/sovereign-daemon::tests
+36905	svrn/crates/sovereign-daemon::tests
 1853	svrn/crates/sovereign-grants
 1768	svrn/crates/sovereign-grants::tests
 4484	svrn/crates/sovereign-meshapp

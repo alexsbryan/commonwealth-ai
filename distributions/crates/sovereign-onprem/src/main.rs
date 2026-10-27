@@ -60,9 +60,8 @@ fn main() {
             Ok(parts)
         },
     )
-    .env_contract(|args, shared_model| {
-        sovereign_serve::apply_rpc_worker_flag(args);
-        sovereign_serve::apply_shared_model_role_to_env(shared_model);
+    .env_contract(|shared_model| {
+        sovereign_serve::apply_shared_model_to_env(shared_model);
     })
     .ner(sovereign_serve::served_ner)
     .rank(|provider, ports| async move {
@@ -76,15 +75,7 @@ fn main() {
         None,
         sovereign_daemon::process::Posture::Sealed,
     );
-    // macOS: the loader's fast-exit past `__cxa_finalize_ranges`, as stock's.
-    #[cfg(target_os = "macos")]
-    {
-        sovereign_serve::fast_exit_skip_destructors(exit_code)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        std::process::exit(exit_code)
-    }
+    std::process::exit(exit_code)
 }
 
 /// serve's ranking as svrn is handed it.

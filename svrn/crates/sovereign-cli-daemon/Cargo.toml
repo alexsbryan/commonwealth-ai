@@ -91,10 +91,8 @@ workspace-hack = { version = "0.1", path = "../../../shared/crates/workspace-hac
 libc = "0.2"
 
 [features]
-# No Windows GPU selectors: this binary loads no model. They moved to the
-# loader, sovereign-stock (forwarded through sovereign-serve), which
-# `scripts/stage-daemon-sidecar.sh` builds with `SOVEREIGN_SIDECAR_FEATURES`
-# beside this sidecar (pb-distribution-setup).
+# No GPU backend selectors: no Rust crate links llama.cpp since
+# ENGINE_SWAP_PLAN G3; the backend is the llama-server's (build.sh --backend).
 
 # Headless OCR. OFF by default: it pulls `ort` + `ndarray` + `imageproc` +
 # `i_overlay` into every daemon build, and the engine additionally needs

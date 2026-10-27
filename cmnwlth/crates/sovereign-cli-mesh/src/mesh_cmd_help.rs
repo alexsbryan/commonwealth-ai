@@ -76,18 +76,6 @@ pub(crate) const HELP_MESH: sovereign_cli_base::help::Help = sovereign_cli_base:
                 "Fetch serve's NER (GLiNER) model from HuggingFace",
             ),
             (
-                "warm-cache <gguf>",
-                "Pre-seed the RPC tensor cache from a local GGUF (offline; later serves with zero weight transfer)",
-            ),
-            (
-                "plan <gguf> --devices <gb,..>",
-                "Dry-run the tensor split across a mesh — per-device fit + headroom, offline (no load)",
-            ),
-            (
-                "bench",
-                "Measure how fast the model you are running actually decodes, and record it for `plan`",
-            ),
-            (
                 "check-invariants --nodes <a,b,..>",
                 "Poll /v1/mesh/status across nodes and assert convergence/no-ghost/liveness (soak harness)",
             ),

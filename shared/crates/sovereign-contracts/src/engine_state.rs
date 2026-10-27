@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `serve`'s engine-state wire: the loader's CACHED view of device memory and
-//! the pinned RPC block split, which the svrn daemon's `/v1/mesh/status`
-//! reads once serving lives in serve (pb-svrn-dials-serve). serve produces it
+//! `serve`'s engine-state wire: the RPC workers serve's discovery holds,
+//! which `svrn mesh plan|bench` read (pb-svrn-dials-serve). serve produces it
 //! and the daemon consumes it, so the shape lives in the serving contract.
 //!
-//! Cached, never sampled, on serve's side too: sampling an RPC device is a
-//! round trip to a worker that can stall for a minute (the 2026-07-30 hang,
-//! `sovereign_inference::embedded::last_device_memory`).
+//! The loader's cached device-memory reading and the pinned RPC block split
+//! were the embedded engine's, and went with it (ENGINE_SWAP_PLAN G2).
 //!
 //! [`Lap`] times one loopback request on either side under one target.
 
@@ -30,11 +28,6 @@ pub struct EngineReloaded {
 /// What the loader last saw.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EngineState {
-    /// `None` until the loader has planned a distributed load in that process
-    /// ("not observed yet", never "no devices").
-    pub device_memory: Option<DeviceMemoryReading>,
-    /// `SOVEREIGN_RPC_BLOCK_SPLIT` as the loader reads it, raw.
-    pub rpc_block_split_pin: Option<String>,
     /// The RPC workers this process's discovery holds, one eligibility row
     /// each (`sovereign_serving_host::worker_eligibility`'s status view:
     /// `node_id`, `endpoint`, …). svrn's `/v1/mesh/status` carried them
@@ -42,28 +35,6 @@ pub struct EngineState {
     /// Empty where no discovery loop runs.
     #[serde(default)]
     pub rpc_workers: Vec<serde_json::Value>,
-}
-
-/// One cached reading, with its age.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DeviceMemoryReading {
-    /// Unix seconds at which the loader took the reading.
-    pub observed_unix: u64,
-    /// Plan order: eligible RPC workers first, local GPU last.
-    pub devices: Vec<DeviceBytes>,
-}
-
-/// One device as the loader saw it, in bytes.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DeviceBytes {
-    /// The RPC worker endpoint behind the device; `None` for a local one.
-    pub endpoint: Option<String>,
-    /// Available at the instant of the reading.
-    pub free_bytes: u64,
-    /// Physical device memory.
-    pub total_bytes: u64,
-    /// What the owning node keeps for itself and will not lend.
-    pub reserve_bytes: u64,
 }
 
 /// Where serve answers what its provider says about itself.

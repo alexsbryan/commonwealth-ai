@@ -33,6 +33,21 @@ pub use crate::oicp::{
     SamplingMode, Speed, StreamFrame, StreamUsage, ToolSchema, TurnAdmission,
 };
 
+/// Whether a request is sampled by llama-server's own defaults rather than
+/// by a daemon sampler profile: an OpenAI chat conversation with no explicit
+/// `sampling_mode`.
+///
+/// ONE decider (ARCH 8). Both engines ask this question, because both must
+/// answer it the same way or they sample one request differently: the
+/// embedded sampler (`sampler::build_sampler`) hands such a request to
+/// llama.cpp's defaults, the GGUF's recommendations and then the client's
+/// values, and `llama_router::provider::slot_penalties` must leave it
+/// alone for the server to do the same. Written once because the router's
+/// copy of it drifted into the whole `ModelQuirks` tuple on 2026-10-25.
+pub fn is_server_default_shape(shape: Option<&PromptShape>, mode: Option<SamplingMode>) -> bool {
+    matches!(shape, Some(PromptShape::Conversation { .. })) && mode.is_none()
+}
+
 /// User-configurable inference parameters, sourced from `DesktopConfig`.
 /// Passed to `Runtime::new()` and used when building every `CompletionRequest`.
 #[derive(Debug, Clone, Serialize, Deserialize)]

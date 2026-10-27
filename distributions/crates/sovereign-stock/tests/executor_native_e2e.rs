@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The executor's tool loop sends a conversation and reads the reply on both
-//! engines (es-t2-executor-native): one `Delegate` step with one tool round
-//! trip, on the embedded engine in this process and on the shipped
-//! llama-server through `oicp-client`, the router's wire. Both run
-//! Qwen3.5-0.8B from `SOVEREIGN_MODELS_DIR`.
+//! The executor's tool loop sends a conversation and reads the reply
+//! (es-t2-executor-native): one `Delegate` step with one tool round trip, on
+//! the shipped llama-server through `oicp-client`, the router's wire, running
+//! Qwen3.5-0.8B from `SOVEREIGN_MODELS_DIR`. Its embedded-engine twin went
+//! with that engine (ENGINE_SWAP_PLAN G2).
 //!
-//! Ignored: it loads a model twice and boots a server.
+//! Ignored: it loads a model and boots a server.
 //!
 //! ```text
 //! cargo test -p sovereign-stock --test executor_native_e2e -- --ignored --nocapture
@@ -29,7 +29,6 @@ use sovereign_contracts::types::{
 use sovereign_core::executor::{AutoApprovalChannel, Executor, TaskContext};
 use sovereign_core::registry::ToolRegistry;
 use sovereign_core::skills::SkillRegistry;
-use sovereign_inference::embedded::{EmbeddedLlamaCpp, SlotWindows};
 use sovereign_store::memory::InMemoryStateStore;
 
 const MODEL: &str = "Qwen3.5-0.8B-UD-Q6_K_XL.gguf";
@@ -155,17 +154,6 @@ fn assert_round_trip(engine: &str, calls: usize, contract: &serde_json::Value) {
         capital.contains(CAPITAL),
         "{engine}: the tool's result did not reach the contract: {contract}"
     );
-}
-
-#[tokio::test(flavor = "multi_thread")]
-#[ignore = "loads Qwen3.5-0.8B; run with --ignored"]
-async fn a_delegate_step_round_trips_a_tool_on_the_embedded_engine() {
-    let path = model();
-    let engine =
-        EmbeddedLlamaCpp::load_full(&path, Some(&path), None, SlotWindows::uniform(8192), None)
-            .expect("the embedded engine loads the model");
-    let (calls, contract) = delegate_once(Arc::new(engine)).await;
-    assert_round_trip("embedded", calls, &contract);
 }
 
 struct Killed(Child);

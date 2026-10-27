@@ -83,31 +83,13 @@ fn a_process_serves_rerank_only_when_it_holds_one() {
     );
 }
 
-/// The config asked for a reranker and the install failed (the engine logs
-/// it and holds no slot). The lane must stay unarmed: before this, the plan
-/// answered yes and every search paid the overfetch for NotImplemented.
+/// The config asked for a reranker and nothing loaded it. The lane must stay
+/// unarmed: before this, the plan answered yes and every search paid the
+/// overfetch for NotImplemented. (The case was a failed in-process install,
+/// which went with the embedded engine, ENGINE_SWAP_PLAN G2; the decider's
+/// answer for "nothing holds it" is what stays.)
 #[test]
 fn a_failed_rerank_install_does_not_arm_the_lane() {
-    let mut config = SetupConfig::unconfigured();
-    let mut models = ModelsSection {
-        primary: "/m/primary.gguf".into(),
-        embed: "/m/embed.gguf".into(),
-        ..Default::default()
-    };
-    models
-        .kinds
-        .insert("rerank".into(), "/m/rerank.gguf".into());
-    config.models = Some(models);
-    assert!(
-        std::env::var_os("SOVEREIGN_RERANK_MODEL_PATH").is_none(),
-        "this test reads the config key; the env var would override it"
-    );
-    let planned = plan_serving(&config).expect("a holder plans");
-    assert!(
-        planned.in_process.contains(&PlannedSlot::Rerank),
-        "the config asks for the rerank slot"
-    );
-
     let installed = Holds {
         slots: vec![slot("fast"), slot("embed")],
         children: Vec::new(),

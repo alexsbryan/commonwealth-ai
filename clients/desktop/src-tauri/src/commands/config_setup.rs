@@ -168,8 +168,8 @@ pub(crate) async fn mirror_to_setup_config(desktop: &DesktopConfig) -> Result<()
     // shared-model UI in the alpha (the feature lives on the CLI path — see
     // docs/RUN_GLM_5_2_ON_THE_MESH.md). The mirror still writes them so a
     // `sovereign daemon run` started from this config picks them up at startup
-    // (apply_shared_model_role_to_env). Kept so re-adding the UI later needs
-    // no config plumbing.
+    // (apply_shared_model_to_env reads the id; the role is inert, engine-swap-8).
+    // Kept so re-adding the UI later needs no config plumbing.
     if cli.shared_model.role != desktop.shared_model_role
         || cli.shared_model.model_id != desktop.shared_model_id
     {

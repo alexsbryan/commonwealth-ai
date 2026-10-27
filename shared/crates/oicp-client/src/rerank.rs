@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The rerank kind's client method: `rerank_batch` over the serving node's
-//! `/v1/rerank` route (`sovereign_inference::served_kind::RERANK`).
+//! `/v1/rerank` route (`sovereign_compute::served_kind::RERANK`).
 
 use sovereign_contracts::error::{Error, Result};
 use sovereign_contracts::oicp::openai_types::{RerankRequest, RerankResponse};

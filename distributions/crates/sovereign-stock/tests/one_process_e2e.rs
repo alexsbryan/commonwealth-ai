@@ -402,7 +402,7 @@ fn a_distributed_config_is_hosted_and_starts_its_mesh_subsystems() {
     assert_eq!(serving, "serve (this process)", "{}", log_tail(&log));
     let text = std::fs::read_to_string(&log).expect("log");
     assert!(
-        text.contains("auto-warm orchestrator installed"),
+        text.contains("distribution: RPC-worker discovery starts"),
         "the engine's mesh subsystems were not started beside the hosted engine:\n{}",
         log_tail(&log)
     );

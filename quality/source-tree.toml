@@ -20,7 +20,7 @@
 excluded_dirs = [
   ".git",       # the object store; git never reports it as ignored
   ".sovereign", # local feature/notes/mesh state; partly tracked, never Rust source
-  "vendor",     # forked upstream crates (llama-cpp-4, llama-cpp-sys-4, lance-linalg):
-                # tracked in this repo, but not authored here — 75 .rs files
+  "vendor",     # forked upstream crates (lance-linalg): tracked in this
+                # repo, but not authored here
   "node_modules",
 ]

@@ -4933,6 +4933,71 @@ Instruments, as run:
   both are module-local wire shapes, not the concept. `Killed`/`Stat` and
   conversation.rs's test `Host(bool)` are test-only, which converge excludes.
 
+## REVIEW-audit-es-auto-4 (2026-10-26, range 962967bb8..390b530f7, on the Halo)
+
+71 non-merge commits. 61 are the queue's: es-f2, es-f3-d4, es-c2-battery-rejudge,
+es-c2-battery-rejudge-fix, es-c1, es-e2, es-g1 and es-g2, plus queue and
+eutropia bookkeeping. The other 10 are the seat's HUMAN-es-host-flip commits on
+main (2c80eef78, 0fa9d32b7, 1c858df1b, d89bc15f6, a67e42190, 9dda35829,
+d68ab3c61 and three rustfmt commits), which came in through da6801b7f. No
+other queue audits them, so they are audited here. es-c2-battery-rejudge-fix
+was applied twice: 52118d362 and 41ffa1ea3 on the pre-merge base 38666faa4,
+and b9e273693 and e555a3950 again after da6801b7f. 879ba09c2 joins the two
+copies. The ledger counts the second copy only.
+
+| # | principle | path:line | fixed in | finding |
+|---|---|---|---|---|
+| 1 | 8 | serve/crates/sovereign-compute/src/llama_router/placement.rs:156; serve/crates/sovereign-compute/src/rpc_peer.rs:52 | a93a3d684 | es-f2's `parse_peer` re-implemented `parse_bind`'s refusal (every interface, loopback, port 0, in the same order), and its doc said "the same rule". `rpc_peer::endpoint_refusal` now decides it for both, and each side keeps its own wording, so the texts are unchanged (placement_tests.rs:46-50, rpc_peer_tests.rs:14-31). TEST(sovereign-compute) 245/0 |
+| 2 | 6, 3 | serve/crates/sovereign-compute/src/llama_router.rs:166, :197; serve/crates/sovereign-compute/src/engine_factory.rs:238 | 04a101b06 | two router refusals (d89bc15f6's rerank head, `[models.extra]`) offered "or run kind = \"llama\"", and es-g2 made that kind a startup refusal (`LLAMA_RETIRED`). The retired alternative is dropped from both. The same commit fixes the comments that called the deleted engine live in files this range touched: `EngineKind::Llama`, `SetupConfig::engine`, `EngineSection`, desktop `install_siblings`, three `fast_exit_skip_destructors` cites, wire.rs `build_sampler` |
+| 3 | 3, 4 | shared/crates/oicp-types/src/completion.rs:174, :187, :241, :262, :278; shared/crates/oicp-client/src/chat_wire.rs:116 | not fixed | es-g2 left 31 comment cites of the deleted engine in 14 files, all compiling. Most name `embedded::build_sampler` as the consumer of a request field, and for the constraint fields that consumer is now `chat_wire::write_constraints`. The others: oicp-types openai_types.rs:99, :122, :133, :144, :147, forced_choice.rs:6, :23, completion.rs:407; sovereign-contracts model_family.rs:155, types/mod.rs:42, decode_allowlist.rs:5, structured_output.rs:4; sovereign-serving-host inference_adapter.rs:14, :411, :421, :432; sovereign-core grounding/judge.rs:141; sovereign-daemon admission/layers.rs:210; sovereign-inference cpu_compat.rs:55 and tests/main/llguidance_parity.rs:15, :411, :480, :520; corpus-index provenance.rs:51, prompt.rs:36 (frozen; needs a `Frozen-path:` trailer). Each one needs its present consumer found before the rewrite, so this is es-g3's "SYSTEM_OVERVIEW and docs", not a find-and-replace. A 32nd, setup_config.rs:1924 (an `embedded::SlotWindows` re-export that no longer exists), is dropped in the commit that adds this section |
+| 4 | 5 | distributions/crates/sovereign-stock/tests/engine_conformance_instruments_e2e.rs:393; bench/lanes/engine-swap/battery.sh:180; serve/crates/sovereign-compute/src/engine_factory.rs:189 | not fixed | es-c2's instruments e2e boots its `embedded` reference with `[engine] kind = "llama"`, and battery.sh's `embedded` target writes the same. Since 18393dca7 that daemon refuses at boot. The e2e is `#[ignore]`, so the suite stays green, and its next run will fail at `boot` before the two rows that compare against the reference (`compute.embeddings-default-inputs`, `projection.stream-usage`) take a verdict. The row that owns them decides between a recorded reference and retiring the comparison. The two `containment_guard_e2e` files also boot kind = "llama", and es-g4 already lists them for deletion |
+| 5 | 8 | distributions/crates/sovereign-stock/tests/router_rpc_split_e2e.rs:59, :138, :209; engine_conformance_instruments_e2e.rs:67, :76, :130 | not fixed | audit-1 #3 grows again. `struct Killed(Child)` is at 14 copies (12 at auto-3), `reserved_port` at 5 (3), `Stat` at 3 (2), `log_tail` at 9 (7). es-f2 and es-c2 added one of each, plus `Booted` and `Daemon` twins. This is the same cross-crate test-support decision |
+
+Open findings from earlier audits. Auto-3 #4 stands, and its premise is
+weaker now. es-f2 put a chat section's shard on a peer's card, so for that
+section the head's own VRAM check (`vram_if_every_section_loaded`,
+llama_router.rs:542) no longer bounds what the router holds. Meanwhile
+`demands_repair` (live.rs:105) still reloads every `unloaded` model (lesson
+bfaaa239). Auto-3 #3 stands: `rpc_peer::resolve_binary` (rpc_peer.rs:75) is
+still beside `live::resolve_binary` (live.rs:122). Auto-3 #5 is not re-checked
+here. Auto-2 #5 stands: capacity.rs:402 still mirrors daemon.rs:2065 by hand.
+Auto-2 #6 and #7 stand. Auto-1 #5 stands: `count_tokens_exact` is reached only
+through forwards and the engine-replay route (engine_replay.rs:173). Auto-1 #12
+is not re-checked.
+
+Gates: LINT exit=0 (`sovereign-lint.sh --human`, 44 crates, --all-targets, 0
+errors), run after #1 and #2. TEST(sovereign-compute) 245 pass, 0 fail.
+clone-gate 13895 lines / 402 families against 14032, with no new clone. es-g2's
+cut of 137 lines is banked with `--tighten` in this row.
+
+Instruments, as run:
+
+- **per-unit net lines** (`git log --no-merges --numstat`, without the two
+  duplicate copies; src is non-test `.rs`/`.sh`/`.py` outside ralph/, with
+  inline `#[cfg(test)]` counted as src; other is docs, data and config):
+  es-f2-router-rpc-placement src +337 test +981 other +70 ·
+  es-f3-d4-split-on-uneven-memory src +524 other +60 (all of it the D4 bench
+  scripts under bench/lanes/engine-swap/derisk-20261012) ·
+  es-c2-battery-rejudge src +1028 test +746 other +20 (engine_replay.rs +332,
+  engine_conformance scenario/run +350, the instruments e2e +497) ·
+  es-c2-battery-rejudge-fix src +253 test +249 other +40 · es-c1-sampler-outcome
+  src +106 other +26 · es-e2-flip-default src +18 test +13 ·
+  es-g1-move-factory-and-kinds src -51 test +22 · es-g2-delete-engine
+  src -33051 test -6232 other -3898 · seat on main (host flip) src +504
+  test +106 other +90 · engine-swap queue tooling src +23. Range total src
+  -30309, test -4115.
+- **dry-report: could-not-judge**, as at audits 1-3. Every crate dir refuses
+  (no corpus built from this worktree), and `--corpus-id commonwealth-ai` finds
+  no `chunks.lance`. The named substitute is clone-gate, above.
+- **converge noun** with `--corpus-id commonwealth-ai`, on the range's new
+  production types. `HostLifecycleAnswer`, `LifecycleCall` (engine_observe.rs),
+  `RouterPlacement` (placement.rs), `SplitLine`, `Retired` and `Daemon`
+  (bench engine_conformance) each have 1 definition. `StreamUsageFacet` has 0
+  because the index predates it, and `git grep` finds it once
+  (record.rs:116). `EndpointRefusal` (#1, new here) has 0 in the index and is
+  defined once. The test-only nouns (`Killed`, `Stat`, `Booted`, `Ports`) are
+  #5.
+
 ## REVIEW-audit-ek-verify (2026-10-15, range 60eeeb73c..b4a033039, the every-kind-finish queue)
 
 Three units (ek-waves-reasoned, ek-window-refs, ek-reader-voices), 13 commits,

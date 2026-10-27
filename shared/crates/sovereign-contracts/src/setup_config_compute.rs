@@ -87,7 +87,7 @@ pub struct ComputeSlotConfig {
     /// child. Also used as the child `--name`.
     pub name: String,
     /// `"generate"` (EmbeddedLlamaCpp), `"embed"` (EmbedOnlyProvider), or a
-    /// served kind's child role (`"rerank"`; `sovereign_inference::served_kind`).
+    /// served kind's child role (`"rerank"`; `sovereign_compute::served_kind`).
     pub role: String,
     /// GGUF path the child loads.
     pub model: PathBuf,

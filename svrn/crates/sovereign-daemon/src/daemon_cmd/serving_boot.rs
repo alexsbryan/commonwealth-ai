@@ -27,25 +27,22 @@ pub(super) struct ServingBoot {
 /// `Err(code)` is the exit code `run_daemon` returns.
 pub(super) async fn boot_serving(
     config: &SetupConfig,
-    args: &[String],
     config_override: &Option<std::path::PathBuf>,
     mut hosted: Option<crate::serve_client::HostedServe>,
 ) -> Result<ServingBoot, i32> {
     // Shared-model cluster role → RPC env contract, applied once, before any
-    // RPC consumer reads the env (the hosted engine's worker bind and
-    // discovery, svrn's router and `/status`). The translation is the
-    // loader's (pb-serve-distributes), so the distribution that hosts it hands
-    // it in; an explicit env var wins, and `--rpc-worker` beats the role. A
-    // svrn alone loads nothing and translates nothing: the serve it dials
-    // applies its own.
+    // consumer reads the env (svrn's router and `/status`). The translation is
+    // the loader's (pb-serve-distributes), so the distribution that hosts it
+    // hands it in; an explicit env var wins. A svrn alone loads nothing and
+    // translates nothing: the serve it dials applies its own.
     let applied = hosted
         .as_ref()
-        .is_some_and(|h| h.apply_env_contract(args, &config.shared_model));
+        .is_some_and(|h| h.apply_env_contract(&config.shared_model));
     tracing::info!(
         target: "serving_path",
         applied,
         role = ?config.shared_model.role,
-        "boot: the loader's RPC env contract (`[shared_model]`, `--rpc-worker`)"
+        "boot: the loader's RPC env contract (`[shared_model]`)"
     );
 
     // Where serving lives, decided once, after the RPC env contract above

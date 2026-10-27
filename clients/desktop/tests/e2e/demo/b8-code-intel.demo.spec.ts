@@ -144,7 +144,6 @@ const FORBIDDEN_IN_QUESTION = [
   "model_slot",
   "ModelSlot",
   "placement",
-  "rpc_worker",
   "oicp",
   "OICP",
   "distributed_inference",

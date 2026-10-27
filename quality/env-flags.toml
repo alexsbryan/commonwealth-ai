@@ -61,13 +61,6 @@ purpose = "The CLI contract file, fixed at compile time into cli_contract::manif
 status = "shipped"
 
 [[flag]]
-name = "SOVEREIGN_TENSOR_BUFT_OVERRIDE"
-cluster = "inference"
-default = "unset"
-status = "experiment"
-purpose = "Per-tensor placement at load, llama.cpp `-ot` syntax: `<regex>=<buffer-type>[,...]`, e.g. `per_layer_token_embd=CPU`. CPU is the only buffer type resolved, and it is the one that changes RESIDENCY: a tensor on the CPU buffer type is left pointing into the mmap'd GGUF instead of copied into a device buffer (llama-model-loader.cpp -> ggml_backend_tensor_alloc(buf_mmap, cur, data)), so it stays demand-paged from disk and EVICTABLE under pressure rather than pinned — pressure costs a page fault, not an OOM kill. Built for Qwen3.8-Flash-Next's per_layer_token_embd, a single 26.8 GiB IQ4_NL n-gram table read 16 rows (1440 B) per token; measured NVMe marginal cost on RuggedFox is ~92 us against a ~25.6 ms token budget. Applied on LocalOnly/StreamSplit only — a distributed OwnedOverrides load derives its own -ot set from the shard plan and REFUSES to merge (logged at warn, not silently dropped). A malformed entry or unknown buffer type refuses the whole variable rather than half-applying. Read in one place: model_slot.rs::env_tensor_buft_overrides."
-
-[[flag]]
 name = "SOVEREIGN_MESH_STRICT_AUTH"
 cluster = "mesh"
 default = "off"
@@ -329,13 +322,6 @@ status = "experiment"
 purpose = "Include relation atoms in the enumeration."
 
 [[flag]]
-name = "SOVEREIGN_MAX_QUEUE_WAIT_SECS"
-cluster = "inference"
-default = "30"
-status = "shipped"
-purpose = "Ceiling on how long a caller may wait SILENTLY for a model permit before the host sheds with a structured 503 + Retry-After (MESH_N4_TOPOLOGY M5). Bounds PREDICTED WAIT, not queue depth: measured 2026-08-06, an identical depth of 8 cost 6.2s when callers shared a prompt prefix and 90.7s when they did not. =0 restores the pre-M5 unbounded wait. Raise it for a hub deployment with no alternative holder, where a shed means no answer rather than a slow one."
-
-[[flag]]
 name = "SOVEREIGN_CLIENT_FAIRNESS"
 cluster = "inference"
 default = "on"
@@ -357,32 +343,11 @@ status = "shipped"
 purpose = "Caller-directed pinned-prefix full-state cache. Graduated default-on 2026-08-03 on a measured 1.30x through the production answer path (868.4s -> 669.0s, 2 reps/arm); the grounding gate is its only consumer. Opt out with =0. Worth most on archs where prefix_cache_gate vetoes ordinary partial-KV reuse."
 
 [[flag]]
-name = "SOVEREIGN_PREFIX_STATE_MAX_MB"
-cluster = "inference"
-default = "2048"
-status = "shipped"
-purpose = "Per-slot byte cap on the pinned-state LRU. State files run ~64KB/token, so a 10K-token pin is ~650MB; this is what bounds the default-on pin's disk cost."
-
-[[flag]]
-name = "SOVEREIGN_PREFIX_STATE_MIN"
-cluster = "inference"
-default = "code default"
-status = "shipped"
-purpose = "Minimum stable-prefix length (tokens) worth pinning. Below it, saving state costs more than the re-prefill it avoids."
-
-[[flag]]
 name = "SOVEREIGN_RAPTOR_GROUNDING"
 cluster = "retrieval"
 default = "on"
 status = "deprecated"
 purpose = "RETIRED 2026-09-07 (order ei-5c); no longer read. It gated the retrieval-time RAPTOR injector (sovereign-core runtime/retrieval/raptor_grounding.rs), which ei-5c deleted: whole-work summaries now reach retrieval as the atlas walk's Summary atoms, appended at the same late position by retrieval/atlas_grounding.rs::append_atlas_summaries. One walk, one producer. Whether a corpus has those summaries is a DATA state, not a knob — `svrn enrich summary-atoms <corpus>` is the migration that gives a corpus its Summary atoms. Setting this has no effect. Record: docs/DEFAULTS_LEDGER.md."
-
-[[flag]]
-name = "SOVEREIGN_CAPABILITY_PROBE"
-cluster = "inference"
-default = "on"
-status = "shipped"
-purpose = "Load-time measured capability probe for a chat slot (embedded::capabilities): prefill, generate, roll back ACROSS the decode-pass boundary, replay identical tokens, compare continuations. Establishes PartialKvVerdict by measurement instead of inferring it from the gguf arch string. =0/false/off skips it and leaves the record CouldNotJudge, which vetoes rather than defaulting to a pass. Costs ~0.3-1s per slot load. SHADOW PHASE: the verdict is recorded and logged on target `capability`; prefix_cache_gate still follows the arch ladder, so disabling this changes no answer, only observability."
 
 [[flag]]
 name = "SOVEREIGN_RAPTOR_LATE"
@@ -624,20 +589,6 @@ status = "guard"
 purpose = "Kill-switch: disable multi-token-prediction speculative decoding."
 
 [[flag]]
-name = "SOVEREIGN_MTP_DRAFT_MAX"
-cluster = "inference"
-default = "3"
-status = "shipped"
-purpose = "MTP speculative draft depth (n_draft_max). Admitted range is 1..mtp_n_rs_seq (structural cap n_rs_seq - 1: one slot of headroom for partial KV rollback on the recurrent layers). Out-of-range or unparseable values WARN and fall back to 3 — a named substitution, never silent (ARCH_PRINCIPLES §18.3). Default 3 is upstream's Qwen3.6-A3B sweet spot; the 3.8-UD A/B is order deep-research-t7c (2026-08-19)."
-
-[[flag]]
-name = "SOVEREIGN_NEXT_EDIT_FALLBACK"
-cluster = "inference"
-default = "off"
-status = "experiment"
-purpose = "=1/true serves the next-edit lane (POST /v1/edit_predictions) off the already-resident FAST slot when NO [models.edit] is configured, instead of serving nothing (install_fallback_next_edit_slot). Next-edit needs only a prompt dialect, not FIM marker tokens, so an ordinary chat model can serve it. MEASURED AND IT DID NOT HOLD (2026-08-07): the flag resolves through fast_path(), so on a box with an explicit [models].fast the answering model is the fast slot — a 4B there scored 14/30 useful (GM4 FAIL) at p95 2194ms, against 21/30 for the 35B-A3B chat primary and 19/30 / 828ms for a 1.5B specialist, same 60-case gym/next-edit/gen bank. Safe but not useful: 0 wrong edits in 17 fires. A bench number does not transfer down a model class. Marks the slot degraded=true, which drives the advice nudge on /status.inference.edit. An explicit [models.edit] always wins. STAYS OFF — opt-in only; users are pointed at `svrn setup --fim`. Ledger row: docs/DEFAULTS_LEDGER.md."
-
-[[flag]]
 name = "SOVEREIGN_JOURNAL"
 cluster = "inference"
 default = "on"
@@ -666,13 +617,6 @@ status = "shipped"
 purpose = "Overrides the journal directory for every stream. Tests and operators only — unset resolves through rebrand::journal_dir() so the ~/.svrnmesh rebrand and its legacy ~/.sovereign fallback are honoured (clippy.toml's path-SSOT ban)."
 
 [[flag]]
-name = "SOVEREIGN_MTP_QUARANTINE_DISABLE"
-cluster = "inference"
-default = "unset"
-status = "guard"
-purpose = "Kill-switch: disable the MTP quarantine (the guard that benches a model before trusting its MTP head)."
-
-[[flag]]
 name = "SOVEREIGN_FORCE_CPU_CHAT"
 cluster = "inference"
 default = "unset"
@@ -687,11 +631,11 @@ status = "guard"
 purpose = "Skip the model-fit VRAM check before load."
 
 [[flag]]
-name = "SOVEREIGN_BLOCK_NON_LATIN"
+name = "SOVEREIGN_ROUTER_SLOTS_DEBUG"
 cluster = "inference"
-default = "unset"
+default = "1 (on)"
 status = "guard"
-purpose = "Unicode-crash denylist: block non-Latin scripts in generation."
+purpose = "Hand the supervised llama-server router LLAMA_SERVER_SLOTS_DEBUG, so its `/slots` describes each task rather than only its metrics. The conformance battery's grammar rows read the grammar the router enforced from that description; set 0 to serve the metrics-only form."
 
 [[flag]]
 name = "SOVEREIGN_EXACTVAL_FIX"
@@ -897,13 +841,6 @@ status = "shipped"
 purpose = "PaddleOCR models ROOT — the dir holding <model_id>/{det.onnx,rec.onnx,dict.txt}. Since 2026-08-10 paddle::models_root() falls back through the path SSOT (rebrand::svrnmesh_root()), so it resolves correctly on both a rebranded and a not-yet-migrated install and setting this is no longer required to work around a hardcoded path — it is now purely a staging/relocation override. The daemon's ocr_install probes <data_dir>/models/paddle-ocr first and sets the var for the engine."
 
 [[flag]]
-name = "SOVEREIGN_PROBE_GGUF"
-cluster = "infra-paths"
-default = "unset"
-status = "experiment"
-purpose = "First shard of the GGUF that the #[ignore]d device-memory probe measures (sovereign-inference/tests/device_memory_probe.rs). Manual, opt-in: the test panics with this instruction when unset, and never runs in CI."
-
-[[flag]]
 name = "SOVEREIGN_PADDLE_OCR_MODEL"
 cluster = "infra-paths"
 default = "ppocr-en-v4v5"
@@ -941,7 +878,7 @@ cluster = "mesh"
 default = "unset"
 status = "shipped"
 shadows = "shared_model.model_id"
-purpose = "Distributed-inference shared model id override (bootstrap.rs env-or-config)."
+purpose = "Shared model id primary turns route to; written from [shared_model] model_id by sovereign_serve::apply_shared_model_to_env unless already set, read by rank via SharedModelFleet::from_env."
 
 [[flag]]
 name = "SOVEREIGN_SHARED_MODEL_HOST_NODE_ID"
@@ -950,29 +887,6 @@ default = "unset"
 status = "shipped"
 shadows = "shared_model.host_node_id"
 purpose = "Distributed-inference host node id override."
-
-[[flag]]
-name = "SOVEREIGN_RPC_SERVE"
-cluster = "mesh"
-default = "unset"
-status = "shipped"
-shadows = "shared_model.role"
-purpose = "Anchor/host half of the shared-model role (env half of the config's role field)."
-
-[[flag]]
-name = "SOVEREIGN_RPC_ALLOW_PLAINTEXT_LAN"
-cluster = "mesh"
-default = "unset (a non-loopback RPC bind is refused)"
-status = "shipped"
-shadows = "shared_model.allow_plaintext_lan"
-purpose = "Acknowledge that the tensor-split ggml RPC port may bind where other hosts can reach it. The rpc-server authenticates nothing and encrypts nothing, so RpcServe refuses a non-loopback SOVEREIGN_RPC_SERVE without this; members reach the worker over the encrypted mesh tunnel (RPC_ALPN) instead. Accepts 1/true."
-
-[[flag]]
-name = "SOVEREIGN_RPC_WORKER_PROCESS"
-cluster = "mesh"
-default = "unset (in-process worker)"
-status = "experiment"
-purpose = "Serve the ggml RPC worker from a supervised child process instead of a thread in the daemon, so a peer-reachable GGML_ASSERT abort kills the child and not the process holding the mesh key. Accepts 1/true."
 
 [[flag]]
 name = "SOVEREIGN_RPC_DISCOVER"
@@ -1044,21 +958,6 @@ cluster = "inference"
 default = "unset"
 status = "guard"
 purpose = "Skip the per-device fit check in the RPC byte-aware shard split."
-
-[[flag]]
-name = "SOVEREIGN_SKIP_LOCAL_FIT_CHECK"
-cluster = "inference"
-default = "unset"
-status = "guard"
-purpose = "Skip the local fit check before joining a distributed load (rpc_distribution.rs)."
-
-[[flag]]
-name = "SOVEREIGN_LOCAL_FIT_CHECK_SKIP"
-cluster = "inference"
-default = "unset"
-status = "deprecated"
-alias_of = "SOVEREIGN_SKIP_LOCAL_FIT_CHECK"
-purpose = "Word-order twin read in the SAME fallback expression as its alias target — one knob, two spellings; scheduled to collapse onto the alias target."
 
 [[flag]]
 name = "SOVEREIGN_GPU_LAYERS"
@@ -1173,7 +1072,7 @@ name = "SOVEREIGN_SERVE_BIN"
 cluster = "cli-binaries"
 default = "sibling of dispatcher"
 status = "shipped"
-purpose = "Path override for sovereign-serve, which the dispatcher execs for `svrn mesh warm-cache`, `svrn mesh fetch-model` (phase-b-22) and `svrn mesh fetch-ner` (pb-cli-llm). The svrn daemon no longer brings serve up (pb-stock-binary): the stock install hosts serve in its own process, and a standalone serve is started by whoever runs it."
+purpose = "Path override for sovereign-serve, which the dispatcher execs for `svrn mesh fetch-model` (phase-b-22) and `svrn mesh fetch-ner` (pb-cli-llm). The svrn daemon no longer brings serve up (pb-stock-binary): the stock install hosts serve in its own process, and a standalone serve is started by whoever runs it."
 
 [[flag]]
 name = "SOVEREIGN_INGEST_BIN"
@@ -1345,15 +1244,6 @@ status = "guard"
 purpose = "The chat GGUF the ignored distributed-router e2e (distributions/crates/sovereign-stock/tests/router_rpc_split_e2e.rs) splits across a peer, by role: any chat model big enough that a split is worth measuring (the D2 model), an absolute path or a file in SOVEREIGN_MODELS_DIR. Read only by that test, so a host without the default file can still run the kill-and-restart half."
 
 [[flag]]
-name = "SOVEREIGN_TOOL_STOP_TEST_GGUF"
-cluster = "dev-gates"
-default = "unset (the test prints SKIP and returns)"
-status = "guard"
-purpose = "Absolute path to a tool-calling chat GGUF (a Qwen3.x) for the ignored manual test serve/crates/sovereign-inference/tests/main/tool_turn_finish_reason.rs, which loads the model and checks that a turn stopping on its `</tool_call>` marker reports finish reason Stop, not Length. Read only by that test; run it with `-- --ignored`."
-
-# ── dev-gates: which host tool the gate reaches for ─────────────────
-
-[[flag]]
 name = "SOVEREIGN_PYTHON"
 cluster = "dev-gates"
 default = "unset (first of python3.13, python3.12, python3.11, python3 on PATH)"
@@ -1380,15 +1270,6 @@ cluster = "dev-gates"
 default = "unset"
 status = "guard"
 purpose = """Who canon records as acting. Set by the harness, never on a command line: .claude/settings.json sets agent:claude-code. .claude/hooks/canon-actor-guard.py reads it to allow a canon propose verb (add, question, draft) only under an agent: actor, and refuses every adjudication verb whatever it holds. Unset, canon falls back to git user.name prefixed human:, which on this machine is the operator; that fallback is what the guard stops an agent inheriting (canon docs/LOAD_TEST_COMMONWEALTH.md entry 3)."""
-[[flag]]
-name = "SOVEREIGN_FAST_SHORT_QUEUE_CAP"
-cluster = "inference"
-default = "64"
-status = "shipped"
-purpose = "How many FastShort requests may wait for the continuous-batch drainer before new arrivals are shed with the existing QueueShed shape. The coalescer channel was unbounded, and FastShort takes its inflight permit AFTER the queue, so the backlog was invisible to queue.depth() and the slot's predicted-wait shed could never fire on this path — an enrichment pass that outran decode grew the queue until the process died, every caller still parked on its oneshot. Default 64 = eight full batches at n_seq_max 8; a queue deeper than that is a memory leak with a completion handler. A zero or unparseable value falls back to the default rather than producing a shed-everything channel."
-
-# ── web: search-backend keys ───────────────────────────────────────
-
 [[flag]]
 name = "SOVEREIGN_TAVILY_API_KEY"
 cluster = "web"
@@ -1497,13 +1378,6 @@ status = "shipped"
 purpose = "drb1-r8: the deliverable carries the ARCHITECTURE of a report - its own title, an executive summary that answers the question first, and a Conclusion - instead of the shape of the pipeline that produced it. On-form: SOVEREIGN_DR_REPORT_ARCHITECTURE=1 (also true, case-insensitive); every other value, including unset, leaves the composed report byte-identical. Requires SOVEREIGN_DR_COMPOSED_REPORT=1; composes with SOVEREIGN_DR_REPORT_OUTLINE, which decides WHICH sections exist while this decides what surrounds them. Why it exists, diagnosed from the judge's own per-criterion scores across 25 task-69 records rather than guessed: the criteria we lose most are Breadth and Depth of MCP Protocol Description (ours 6.12 vs the reference article's 9.36, in 25 of 25 draws), Logical Structure and Coherent Flow of Argumentation (6.60 vs 9.50), Formatting Layout and Typographical Consistency (6.98 vs 9.48) and Paragraph Cohesion Sentence Fluency and Conciseness (6.80 vs 9.02) - six of our seven worst criteria are readability, which is a property of how the article is WRITTEN, not of what was retrieved. Three named structural causes, each addressed here: (1) compose_report's H1 was the user's raw prompt sentence (synthesize.rs, the format! at the end of compose_report), so the deliverable announced itself as a machine artifact; a planned title replaces it. (2) There was no summary and the report closed on 'Synthesis and Assessment' - the pipeline's own vocabulary; an executive summary written LAST and read FIRST answers the question in its first two sentences, and the closing section is titled Conclusion. (3) OUTLINE_MAX capped the plan at 8 sections, so a question naming two subjects could not afford a section for the second one - which is exactly the MCP deficit above; the cap is 12 when this is on. The cap is ONE decider (synthesize::outline_max) read by both the prompt that asks for n sections and the parser that admits them, so the writer can never be asked for 12 and admitted for 8; watched red in synthesize::tests::the_section_cap_is_one_decider_for_the_prompt_and_the_parser. WHAT DOES NOT CHANGE WHEN IT IS ON: the citation contract and therefore the gate. The title and summary add no claims of their own - the summary is told to assert nothing the report does not already establish and to reuse the [Source: ev-N] handles already used below, and both are composed BEFORE the audit pass, so every sentence they carry faces the same gate as the sections. A refused title (outside 20-160 chars) falls back to the question and a failed summary lands the report without one, both NAMED in the trace, never silently (ARCH 18.3); watched red in synthesize::tests::the_title_parser_refuses_what_is_not_a_title. Cost: two extra draft calls per run (title, summary). Read in exactly one place (deep_research::report_architecture_enabled). Reversal condition + evidence: docs/DEFAULTS_LEDGER.md."
 
 [[flag]]
-name = "SOVEREIGN_MTP_PREFILL_TAIL_LOGITS"
-cluster = "inference"
-default = "on"
-status = "shipped"
-purpose = "The MTP prefill flags ONLY its final position for logits instead of every position. GRADUATED DEFAULT-ON 2026-09-08. Off-form: SOVEREIGN_MTP_PREFILL_TAIL_LOGITS=0 (also false, case-insensitive) restores all-position flagging; every other value, including unset, flags only the final position. WHY IT EXISTS: flagging every position makes n_outputs_all the whole prompt (llama-context.cpp:1700), so output_reserve sizes the logits buffer at n_vocab * n_prompt_tokens * 4 - 993,280 bytes PER PROMPT TOKEN at the qwen35 family's 248,320 vocab. Past ~3,650 tokens that exceeds this device's 4 GiB maxBufferSize, fails to pin, and falls back to a host CPU buffer that is retained at high-water until the process exits (ggml-vulkan.cpp:16191 for the fallback, llama-context.cpp:2092 which grows and never shrinks). One 20k-token request strands ~19.9 GB. It is the daemon's single largest unreclaimable allocation and the reason 'restart between runs' kept being proposed. THE JUSTIFICATION FOR THE FLAG IS FALSE, measured not argued (tests/mtp_prefill_logits_spike.rs, 2026-08-27): model_slot.rs cites an upstream invariant that get_embeddings_pre_norm_ith errors with batch.logits[N] != true, but that error comes from output_resolve_row, which get_embeddings_nextn_ith calls ONLY on the masked path (llama-context.cpp:966); the unmasked path returns early at :954-960 indexing nextn rows densely by raw token position, and common_speculative initialises the MTP TARGET unmasked (speculative.cpp:1371 - the daemon logs set_embeddings_nextn: value = 1, masked = 0). On a 681-token prompt the pre-norm hidden states MTP actually consumes are BIT-IDENTICAL at every position with and without the flag, against a floor of 0e0, and 128 greedy tokens generate identically. WHAT HELD IT OFF, AND WHAT CLEARED IT: the same spike found what source reading would not - the next-token logits shift by 1.46e-1 against a ZERO floor, because n_outputs_all going n -> 1 changes the output-gathering graph and therefore the float accumulation order for the row read. That had to clear a byte-identity arm on a real composed report, and on 2026-09-08 it did: a 26,226-token composed-report prompt (52-chunk window, arms/bed-compose/compose-input.json) reproduced the control's draft sha256 EXACTLY over 2,000 greedy tokens while the prefill's unreclaimable anon step fell from +21.20 GiB to +0.01 GiB - predicted 20.88 GiB, measured 21.20, so the formula holds to 1.5%. Measured with NO daemon, one process per arm (the buffer is grow-only and retained until process exit, so a second arm in-process inherits the first's allocation and measures nothing). The residual risk is ONE argmax, not an architecture property: the body runs identically over every position either way, so hidden states and KV are bit-identical and MoE expert routing is untouched; only whether the top-2 logit gap at the final prefill position exceeds the shift decides identity, and that gap belongs to the PROMPT. A flip would be a different-but-equally-valid greedy continuation from an identical KV cache, not a defect. The vendored precondition has a tripwire (the_mtp_target_context_is_still_initialised_unmasked) because a bump flipping that masked argument would make the change abort the daemon rather than error. Read in exactly one place (embedded::prompt_helpers::mtp_prefill_tail_logits_only). Reversal condition + evidence: docs/DEFAULTS_LEDGER.md."
-
-[[flag]]
 name = "SOVEREIGN_DR_SECTION_CONTEXT"
 cluster = "deep-research"
 default = "off"
@@ -1555,13 +1429,6 @@ cluster = "inference"
 default = "off"
 status = "guard"
 purpose = """Makes the local-fit gate REFUSE a load it predicts will not fit, instead of warning and loading anyway. Default OFF — the gate is ADVISORY (operator direction 2026-08-27, reversing its original posture). Why the default flipped: the gate predicts, it does not know; it estimates weights + projected KV/scratch against MemAvailable minus a heuristic reserve, and every term can be conservative — most sharply for a model that leaves a large tensor in the mmap, which is exactly the case (Qwen3.8-Flash-Next, 26.8 GiB engram) where it refused a model that then loaded and served fine. The failure modes are asymmetric: a wrong REFUSAL is silent and total (the model reports unavailable and the override name appears only in a log line the operator never sees), while a wrong ADMISSION is loud and bounded (the load fails or the process dies, with the gate's full arithmetic logged immediately above it). Prefer the loud one. Set this to 1 on an unattended host that would rather stay up than crash — the right choice for a server, the wrong default for someone running a model on their own machine. The predicate itself is unchanged and still logs every term; only what the placement DOES with the verdict changed. Distinct from SOVEREIGN_LOCAL_FIT_CHECK_SKIP / SOVEREIGN_SKIP_LOCAL_FIT_CHECK, which skip the computation entirely and therefore also silence the forecast. Does NOT affect the per-device worker fit gate (SOVEREIGN_SKIP_PER_DEVICE_FIT), which still refuses: an overflowing shard aborts a REMOTE peer mid-graph, which is neither loud nor bounded on the machine that has to diagnose it."""
-
-[[flag]]
-name = "SOVEREIGN_TENSOR_NO_HOST"
-cluster = "inference"
-default = "off"
-status = "experiment"
-purpose = """Bypass the device HOST buffer type for big local loads (llama.cpp `--no-host`), and with it the load-time prefetch: patch 0008 gates `init_mappings(!no_host)`, so this is also the only way to stop MAP_POPULATE making every CPU-placed weight resident before a single row is gathered. DEFAULT OFF BECAUSE IT WAS MEASURED HARMFUL ON THE CASE IT WAS WRITTEN FOR: on Qwen3.8-Flash-Next it turned the mmap-resident 26.8 GiB engram into an anonymous copy (RssAnon 8.85 -> 21.47 GiB, RssFile 0.29 -> 0.06 GiB) and the load OOM'd. Anonymous pages cannot be reclaimed; file-backed ones can. Kept as an opt-in because on a backend whose host buffer DOES accept the tensor's quant, CPU-placed weights really do land in pinned memory and this is the lever — measure RssAnon vs RssFile before turning it on. For placing ONE tensor on plain pageable CPU without this trade, use SOVEREIGN_TENSOR_BUFT_OVERRIDE instead."""
 
 [[flag]]
 name = "SOVEREIGN_ALLOW_STALE_SOLVE"
@@ -1696,13 +1563,6 @@ cluster = "dev-gates"
 default = "release"
 status = "shipped"
 purpose = "Cargo profile for the daemon sidecar scripts/stage-daemon-sidecar.sh stages. Release by default because the artifact ships inside an installer and `cargo tauri build` is itself a release build; `debug` exists so a local rehearsal of the PACKAGING can skip the release compile. A debug sidecar in a shipped bundle is roughly 3x the size and materially slower, so this is a dev-loop lever, not a supported release configuration."
-
-[[flag]]
-name = "SOVEREIGN_SIDECAR_FEATURES"
-cluster = "dev-gates"
-default = "unset (no extra features — the sidecar builds with sovereign-cli-daemon's defaults)"
-status = "shipped"
-purpose = "Comma-separated cargo features scripts/stage-daemon-sidecar.sh forwards as `--features` when it builds the sovereign-cli-daemon Tauri sidecar. This is how the Windows GPU backend is selected since svt-7 (2026-09-12): `windows-vulkan` / `windows-cuda` are owned by sovereign-cli-daemon — the process that loads the weights — and forward from there to sovereign-inference (docs/SYSTEM_OVERVIEW.md:260). Only the Windows legs set it; `scripts/windows-crosscheck.sh:28` is the worked example. Unset means the default feature set, never a silent CPU fallback: a feature the crate does not have is a cargo build failure the script refuses to stage past."
 
 # ── removed ─────────────────────────────────────────────────────────
 # Nothing reads these any more. env-gate fails if one is read again, and

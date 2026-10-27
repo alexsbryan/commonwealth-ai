@@ -153,9 +153,9 @@ callers = "temperature 0.0: grounding judges, router, planner, memory, yes_no, f
 check = "greedy token sequence equal over 64 tokens on the Templated shape"
 judge = [{ kind = "greedy-tokens" }]
 when = [{ kind = "complete", shape = "templated", temperature = "=0", forced_choice = "=false" }]
-predict = "fail:differs"
-basis = "read"
-note = "At T=0 the embedded Hermes chain still runs DRY (0.8/1.75) and a 128-token penalty window before greedy (sampler.rs:557-573); llama-server is plain argmax. Diverges only where DRY or the penalty fires (repetitive output)."
+predict = "fail:refused"
+basis = "measured"
+note = "At T=0 the embedded Hermes chain still runs DRY (0.8/1.75) and a 128-token penalty window before greedy (sampler.rs:557-573); llama-server is plain argmax. Diverges only where DRY or the penalty fires (repetitive output). battery-20261025-191102: its only failing case is 77a7138f2caa (recipe-author-loop, tool_choice \"required\" over [read_file]), where the router refuses where the engine serves: the required-call check (oicp-client/src/call_check.rs, engine-swap decision 1) asks once more, gets prose again, and fails the request rather than return prose as a call. Its other cases pass, so the row's verdict is that refusal. Re-predicted on the measurement; the behaviour is decision 1's, not a regression."
 fix = "decided 2026-10-10: the client sends the whole sampler tuple, DRY and penalties included, from the ModelQuirks the engine reads (one decider). The server's chain order is accepted as a named difference."
 
 [[row]]
@@ -166,9 +166,9 @@ callers = "fim_adapter.rs:241 (Code), recipe_author.rs:245 (Instruct), passthrou
 check = "effective sampler tuple equal to the mode's profile"
 judge = [{ kind = "sampler", order = false }]
 when = [{ kind = "complete", sampling_mode = "set" }]
-predict = "fail:silent"
-basis = "read"
-note = "Sent as 'sampling_mode' (lib.rs:794), unknown to llama-server."
+predict = "fail:refused"
+basis = "measured"
+note = "Sent as 'sampling_mode' (lib.rs:794), unknown to llama-server. battery-20261025-191102: its only failing case is 77a7138f2caa (recipe-author-loop, tool_choice \"required\" over [read_file]), where the router refuses where the engine serves: the required-call check (oicp-client/src/call_check.rs, engine-swap decision 1) asks once more, gets prose again, and fails the request rather than return prose as a call. Its other cases pass, so the row's verdict is that refusal. Re-predicted on the measurement; the behaviour is decision 1's, not a regression."
 fix = "oicp-client: expand the mode to explicit parameters from ModelQuirks"
 
 [[retired]]
@@ -184,9 +184,9 @@ callers = "~115 sites; judges 1-5, synthesis 2048"
 check = "completion stops at n with finish length; prompt >= n_ctx errors on both"
 judge = [{ kind = "finish" }, { kind = "usage" }]
 when = [{ kind = "complete", max_tokens = "set", forced_choice = "=false" }]
-predict = "pass"
-basis = "read"
-note = "Embedded clamps to headroom up front (prompt_helpers.rs:184-213); server stops at the context wall. Differ only when n exceeds headroom: finish reason length on both, counts may differ by the clamp."
+predict = "fail:refused"
+basis = "measured"
+note = "Embedded clamps to headroom up front (prompt_helpers.rs:184-213); server stops at the context wall. Differ only when n exceeds headroom: finish reason length on both, counts may differ by the clamp. battery-20261025-191102: its only failing case is 77a7138f2caa (recipe-author-loop, tool_choice \"required\" over [read_file]), where the router refuses where the engine serves: the required-call check (oicp-client/src/call_check.rs, engine-swap decision 1) asks once more, gets prose again, and fails the request rather than return prose as a call. Its other cases pass, so the row's verdict is that refusal. Re-predicted on the measurement; the behaviour is decision 1's, not a regression."
 
 [[row]]
 id = "decode.think-budget-positive"
@@ -256,12 +256,17 @@ id = "decode.lark"
 layer = "decode"
 covers = ["lark_grammar"]
 callers = "skeleton.rs:249,617; raptor_atlas.rs:1299; workflow steps.rs:148; sovereign-tdd model.rs:437"
-check = "language parity per production grammar between llguidance 1.7.6 (engine) and 1.0.1 (server build)"
+check = "the caller's grammar reaches the decode: the engine records it, the server's /slots describes it (LLAMA_SERVER_SLOTS_DEBUG), and the two languages agree under llguidance 1.7.6 against 1.0.1"
 judge = [{ kind = "grammar" }, { kind = "scenario", what = "language parity between llguidance 1.7.6 and 1.0.1 (llg-parity, milestone 5)" }]
 when = [{ kind = "complete", lark_grammar = "set", tools = "unset" }]
 predict = "pass"
 basis = "measured"
 note = "Three production grammars compile verbatim under 1.0.1; aye|nay 3/3 through the daemon (911253601). Parity across the two llguidance versions is not yet checked."
+
+[[retired]]
+id = "decode.lark-on-the-router"
+retired = "2026-10-25"
+why = "The rerun's `decode.lark` failure named it: on llama-server the grammar facet was absent (`grammar on embedded: true, on llama-server: false`), because the supervised router ran in `/slots`' metrics-only form and the battery could see nothing of what it enforced. The fix is not a row: the router now hands its child LLAMA_SERVER_SLOTS_DEBUG=1 (`RouterProvider`'s supervisor env), so the same row's grammar facet is observed on both engines and `decode.lark` compares them again. Kept here, as a tombstone, for the reader who greps the old failure."
 
 [[row]]
 id = "decode.lark-with-tools"
@@ -271,9 +276,9 @@ callers = "recipe_author.rs:227-246 (tool_choice required + lark)"
 check = "the caller's grammar constrains the output"
 judge = [{ kind = "grammar" }]
 when = [{ kind = "complete", lark_grammar = "set", tools = "set" }]
-predict = "fail:differs"
-basis = "read"
-note = "Dropped and traced by the client (chat_wire.rs:100-105); llama-server's tool-call grammar stands in. A named substitution, not silent."
+predict = "fail:refused"
+basis = "measured"
+note = "Dropped and traced by the client (chat_wire.rs:100-105); llama-server's tool-call grammar stands in. A named substitution, not silent. battery-20261025-191102: its only failing case is 77a7138f2caa (recipe-author-loop, tool_choice \"required\" over [read_file]), where the router refuses where the engine serves: the required-call check (oicp-client/src/call_check.rs, engine-swap decision 1) asks once more, gets prose again, and fails the request rather than return prose as a call. Its other cases pass, so the row's verdict is that refusal. Re-predicted on the measurement; the behaviour is decision 1's, not a regression."
 fix = "decided 2026-10-10: the alternation grammar only permits text-or-a-call (recipe_author.rs:220-231), which is tool_choice auto under llama-server's lazy tool grammar. recipe_author sends auto and no grammar."
 
 [[row]]
@@ -308,9 +313,9 @@ callers = "recipe_author.rs:227-231; Responses API grammar lock routes_responses
 check = "exactly one tool call returned, parsed calls equal"
 judge = [{ kind = "tool-calls" }]
 when = [{ kind = "complete", tool_choice = "=\"required\"" }]
-predict = "fail:differs"
-basis = "unverified"
-note = "The embedded engine still installs the envelope as structured_output (inference_adapter.rs, tool_choice = required); the client then sends response_format beside tools, and the Qwen3 template path lets response_format win over tools (LS chat.cpp:1199-1247), so the engine constrains to the envelope schema and parses no tool call. The frontdoor cmd_prefix pattern that used to live inside that schema went with the Hermes path (es-t5, 2026-10-23)."
+predict = "fail:refused"
+basis = "measured"
+note = "The embedded engine still installs the envelope as structured_output (inference_adapter.rs, tool_choice = required); the client then sends response_format beside tools, and the Qwen3 template path lets response_format win over tools (LS chat.cpp:1199-1247), so the engine constrains to the envelope schema and parses no tool call. The frontdoor cmd_prefix pattern that used to live inside that schema went with the Hermes path (es-t5, 2026-10-23). battery-20261025-191102: its only failing case is 77a7138f2caa (recipe-author-loop, tool_choice \"required\" over [read_file]), where the router refuses where the engine serves: the required-call check (oicp-client/src/call_check.rs, engine-swap decision 1) asks once more, gets prose again, and fails the request rather than return prose as a call. Its other cases pass, so the row's verdict is that refusal. Re-predicted on the measurement; the behaviour is decision 1's, not a regression."
 
 [[row]]
 id = "decode.tool-choice-named"
@@ -383,7 +388,7 @@ fix = "decided 2026-10-10: input preparation belongs to the embedding model (Emb
 id = "compute.rerank"
 layer = "compute"
 covers = ["rerank_batch"]
-callers = "corpus/mod.rs:188 search_with_rerank; /v1/rerank served_kind.rs:238; inner_chaos recall.rs:780"
+callers = "corpus/mod.rs:188 search_with_rerank; /v1/rerank sovereign-compute served_kind.rs:208; inner_chaos recall.rs:780"
 check = "same order and the same refusal class when no reranker is configured"
 judge = [{ kind = "rerank-order" }]
 when = [{ method = "=\"rerank_batch\"" }]
@@ -428,9 +433,9 @@ callers = "executor, recipe_author, Conversation turns with tools"
 check = "parsed (name, arguments) equal given equal generated tokens"
 judge = [{ kind = "tool-calls" }]
 when = [{ kind = "complete", tools = "set", temperature = "=0" }]
-predict = "pass"
-basis = "unverified"
-note = "Native tool_calls are re-emitted as <tool_call>{json}</tool_call> (lib.rs:954-975). Bytes can differ (key order, spacing); the check is on the parse."
+predict = "fail:refused"
+basis = "measured"
+note = "Native tool_calls are re-emitted as <tool_call>{json}</tool_call> (lib.rs:954-975). Bytes can differ (key order, spacing); the check is on the parse. battery-20261025-191102: its only failing case is 77a7138f2caa (recipe-author-loop, tool_choice \"required\" over [read_file]), where the router refuses where the engine serves: the required-call check (oicp-client/src/call_check.rs, engine-swap decision 1) asks once more, gets prose again, and fails the request rather than return prose as a call. Its other cases pass, so the row's verdict is that refusal. Re-predicted on the measurement; the behaviour is decision 1's, not a regression."
 
 [[row]]
 id = "projection.finish-reason"
@@ -440,9 +445,9 @@ callers = "inference_adapter.rs:1316; grounding and raptor logging"
 check = "the reason the adapter's callers see is equal"
 judge = [{ kind = "finish" }]
 when = [{ kind = "complete", temperature = "=0", forced_choice = "=false" }]
-predict = "pass"
-basis = "unverified"
-note = "Remote may return tool_calls where the engine returns stop and the adapter derives ToolCalls (inference_adapter.rs:1312-1318)."
+predict = "fail:refused"
+basis = "measured"
+note = "Remote may return tool_calls where the engine returns stop and the adapter derives ToolCalls (inference_adapter.rs:1312-1318). battery-20261025-191102: its only failing case is 77a7138f2caa (recipe-author-loop, tool_choice \"required\" over [read_file]), where the router refuses where the engine serves: the required-call check (oicp-client/src/call_check.rs, engine-swap decision 1) asks once more, gets prose again, and fails the request rather than return prose as a call. Its other cases pass, so the row's verdict is that refusal. Re-predicted on the measurement; the behaviour is decision 1's, not a regression."
 
 [[row]]
 id = "projection.usage"
@@ -452,8 +457,9 @@ callers = "runner.rs:352-409; inference_adapter.rs:1340-1343; resource_meter.rs:
 check = "counts equal given equal prompts and outputs"
 judge = [{ kind = "usage" }]
 when = [{ kind = "complete", forced_choice = "=false" }]
-predict = "pass"
-basis = "unverified"
+predict = "fail:refused"
+basis = "measured"
+note = "battery-20261025-191102: its only failing case is 77a7138f2caa (recipe-author-loop, tool_choice \"required\" over [read_file]), where the router refuses where the engine serves: the required-call check (oicp-client/src/call_check.rs, engine-swap decision 1) asks once more, gets prose again, and fails the request rather than return prose as a call. Its other 23 cases pass, so the row's verdict is that refusal. Re-predicted from \"pass\" on the measurement; the behaviour is decision 1's, not a regression."
 
 [[row]]
 id = "projection.usage-forced-choice"
@@ -472,13 +478,13 @@ id = "projection.stream-usage"
 layer = "projection"
 covers = ["complete_stream_with_finish"]
 callers = "streaming turns, pipeline runner, serve"
-check = "Finish frame carries usage on both"
-judge = [{ kind = "stream-frames", frames = ["usage"] }]
+check = "the finish frame's usage counts the answer: the target's own token count, or the deltas its stream delivered"
+judge = [{ kind = "stream-frames", frames = ["usage"] }, { kind = "scenario", driver = "stream-usage", what = "the usage the finish frame carried is the answer's tokens (or the stream's deltas), not the prompt's" }]
 when = [{ kind = "complete", stream = "=true" }]
-predict = "fail:silent"
-basis = "read"
-note = "The client never sets stream_options.include_usage, so llama-server sends no usage (LS server-task.cpp:502)."
-fix = "oicp-client: send include_usage"
+predict = "pass"
+basis = "measured"
+note = "Re-predicted pass 2026-10-25 (es-c2-battery-rejudge-fix) from the saved rerun (battery-20261025-191102): the frame is present on both targets, and its completion count is the answer's on all three streaming cases measured (embedded 335/63/64, llama-server 495/61/64 against their own answers). The earlier `fail:silent` rested on the client never setting stream_options.include_usage; it does now. The scenario accepts either count the answer can be counted two ways by: the target's tokenizer count, or the token frames the same stream delivered (llama-server's count is what it evaluated, which a draft head makes larger)."
+fix = "done: the engine sends include_usage and llama-server honours it; the row now has a scenario that reads what the frame counted rather than only that the kind was present."
 
 [[row]]
 id = "projection.stream-tool-calls"
@@ -541,9 +547,9 @@ callers = "enrichment and judges at max_tokens <= 512 (FastShort coalescer, engi
 check = "aggregate tokens/s, 8 concurrent fast calls, within 10% (the only timed row)"
 judge = [{ kind = "throughput", ratio = 0.9 }]
 when = [{ method = "=\"throughput\"" }]
-predict = "pass"
-basis = "unverified"
-note = "llama-server --parallel batches continuously; the default is 4 slots."
+predict = "fail:differs"
+basis = "measured"
+note = "llama-server --parallel batches continuously; the default is 4 slots. battery-20261025-191102 measured 66.0-66.1 tok/s against 78.1 (85%) on both router targets, under the row's own 90% bar, so it is predicted to fail on the measurement rather than on a passed-and-wrong guess. Accepted at 85% by operator direction 2026-10-25 (the scrappy path); es-r2-router-parity re-measures it with kv-unified, and the row stays live until that number lands."
 
 [[row]]
 id = "cost.resident-bytes"
@@ -563,12 +569,12 @@ layer = "cost"
 covers = ["admission"]
 callers = "admission::stamp, streaming.rs:985,1392,2959; call_census.rs:258"
 check = "under predicted overload, an admitted call parks and an unadmitted one is shed"
-judge = [{ kind = "scenario", driver = "admission", what = "an admitted call is served after the bound where a fresh one behind it is shed (or, against the router, both are served and neither sheds)" }]
+judge = [{ kind = "scenario", driver = "admission-shape", what = "the admitted call is served; whether the fresh one behind it is shed is the sentence the row records as a named difference (the engine sheds it, the router does not)" }]
 when = [{ method = "=\"admission\"" }]
-predict = "fail:differs"
-basis = "read"
+predict = "pass"
+basis = "measured"
 fix = "decided 2026-10-10: admission belongs to the scheduler above the engine (ARCH 12); it sheds from the server's /slots occupancy rather than an engine-internal prediction"
-note = "Driven since 2026-10-25 (es-c2-battery-rejudge, L I3): one slot, a long held call, then a second arriving behind it, the first carrying a `turn_admission` the replay route stamps onto the request. The engine parks the admitted caller past its bound and sheds the fresh one (`model_slot.rs:1316-1403`). Predicted `fail:differs` against the router: the engine client never sends `turn_admission` for a plain remote call (`outbound.rs`), and llama-server queues everything without shedding, so a remote target serves both where the engine sheds one. The scenario grades each target on its own (`admitted` served and `shed` present on the engine; both served, no shed, on the router), so the prediction is the verdict the difference predicts."
+note = "Driven since 2026-10-25 (es-c2-battery-rejudge, L I3): one slot, a long held call, then a second arriving behind it, the first carrying a `turn_admission` the replay route stamps onto the request. The engine parks the admitted caller past its bound and sheds the fresh one (`model_slot.rs:1316-1403`). Re-judged 2026-10-25 (es-c2-battery-rejudge-fix) after the rerun: the scenario compared the ENGINE shape against the router records, charging the router for not being the engine; `admission-shape` now grades each target on its own, so the router both-served-no-shed answer is a verdict, not a difference. CORRECTED to `pass`, basis measured, on the Halo's self-booted run (`engine_conformance_instruments_e2e`, records /tmp/e2e-router.jsonl, case 18e46ea9efac, `[\"served:admitted\",\"served:unadmitted\"]`): `admission_shape` (scenario.rs:135-150) passes when the admitted call is served and fails only when nothing is served or the admitted call itself is shed — its doc comment says either shape is a verdict. The old `fail:differs` was the deleted cross-target comparison's prediction, so leaving it made a passing row read `not as predicted` on every run. Inverting it alone, all else equal, moved this row's cells from 1 to 0 not-as-predicted and changed no verdict. The bound itself is the engine scheduler's own (ARCH 12)."
 
 # ── host ────────────────────────────────────────────────────────────────
 

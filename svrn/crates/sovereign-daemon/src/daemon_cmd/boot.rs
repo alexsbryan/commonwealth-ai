@@ -226,7 +226,7 @@ pub(super) async fn run_daemon(
         deferred_daemon,
         ner,
         ranked,
-    } = match super::serving_boot::boot_serving(&config, args, &config_override, hosted).await {
+    } = match super::serving_boot::boot_serving(&config, &config_override, hosted).await {
         Ok(s) => s,
         Err(code) => return code,
     };

@@ -66,7 +66,7 @@ wildcards = "warn"
 allow-wildcard-paths = true
 
 [sources]
-# Everything must come from crates.io. The vendored llama-cpp-4 is a
+# Everything must come from crates.io. The vendored lance-linalg is a
 # [patch.crates-io] *path* source, which this lane does not restrict.
 unknown-registry = "deny"
 unknown-git = "deny"

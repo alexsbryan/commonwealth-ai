@@ -469,10 +469,11 @@ async fn run_terminal_join(raw: &str, opts: &Opts) -> i32 {
             entry_embed_model: facts.embed.clone(),
         },
         compute: Default::default(),
-        // Default `[engine] kind = llama`, and it is never consulted: a
-        // terminal returns its forwarding provider before `load_provider`
-        // reaches the engine factory. Written as the default rather than
-        // omitted so the file round-trips like any other config.
+        // Default `[engine] kind = llama-server`, and it is never
+        // consulted: a terminal returns its forwarding provider before
+        // `load_provider` reaches the engine factory, and it holds no
+        // `[models]` for a router to serve. Written as the default rather
+        // than omitted so the file round-trips like any other config.
         engine: Default::default(),
         search: Default::default(),
         retrieval: Default::default(),
@@ -716,10 +717,11 @@ async fn run_terminal_address(entry_raw: &str, opts: &Opts) -> i32 {
             entry_embed_model: embed_model.clone(),
         },
         compute: Default::default(),
-        // Default `[engine] kind = llama`, and it is never consulted: a
-        // terminal returns its forwarding provider before `load_provider`
-        // reaches the engine factory. Written as the default rather than
-        // omitted so the file round-trips like any other config.
+        // Default `[engine] kind = llama-server`, and it is never
+        // consulted: a terminal returns its forwarding provider before
+        // `load_provider` reaches the engine factory, and it holds no
+        // `[models]` for a router to serve. Written as the default rather
+        // than omitted so the file round-trips like any other config.
         engine: Default::default(),
         search: Default::default(),
         retrieval: Default::default(),

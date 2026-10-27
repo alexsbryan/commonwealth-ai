@@ -18,11 +18,11 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, OnceLock};
 
-use sovereign_contracts::ner::{generation_wire, to_wire, LabeledEntityExtractor};
-use sovereign_contracts::traits::InferenceProvider;
-use sovereign_inference::served_kind::{
+use crate::served_kind::{
     self, KindChild, KindClient, KindLoader, KindRoute, KindServeError, ServedKind,
 };
+use sovereign_contracts::ner::{generation_wire, to_wire, LabeledEntityExtractor};
+use sovereign_contracts::traits::InferenceProvider;
 
 pub use sovereign_gliner::configured_model_id;
 pub use sovereign_gliner::gliner_ner::{download_model, models_root, probe_model_available};
@@ -128,8 +128,8 @@ fn load_once(
                 tracing::info!(target: "served_kind", kind = kind.role, loaded = handle.is_some(), "NER kind loaded for this process");
                 handle
             }
-            KindLoader::Provider(_) => {
-                tracing::warn!(target: "served_kind", kind = kind.role, "registered kind loads a provider, not an entity extractor");
+            KindLoader::Provider(_) | KindLoader::Absent { .. } => {
+                tracing::warn!(target: "served_kind", kind = kind.role, "registered kind loads no entity extractor");
                 None
             }
         }

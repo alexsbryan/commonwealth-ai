@@ -69,17 +69,13 @@ fn main() {
             )
             .await;
             // serve on the node's mesh through cw-rails, exactly as a
-            // standalone serve is (pb-mesh-exit-transport): its distribution,
-            // rpc-warm, member client and origin registrations.
-            let mut routes = assembly.routes;
+            // standalone serve is (pb-mesh-exit-transport): its member client
+            // and origin registrations.
+            let routes = assembly.routes;
             sovereign_serve::rails_mesh::join(
                 &assembly.rails_base,
                 bound,
                 std::sync::Arc::clone(&assembly.cell) as _,
-                std::sync::Arc::clone(&ranking.router),
-                assembly.distribute,
-                assembly.servable,
-                &mut routes,
             )
             .await;
             let parts = sovereign_daemon::process::HostedParts {
@@ -99,10 +95,9 @@ fn main() {
             Ok(parts)
         },
     )
-    // The loader's env contract, applied by svrn's boot on every path.
-    .env_contract(|args, shared_model| {
-        sovereign_serve::apply_rpc_worker_flag(args);
-        sovereign_serve::apply_shared_model_role_to_env(shared_model);
+    // The shared model primary turns route to, applied by svrn's boot on every path.
+    .env_contract(|shared_model| {
+        sovereign_serve::apply_shared_model_to_env(shared_model);
     })
     // The NER kind svrn's ingest and retrieval take their handle from, where
     // this process loads for itself (hosted, or a terminal).
@@ -166,17 +161,7 @@ fn main() {
         Some(mesh),
         sovereign_daemon::process::Posture::Open,
     );
-    // macOS: past `__cxa_finalize_ranges`, so the ggml-metal device sweeper
-    // never asserts on still-resident resources; the loader's fast-exit,
-    // through serve's face, where the daemon's `run` used to call it.
-    #[cfg(target_os = "macos")]
-    {
-        sovereign_serve::fast_exit_skip_destructors(exit_code)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        std::process::exit(exit_code)
-    }
+    std::process::exit(exit_code)
 }
 
 /// serve's ranking as svrn is handed it: the router as svrn's provider, its

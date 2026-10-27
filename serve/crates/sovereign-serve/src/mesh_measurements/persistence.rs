@@ -10,8 +10,8 @@ use super::*;
 
 /// Resolved store path, or `None` when disabled.
 ///
-/// `SOVEREIGN_MESH_MEASUREMENTS=0` turns the whole mechanism off: lookups miss
-/// and nothing is written, which is the escape hatch for a machine that should
+/// `SOVEREIGN_MESH_MEASUREMENTS=0` turns the whole mechanism off: nothing is
+/// read or written, which is the escape hatch for a machine that should
 /// not keep this history.
 pub fn store_path() -> Option<PathBuf> {
     match std::env::var("SOVEREIGN_MESH_MEASUREMENTS") {
@@ -72,30 +72,11 @@ pub fn save(file: &MeasurementFile) -> std::io::Result<()> {
 // Travel
 // ---------------------------------------------------------------------------
 //
-// A measurement is worth most to the machine that did not take it. Locally it
-// answers "what did this feel like last time"; on a peer it answers the question
-// `mesh plan` exists for — "what will this feel like here" — for a configuration
-// the reader has no way to try without buying hardware.
-//
-// The shape follows the notes precedent: the durable local file is
-// authoritative, and the mesh KV store is a wire buffer. Concretely that means
-// three things, and the third is the one that is easy to get wrong:
-//
-//  1. A record is written to disk first and published second. `mesh bench`
-//     succeeds with the daemon down; the record simply has not travelled yet.
-//  2. Publication is idempotent — `wire_key` is derived from the record, so
-//     republishing the same record overwrites its own entry rather than
-//     accumulating copies. LWW does the right thing without a sequence number.
-//  3. The buffer is *lost on daemon restart*, which is why publication cannot be
-//     a one-shot at measure time. The daemon republishes the local file at boot
-//     (`bootstrap.rs`). Without that step every node's history would quietly
-//     evaporate from the mesh one restart at a time, while still looking correct
-//     on the node that owned it.
-//
-// Peer records are deliberately **not** merged into [`MeasurementFile`]. That
-// keeps [`lookup`] meaning exactly what it has always meant — what this machine
-// measured — so no peer's number can ever be served as the reader's own. They
-// reach the operator through [`near_misses`], attributed, and nowhere else.
+// The durable local file is authoritative; the ring journal carries copies.
+// Publication is idempotent by content — `wire_key` is derived from the
+// record, so republishing the same record is recognised rather than
+// accumulated (`crate::measurements_rail::republish`). Peer records are never
+// merged into [`MeasurementFile`].
 
 /// A record on the wire, versioned so a future incompatible change is *dropped*
 /// by an older reader rather than half-understood.
@@ -113,8 +94,8 @@ struct MeasurementEnvelope {
 /// Serialize a record for publication, or `None` if it must not travel.
 ///
 /// Refuses an [`Verdict::Invalid`] run. A failed run is glassbox material *for
-/// the operator who ran it* — it says their machine could not do the thing —
-/// and `mesh bench --history` shows it. On a peer it is only noise, and worse,
+/// the operator who ran it* — it says their machine could not do the thing.
+/// On a peer it is only noise, and worse,
 /// it is noise a reader could mistake for a capability claim about hardware they
 /// were considering. The local file keeps every run; the wire carries only the
 /// ones that mean something to a stranger.
@@ -187,41 +168,4 @@ pub fn wire_key(record: &MeasurementRecord) -> String {
     h.update(record.measured_at.to_le_bytes());
     h.update(((record.decode_tok_s * 1000.0).round() as i64).to_le_bytes());
     format!("{:010}/{}", record.measured_at, hex16(&h.finalize()))
-}
-
-/// A measurement taken by another node, with the identity of the node that took
-/// it.
-///
-/// The origin is *not* a field of [`MeasurementRecord`], and that is deliberate.
-/// It comes from the KV entry's own `origin`, stamped by the publishing daemon
-/// and carried by gossip — so a node cannot claim to be someone else by writing
-/// a name into a payload it controls. A record says what was measured; the
-/// envelope around it says who says so.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ForeignRecord {
-    /// Hex node id of the publisher. Always present, always the ground truth.
-    pub origin_node: String,
-    /// Friendly mesh name for that node, resolved against live membership at
-    /// read time. `None` when the peer has since left, or was never named.
-    pub origin_name: Option<String>,
-    /// What they measured.
-    pub record: MeasurementRecord,
-}
-
-impl ForeignRecord {
-    /// How to name the publisher to a reader.
-    ///
-    /// Prefers the friendly name; falls back to a truncated node id, which is
-    /// unlovely but is at least something the operator can match against
-    /// `svrn mesh status`. Never falls back to a description of the *hardware* —
-    /// that would read as an identity the mesh had verified, and it has not.
-    pub fn describe_origin(&self) -> String {
-        if let Some(name) = self.origin_name.as_deref().map(str::trim) {
-            if !name.is_empty() {
-                return name.to_string();
-            }
-        }
-        let short: String = self.origin_node.chars().take(16).collect();
-        format!("node-{short}")
-    }
 }

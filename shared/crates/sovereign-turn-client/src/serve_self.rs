@@ -45,8 +45,8 @@ pub fn default_serve_base() -> String {
 }
 
 /// What reading serve's engine state found. The absences stay apart
-/// (principle 6): "not observed yet" is an [`EngineStateRead::Answered`]
-/// whose `device_memory` is `None`, and it is never the same answer as a
+/// (principle 6): "no workers yet" is an [`EngineStateRead::Answered`]
+/// whose `rpc_workers` is empty, and it is never the same answer as a
 /// serve that is not there or one that did not answer in time. Moved from
 /// the svrn daemon's `serve_client` when its `/v1/mesh/status` went
 /// (pb-mesh-exit-transport); `svrn mesh plan|bench` read it now. `T` is
@@ -143,10 +143,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_serve_that_answers_is_read_and_not_observed_yet_stays_none() {
+    async fn a_serve_that_answers_is_read_and_holds_no_workers_yet() {
         let base = stub_serve(std::time::Duration::ZERO).await;
         match read_engine_state(&base).await {
-            EngineStateRead::Answered(state) => assert_eq!(state.device_memory, None),
+            EngineStateRead::Answered(state) => assert!(state.rpc_workers.is_empty()),
             other => panic!("expected an answer, got {other:?}"),
         }
     }

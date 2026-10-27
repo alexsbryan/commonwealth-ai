@@ -17,6 +17,12 @@
 //! execs (`sovereign-cli bench engine-conformance run`), so the verdict comes
 //! from the code a seat's run will use.
 //!
+//! It also builds `bench/lanes/engine-swap/llg-parity` (the one crate that is
+//! outside this workspace on purpose) and reads its scenario file back through
+//! `judge --scenario`, so the language-parity rows (`decode.lark`,
+//! `decode.url-allowlist`, `decode.evidence-id-allowlist`) take a real verdict
+//! rather than abstaining for a missing instrument.
+//!
 //! Ignored in the suite: it loads real GGUFs and boots servers.
 //!
 //! ```text
@@ -39,13 +45,23 @@ const BIN: &str = env!("CARGO_BIN_EXE_sovereign-stock");
 const CHAT_DEFAULT: &str = "Qwen3.5-0.8B-UD-Q6_K_XL.gguf";
 const EMBED_DEFAULT: &str = "Qwen3-Embedding-0.6B-Q8_0.gguf";
 
-/// The rows this test proves reached a verdict (L I3, I4).
-const ROWS: [&str; 5] = [
+/// The rows this test proves reached a verdict (L I3, I4, and the
+/// stream-usage instrument the rerun showed was grading the wrong count).
+const ROWS: [&str; 6] = [
     "projection.stream-error",
     "projection.stream-split-line",
+    "projection.stream-usage",
     "cost.admission",
     "compute.embeddings-default-inputs",
     "host.lifecycle",
+];
+
+/// The language-parity rows (milestone 5): judged by `llg-parity`'s scenario
+/// file, not by a record facet.
+const LLG_ROWS: [&str; 3] = [
+    "decode.lark",
+    "decode.url-allowlist",
+    "decode.evidence-id-allowlist",
 ];
 
 struct Killed(Child);
@@ -338,6 +354,14 @@ fn the_new_instruments_reach_a_verdict_on_a_daemon_and_router_the_test_boots() {
             "no case in the bank exercises {row}"
         );
     }
+    // The language-parity rows need three grammars in the bank too: without
+    // a case the scenario has nothing to judge against a target.
+    for row in LLG_ROWS {
+        assert!(
+            bank.iter().any(|c| carries(c, &[row])),
+            "no case in the bank exercises {row}"
+        );
+    }
 
     // 1. The router with client-prepared embed input: the stream, admission
     //    and lifecycle rows.
@@ -345,9 +369,10 @@ fn the_new_instruments_reach_a_verdict_on_a_daemon_and_router_the_test_boots() {
         &root.path().join("router-client"),
         "[engine]\nkind = \"llama-server\"\nembed_inputs = \"client\"\ngrammar = \"llguidance\"\ncontext_size = 4096",
     );
-    let router_rows: [&str; 4] = [
+    let router_rows: [&str; 5] = [
         "projection.stream-error",
         "projection.stream-split-line",
+        "projection.stream-usage",
         "cost.admission",
         "host.lifecycle",
     ];
@@ -362,9 +387,14 @@ fn the_new_instruments_reach_a_verdict_on_a_daemon_and_router_the_test_boots() {
     );
     drop(router_client);
 
-    // 2. The embedded engine: the reference for the embed row.
+    // 2. The embedded engine: the reference for the embed row and for the
+    //    streaming usage one, which needs both sides' records to be a
+    //    comparison at all.
     let embedded = boot(&root.path().join("embedded"), "[engine]\nkind = \"llama\"");
-    let embed_rows: [&str; 1] = ["compute.embeddings-default-inputs"];
+    let embed_rows: [&str; 2] = [
+        "compute.embeddings-default-inputs",
+        "projection.stream-usage",
+    ];
     let embedded_records = root.path().join("embedded.jsonl");
     run_rows(
         &cli,
@@ -392,7 +422,43 @@ fn the_new_instruments_reach_a_verdict_on_a_daemon_and_router_the_test_boots() {
     );
     drop(default_embed);
 
-    // Judge all three record sets against the shipped inventory.
+    // The language-parity rows take their verdict from a scenario file, not
+    // from a record: `llg-parity` judges the corpus the engine side writes
+    // under llama-server's own llguidance. Build it in a target dir of its
+    // own (it has its own Cargo.lock and pins 1.0.1 against the workspace's
+    // 1.7.6) and read its file back the way `battery.sh` will.
+    let llg_dir = repo.join("bench/lanes/engine-swap/llg-parity");
+    let llg_target = root.path().join("llg-parity-target");
+    let built = Command::new("cargo")
+        .args(["build", "--manifest-path"])
+        .arg(llg_dir.join("Cargo.toml"))
+        .env("CARGO_TARGET_DIR", &llg_target)
+        .output()
+        .expect("cargo builds llg-parity");
+    assert!(
+        built.status.success(),
+        "llg-parity did not build:\n{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    let scenario = root.path().join("scenario.jsonl");
+    let ran = Command::new(llg_target.join("debug/llg-parity"))
+        .args(["--out", scenario.to_str().unwrap()])
+        .current_dir(&repo)
+        .output()
+        .expect("llg-parity runs");
+    let ran_stdout = String::from_utf8_lossy(&ran.stdout).to_string();
+    eprintln!("llg-parity:\n{ran_stdout}");
+    // Exit 0 (every row passed) and 3 (one failed) are both verdicts; 4 is a
+    // file where no row could be judged.
+    assert!(
+        matches!(ran.status.code(), Some(0) | Some(3)),
+        "llg-parity claimed nothing for some row (exit {:?}):\n{ran_stdout}\n{}",
+        ran.status.code(),
+        String::from_utf8_lossy(&ran.stderr)
+    );
+
+    // Judge all three record sets against the shipped inventory, with the
+    // scenario file beside them.
     let verdicts = root.path().join("verdicts");
     let judged = Command::new(&cli)
         .args(["bench", "engine-conformance", "judge"])
@@ -405,10 +471,25 @@ fn the_new_instruments_reach_a_verdict_on_a_daemon_and_router_the_test_boots() {
         .args(["--records", router_records.to_str().unwrap()])
         .args(["--records", embedded_records.to_str().unwrap()])
         .args(["--records", default_embed_records.to_str().unwrap()])
+        .args(["--scenario", scenario.to_str().unwrap()])
         .args(["--out", verdicts.to_str().unwrap()])
         .env("SOVEREIGN_NO_STALE_WARN", "1")
         .output()
         .expect("the judge runs");
+    // A failing assertion below would delete the tempdir with the evidence
+    // in it; the record sets are small, so keep them where the failure can
+    // be read.
+    if std::env::var_os("CONFORMANCE_E2E_KEEP").is_some() {
+        for f in [
+            &router_records,
+            &embedded_records,
+            &default_embed_records,
+            &scenario,
+        ] {
+            let name = f.file_name().and_then(|n| n.to_str()).unwrap_or("rec");
+            let _ = std::fs::copy(f, Path::new("/tmp").join(format!("e2e-{name}")));
+        }
+    }
     let stdout = String::from_utf8_lossy(&judged.stdout).to_string();
     let stderr = String::from_utf8_lossy(&judged.stderr).to_string();
     eprintln!("judge:\n{stdout}\n{stderr}");
@@ -439,6 +520,31 @@ fn the_new_instruments_reach_a_verdict_on_a_daemon_and_router_the_test_boots() {
             verdict == "passed" || verdict == "failed",
             "row {row} is `{verdict}`, which claims nothing:\n{table}"
         );
+    }
+
+    // The language-parity rows: each target's verdict comes from the
+    // scenario file, and for these three it must be passed or failed — all
+    // three grammars compile under 1.0.1. `never-ran` is judged but not
+    // applied here: battery.sh applies a scenario verdict to every target it
+    // has no record for, and a record run that did not ask these rows says
+    // nothing about the language, which the scenario file answers.
+    for row in LLG_ROWS {
+        let found: Vec<&Value> = verdict_lines
+            .iter()
+            .filter(|v| v["row"] == row && v["verdict"] != "never-ran")
+            .collect();
+        assert!(
+            !found.is_empty(),
+            "row {row} has no verdict from the scenario file — it did not reach the judge:\n{table}"
+        );
+        for v in &found {
+            let verdict = v["verdict"].as_str().unwrap_or_default();
+            assert!(
+                verdict == "passed" || verdict == "failed",
+                "row {row} on {} is `{verdict}`, which claims nothing:\n{table}",
+                v["target"]
+            );
+        }
     }
 
     // The embed instrument must be able to see what the row is about. On

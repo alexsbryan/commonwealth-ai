@@ -5,12 +5,13 @@
 //! Lifecycle: bind `127.0.0.1:0` → print the stdout handshake (the
 //! supervisor parses the port → `Warming`) → serve immediately (so
 //! `/health` answers 503 while the model loads) → load the model on a
-//! blocking task → flip `ready` (→ `Healthy`) → serve until SIGTERM →
-//! `fast_exit_skip_destructors` past the ggml teardown SIGABRT.
+//! blocking task → flip `ready` (→ `Healthy`) → serve until SIGTERM → exit.
 //!
-//! Roles: `generate` (EmbeddedLlamaCpp), `embed` (EmbedOnlyProvider),
-//! `mock` (canned frames with a per-token delay — model-free, for the
-//! crash-isolation e2e).
+//! Roles: a served kind under its registered child role
+//! (`crate::served_kind`), and `mock` (canned frames with a per-token delay —
+//! model-free, for the crash-isolation e2e). The `generate` and `embed` roles
+//! hosted the embedded engine and were deleted with it (ENGINE_SWAP_PLAN G2);
+//! naming one is refused.
 
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -18,14 +19,13 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
+use crate::served_kind::{self, ServedKind};
 use async_trait::async_trait;
 use futures::Stream;
 use sovereign_contracts::{
     CompletionRequest, CompletionResponse, Depth, Error, InferenceProvider, ProviderCapabilities,
     Result, Speed, StreamFrame,
 };
-use sovereign_inference::fast_exit_skip_destructors;
-use sovereign_inference::served_kind::{self, ServedKind};
 use tracing::{error, info};
 
 use crate::mock::MockProvider;
@@ -35,22 +35,16 @@ use crate::supervisor::HANDSHAKE_PREFIX;
 /// The kind of provider a child hosts.
 #[derive(Debug, Clone, Copy)]
 enum Role {
-    /// Full generative engine (`EmbeddedLlamaCpp`), serves `/internal/complete*`.
-    Generate,
-    /// Embedding-only engine (`EmbedOnlyProvider`).
-    Embed,
     /// Model-free canned provider for the crash-isolation e2e.
     Mock,
     /// A served model kind hosted under its registered child role
-    /// (`sovereign_inference::served_kind`), serving its kind route.
+    /// (`crate::served_kind`), serving its kind route.
     Kind(ServedKind),
 }
 
 impl Role {
     fn as_str(self) -> &'static str {
         match self {
-            Role::Generate => crate::compute_roles::GENERATE_ROLE,
-            Role::Embed => crate::compute_roles::EMBED_ROLE,
             Role::Mock => "mock",
             Role::Kind(kind) => kind.child_role().unwrap_or(kind.role),
         }
@@ -62,17 +56,9 @@ struct ChildArgs {
     role: Role,
     name: String,
     model: Option<PathBuf>,
-    ctx: u32,
-    gpu_layers: Option<u32>,
     bind: String,
     mock_tokens: usize,
     mock_token_delay_ms: u64,
-    /// Path to a [`crate::distribution::DistributionHandoff`] written by the daemon. Present iff
-    /// this child hosts the mesh's DISTRIBUTED primary: it names the warmed
-    /// RPC workers and the shard plan they were warmed against. The path is
-    /// visible in `ps` and the file is plain JSON, so "what was this child
-    /// told to do" is answerable without reading the daemon's logs.
-    distribution: Option<PathBuf>,
 }
 
 fn take_value<'a>(
@@ -84,31 +70,24 @@ fn take_value<'a>(
         .ok_or_else(|| format!("{flag} requires a value"))
 }
 
-/// Context size a child loads with when `--ctx` is not given. Public because
-/// the daemon's warm path must project memory for the SAME context the child
-/// will build — a projection at a different ctx sizes the margin for a load
-/// that never happens.
-pub const DEFAULT_CTX: u32 = 4096;
-
 impl ChildArgs {
     fn parse(args: &[String]) -> std::result::Result<Self, String> {
         let mut role: Option<Role> = None;
         let mut name: Option<String> = None;
         let mut model: Option<PathBuf> = None;
-        let mut ctx: u32 = DEFAULT_CTX;
-        let mut gpu_layers: Option<u32> = None;
         let mut bind = "127.0.0.1:0".to_string();
         let mut mock_tokens: usize = 32;
         let mut mock_token_delay_ms: u64 = 0;
-        let mut distribution: Option<PathBuf> = None;
 
         let mut it = args.iter();
         while let Some(arg) = it.next() {
             match arg.as_str() {
                 "--role" => {
-                    role = Some(match take_value(&mut it, "--role")?.as_str() {
-                        crate::compute_roles::GENERATE_ROLE => Role::Generate,
-                        crate::compute_roles::EMBED_ROLE => Role::Embed,
+                    let named = take_value(&mut it, "--role")?;
+                    if let Some(why) = crate::compute_roles::retired(&named) {
+                        return Err(why);
+                    }
+                    role = Some(match named.as_str() {
                         "mock" => Role::Mock,
                         other => match served_kind::kind_for_child_role(other) {
                             Some(kind) => Role::Kind(kind),
@@ -118,23 +97,15 @@ impl ChildArgs {
                 }
                 "--name" => name = Some(take_value(&mut it, "--name")?),
                 "--model" => model = Some(PathBuf::from(take_value(&mut it, "--model")?)),
-                "--ctx" => {
-                    ctx = take_value(&mut it, "--ctx")?
-                        .parse()
-                        .map_err(|_| "invalid --ctx".to_string())?
-                }
-                "--gpu-layers" => {
-                    let v = take_value(&mut it, "--gpu-layers")?;
-                    gpu_layers = if v == "auto" {
-                        None
-                    } else {
-                        Some(v.parse().map_err(|_| "invalid --gpu-layers".to_string())?)
-                    };
+                // The kinds a child hosts load at their own size; these two
+                // sized the retired generate and embed engines. Refused by
+                // name rather than accepted and ignored (ARCH 6).
+                flag @ ("--ctx" | "--gpu-layers") => {
+                    return Err(format!(
+                        "{flag} sized the retired generate and embed roles; no child role reads it"
+                    ))
                 }
                 "--bind" => bind = take_value(&mut it, "--bind")?,
-                "--distribution" => {
-                    distribution = Some(PathBuf::from(take_value(&mut it, "--distribution")?))
-                }
                 "--mock-tokens" => {
                     mock_tokens = take_value(&mut it, "--mock-tokens")?
                         .parse()
@@ -153,12 +124,9 @@ impl ChildArgs {
             role: role.ok_or_else(|| "--role is required".to_string())?,
             name: name.unwrap_or_else(|| "compute-child".to_string()),
             model,
-            ctx,
-            gpu_layers,
             bind,
             mock_tokens,
             mock_token_delay_ms,
-            distribution,
         })
     }
 
@@ -177,8 +145,8 @@ impl ChildArgs {
 }
 
 /// Entrypoint: `<daemon-binary> --compute-child --role … --model …`.
-/// Returns a process exit code (the success path never returns — it
-/// `fast_exit`s past the ggml destructors on SIGTERM).
+/// Returns a process exit code (the success path never returns — it exits
+/// on SIGTERM).
 pub fn run(args: &[String]) -> i32 {
     let cfg = match ChildArgs::parse(args) {
         Ok(c) => c,
@@ -200,8 +168,6 @@ pub fn run(args: &[String]) -> i32 {
 
     let rt = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
-        // Match the daemon's 8 MiB worker stack — llama.cpp call chains are deep.
-        .thread_stack_size(8 * 1024 * 1024)
         .thread_name("sovereign-compute-child-rt")
         .build()
     {
@@ -271,14 +237,11 @@ async fn serve(cfg: ChildArgs) -> i32 {
         let name = cfg.name.clone();
         let role = cfg.role;
         let model = cfg.model.clone();
-        let ctx = cfg.ctx;
-        let gpu = cfg.gpu_layers;
         let mock_tokens = cfg.mock_tokens;
         let mock_delay = cfg.mock_token_delay_ms;
-        let distribution = cfg.distribution.clone();
         tokio::spawn(async move {
             let loaded = tokio::task::spawn_blocking(move || {
-                load_provider(role, model, ctx, gpu, mock_tokens, mock_delay, distribution)
+                load_provider(role, model, mock_tokens, mock_delay)
             })
             .await;
             match loaded {
@@ -291,11 +254,11 @@ async fn serve(cfg: ChildArgs) -> i32 {
                 }
                 Ok(Err(e)) => {
                     error!(target: "compute_child", child = %name, error = %e, "model load failed; exiting");
-                    fast_exit_skip_destructors(1);
+                    std::process::exit(1);
                 }
                 Err(e) => {
                     error!(target: "compute_child", child = %name, error = %e, "model load task panicked; exiting");
-                    fast_exit_skip_destructors(1);
+                    std::process::exit(1);
                 }
             }
         });
@@ -332,33 +295,18 @@ async fn serve(cfg: ChildArgs) -> i32 {
         return 1;
     }
 
-    // SIGTERM path — skip the ggml static destructors (the teardown SIGABRT).
-    info!(target: "compute_child", child = %cfg.name, "SIGTERM received; fast-exiting");
-    fast_exit_skip_destructors(0)
+    info!(target: "compute_child", child = %cfg.name, "SIGTERM received; exiting");
+    std::process::exit(0)
 }
 
 /// Build the role's provider. Blocking (model load) — call on `spawn_blocking`.
-#[allow(clippy::too_many_arguments)]
 fn load_provider(
     role: Role,
     model: Option<PathBuf>,
-    ctx: u32,
-    gpu_layers: Option<u32>,
     mock_tokens: usize,
     mock_token_delay_ms: u64,
-    distribution: Option<PathBuf>,
 ) -> Result<Arc<dyn InferenceProvider>> {
     match role {
-        Role::Generate => {
-            let path = model
-                .ok_or_else(|| Error::InvalidInput("--model required for role=generate".into()))?;
-            crate::assembly::assemble_child_generate(&path, ctx, gpu_layers, distribution)
-        }
-        Role::Embed => {
-            let path = model
-                .ok_or_else(|| Error::InvalidInput("--model required for role=embed".into()))?;
-            crate::assembly::assemble_child_embed(&path)
-        }
         Role::Kind(kind) => {
             let path = model.ok_or_else(|| {
                 Error::InvalidInput(format!("--model required for role={}", kind.role))

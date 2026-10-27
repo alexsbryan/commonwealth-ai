@@ -1,35 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-/// Without `llama_cpp` in the allowlist, the log route serve installs
-/// before loading delivers nothing and a failed load is a bare error. It
-/// must be listed at BOTH postures, and reach `debug` when the operator
-/// asks for verbose ggml output (moved with the knob from svrn's filter,
-/// pb-serve-distributes).
-#[test]
-fn serve_filter_carries_llama_cpp_target() {
-    let quiet = super::tracing_filter_for(false);
-    let verbose = super::tracing_filter_for(true);
-    assert!(
-        quiet.contains("llama_cpp=info"),
-        "llama_cpp must be allowlisted even when quiet: {quiet}"
-    );
-    assert!(
-        verbose.contains("llama_cpp=debug"),
-        "GGML_RPC_DEBUG / SOVEREIGN_LLAMA_LOGS=1 must lift llama_cpp to debug: {verbose}"
-    );
-    tracing_subscriber::EnvFilter::builder()
-        .parse(&quiet)
-        .expect("serve's default filter must parse");
-    let rendered = tracing_subscriber::EnvFilter::builder()
-        .parse(&verbose)
-        .expect("verbose serve filter must parse")
-        .to_string();
-    assert!(
-        rendered.contains("llama_cpp=debug"),
-        "llama_cpp=debug did not survive EnvFilter parsing: {rendered}"
-    );
-}
-
 use super::*;
 
 #[test]
@@ -314,17 +284,7 @@ async fn standalone_routes() -> (Vec<RouteBundle>, tempfile::TempDir) {
         "[engine]\nkind = \"mock\"\n\n[models]\nprimary = \"/nonexistent/mock.gguf\"\nembed = \"/nonexistent/mock-embed.gguf\"\n",
     )
     .expect("write config");
-    let ServeAssembly {
-        mut routes,
-        servable,
-        rails_base,
-        ..
-    } = assemble(dir.path(), &config_path).await.expect("assembled");
-    routes.push(crate::rpc_warm::bundle(
-        servable,
-        crate::rails_mesh::RailsRoster::new(rails_base),
-        Arc::new(crate::MeshRpcShardWarmer::new()),
-    ));
+    let ServeAssembly { routes, .. } = assemble(dir.path(), &config_path).await.expect("assembled");
     (routes, dir)
 }
 
@@ -335,7 +295,7 @@ async fn standalone_routes() -> (Vec<RouteBundle>, tempfile::TempDir) {
 /// named here the moment it is mounted.
 ///
 /// The guard also turns away no legitimate caller: the same router bound on
-/// every interface still runs rpc-warm for a loopback caller, as cw-rails'
+/// every interface still lists model files for a loopback caller, as cw-rails'
 /// forward is. One test in a child process of its own, because `assemble`
 /// registers the mock engine, the registry refuses a second registration in
 /// one process, and reload's tests register it too: `cargo test` (the lift)
@@ -371,7 +331,7 @@ async fn every_internal_route_serve_mounts_refuses_a_non_loopback_caller() {
         .cloned()
         .collect();
     for expected in [
-        crate::rails_mesh::RPC_WARM_PATH,
+        oicp_types::model_transfer::MODELS_LIST_PATH,
         crate::guest_route::GUEST_ROUTE_PATH,
     ] {
         assert!(
@@ -414,7 +374,7 @@ async fn every_internal_route_serve_mounts_refuses_a_non_loopback_caller() {
          host_kit::shell::guard::loopback_only: {unguarded:?}"
     );
 
-    // `{}` is refused by the handler, past the guard, as a malformed body.
+    // A loopback caller passes the guard and reaches the handler.
     let listener = tokio::net::TcpListener::bind("0.0.0.0:0")
         .await
         .expect("bind");
@@ -422,18 +382,17 @@ async fn every_internal_route_serve_mounts_refuses_a_non_loopback_caller() {
     let service = app.into_make_service_with_connect_info::<SocketAddr>();
     tokio::spawn(async move { axum::serve(listener, service).await });
     let response = reqwest::Client::new()
-        .post(format!(
+        .get(format!(
             "http://127.0.0.1:{port}{}",
-            crate::rails_mesh::RPC_WARM_PATH
+            oicp_types::model_transfer::MODELS_LIST_PATH
         ))
-        .json(&serde_json::json!({}))
         .send()
         .await
         .expect("answered");
     let status = response.status();
     let body = response.text().await.unwrap_or_default();
     assert!(
-        status != 403 && body.contains("malformed rpc-warm body"),
-        "a loopback caller did not reach the rpc-warm handler: {status} {body}"
+        status.is_success() && body.contains("files"),
+        "a loopback caller did not reach the model-list handler: {status} {body}"
     );
 }

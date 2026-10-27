@@ -96,9 +96,10 @@ pub struct SetupConfig {
     #[serde(default)]
     pub compute: ComputeSection,
     /// `[engine]` — WHICH inference engine serves this node. Absent
-    /// (the overwhelmingly common case) means [`EngineKind::Llama`], the
-    /// in-process llama.cpp engine this repo has always run, so an
-    /// existing `config.toml` is unaffected. See [`EngineSection`].
+    /// (the overwhelmingly common case) means [`EngineKind::LlamaServer`],
+    /// the supervised router `svrn setup` writes and the release default
+    /// (ENGINE_SWAP_PLAN E2); `kind = "llama"`, the in-process engine, is
+    /// refused by name since G2 deleted it. See [`EngineSection`].
     #[serde(default)]
     pub engine: EngineSection,
     /// `[search]` — the operator's web-search provider and its key. The
@@ -682,7 +683,7 @@ pub struct ModelsSection {
     pub edit: Option<EditSection>,
 
     /// `[models.kinds]` — the GGUF each served model kind loads, keyed by the
-    /// kind's role (`sovereign_inference::served_kind`). A kind's env var,
+    /// kind's role (`sovereign_compute::served_kind`). A kind's env var,
     /// where it has one, wins over its key here.
     ///
     /// ```toml
@@ -1919,8 +1920,7 @@ mod served;
 
 // ─── Slot context windows ───────────────────────────────────────────
 // Moved from sovereign-inference/src/embedded/engine.rs (2026-09-12) so a
-// client can spell the two windows without linking the inference stack;
-// `sovereign_inference::embedded::SlotWindows` re-exports it.
+// client can spell the two windows without linking the inference stack.
 
 /// The window each slot is built with — one value, named per slot.
 ///

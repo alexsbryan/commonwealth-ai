@@ -43,8 +43,9 @@ commonwealth-ai/
 └── docs/             # This file, ARCH_PRINCIPLES and the other repo-wide docs
 ```
 
-Also at the top: `scripts/` (the build and test wrappers), `vendor/` (pinned
-`llama-cpp-4`), `research/` (cross-program spikes and captured runs), `gym/`
+Also at the top: `scripts/` (the build and test wrappers), `vendor/` (patched
+`lance-linalg`; the vendored llama-cpp crates went in ENGINE_SWAP_PLAN G3),
+`research/` (cross-program spikes and captured runs), `gym/`
 (the next-edit and FIM case banks, the comaintainer seat's charter) and
 `ralph/` (the work loop's queue and decisions). Downloaded GGUF weights sit
 in a gitignored models directory under sovereign/, the one thing left there.
@@ -147,7 +148,7 @@ serve/crates/
 ├── serving-policy                 # Re-export shim for the serving-policy arithmetic (tier-0)
 ├── sovereign-compute              # Supervised compute-child boundary — crash isolation, not parallelism
 ├── sovereign-gliner               # GLiNER (ONNX) NER — the NER served kind's loader (sovereign-compute `ner`, once per process); port in sovereign-contracts `ner`, chunk adapter in corpus-engine
-├── sovereign-inference            # llama.cpp slots, remote OpenAI-compat, hybrid, idle residency
+├── sovereign-inference            # The shipped llama-server's GPU probe, the priority gate, the `remote` OICP client re-export (hardware, capacity, cpu_compat, engine_capture moved to sovereign-compute)
 ├── sovereign-scheduler            # Serving's pure tier — ranker, decision records, replay ("The two tiers", SERVING_BOUNDARY.md)
 ├── sovereign-serve                # `serve`, the model server binary — the OpenAI wire alone (no mesh, no cw-rails) over the one serving assembly
 └── sovereign-serving-host         # Serving's host tier — peer_inference, admission, turn_admission, entry_endpoint
@@ -1154,11 +1155,12 @@ forced-choice body itself is built in one place for every subsystem,
 it through a census (`gate_call` here, RESOLVE's `decision_call` in ingest).
 A WAVE (`forced_choice::wave`, advertised `x:forced_choice_wave`, routed only
 to hosts that advertise it) carries several closed questions over one shared
-prompt as branches; the engine renders each branch as the single request it
-stands for, decodes the shared token prefix once, restores that sequence state
-before each branch and reads each distribution as a single forced choice does
-(`embedded/decide_wave.rs`), so every answer equals its single request's.
-No ingest path issues a wave since the passes reader was deleted (2026-10-16).
+prompt as branches; the embedded engine rendered each branch as the single
+request it stands for, decoded the shared token prefix once, restored that
+sequence state before each branch and read each distribution as a single forced
+choice does, so every answer equalled its single request's. It was the only host
+that advertised the feature, and it was deleted (ENGINE_SWAP_PLAN G2). No ingest
+path issues a wave since the passes reader was deleted (2026-10-16).
 
 **Retrieval** is `runtime/retrieval_pipeline.rs`, a step ledger where every
 step accounts for what it did to the pool. `apply_atlas_grounding` is a CALLER
@@ -1186,9 +1188,10 @@ from flag values.
 
 ### Inference
 
-`sovereign-inference/src/embedded/` wraps `llama-cpp` with lazy-loaded slots
-(Quick / Main / Code / Embed). Hybrid and remote providers wrap
-OpenAI-compatible servers. Full detail
+Every model runs in a supervised llama-server router
+(`sovereign_compute::llama_router`); the in-process llama.cpp engine that held
+lazy-loaded slots in this process was deleted (ENGINE_SWAP_PLAN G2). Remote
+providers wrap OpenAI-compatible servers. Full detail
 [`svrn/docs/inference.md`](../svrn/docs/inference.md).
 
 **Which engine serves this node is config, not code.**
@@ -1196,9 +1199,12 @@ OpenAI-compatible servers. Full detail
 becomes an `Arc<dyn InferenceProvider>`. The vocabulary is one layer down in
 `sovereign-contracts`, so an out-of-tree engine can name the selection without
 naming any implementation. `llama`, `remote` and `llama-server` are typed
-variants; anything else is `EngineKind::Custom(name)` resolved through
+variants (`llama` refused by name since G2); anything else is `EngineKind::Custom(name)` resolved through
 `register_engine`, and an unknown id refuses listing what IS registered rather
-than falling back. `llama-server` is a router the node supervises: the factory
+than falling back. `llama-server` is the default (ENGINE_SWAP_PLAN E2): what
+`svrn setup` writes, and what an `[engine]` section with no `kind`, or no
+section, means. `llama`, the in-process engine, stays built for one release as
+its rollback. `llama-server` is a router the node supervises: the factory
 refuses it by name, because its endpoint exists only once serving assembly has
 started the router. Its models come from `[models]` through
 `sovereign_compute::llama_router::RouterPreset`, whose `engine_section` is the
@@ -1295,8 +1301,10 @@ preflight is llama's own question, skipped for engines holding no weights.
 The contracts are executable: `engine_conformance::{check_sync, check_serving}`.
 Cold start and hot reload both reach it through ONE serving assembly,
 `sovereign_compute::assembly` (`assemble_serving`, `ReloadFactory::build`),
-which adds admission, llama's slot installs and the compute-child layer; a
-reload re-wraps the running compute children instead of spawning new ones.
+which adds admission, the router and the compute-child layer (`kind =
+"llama"`, the generate, embed and rerank child roles and `[compute]
+distributed_primary` are refused by name since the embedded engine was
+deleted, ENGINE_SWAP_PLAN G2); a reload re-wraps the running compute children instead of spawning new ones.
 
 **The engine conformance battery measures the engine that serves.**
 `POST /internal/engine/replay`, on the operator listener beside
@@ -1304,15 +1312,16 @@ reload re-wraps the running compute children instead of spawning new ones.
 `sovereign_contracts::engine_observe` sink installed and returns the answer
 and what the engine recorded on the way. Its `probe` method is
 `InferenceProvider::probe_logprobs`: greedy steps with each step's top-k
-logprobs, on a context of the slot's own parameters (`embedded/probe.rs`).
-The default refuses, and the wrappers on the daemon's path forward it.
+logprobs, on a context of the slot's own parameters (the embedded engine's
+implementation went with it, ENGINE_SWAP_PLAN G2; the router forwards the call
+to its remote half). The default refuses, and the wrappers on the daemon's path forward it.
 `bench/lanes/engine-swap/battery.sh` drives the case bank through it per
 target, and `svrn bench engine-conformance judge` holds the records to
 `conformance.toml`. Rows whose oracle is a language rather than a record take
 their verdict from `--scenario`: `bench/lanes/engine-swap/llg-parity`, a
-standalone crate pinned to llama-server's llguidance, judges the corpus the
-engine side writes (`llg_parity_corpus_tests.rs`) and emits one verdict per
-row. Three scenarios the battery drives itself are graded from the record's
+standalone crate pinned to llama-server's llguidance, judges the committed corpus
+(`serve/crates/sovereign-inference/tests/fixtures/llg-parity/corpus.jsonl`; its
+engine-side writer went with the engine, G2) and emits one verdict per row. Three scenarios the battery drives itself are graded from the record's
 own facets (`bench/crates/sovereign-cli-bench/src/bench_cmd/engine_conformance/scenario.rs`), named by a row's
 `judge.driver`: `split-line` (the typed stream cut across two byte chunks,
 read through the shipped SSE reader), `admission` (a long held call with a
@@ -1399,21 +1408,22 @@ no matcher step until the accepted bytes close it (`ThinkWait`), so the
 reasoning is free and the answer after it is held to the schema; a block that
 never closes is warned at the sampler's drop.
 
-**Residency is a policy.** `embedded/idle_slot.rs` is the one idleness decider.
-It exists because the daemon is a MESH NODE and must stay available to peers
-while the app is closed, which makes idle-EXIT impossible and idle-UNLOAD the
-only answer to resident RAM. **The unit of residency is the FAMILY, not the
-slot**: `fast` shares its `Arc<LlamaModel>` with `fast_short` and, in alias
-mode, with `primary`, so dropping a slot frees a KV cache and leaves the
-weights — "fast unloaded" in the log is not yet "memory returned".
+**Residency was a policy of the embedded engine**, whose one idleness decider
+and idle monitors were deleted with it (ENGINE_SWAP_PLAN G2). It existed because
+the daemon is a MESH NODE and must stay available to peers while the app is
+closed, which makes idle-EXIT impossible and idle-UNLOAD the only answer to
+resident RAM. Its unit of residency was the model FAMILY, not the slot:
+`fast` shared its weights with `fast_short` and, in alias mode, with
+`primary`, so dropping a slot freed a KV cache and left the weights.
 
 **`sovereign-compute` is a process boundary, and its value is crash isolation
 plus the can't-fit-one-box case, NOT throughput.** For a model that fits one
 box, N process replicas LOSE to in-process multi-sequence batching — the
 replica-pool path is a demonstrated dead end for parallelism.
-`[compute] distributed_primary` is the payoff: the daemon plans and warms, a
-`DynamicChildSlot` owns the primary, and the handoff ships the PLAN rather
-than the worker list, so plan agreement survives the process boundary.
+`[compute] distributed_primary` and its `DynamicChildSlot` were retired with
+the embedded engine and deleted with the mesh fabric (discovery, warm,
+handoff, containment guard; es-g4-delete-mesh-fabric): a model past one box
+is the router's own child over static `[compute] rpc_peers`.
 
 ### Tools
 
@@ -1666,7 +1676,7 @@ Eight decision points, each with one home:
 | Hub picks a local model for a peer request | `sovereign-daemon/src/routes_inference.rs::route_with_oicp` |
 | Serving peer picks Fast-vs-Slow slot | `sovereign-serving-host/src/slot_select.rs::pick_slot_for_oicp` |
 | Synthesis tier (Fast vs Primary) | `sovereign-core/runtime/evidence.rs::resolve_synthesis_route` |
-| Distributed placement (model > one node) | `sovereign-inference/embedded/rpc_distribution.rs` (load); plan and warm cache, FFI-free, `sovereign-inference/rpc_warm_cache.rs` |
+| Distributed placement (model > one node) | the router section's `rpc` key and `-ts` split (`sovereign_compute::llama_router::placement`) |
 | Collaborative ingest partitioning | `sovereign-grants/knowledge_assignment.rs` |
 
 Slot policy is normative in [`svrn/docs/SLOT_POLICY.md`](../svrn/docs/SLOT_POLICY.md):
@@ -1686,27 +1696,19 @@ check it reproduces its own verdict. The Tier-1 simulator is
 `sovereign-mesh-test-harness`'s `mesh_sim` module behind the `dst` feature.
 Findings are in `svrn/docs/specs/SCHEDULER_QUALITY.md`; **the standing one is F10 —
 the scheduler has no speed signal in production**, so `throughput_factor` is
-neutral 1.0 for every peer, and `svrn mesh bench` deliberately does NOT write
-to `NodeCapabilities.benchmark` (`gossip_never_advertises_a_benchmark` fails
-the build if it is populated).
+neutral 1.0 for every peer.
 
-**Byte-mass-aware split (`plan_shards_weighted`).** Each device gets a
-CONTIGUOUS block range whose *bytes*, not block *count*, are proportional to
-its VRAM. The big open-weight models are MoE and MoE mass is deeply
-non-uniform — routed experts are ~88–93% of the bytes but cold, and a hybrid
-SSM+MoE stack alternates a ~20 MB block with a ~1.3 GB one, a measured 62×
-per-block spread — so count-proportional apportionment hands a small node a
-heavy run and OOMs it. One function serves both the live load and
-`svrn mesh plan`'s preview, so they cannot diverge. Per-device fit is
-`shard_fits(plan, capacities, mass, headroom)`, where **`None` means
-cannot-judge and is not a pass**: an unread tensor table would otherwise clear
-every device on the strength of zeros.
+The byte-mass-aware planner (`plan_shards_weighted`, `shard_fits`) is deleted
+(es-g4-delete-mesh-fabric-verbs): D4 measured our `-ot` split at parity with
+upstream's own free-memory split on a real Mac peer (2026-10-24), and a tie
+deletes it, so the router section sends only `rpc` and `-ts`.
 
-`svrn mesh bench` measures the configuration that is loaded and never loads
-the one it wants to measure — there is no slot argument, so there is no slot
-to get wrong. A record carries the pre-image of its own key (`witness`) and
-the conditions it met (`conditions`), travels on the ring rail rather than the
-gossip KV store, and refuses to travel when invalid. Origin comes from the
+`svrn mesh plan`, `bench` and `warm-cache` were deleted with the fabric
+(es-g4-delete-mesh-fabric-verbs). The placement measurements a node already
+holds (`~/.svrnmesh/mesh-measurements.json`) stay on the ring rail through
+serve's reconcile (`measurements_rail::reconcile_loop`). A record carries the
+pre-image of its own key (`witness`) and the conditions it met
+(`conditions`), and refuses to travel when invalid. Origin comes from the
 SIGNATURE, never the payload.
 
 Known gap: `commonwealth-inference/orchestrator/` was deleted as dead code,
@@ -1827,7 +1829,7 @@ admits and no disk holds; a CLI presents `SOVEREIGN_API_KEY`, read by
 | `POST /v1/responses` | OpenAI Responses-API adapter |
 | `GET /v1/models` | Names this daemon can dispatch by name, built from the local OICP manifest + every reachable peer's — the same source `locate_named_model` resolves against, so a listed id resolves and an omitted one does not |
 | `POST /v1/embeddings` | What peers call via `embed_http::http_embed_fn` |
-| `POST /v1/rerank` (and each served kind's route) | Mounted from the served-kind registry (`sovereign_inference::served_kind`); answers with the rerank kind's slot or compute child |
+| `POST /v1/rerank` (and each served kind's route) | Mounted from the served-kind registry (`sovereign_compute::served_kind`); answers with the rerank kind's slot or compute child |
 | `POST /v1/knowledge/search` | Determines target corpora, fans out, merges, reranks. The local corpora searched, here and on the peer route `/internal/knowledge/search`, are the caller's `oicp_evidence::readable_corpora` (a member reaches `query_sharing` corpora, an unverified claimant none, a key its grant); one held here outside that set answers like one nobody holds. Every local hit, and the peer route's, carries `document` (OICP v0.5 §3): its text's record read through `chunk_text_sha256s` + `documents_for` by the one projection `oicp_evidence::knowledge_results`, or names why not in `document_absent` (`texts not stored`, `text not stored`, `document unreadable`); the v0.2 `metadata` map stays empty. Both routes search through `oicp_evidence::search_corpus`: a `documents` filter (text names, OICP v0.6 §2.8, `knowledge:scoped`) runs inside the index (`CorpusIndex::search_in_texts`, `only_if` on `text_sha256`), a malformed name is `400`, it is forwarded to peers, and `build_response` drops any merged hit from an unnamed text. Every hit also carries `span`, its range of its stored text located by `oicp_evidence::span_of` (the locator verify's passages share), or `span_absent` (`knowledge:range`). A hit's document, and its span's, carries the text's record by identifier when its install kept one (OICP v0.6 §2.16, `records_by_identifier::attach_to_hits`, read from the corpus's `_records.json`, on passage and sentence hits alike), the same record progress lists; the text and align routes' documents carry none yet. The span also carries `locator` (v0.6 §2.13, `knowledge:locator`), read by `oicp_evidence::locator_at` from the places the text's writer kept beside it (`StoredText::locators`, the `<sha256>.locators` sidecar of `TextWriter::store_document_located`; `oicp_types::locator::PlacedLocators`), shared by `span_of`, the sentence route's `hit` and align's `wire_alignment`; a declared transcript's turns and a plain text's heading paths are kept, and a span of a text with neither carries none. `svrn search` is the CLI client, and prints each hit's locator (`under BOOK I. › CHAPTER I.`, `at 0:01:04, HARBOUR MASTER`) and its catalogue entry (`search_cmd/catalogue.rs`: author, year, title, container, how many fields a resolver supplied, and any identifier that did not resolve) from that record, or from the declared metadata when there is none. Where its time goes: one DEBUG event per stage (`search_stage::SearchStage`: `admission`, `query_embed`, and per corpus `index_query`, `records`, `text_read`, `span_of`), each with `elapsed_us` and `count`, under one `search{route, query}` span (`query` is the query text's sha256, 12 hex), all on the `search.stage` target, so `RUST_LOG=…,search.stage=debug` shows them; the embed slot's own wait is the engine's `slot_wait_ms` on `inference.embed: done`, under the same span. A request's `priority` (OICP v0.6 §2.17, `knowledge:priority`) runs the handler under `sovereign_contracts::request_priority::asked`, and `sovereign_inference::priority_gate::PriorityGate` holds each step of model work at the embed slot (`embed`, `embed_query`, `embed_batch`) and at the generation slots' admission (`acquire_with_queue_gauge`, the step kept in `SlotPermit`): each site tells its `Step` `entered()` once it holds its stage (the embed context's lock, the slot's permit); an `interactive` step is counted from its ask, a `background` step waits until none is, and the background steps waiting to enter one stage (the stage named at `step`: `embed`, or the slot queue's label) go one at a time, a step inside its stage holding none back (PV3e) and a step keeping its place however long the ones ahead take (PV3h), its hold for interactive work bounded by `HOLD_CEILING` (2 s) counted from its place; a background completion's prompt is read in parts of `BACKGROUND_PART_TOKENS` (64) through `PriorityGate::in_parts` (`ModelSlot::prefill_reusing_prefix`, the request carried to the blocking thread by `sovereign_contracts::call_scope::carry`), pausing between parts while an interactive step that has entered its stage runs, never for one waiting on the slot the prompt holds, and a background embed batch takes the embed context once a sub-batch through `PriorityGate::parts_under` (`EmbedSlot::run_embed_batch_sync`), letting it go and pausing between them; an embed slot on the GPU keeps `EmbedSlot::writer`, a CPU context over a CPU copy of the model, and an `interactive` request's embeds compute on it (`EmbedSlot::context_for_request`, PV3d; `Writer::None` for `EmbedOnlyProvider`); events on the `priority` target say what each background step waited behind. At `granularity: sentence` (OICP v0.6 §2.11, `knowledge:sentences`) the handler hands the request to `routes_knowledge_sentences::search`, local corpora only: the query and the embedder's sentinel probe embedded in one call, each scoped corpus prepared by `sentence_index::SentenceIndex::prepare` (its texts split by `sentence_ranges`, a Project Gutenberg wrapper left out by `sentence_index::wrapper::body`, a sidecar an earlier splitter cut re-cut with its vectors kept by key, rows `(text, code-point range, byte range, sha256 of the sentence)`, vectors loaded from the corpus's `_sentences.bin` sidecar or embedded in the background by the one `sentence_index` worker, queued after an OICP install, at the first sentence search naming the corpus, and at start for every corpus with a sidecar), then either the `index` route (every scoped row scored by `scan::top_k`, threaded, up to the data file's `scan_ceiling`, named `truncated` past it) or, while any scoped sentence is pending or the vectors are another embedder's, the `passages` route (`search_corpus`'s hits' overlapping sentences, with `sentences_pending`), and, with `knowledge:sentence_queue` (v0.6 §2.11), `sentence_queue`: where each scoped corpus with sentences waiting stands in the worker's line, `embedding` now or `queued` behind the corpora ahead with their pending counts. The order is `sentence_index::queue::Fifo`'s, the one the worker takes from and finishes against; a search reads a `QueueSnapshot` of it (`SentenceIndex::queue`) and `queue::places` builds the wire places, naming no corpus the worker has finished and none ahead of a corpus with nothing before it (events: `embedding now`, `placed`, and `queue placed` on the search). A corpus whose directory goes away mid-walk (`svrn corpus remove`, which tells the daemon nothing) stops at the worker's next batch and is forgotten (`SentenceIndex::forget`; event `the corpus was removed while it embedded`), so the corpus behind it goes next. The scorer is `data/sentence_search.toml`'s (`cosine`, or `rerank` over cosine's best `rerank_candidates` through `rerank_batch`, its model the resident rerank slot's); one that cannot run is `503 scorer unavailable` by name. Hits are cut from their stored addresses, never `span_of`; its stages are `SearchStage::SENTENCE_ROUTE` (`query_embed`, `admission`, `sentence_scan`, `text_read`; admission's parts `local_embed_model`, `resident_slots` and `admit` on one `admission in parts` event, `search_stage::admission_parts`) under a `search{route="sentences"}` span, and the index's own events are on the `sovereign_daemon::sentence_index` target (`prepared`, `loaded from its sidecar`, `ready` with `elapsed_ms` and `resident_bytes`). `svrn search --sentences` is the CLI client, and prints each waiting corpus's place (`search_cmd::queue_lines`). `MeshKnowledgeClient` keeps it as `MeshScoredChunk::document` |
 | `GET /status` | Node / mesh / inference / knowledge summary, incl. `process.pid` + `run_id` |
 | `GET /oicp/v1/capabilities` | Provider manifest + federation info |
@@ -2137,7 +2139,9 @@ cargo build -p sovereign-cli -p sovereign-cli-daemon \
 For local deployed-daemon iteration use `scripts/dev-release.sh` rather than
 plain `--release`: same opt-level, LTO and codegen-units overridden via env,
 so a one-line change costs seconds instead of ~7.5 minutes. A custom cargo
-profile cannot do this — `llama-cpp-sys-4`'s build script panics under any.
+profile could not do this while `llama-cpp-sys-4` was in the build (its build
+script panicked under any); that crate left in ENGINE_SWAP_PLAN G3, and a
+custom profile has not been tried since.
 
 **The gate is the two scripts**, not bare cargo — they resolve the repo's real
 feature contract (`corpus-engine/treesitter` + `sovereign-cli/dev-tools`, and

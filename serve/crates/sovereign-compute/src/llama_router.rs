@@ -28,7 +28,7 @@ use sovereign_contracts::engine_config::{EmbedInputs, EngineKind, EngineSection,
 use sovereign_contracts::setup_config::{DaemonSection, ModelsSection};
 
 use self::placement::RouterPlacement;
-use sovereign_inference::capacity::SlotPlan;
+use crate::capacity::SlotPlan;
 
 /// Draft tokens per MTP step: the embedded engine's default
 /// (`mtp_draft_max_decide`), the value every battery pass ran.
@@ -133,7 +133,7 @@ pub struct RouterPreset {
 /// ([`rerank_with_head`] over the file's own metadata).
 pub fn served_rerank(models: &ModelsSection) -> Result<Option<PathBuf>, String> {
     rerank_with_head(
-        sovereign_inference::served_kind::RERANK.model_path(Some(models)),
+        crate::served_kind::RERANK.model_path(Some(models)),
         sovereign_inference::gguf_meta::read_architecture,
         sovereign_inference::gguf_meta::read_classifier_labels,
     )
@@ -162,8 +162,7 @@ pub fn rerank_with_head(
             "the reranker {} is a {arch} model with no classifier head \
              ({arch}.classifier.output_labels), so llama-server would score every \
              document near zero; derive one with \
-             serve/crates/sovereign-compute/llama-server/rerank-head-gguf.py, \
-             or run kind = \"llama\"",
+             serve/crates/sovereign-compute/llama-server/rerank-head-gguf.py",
             path.display()
         ));
     }
@@ -193,8 +192,7 @@ impl RouterPreset {
     ) -> Result<Self, String> {
         if !models.extra.is_empty() {
             return Err(format!(
-                "[models.extra] ({}) is not served by kind = \"llama-server\" yet; \
-                 remove it or run kind = \"llama\"",
+                "[models.extra] ({}) is not served by kind = \"llama-server\" yet; remove it",
                 models.extra.keys().cloned().collect::<Vec<_>>().join(", ")
             ));
         }
@@ -369,10 +367,7 @@ impl RouterPreset {
             ("fast", self.fast.as_ref()),
             ("code", self.code.as_ref()),
             ("embed", self.embed.as_ref()),
-            (
-                sovereign_inference::served_kind::RERANK.role,
-                self.rerank.as_ref(),
-            ),
+            (crate::served_kind::RERANK.role, self.rerank.as_ref()),
         ]
         .into_iter()
         .filter_map(|(role, name)| name.map(|n| (role, n.as_str())))
@@ -610,12 +605,12 @@ impl RouterPreset {
             embed_inputs: Some(EmbedInputs::Client),
             // The shipped router is built with llguidance.
             grammar: Some(GrammarSupport::Llguidance),
-            // The embedded engine's decode deadline, on every chat request.
-            // The server measures it from the first generated token and
-            // stops only at a newline past it, where the engine stopped
-            // the wall clock outright: no caller reads that difference.
+            // The decode deadline, on every chat request. The server
+            // measures it from the first generated token and stops only at
+            // a newline past it, where the embedded engine stopped the wall
+            // clock outright: no caller reads that difference.
             extra_params: Some(serde_json::json!({
-                "t_max_predict_ms": sovereign_inference::embedded::inference_deadline_secs() * 1000
+                "t_max_predict_ms": inference_deadline_secs() * 1000
             })),
             ..Default::default()
         }
@@ -639,6 +634,28 @@ impl RouterPreset {
             ..vendor.clone()
         }
     }
+}
+
+/// The decode deadline the router sends as `t_max_predict_ms`:
+/// `SOVEREIGN_INFERENCE_TIMEOUT_SECS`, else 300 s. Read once per process. It
+/// lived in the embedded engine, which enforced it itself, and moved here with
+/// its one reader when that engine was deleted (ENGINE_SWAP_PLAN G2).
+fn inference_deadline_secs() -> u64 {
+    use std::sync::OnceLock;
+    static DEADLINE: OnceLock<u64> = OnceLock::new();
+    *DEADLINE.get_or_init(|| {
+        let raw = std::env::var("SOVEREIGN_INFERENCE_TIMEOUT_SECS").ok();
+        let parsed = raw.as_deref().and_then(|s| s.parse::<u64>().ok());
+        if let (Some(raw), None) = (&raw, parsed) {
+            tracing::warn!(
+                target: "llama_router",
+                value = %raw,
+                "SOVEREIGN_INFERENCE_TIMEOUT_SECS is not a whole number of seconds; \
+                 the 300 s default applies"
+            );
+        }
+        parsed.unwrap_or(300)
+    })
 }
 
 #[cfg(test)]

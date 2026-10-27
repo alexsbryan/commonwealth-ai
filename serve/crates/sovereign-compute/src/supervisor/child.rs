@@ -298,8 +298,8 @@ impl Supervisor {
         }
     }
 
-    /// Graceful terminate: best-effort SIGTERM (so a compute child can
-    /// `fast_exit_skip_destructors`), then SIGKILL if it overruns the
+    /// Graceful terminate: best-effort SIGTERM (so a compute child can exit
+    /// on its own), then SIGKILL if it overruns the
     /// grace. Reaps the child so no zombie remains.
     pub(super) async fn graceful_kill(child: &mut Child, pid: u32, grace: Duration) {
         signal_group(pid, Signal::Term);

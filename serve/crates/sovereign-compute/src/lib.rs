@@ -27,23 +27,21 @@
 //! - [`child_main`] — the child process entrypoint (`--compute-child`),
 //!   reached by re-executing the daemon binary.
 //! - [`assembly`] — the one serving assembly: config in, the provider a
-//!   serving process installs out; [`containment`] is its admission guard.
+//!   serving process installs out.
 
 pub mod assembly;
 pub mod assets;
+pub mod capacity;
 pub mod child;
 pub mod child_main;
 pub mod client;
 pub mod compute_roles;
-pub mod containment;
-pub mod discovery_policy;
-pub mod distributed_discovery;
-pub mod distributed_respawn;
-pub mod distributed_role;
-pub mod distributed_warm;
-pub mod distribution;
+pub mod cpu_compat;
+pub mod engine_capture;
 /// The contracts an engine must satisfy, as runnable checks.
 pub mod engine_conformance;
+pub mod engine_factory;
+pub mod hardware;
 pub mod llama_router;
 pub mod manager;
 pub mod mock;
@@ -52,6 +50,7 @@ pub mod ner;
 pub mod preflight;
 /// The supervised `ggml-rpc-server` a peer lends its GPU through.
 pub mod rpc_peer;
+pub mod served_kind;
 pub mod server;
 pub mod setup_planner;
 pub mod setup_reads;

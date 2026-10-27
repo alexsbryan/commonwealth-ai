@@ -220,7 +220,7 @@ fn an_admitted_line_this_build_cannot_read_is_counted_not_swallowed() {
 /// file keeps `MAX_RUNS_PER_KEY` runs per configuration so variance stays
 /// visible without unbounded growth; the rail has no such cap. Applying the
 /// publisher's own depth on the read side is what stops a reader seeing more
-/// history than `mesh bench --history` shows the person who took it.
+/// history than the publisher's own file keeps.
 ///
 /// Per CONFIGURATION, not per publisher: a second config measured once is
 /// still there.

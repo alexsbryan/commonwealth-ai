@@ -12,8 +12,8 @@
 //! Instead the child speaks the contract types **verbatim** — `serde` in,
 //! `serde` out — so grammar-constrained generation, allowlists, and every
 //! other per-request knob survive the process boundary unchanged. The
-//! engine consumes them exactly as it does in-process (`build_sampler`),
-//! so nothing about generation behaviour differs across the seam.
+//! engine in the child consumes them exactly as it would in-process, so
+//! nothing about generation behaviour differs across the seam.
 //!
 //! # Endpoints
 //! - `POST /internal/complete` — [`CompletionRequest`] → [`CompletionResponse`]

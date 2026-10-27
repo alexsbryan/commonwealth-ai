@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use super::*;
-use sovereign_contracts::launch::RpcServe;
 
 const ME: &str = "0000000000000000000000000000000a";
 const PEER: &str = "0000000000000000000000000000000b";
@@ -84,77 +83,25 @@ fn a_cw_rails_without_full_ids_is_named_not_an_empty_roster() {
 }
 
 #[test]
-fn serve_registers_its_peer_prefixes_and_its_rpc_worker_only_when_it_binds() {
+fn serve_registers_its_peer_prefixes_and_its_member_client() {
     let listen: SocketAddr = "127.0.0.1:18000".parse().unwrap();
     let member: Option<SocketAddr> = Some("127.0.0.1:18001".parse().unwrap());
-    let off = registrations_for(listen, member, RpcServe::resolve(None, false), Ok(None));
-    assert_eq!(off.len(), 2, "no worker bind, no rpc origin: {off:?}");
-    assert_eq!(off[0].alpn, "cwth/http/0");
-    assert_eq!(off[0].port, 18000);
+    let regs = registrations_for(listen, member, Ok(None));
     assert_eq!(
-        off[0].prefixes,
-        vec![
-            "/internal/v1/models".to_string(),
-            "/internal/rpc-warm".to_string()
-        ]
+        regs.len(),
+        2,
+        "no rpc origin since the fabric's deletion: {regs:?}"
     );
-    assert_eq!(off[0].framing, Framing::Http);
+    assert_eq!(regs[0].alpn, "cwth/http/0");
+    assert_eq!(regs[0].port, 18000);
+    assert_eq!(regs[0].prefixes, vec!["/internal/v1/models".to_string()]);
+    assert_eq!(regs[0].framing, Framing::Http);
     // The member client, whole on the ALPN the Inference class rides, at its
     // own listener rather than serve's.
-    assert_eq!(off[1].alpn, "cwth/client/0");
+    assert_eq!(regs[1].alpn, "cwth/client/0");
     assert_eq!(
-        (off[1].port, off[1].framing, off[1].prefixes.len()),
+        (regs[1].port, regs[1].framing, regs[1].prefixes.len()),
         (18001, Framing::Http, 0)
-    );
-
-    let on = registrations_for(
-        listen,
-        member,
-        RpcServe::resolve(Some("127.0.0.1:50060"), false),
-        Ok(None),
-    );
-    let rpc = on
-        .iter()
-        .find(|r| r.alpn == "cwth/rpc/0")
-        .expect("the rpc origin");
-    assert_eq!((rpc.port, rpc.framing), (50060, Framing::Bytes));
-    let anchor = rpc
-        .claims
-        .as_ref()
-        .and_then(|c| c.anchor.as_ref())
-        .expect("the rpc origin declares the anchor record");
-    assert!(anchor.can_anchor);
-    assert_eq!((anchor.rpc_port, anchor.rpc_iroh), (Some(50060), true));
-    assert!(
-        !anchor.rpc_direct,
-        "a loopback worker declares no direct bind"
-    );
-}
-
-/// pc-rpc-probe-identity: the anchor record declares a direct bind only for a
-/// worker the operator let past loopback; a host probes the member's address
-/// for no other. Failing input: declare `rpc_direct` unconditionally.
-#[test]
-fn only_a_worker_bound_past_loopback_declares_a_direct_bind() {
-    let listen: SocketAddr = "127.0.0.1:18000".parse().unwrap();
-    let direct = |rpc: RpcServe| {
-        registrations_for(listen, None, rpc, Ok(None))
-            .iter()
-            .find(|r| r.alpn == "cwth/rpc/0")
-            .and_then(|r| r.claims.as_ref()?.anchor.as_ref().map(|a| a.rpc_direct))
-    };
-    assert_eq!(
-        direct(RpcServe::resolve(Some("127.0.0.1:50060"), false)),
-        Some(false)
-    );
-    assert_eq!(
-        direct(RpcServe::resolve(Some("0.0.0.0:50060"), true)),
-        Some(true)
-    );
-    assert_eq!(
-        direct(RpcServe::resolve(Some("0.0.0.0:50060"), false)),
-        None,
-        "refused: no worker"
     );
 }
 
@@ -165,7 +112,7 @@ fn only_a_worker_bound_past_loopback_declares_a_direct_bind() {
 fn the_peer_registration_declares_the_loaders_vram_figure() {
     let listen: SocketAddr = "127.0.0.1:18000".parse().unwrap();
     let declared = |vram| {
-        registrations_for(listen, None, RpcServe::resolve(None, false), Ok(vram))[0]
+        registrations_for(listen, None, Ok(vram))[0]
             .claims
             .clone()
             .expect("the peer registration declares")
@@ -189,49 +136,13 @@ fn the_peer_registration_declares_the_loaders_vram_figure() {
     assert!(declared(None).hardware.gpus.is_empty());
 }
 
-/// es-m2: a failed GPU probe is unknown, never 0 GB (ARCH 6). The peer
-/// registration declares no GPU, and the rpc origin declares no anchor rather
-/// than a CPU-only one. Failing input: read an unknown figure as 0.
+/// es-m2: a failed GPU probe is unknown, never 0 GB (ARCH 6): the peer
+/// registration declares no GPU. Failing input: read an unknown figure as 0.
 #[test]
-fn an_unknown_vram_figure_declares_no_gpu_and_no_anchor() {
+fn an_unknown_vram_figure_declares_no_gpu() {
     let listen: SocketAddr = "127.0.0.1:18000".parse().unwrap();
-    let regs = registrations_for(
-        listen,
-        None,
-        RpcServe::resolve(Some("127.0.0.1:50060"), false),
-        Err("no llama-server".to_string()),
-    );
+    let regs = registrations_for(listen, None, Err("no llama-server".to_string()));
     assert!(regs[0].claims.as_ref().unwrap().hardware.gpus.is_empty());
-    let rpc = regs
-        .iter()
-        .find(|r| r.alpn == "cwth/rpc/0")
-        .expect("the rpc origin still registers");
-    assert!(rpc.claims.is_none(), "{:?}", rpc.claims);
-
-    let known_cpu_only = registrations_for(
-        listen,
-        None,
-        RpcServe::resolve(Some("127.0.0.1:50060"), false),
-        Ok(None),
-    );
-    let anchor = known_cpu_only
-        .iter()
-        .find(|r| r.alpn == "cwth/rpc/0")
-        .and_then(|r| r.claims.as_ref()?.anchor.as_ref())
-        .expect("a known CPU-only node declares its anchor");
-    assert_eq!(anchor.vram_gb, 0);
-}
-
-#[test]
-fn an_unspecified_listener_is_reached_on_loopback() {
-    assert_eq!(
-        origin_addr("0.0.0.0:7000".parse().unwrap()),
-        "127.0.0.1:7000".parse::<SocketAddr>().unwrap()
-    );
-    assert_eq!(
-        origin_addr("127.0.0.1:7001".parse().unwrap()),
-        "127.0.0.1:7001".parse::<SocketAddr>().unwrap()
-    );
 }
 
 /// A stand-in cw-rails: `doc(Some(PEER))` on its roster route, and a reach

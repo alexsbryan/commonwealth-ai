@@ -10,8 +10,8 @@
 //! out-of-tree engine implementation lifts: it names an engine without
 //! naming any engine's implementation. The factory that turns an
 //! [`EngineKind`] into a running provider is
-//! `sovereign_inference::engine_factory`, one layer up, because it has
-//! to name `EmbeddedLlamaCpp` and this must not.
+//! `sovereign_compute::engine_factory`, layers up, because it has to
+//! name `EmbeddedLlamaCpp` and this must not.
 
 use serde::{Deserialize, Serialize};
 
@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 /// The engines that ship in-tree are a closed set and get typed
 /// variants; an engine built OUT of tree cannot be, so it is named as
 /// [`EngineKind::Custom`] and resolved through
-/// `sovereign_inference::engine_factory::register_engine` (ARCH §2, §4 —
+/// `sovereign_compute::engine_factory::register_engine` (ARCH §2, §4 —
 /// closed sets are enums, open sets are registries).
 ///
 /// Lives here rather than beside the factory because this is config
@@ -28,14 +28,14 @@ use serde::{Deserialize, Serialize};
 /// third-party engine implementation lifts. The factory is one layer up
 /// (it must name `EmbeddedLlamaCpp`); this type must not be.
 ///
-/// Serialized as a plain TOML string — `kind = "llama"` — so the config
-/// surface reads naturally while the code side stays typed.
+/// Serialized as a plain TOML string — `kind = "llama-server"` — so the
+/// config surface reads naturally while the code side stays typed.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "String", into = "String")]
 pub enum EngineKind {
-    /// In-process llama.cpp via `llama-cpp-4`. The default, and what
-    /// every existing deployment runs.
-    #[default]
+    /// The in-process llama.cpp engine, deleted (ENGINE_SWAP_PLAN G2). It
+    /// still parses so that a written `config.toml` naming it is refused by
+    /// name (`engine_factory::LLAMA_RETIRED`), not as an unknown kind.
     Llama,
     /// An OpenAI-compatible HTTP endpoint (`oicp-client`'s
     /// `RemoteApiProvider`). Holds no weights.
@@ -43,7 +43,10 @@ pub enum EngineKind {
     /// A llama-server router this node runs and supervises, serving the
     /// GGUFs in `[models]`. It holds the weights, as `Llama` does; it is
     /// reached the way `Remote` is, through an endpoint and model ids that
-    /// follow from the router and are never configured.
+    /// follow from the router and are never configured. The default since
+    /// the release flip (ENGINE_SWAP_PLAN E2), which is what `svrn setup`
+    /// writes and what a `[engine]` section that omits `kind` means.
+    #[default]
     LlamaServer,
     /// An engine registered out of tree, selected by name.
     Custom(String),
@@ -146,8 +149,9 @@ impl StructuredOutputMode {
 /// embed_model_id = "BAAI/bge-m3"
 /// ```
 ///
-/// The `endpoint` / `api_key` / `model_id` / `context_size` fields are
-/// inert under `kind = "llama"`, which takes its slots from `[models]`.
+/// The `endpoint` / `api_key` / `model_id` / `context_size` fields are how
+/// `kind = "remote"` reaches its backend; a node whose slots come from
+/// `[models]` does not need them.
 /// They are deliberately NOT defaulted for `remote`: a defaulted
 /// endpoint makes a misconfigured node look healthy until its first
 /// request (ARCH §18.3), so the factory refuses instead.
@@ -156,7 +160,7 @@ impl StructuredOutputMode {
 /// whatever subset it needs.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EngineSection {
-    /// Which engine. Default [`EngineKind::Llama`].
+    /// Which engine. Default [`EngineKind::LlamaServer`].
     #[serde(default)]
     pub kind: EngineKind,
     /// Base URL including the `/v1` suffix. Required by `remote`.
@@ -331,7 +335,7 @@ impl EngineSection {
     /// a vendor names no `[models]`, so that one GGUF has no preset to be a
     /// section of. The server route is `embed_endpoint`, which hosts nothing
     /// here; the pair's own route is `hosted_router_section` (sovereign
-    /// inference's `engine_factory`), which moves `kind = "remote"` +
+    /// compute's `engine_factory`), which moves `kind = "remote"` +
     /// `embed_path` onto a one-section router.
     ///
     /// One implementation, read by both the startup class check

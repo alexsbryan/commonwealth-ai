@@ -14,12 +14,12 @@ use crate::{assemble, ServeArgs, ServeAssembly};
 pub(crate) async fn serve(args: ServeArgs) -> i32 {
     info!(target: "serve", data_dir = %args.data_dir.display(), listen = %args.listen, "serve starting");
     let config_path = SetupConfig::path_in(&args.data_dir);
-    // The loader's env contract, before the engine is built: the
-    // `[shared_model]` role binds this node's rpc worker and arms discovery,
-    // as svrn's boot applies it for a stock node (pb-serve-distributes-
-    // standalone). A config that does not load refuses in `assemble` below.
+    // The shared model this node's primary turns route to, published before
+    // `rank` reads it, as svrn's boot does for a stock node (pb-serve-
+    // distributes-standalone). A config that does not load refuses in
+    // `assemble` below.
     if let Ok(config) = SetupConfig::load_from(&config_path) {
-        crate::apply_shared_model_role_to_env(&config.shared_model);
+        crate::apply_shared_model_to_env(&config.shared_model);
     }
     let assembly = match assemble(&args.data_dir, &config_path).await {
         Ok(a) => a,
@@ -66,8 +66,6 @@ pub(crate) async fn serve(args: ServeArgs) -> i32 {
         cell,
         mut routes,
         run_lock: _run_lock,
-        distribute,
-        servable,
         rails_base,
         ..
     } = assembly;
@@ -85,16 +83,7 @@ pub(crate) async fn serve(args: ServeArgs) -> i32 {
     let replaced = before - routes.len();
     routes.push(crate::openai_face(Arc::clone(&ranking.provider)));
     info!(target: "serve", replaced, "serve's OpenAI face ranks over cw-rails' roster");
-    crate::rails_mesh::join(
-        &rails_base,
-        bound_addr,
-        local,
-        ranking.router,
-        distribute,
-        servable,
-        &mut routes,
-    )
-    .await;
+    crate::rails_mesh::join(&rails_base, bound_addr, local).await;
     match host_kit::shell::serve([listener], routes, shutdown).await {
         Ok(()) => 0,
         Err(e) => {

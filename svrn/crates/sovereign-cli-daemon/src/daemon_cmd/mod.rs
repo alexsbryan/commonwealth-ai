@@ -39,10 +39,6 @@ pub(crate) mod lifecycle;
 pub(crate) use lifecycle::read_daemon_pid;
 
 use lifecycle::{reload_daemon, restart_daemon, start_daemon, status_daemon, stop_daemon};
-// Kept for `lifecycle::start_daemon`, which forwards the `--rpc-worker`
-// flag to the daemon it spawns via `bootstrap::rpc_worker_flag` — the
-// flag parser lives with the daemon crate that also consumes the flag.
-use sovereign_daemon::bootstrap;
 
 /// Entry point routed from `main.rs` when the user invokes
 /// `svrn daemon` or one of its subcommands.
@@ -72,9 +68,9 @@ pub async fn run(launch: &Launch, args: &[String]) -> i32 {
     }
     match args.first().map(String::as_str) {
         Some("run") => run_daemon(launch, args).await,
-        Some("start") => after_ready(start_daemon(&args[1..]).await),
+        Some("start") => after_ready(start_daemon().await),
         Some("stop") => stop_daemon().await,
-        Some("restart") => after_ready(restart_daemon(&args[1..]).await),
+        Some("restart") => after_ready(restart_daemon().await),
         Some("reload") => reload_daemon().await,
         Some("status") => status_daemon().await,
         // Sizing, not lifecycle: what VRAM would a loadout need, and which
@@ -142,11 +138,10 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
     summary: "Long-running OICP server with managed inference + MCP tools.",
     sections: &[
         sovereign_cli_shared::help::HelpSection::Usage(
-            "svrn daemon [--setup-only] [--rpc-worker[=<bind>]] | svrn daemon <subcommand>",
+            "svrn daemon [--setup-only] | svrn daemon <subcommand>",
         ),
         sovereign_cli_shared::help::HelpSection::Flags(&[
             ("--setup-only", "Run the first-boot wizard (hardware detect + model pick + config) and exit without binding the listener."),
-            ("--rpc-worker[=<bind>]", "Lend this node's GPU to the mesh: serve an llama.cpp RPC worker so peers can place layers here. Default bind 127.0.0.1:50052 — members reach the worker over the encrypted mesh tunnel, so no LAN bind is needed; a non-loopback bind is refused unless SOVEREIGN_RPC_ALLOW_PLAINTEXT_LAN=1 acknowledges it. Works on `run`, `start` and `restart`. This only OFFERS the GPU — unlike `[shared_model] role = \"anchor\"`, it does not also turn on peer discovery or enter the host election."),
         ]),
         sovereign_cli_shared::help::HelpSection::Subcommands(&[
             ("(bare)",  "Run the daemon in the foreground. On first boot inlines the setup wizard; subsequent runs just load config and start. Equivalent to `daemon run`."),

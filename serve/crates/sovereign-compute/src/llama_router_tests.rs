@@ -229,10 +229,7 @@ fn every_role_names_the_model_that_fills_it_embed_and_rerank_included() {
             ("fast", "Qwen3.5-4B-UD-MTP-Q6_K_XL"),
             ("code", "Qwen3.6-35B-A3B-MTP-UD-Q6_K"),
             ("embed", "Qwen3-Embedding-0.6B-Q8_0"),
-            (
-                sovereign_inference::served_kind::RERANK.role,
-                "Qwen3-Reranker-0.6B"
-            ),
+            (crate::served_kind::RERANK.role, "Qwen3-Reranker-0.6B"),
         ]
     );
     assert_eq!(
@@ -368,7 +365,7 @@ fn the_models_warmed_are_the_longest_run_that_fits_primary_first() {
         layers,
     )
     .unwrap();
-    let all = |_: &[sovereign_inference::capacity::SlotPlan]| true;
+    let all = |_: &[crate::capacity::SlotPlan]| true;
     // The code role names the primary's GGUF, so it is not counted twice.
     assert_eq!(
         preset.models_that_fit(all),
@@ -379,18 +376,18 @@ fn the_models_warmed_are_the_longest_run_that_fits_primary_first() {
             "Qwen3-Reranker-0.6B",
         ]
     );
-    let two = |s: &[sovereign_inference::capacity::SlotPlan]| s.len() <= 2;
+    let two = |s: &[crate::capacity::SlotPlan]| s.len() <= 2;
     assert_eq!(
         preset.models_that_fit(two),
         vec!["Qwen3.6-35B-A3B-MTP-UD-Q6_K", "Qwen3.5-4B-UD-MTP-Q6_K_XL"]
     );
     // Each model is sized at its own context, one KV pool.
-    let sized_at_their_ctx = |s: &[sovereign_inference::capacity::SlotPlan]| {
+    let sized_at_their_ctx = |s: &[crate::capacity::SlotPlan]| {
         let ctx: Vec<(u32, u32)> = s.iter().map(|p| (p.n_ctx, p.n_seq_max)).collect();
         [(65536, 1), (32768, 1)].starts_with(&ctx)
     };
     assert_eq!(preset.models_that_fit(sized_at_their_ctx).len(), 2);
-    let none = |_: &[sovereign_inference::capacity::SlotPlan]| false;
+    let none = |_: &[crate::capacity::SlotPlan]| false;
     assert_eq!(
         preset.models_that_fit(none),
         vec!["Qwen3.6-35B-A3B-MTP-UD-Q6_K"],
@@ -431,7 +428,7 @@ fn the_editing_model_is_a_section_of_its_own_or_the_one_it_shares() {
         ),
         "{ini}"
     );
-    let all = |_: &[sovereign_inference::capacity::SlotPlan]| true;
+    let all = |_: &[crate::capacity::SlotPlan]| true;
     assert!(preset
         .models_that_fit(all)
         .contains(&"Mellum2-12B-A2.5B-Instruct-Q6_K"));

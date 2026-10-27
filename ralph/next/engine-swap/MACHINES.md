@@ -57,6 +57,7 @@ Two facts every live row on the Mac rests on, neither proved yet:
 | es-g1-move-factory-and-kinds | none | a move; LAYER and crate tests |
 | es-g2-delete-engine | none | a deletion; TESTALL |
 | es-g4-delete-mesh-fabric | none | a deletion; crate tests, ENV, BOUNDARY |
+| es-g4-delete-mesh-fabric-verbs | none | a deletion; crate tests, ENV, BOUNDARY, DOCS |
 | es-m3-move-agnostic-after-g2 | none | a move; LAYER, BOUNDARY and crate tests |
 | REVIEW-audit-es-auto-4 | none | as audit 2 |
 | es-g3-drop-vendor-and-toolchain | none | a deletion in Cargo and CI; TESTALL, DOCS, PREPUSH |

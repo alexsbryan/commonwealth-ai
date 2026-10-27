@@ -2,7 +2,7 @@
 //! The served model kinds' routes, by the paths their wire is named at here:
 //! what svrn forwards to serve's kind mount (pb-serve-distributes), since svrn
 //! links no kind registry. The registry stays the loader's
-//! (`sovereign_inference::served_kind`); sovereign-compute's census test holds
+//! (`sovereign_compute::served_kind`); sovereign-compute's census test holds
 //! the registered routes and this list equal, so a kind that mounts a route
 //! names its path here or goes red.
 

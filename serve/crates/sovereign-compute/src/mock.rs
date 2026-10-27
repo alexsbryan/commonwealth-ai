@@ -10,13 +10,13 @@ use async_trait::async_trait;
 use futures::Stream;
 use std::sync::Arc;
 
+use crate::engine_factory::{BuiltEngine, EngineBuilder};
 use sovereign_contracts::engine_config::EngineSection;
 use sovereign_contracts::traits::ResidentSlot;
 use sovereign_contracts::{
     CompletionRequest, CompletionResponse, Depth, FinishReason, InferenceProvider,
     ProviderCapabilities, Result, Speed,
 };
-use sovereign_inference::engine_factory::{BuiltEngine, EngineBuilder};
 
 /// The id the mock answers as, in every slot.
 pub const MOCK_MODEL: &str = "mock";

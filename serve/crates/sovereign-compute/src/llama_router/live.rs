@@ -173,12 +173,12 @@ fn check_build(binary: &Path, source: &BinarySource) -> Result<(), String> {
 /// (ENGINE_SWAP_PLAN A7): a preset the card cannot hold is a configuration
 /// this node cannot serve, refused by name instead of warmed in part.
 fn warm_within_memory(preset: &RouterPreset) -> Result<Vec<&str>, String> {
-    let hw = sovereign_inference::hardware::detect_hardware();
+    let hw = crate::hardware::detect_hardware();
     if !hw.gpu_available && !hw.is_unified_memory {
         tracing::info!(target: "llama_router", "router: no GPU budget to size --models-max against; warming every model");
         return Ok(preset.warm_models());
     }
-    let fits = |slots: &[_]| sovereign_inference::capacity::check_fit(slots, &hw).fits;
+    let fits = |slots: &[_]| crate::capacity::check_fit(slots, &hw).fits;
     preset.vram_if_every_section_loaded(fits)?;
     let warm = preset.models_that_fit(fits);
     if warm.len() < preset.warm_models().len() {
@@ -278,10 +278,28 @@ impl LiveRouter {
             // The router lists every model in llama.cpp's download cache
             // beside its preset (`load_from_cache`); an empty cache of its
             // own keeps the preset the one list of what it serves.
-            env: vec![(
-                "LLAMA_CACHE".into(),
-                dir.join("cache").to_string_lossy().into_owned(),
-            )],
+            //
+            // `LLAMA_SERVER_SLOTS_DEBUG` makes `/slots` describe the task,
+            // grammar included; in its metrics-only form (the default) the
+            // key is absent, and the battery's grammar rows can see nothing
+            // of what the router enforced (`slot_sampler`'s
+            // SLOTS_METRICS_ONLY). The daemon already serves the router's
+            // slots for the sampler facet, so the description is on by
+            // default; `SOVEREIGN_ROUTER_SLOTS_DEBUG=0` turns it off.
+            env: vec![
+                (
+                    "LLAMA_CACHE".into(),
+                    dir.join("cache").to_string_lossy().into_owned(),
+                ),
+                (
+                    "LLAMA_SERVER_SLOTS_DEBUG".into(),
+                    if std::env::var("SOVEREIGN_ROUTER_SLOTS_DEBUG").as_deref() == Ok("0") {
+                        "0".to_string()
+                    } else {
+                        "1".to_string()
+                    },
+                ),
+            ],
             health: HealthTarget::Fixed(format!("http://127.0.0.1:{port}/health")),
             crash_log_dir: config.data.dir.join("compute-crash-logs"),
             heartbeat_interval: Duration::from_secs(2),

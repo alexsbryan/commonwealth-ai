@@ -7,10 +7,9 @@
 # whose manifest says anything else, so changing a line here means rebuilding
 # the server.
 #
-# The commit is the one vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT names (a pull
-# request head, see the comments there): the conformance battery compares the
-# embedded engine with this server, so both run the same kernels until the
-# embedded engine is deleted. build.sh refuses while the two differ.
+# The commit is a pull request head: it was held equal to the vendored
+# llama-cpp-sys-4's LLAMA_CPP_COMMIT while the conformance battery compared
+# the embedded engine with this server. Both went in ENGINE_SWAP_PLAN G2/G3.
 
 llama_cpp_commit = "035e22731a7fd70b9854b3a2d64ec68e9b1a45d3"
 llguidance = true

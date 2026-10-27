@@ -1557,7 +1557,7 @@ items = ["bin_main_with"]
 [[distribution.face]]
 package = "serve"
 krate = "sovereign-serve"
-items = ["bundles", "assemble", "rank", "Ranking", "child_launch", "tracing_filter", "measurements_rail::spawn_reconcile", "fast_exit_skip_destructors", "apply_rpc_worker_flag", "apply_shared_model_role_to_env", "served_ner", "rails_mesh::rails_ports", "rails_mesh::join"]
+items = ["bundles", "assemble", "rank", "Ranking", "child_launch", "tracing_filter", "measurements_rail::spawn_reconcile", "fast_exit_skip_destructors", "apply_shared_model_to_env", "served_ner", "rails_mesh::rails_ports", "rails_mesh::join"]
 # Serve's library, for the composition's tests alone (pb-serve-ranks-tests-stock,
 # phase-b-72): the daemon routes serve's router and adapter answer. Empty
 # items keep stock's `src/` from naming any of it.
@@ -1654,7 +1654,7 @@ items = ["process::run", "process::HostedServe", "process::HostedParts", "proces
 [[distribution.face]]
 package = "serve"
 krate = "sovereign-serve"
-items = ["assemble", "rank", "Ranking", "child_launch", "tracing_filter", "fast_exit_skip_destructors", "apply_rpc_worker_flag", "apply_shared_model_role_to_env", "served_ner"]
+items = ["assemble", "rank", "Ranking", "child_launch", "tracing_filter", "fast_exit_skip_destructors", "apply_shared_model_to_env", "served_ner"]
 [[distribution.face]]
 package = "ingest"
 krate = "sovereign-enrichment-catalog"

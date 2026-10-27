@@ -122,7 +122,7 @@ when a host advertises nothing.
 **What ships.** With `capture = "<path>"` the daemon appends every model call
 at the engine boundary to that file: the method, the `CompletionRequest` or
 the embed, rerank or count input, and the innermost tracing span
-(`sovereign-inference/src/engine_capture.rs`). Unset, the engine is not
+(`sovereign-compute/src/engine_capture.rs`). Unset, the engine is not
 wrapped at all.
 
 **Why unset.** It is an instrument for the engine conformance battery's case
@@ -548,7 +548,7 @@ already shared crates, so neither implementation moves — only its caller, into
 `sovereign-cli-daemon`'s slot build beside the `force_cpu_chat()` reads that
 are already there (`sovereign-inference/src/embedded/model_slot.rs:1564,2326`):
 
-* `sovereign_inference::cpu_compat::{choose_cpu_safe_chat_model,
+* `sovereign_compute::cpu_compat::{choose_cpu_safe_chat_model,
   is_cpu_incompatible_arch}` — the arch gate.
 * `sovereign_inference::smoketest::{run_from_argv, SMOKETEST_FLAG}` — the
   probe's whole implementation, which has always lived in the shared crate.
@@ -1312,8 +1312,9 @@ default-on for `qwen4exp` the first time a load is observed in which
 ~26 GiB. Either means the accident has stopped holding and the model is about to
 stop fitting.
 
-**The event that could trigger it is known:** the next move of the vendored
-llama.cpp pin (`vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT`). Check the detector
+**The event that could trigger it is known:** the next move of the llama.cpp
+pin (`serve/crates/sovereign-compute/llama-server/PIN.toml` since the vendored
+copy went in ENGINE_SWAP_PLAN G3). Check the detector
 above as part of that move — that is cheaper and more reliable than a calendar.
 
 **Review by 2026-10-27**, or the next vendor pin move, whichever comes first.

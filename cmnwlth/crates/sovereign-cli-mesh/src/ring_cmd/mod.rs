@@ -142,7 +142,7 @@ fn refuse_derived_roster(namespace: &str) -> Option<String> {
         "`{namespace}` is the daemon's own ring — its roster IS the mesh's membership, \
          derived fresh on every read and never written down.\n\
          Who is in it: svrn mesh status\n\
-         What is on it: svrn ring log {namespace}, or svrn mesh plan (peers' runs, attributed)"
+         What is on it: svrn ring log {namespace}"
     ))
 }
 

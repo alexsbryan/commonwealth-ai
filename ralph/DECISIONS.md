@@ -2202,6 +2202,31 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: no; the row has no deliverable left, so the session closes it and commits no code
 - Because: the staged target/debug once carried HOME's absolute path (targets are moved to PROMOTE_HOME before landing), so a missing target/debug/llama-server reads "this lane never built", not "the tree lost it"; and no kernel is visible in the container, so the daemon cannot boot there. The remaining image check is manifest-vs-PIN.toml, which d18d2ee22's `[build]` table shows is already in the image
 
+**engine-swap-6 · 2026-10-26 · es-g2-delete-engine · director** — this commit
+- Needed: the row deleted `embedded/` and `llama.rs` and left `rpc_worker_main` and the fabric to es-g4, which depends on es-g2. Both call the engine, so the row could not leave the tree compiling; swapping the order fails too, since the engine calls the planner es-g4 deletes.
+- Chose: es-g2 also deletes every item outside the engine whose only consumer is the engine (`rpc_worker_main` + `Launch::RpcWorker`, `distributed_respawn` whole, the fabric's engine-hook call sites and what goes dead with them, `engine_state`'s engine fields, `mesh_plan`'s FFI projection); es-g4 keeps the rest, the planner included. The generate and embed child roles are in es-g2, as P G2 lists them. Acceptance unchanged; ENV added to es-g2's checks because it removes env reads.
+- Because: P G2 already lists `rpc_worker_main` here, so the row contradicted the plan. The cut follows the compiler and ARCH 12: a deletion takes its own call sites, and what keeps a reader outside the engine (`distributed_role`, `SOVEREIGN_RPC_SERVE`, discovery, the planner) stays with the row that owns the fabric. Merging the two rows (~33k lines, one session) and running es-g4 first (it would edit the engine G2 deletes) were both rejected.
+
+**engine-swap-7 · 2026-10-26 · es-g4-delete-mesh-fabric · director** — this commit
+- Needed: the row deletes the planner and the pre-seed (`sovereign_inference::rpc_warm_cache`) and stops on a caller outside the fabric (§6). The census found three: `svrn mesh plan`/`bench`/`warm-cache` with `remote_gguf` (~6.0k lines, dispatched at `sovereign-serve/src/lib.rs:299-302`), model transfer's split-GGUF listing (`model_transfer.rs:453` → `shard_files`), and `/status`'s `rpc_worker` (`routes_status.rs:287,374`, from `SOVEREIGN_RPC_SERVE`). With them the row is ~12.3k lines against its "about 4k".
+- Chose: split. `es-g4-delete-mesh-fabric` deletes the named fabric and the wiring its deletion forces, moves `shard_files`/`split_shard_names` to `sovereign-contracts` beside `gguf_meta` (no path left at the old one), and takes `rpc_worker` off `/status` with `RpcServe` and `--rpc-worker`; the planner and the pre-seed stay one row longer. New `es-g4-delete-mesh-fabric-verbs` (depends on it) deletes the three verbs, `remote_gguf`, their CLI-contract and conformance entries, then the rest of `rpc_warm_cache`. es-m3-move-agnostic-after-g2 and es-g3 depend on both. The row's false premise (`distributed_discovery/tests.rs`) is corrected. Acceptance unchanged: everything the row named is still deleted, across two rows; each half gains the TESTs of the crates it now touches, the verbs half DOCS.
+- Because: the verbs are not a kept capability (the plan's are FIM, rerank, NER and distributed models); they are front ends of the placement the operator cut on 2026-10-23 and of the planner D4 deleted on 2026-10-24. `mesh plan` dry-runs the planner's split, which no longer runs (upstream's free-memory split does, P F), so keeping it would preview a placement the daemon never uses (ARCH 6); `mesh bench` keys its number on the fabric's `placement_digest` for `mesh plan` to look up, and D4 itself was measured by `d4-split.sh` against llama-server, not by it; `mesh warm-cache` is the pre-seed's CLI, which the row names. Model transfer is not distribution, so its one need (`shard_files`, pure GGUF file layout) moves to the crate that owns GGUF file facts (ARCH 12). `/status`'s `rpc_worker` has one reader, `rpc_discovery.rs:392-405`, which this row deletes. Fabric first compiles: `mesh_plan`/`mesh_bench` import nothing from `sovereign_compute` and read the distribution report over HTTP.
+
+**engine-swap-8 · 2026-10-26 · es-g4-delete-mesh-fabric · director** — this commit
+- Needed: the row deletes `distributed_role` whole and stops on a caller outside the fabric (§6). What is left of it, `apply_shared_model_role_to_env`, is the only writer of `SOVEREIGN_SHARED_MODEL_ID`, which serve's ranking reads once at construction (`rank.rs:217`, `SharedModelFleet::from_env` → `set_shared_model_id`) to route this node's primary turns to the mesh peer serving the shared model. That is peer inference, not the fabric; deleting it whole leaves a configured `[shared_model] model_id` unrouted with no error (ARCH 6).
+- Chose: keep that one line and delete the rest. `[shared_model] model_id` → `SOVEREIGN_SHARED_MODEL_ID` (explicit env still wins, the `info!` kept) moves to `serve/crates/sovereign-serve/src/shared_model.rs` as `sovereign_serve::apply_shared_model_to_env`; `sovereign_compute::distributed_role` and the `sovereign-serve/src/lib.rs:105` re-export go, and the three callers (`standalone.rs:22`, `sovereign-stock/src/main.rs:100`, `sovereign-onprem/src/main.rs:64`) and the doc comments naming the old function are repointed, nothing left at the old path. Everything else it wrote goes: the role → discover translation, the anchor eligibility knobs, the host pin, quorum, pooled, headroom and shard-fetch. The worker's package recommended keeping `quorum_anchors` too, and that half is not taken because it has no production reader.
+- Because: serve's ranking is what decides where primary turns go, so the value it reads lives beside the reader and not in compute, which owns process supervision and model kinds (ARCH 12, the charter's placement rule). It is the smallest change that keeps routing intact, and the row's acceptance and checks are unchanged. No other write had a reader in the process that sets it, and that was verified at 7a610b614 (appendix).
+
+**engine-swap-9 · 2026-10-26 · REVIEW-DEMO-es-native-host-build · director** — this commit
+- Needed: P G's done-when, which the charter's objective repeats, is "a native `cargo build --workspace` succeeds on the Fedora host, outside the toolbox". At 5e9f81db4 it fails, though no longer on the engine. The worker offered two arms: the operator `dnf install`s the missing host packages and the build is rerun, or the bar is restated as "no engine C toolchain needed".
+- Chose: the install arm, left to the operator. The restatement is refused because it weakens the row's acceptance and the charter's objective, which the director may not do. The install is a host mutation that needs root, and this session has no non-interactive sudo (`sudo -n true` → "a password is required"). The row stays `[ ]` with its text and `needs [halo]` unchanged. A worker reruns it once the packages are on the host.
+- Because: the bar is meetable as written with one `dnf install` and needs no code change. What remains is ordinary distro build dependencies for lance (protoc), the desktop and mobile shells (GTK/WebKit/dbus) and the repo's own linker choice (clang+mold), not the llama.cpp toolchain the bar was minted against. The C++ compiler is the exception, see finding 1.
+
+**engine-swap-10 · 2026-10-26 · REVIEW-DEMO-es-native-host-build · operator** — this commit
+- Needed: engine-swap-9 left the row parked on a host `dnf install` of clang, mold, protoc, gcc-c++ and the GTK/WebKit/dbus `-devel` packages, so that `cargo build --workspace` could run on the Fedora host outside the toolbox.
+- Chose: the operator withdrew that arm ("We only run in the sovereign-vulkan toolbox, none of that gets installed here") and restated P G's done-when (queue commit ee87bd595): Cargo.lock names no llama*, ggml*, bindgen or clang-sys package, `cargo tree -i cmake` and `-i cc` name no consumer that builds llama.cpp or ggml, and `cargo build --workspace` in the toolbox exits 0. This supersedes engine-swap-9's chosen arm; its host evidence and the corrected AGENTS.md line stand.
+- Because: the host never gets build packages, so a host build measures the host's package set rather than whether the engine's toolchain left the build. Measured at 001bfd63f, the restated bar holds (appendix).
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -14152,5 +14177,219 @@ it). It:
 llguidance, binary names, every patch digest; `[build]` excluded, as `verify` excludes it).
 PASSES on the image's manifest against the kit's `PIN.toml`, REFUSES on a one-character commit
 change, and names an absent `ggml-rpc-server` as absent.
+
+</details>
+
+## engine-swap-6 · 2026-10-26 — es-g2/es-g4 seam: the engine's deletion takes its call sites
+
+<details><summary>reasoning, evidence, package</summary>
+
+Reproduced at c2b65cc15 with
+`git grep -n -E "sovereign_inference::(embedded|llama|llama_logs|rpc_worker_main)\b" -- '*.rs' ':!serve/crates/sovereign-inference'`:
+`distributed_discovery.rs:12,104`, `distributed_respawn.rs:53-239`,
+`distributed_warm.rs:15,71`, `distribution.rs:86-87`, `engine_state.rs:15-44`,
+`mesh_plan.rs:259,266,483-484`, `sovereign-serve/src/lib.rs:259` (`Launch::RpcWorker`),
+plus the within-row live callers `llama_router.rs:615` (`inference_deadline_secs`),
+`assembly.rs:121,882`, `executor_native_e2e.rs:32`. `rpc_worker_main.rs` reads
+`crate::llama` (:164, :217), `crate::llama_logs` (:171) and three `pub(crate)` items
+of `embedded/rpc_distribution.rs` (:130, :173, :231; defined :2172, :2197, :2490).
+The reverse edge: `embedded/rpc_distribution.rs:45,2508` and `embedded/model_slot.rs:63,99`
+call `crate::rpc_warm_cache`, whose other readers (`distributed_warm/worker.rs:26`,
+`mesh_plan.rs:410`) are fabric, so the planner survives G2 with no engine caller
+and es-g4 deletes it as its row says.
+
+`SOVEREIGN_RPC_SERVE` stays with es-g4: `distributed_role.rs:17,72` sets it and
+`RpcServe` has readers outside the engine (note 65f1a395).
+
+P G2 (`svrn-docs/ENGINE_SWAP_PLAN.md`): "`vocab_cache`, `rpc_worker_main`,
+`reranker_standalone`, … the generate and embed child roles; the Llama arm of the
+assembly and its idle monitors".
+
+Package: the lane's `control/package.md` (worker census, options 1-4); option 1
+taken with the compiler as the rule for where it stops, option 4 confirmed.
+
+</details>
+
+## engine-swap-7 · 2026-10-26 — es-g4 split at census: the fabric, then the mesh verbs and the planner
+
+<details><summary>reasoning, evidence, package</summary>
+
+Reproduced at 4bbf69f2a.
+
+`git grep -n rpc_warm_cache -- '*.rs'` outside `sovereign-inference/src/rpc_warm_cache*`:
+fabric (`distributed_warm.rs:10`, `distributed_warm/worker.rs:14,26,42`,
+`distribution.rs:30`, `discovery_policy.rs:228,672`, `manager.rs:1472`); model
+transfer (`model_transfer.rs:453`); the verbs (`mesh_plan.rs:249,410`,
+`mesh_plan/report.rs:63,120,312`, `mesh_plan/tests.rs:95`, `mesh_bench/shell.rs:518`,
+`warm_cache.rs:46,63`, `remote_gguf.rs:67,156`, `examples/warm_cache.rs:10`); and
+`sovereign-cli-mesh/tests/weight_verbs_are_serves.rs:33`.
+
+`wc -l` of the verbs: `mesh_plan.rs` + `mesh_plan/` 2397, `mesh_bench.rs` + four
+files under `mesh_bench/` 3064 (more under `mesh_bench/tests/`), `remote_gguf.rs`
+444, `warm_cache.rs` 82.
+
+`ls serve/crates/sovereign-compute/src/distributed_discovery*` returns only the
+`.rs`; it has no test module.
+
+`git grep -n -E '"rpc_worker"|\.rpc_worker\b|RpcWorkerStatus'` outside
+`routes_status.rs`: `rpc_discovery.rs:392,400,405` (the only reader),
+`clients/desktop/src-tauri/src/mesh_commands.rs:205` (a passthrough),
+`clients/desktop/tests/e2e/demo/b8-code-intel.demo.spec.ts:147` (a key list),
+`scripts/rpc-distributed-e2e.sh:72` (the fabric's e2e script).
+
+`grep -n 'sovereign_compute::' serve/crates/sovereign-serve/src/mesh_bench*
+…/mesh_plan*` is empty; `mesh_bench` reaches `placement_digest` through
+`crate::mesh_measurements` from the daemon's report, so deleting `distribution.rs`
+first leaves the verbs compiling, reporting no distribution until their own row.
+
+P F (`svrn-docs/ENGINE_SWAP_PLAN.md`): "`-ot` from our planner is NOT sent, because
+D4 measured it at parity … and a tie deletes it"; "G4 deletes the planner with the
+fabric". P lists the kept capabilities at "Each kept capability, in its layer".
+
+Finding filed, not acted on: P F says upstream's `-c` cache under `LLAMA_CACHE` is
+"ggml's own format, which our in-process worker already writes", so an offline
+pre-seed of es-f1's child is still possible in principle. The row names the
+pre-seed for deletion and this decision does not reverse it; if the operator wants
+the thumbdrive path back, it is a small restore aimed at the child's cache dir.
+
+Package: the lane's `control/package.md` (worker census, items 1-5, options 1-5);
+options 1, 2, 3 and 5 taken; option 4's split taken with the halves named
+`es-g4-delete-mesh-fabric` and `es-g4-delete-mesh-fabric-verbs`.
+
+</details>
+
+## engine-swap-8 · 2026-10-26 — the shared-model routing line outlives `distributed_role`
+
+<details><summary>reasoning, evidence, findings</summary>
+
+Reproduced at 7a610b614.
+
+`git grep -n 'SOVEREIGN_SHARED_MODEL_ID' -- '*.rs'`: one writer
+(`sovereign-compute/src/distributed_role.rs:28`); one reader,
+`sovereign-contracts/src/launch.rs:423` (`SharedModelFleet::from_env`), whose one
+production caller is `sovereign-serve/src/rank.rs:217`, followed by
+`mesh_provider.set_shared_model_id(..)`. `rank/tests.rs:109,121` already cover the
+env → provider half.
+
+`git grep -n '\.quorum_anchors()' -- '*.rs'` finds only `launch.rs:503,514`, which are
+tests. `SOVEREIGN_RPC_QUORUM_ANCHORS` is still parsed into `SharedModelFleet::Member`,
+but no production code reads that field, and the write sat behind `discover`, i.e.
+serving roles only.
+
+The other writes, and why dropping them changes no behaviour:
+- `SOVEREIGN_RPC_WORKER_SETTLE_SECS`/`_FLAP_THRESHOLD` are read by
+  `worker_eligibility.rs:232-233`, which has had no writer since `rpc_discovery` was
+  deleted (b585dbf4d).
+- `SOVEREIGN_RPC_DISCOVER` is read only by `contracts/containment.rs:20`, whose caller
+  is doctor (`checks_sovereign.rs:979`). Doctor runs in the CLI process, which never
+  inherited the daemon's `set_var`, and `classify_containment` discounts the variable
+  whenever the role implies discovery anyway (`containment.rs:81-93`).
+- `SOVEREIGN_SHARED_MODEL_HOST_NODE_ID`, `SOVEREIGN_RPC_MIN_POOLED_GB` and
+  `SOVEREIGN_RPC_SHARD_FETCH` have no `.rs` reader.
+- `SOVEREIGN_RPC_HEADROOM` is read by `mesh_plan.rs:230`, a CLI process that falls
+  back to `[shared_model] headroom` from config itself (`mesh_plan.rs:225-227`), and
+  es-g4-delete-mesh-fabric-verbs deletes it.
+
+Findings filed and not acted on, because scope is frozen:
+1. The `[shared_model]` keys `role`, `host_node_id`, `quorum_anchors`,
+   `min_pooled_gb`, `shard_fetch` and `allow_plaintext_lan` are now inert, and
+   `headroom` becomes inert with the verbs row. Refusing them by name, as
+   `[compute] distributed_primary` is refused in `assembly.rs`, would be a new row
+   and is the operator's call. Until then a config that sets them loads without a
+   word (ARCH 6).
+2. `worker_eligibility` (serving-host) and its `/v1/mesh/status` rows
+   (`sovereign-serve/src/lib.rs:116`) have had no writer since b585dbf4d. No row
+   names them.
+3. `SharedModelFleet::Member.quorum_anchors` and the env read behind it are an
+   accessor with no production reader, and could fold into a `from_config` with no
+   env var at all. That is a behaviour change, so it does not belong in this row.
+
+Package: the lane's `control/package.md`. Its option 1 is taken, minus
+`quorum_anchors`, with the home in sovereign-serve rather than sovereign-compute.
+Options 2 and 3 are filed as findings 1 and 2.
+
+</details>
+
+## engine-swap-9 · 2026-10-26 — the native host build waits on host packages, not on the engine
+
+<details><summary>reasoning, evidence, options, findings</summary>
+
+Reproduced at 5e9f81db4, from inside the `sovereign-vulkan` toolbox via
+`flatpak-spawn --host`:
+
+- `grep -c 'name = "llama' Cargo.lock` → 0. `grep -c stdbool` over the
+  worker's three logs (`target/host-native-logs/{verbatim,cc-linker,keep-going}.log`,
+  lane tree) → 0, 0, 0. The engine's blocker is gone.
+- On the host: `clang`, `mold`, `protoc`, `c++` and `g++` are missing; `gcc`,
+  `cc` and `pkg-config` are present. `rpm -q` reports not installed for
+  `clang mold protobuf-compiler gcc-c++ dbus-devel gtk3-devel
+  webkit2gtk4.1-devel libsoup3-devel`.
+- The `--keep-going` log has 17 failed build scripts: lance-{encoding,file,
+  table,datafusion,index} (protoc); glib-, gobject-, gio-, gdk-, gdk-pixbuf-,
+  atk-, pango-, soup3-, javascriptcore-rs-sys, cairo-sys-rs and libdbus-sys
+  (pkg-config); esaxx-rs (c++).
+- `.cargo/config.toml` links x86_64 Linux with clang as the driver and mold as
+  the linker, which is why the verbatim build stops in 1 s.
+- `sudo -n true` on the host → "a password is required".
+
+Options, with costs:
+
+1. **Install the packages on the host and rerun (recommended).** One command
+   for the operator:
+   `sudo dnf install clang mold protobuf-compiler gcc-c++ dbus-devel gtk3-devel webkit2gtk4.1-devel libsoup3-devel`
+   (`dnf` pulls the glib2/cairo/pango/atk/gdk-pixbuf2 `-devel` packages in as
+   dependencies of gtk3-devel). After that, a worker runs the row verbatim
+   (`flatpak-spawn --host cargo build --workspace`, no linker override) and
+   pastes the tail and the wall time. Expect a cold build of several minutes
+   into a host-only target dir. Cost: a few hundred MB of host packages. The
+   bar stays as written.
+2. **Restate the bar as "no engine C toolchain needed".** Refused: it weakens
+   the row and the charter's objective. Only the operator can choose it.
+3. **Narrow the build to exclude desktop and mobile.** Refused for the same
+   reason: `--workspace` is the bar.
+
+Findings filed and not acted on, because scope is frozen:
+
+1. The objective says the C++ toolchain is deleted, but one C++ build remains:
+   `esaxx-rs` (C++), through `tokenizers` 0.21's default `esaxx_fast` feature,
+   which `gline-rs` 1.0.1 enables by depending on `tokenizers` with defaults
+   (`cargo tree -i esaxx-rs -e features`: sovereign-gliner → sovereign-compute
+   → sovereign-serve → sovereign-stock/-onprem). Our own
+   `serve/crates/sovereign-gliner/Cargo.toml:47` (`tokenizers = "0.21"`) also
+   takes defaults, so turning the feature off on our side alone does not
+   remove it; it needs gline-rs patched or replaced. The operator decides
+   whether that is a row.
+2. `.cargo/config.toml`'s Linux block still explains its
+   `-L native=/usr/local/lib64` override with stale `libllama.so`/`libggml*.so`
+   from llama-cpp-sys-4, which G3 deleted. The override and its comment are
+   probably dead, which a G3 docs pass could confirm.
+3. `AGENTS.md:289` said host builds die on `stdbool.h` in llama-cpp-sys-4. That
+   line is corrected in the commit that follows this decision.
+
+</details>
+
+## engine-swap-10 · 2026-10-26 — the native-host-build demo is judged in the toolbox
+
+<details><summary>reasoning, evidence, package</summary>
+
+Measured at 001bfd63f (the lane after merging the queue head ee87bd595),
+inside the `sovereign-vulkan` toolbox (`/run/.containerenv` name="sovereign-vulkan"):
+
+- `grep -c '^name = "<p>' Cargo.lock` for llama, ggml, bindgen, clang-sys:
+  0, 0, 0, 0. whisper, sherpa and candle also count 0.
+- `cargo tree --workspace -i cmake -e normal,build --depth 1`: one consumer,
+  `aws-lc-sys` v0.41.0 (rustls → aws-smithy → aws-config → lance-io).
+- `cargo tree --workspace -i cc -e normal,build --depth 1`: cmake,
+  embed-resource, aws-lc-sys, blake3, bzip2-sys, esaxx-rs, lance-linalg,
+  libsqlite3-sys, lz4-sys, onig_sys, openssl-sys, ring, tree-sitter and four
+  grammars, workspace-hack, zstd-sys. None builds llama.cpp or ggml.
+- `cargo build --workspace` (via `scripts/with-cargo-lock.sh`): rc=0, wall
+  208 s, tail `Finished \`dev\` profile [unoptimized] target(s) in 3m 28s`.
+  Log: `target/host-native-logs/toolbox-build.log` (lane tree).
+
+engine-swap-9's findings 1 and 2 still stand and are not changed here:
+esaxx-rs is still a C++ build (through gline-rs → tokenizers' default
+`esaxx_fast`), and the `.cargo/config.toml` `-L native=/usr/local/lib64`
+comment still names the deleted llama-cpp-sys-4.
 
 </details>

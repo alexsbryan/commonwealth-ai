@@ -360,35 +360,6 @@ binary = "llm"
 visibility = "public"
 classification = "daemon"
 [[command]]
-# Offline by classification, and that is the point: `--devices` reads only the
-# GGUF header table, so it answers "will this fit" with no daemon, no GPU and no
-# model load. Only `--from-mesh` touches the daemon.
-path = "mesh plan"
-binary = "llm"
-visibility = "public"
-classification = "offline"
-[command.smoke]
-args = ["mesh", "plan", "--help"]
-expect_exit = 0
-[[command]]
-# The counterpart to `mesh plan`: where plan says what WOULD fit, bench measures
-# what the running configuration actually does. Classified `daemon` because it
-# has to talk to one — it measures the model that is loaded and never loads one
-# itself. Only `--help` is smoked; a real run fires completions at a resident
-# model and can take tens of minutes.
-path = "mesh bench"
-binary = "llm"
-visibility = "public"
-classification = "daemon"
-flags = [
-  { name = "--trials", takes_value = true },
-  { name = "--json" },
-  { name = "--history" },
-]
-[command.smoke]
-args = ["mesh", "bench", "--help"]
-expect_exit = 0
-[[command]]
 path = "mesh leave"
 binary = "llm"
 visibility = "public"
@@ -403,10 +374,6 @@ path = "mesh fetch-model"
 binary = "llm"
 visibility = "public"
 classification = "daemon"
-[[command]]
-path = "mesh warm-cache"
-binary = "llm"
-visibility = "public"
 [[command]]
 path = "mesh fetch-ner"
 binary = "llm"
@@ -885,7 +852,7 @@ classification = "daemon"
 # ingest — ingest's own CLI (phase-b pb-ingest-cli): the dispatcher execs
 # `svrn-ingest` (sovereign-pipeline) with the verb as its first argument.
 # `binary` is a closed enum of the four sovereign-cli siblings; like `mesh
-# warm-cache` (sovereign-serve) this verb's sibling is none of them, so it is
+# fetch-model` (sovereign-serve) this verb's sibling is none of them, so it is
 # filed under llm, the cluster that held ingest's verbs before.
 [[command]]
 path = "ingest"
@@ -1543,7 +1510,7 @@ capabilities = [
 id = "mesh-federation"
 title = "Join two machines into one pool of models and corpora"
 doc = "docs/TWO_NODE_QUICKSTART.md"
-capabilities = ["mesh create", "mesh status", "mesh plan", "mesh offers"]
+capabilities = ["mesh create", "mesh status", "mesh offers"]
 
 [[experience]]
 id = "house-apps"
@@ -2542,11 +2509,6 @@ mutates = true
 run = "mesh join {join_key}"
 mutates = true
 skip_live = "runs on the lending machine"
-[[journey.step]]
-run = "mesh plan {gguf} --from-mesh"
-note = "the fit preview: per-device bytes and whether each machine's own share lands, from the GGUF header alone"
-[journey.step.expect]
-stdout_non_empty = true
 [[journey.step]]
 run = "mesh status"
 [journey.step.expect]

@@ -44,15 +44,8 @@ jobs:
       - name: System deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y ca-certificates curl gnupg
-          curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
-            | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
-          curl -fsSL "https://packages.lunarg.com/vulkan/lunarg-vulkan-$(lsb_release -cs).list" \
-            | sudo tee /etc/apt/sources.list.d/lunarg-vulkan.list >/dev/null
-          sudo apt-get update
           sudo apt-get install -y \
-            protobuf-compiler libprotobuf-dev cmake mold clang \
-            libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
+            protobuf-compiler libprotobuf-dev cmake mold clang
       - name: Install cargo-public-api
         uses: taiki-e/install-action@v2
         with:
@@ -83,16 +76,9 @@ jobs:
       - name: System deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y ca-certificates curl gnupg
-          curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
-            | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
-          curl -fsSL "https://packages.lunarg.com/vulkan/lunarg-vulkan-$(lsb_release -cs).list" \
-            | sudo tee /etc/apt/sources.list.d/lunarg-vulkan.list >/dev/null
-          sudo apt-get update
           sudo apt-get install -y \
             protobuf-compiler libprotobuf-dev cmake mold clang \
-            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
-            libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev
       - name: Install cargo-hack
         uses: taiki-e/install-action@v2
         with:
@@ -163,16 +149,9 @@ jobs:
       - name: System deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y ca-certificates curl gnupg
-          curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
-            | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
-          curl -fsSL "https://packages.lunarg.com/vulkan/lunarg-vulkan-$(lsb_release -cs).list" \
-            | sudo tee /etc/apt/sources.list.d/lunarg-vulkan.list >/dev/null
-          sudo apt-get update
           sudo apt-get install -y \
             protobuf-compiler libprotobuf-dev cmake mold clang \
-            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
-            libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev
       - run: cargo build --workspace --timings -j 3
       - uses: actions/upload-artifact@v7
         with:
@@ -194,15 +173,8 @@ jobs:
       - name: System deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y ca-certificates curl gnupg
-          curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
-            | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
-          curl -fsSL "https://packages.lunarg.com/vulkan/lunarg-vulkan-$(lsb_release -cs).list" \
-            | sudo tee /etc/apt/sources.list.d/lunarg-vulkan.list >/dev/null
-          sudo apt-get update
           sudo apt-get install -y \
-            protobuf-compiler libprotobuf-dev cmake mold clang \
-            libvulkan-dev vulkan-headers spirv-headers spirv-tools shaderc
+            protobuf-compiler libprotobuf-dev cmake mold clang
       - name: Show doc coverage (contract crates)
         run: |
           RUSTDOCFLAGS="-Z unstable-options --show-coverage" \

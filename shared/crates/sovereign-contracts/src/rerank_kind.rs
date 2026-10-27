@@ -2,7 +2,7 @@
 //! The rerank kind's role, and the one decider for whether a provider serves
 //! it — here so svrn answers from a provider (its own or a loopback to serve)
 //! without linking the crates that load the kind (pb-serve-distributes).
-//! `sovereign_inference::served_kind::RERANK` names its roles from here, and
+//! `sovereign_compute::served_kind::RERANK` names its roles from here, and
 //! `sovereign_compute::assembly::serves_rerank` re-exports the decider.
 
 use crate::traits::InferenceProvider;
