@@ -2222,6 +2222,11 @@ merged; that merge is what minted this arrangement, and `ledger-1` records it.
 - Chose: the install arm, left to the operator. The restatement is refused because it weakens the row's acceptance and the charter's objective, which the director may not do. The install is a host mutation that needs root, and this session has no non-interactive sudo (`sudo -n true` → "a password is required"). The row stays `[ ]` with its text and `needs [halo]` unchanged. A worker reruns it once the packages are on the host.
 - Because: the bar is meetable as written with one `dnf install` and needs no code change. What remains is ordinary distro build dependencies for lance (protoc), the desktop and mobile shells (GTK/WebKit/dbus) and the repo's own linker choice (clang+mold), not the llama.cpp toolchain the bar was minted against. The C++ compiler is the exception, see finding 1.
 
+**engine-swap-10 · 2026-10-26 · REVIEW-DEMO-es-native-host-build · operator** — this commit
+- Needed: engine-swap-9 left the row parked on a host `dnf install` of clang, mold, protoc, gcc-c++ and the GTK/WebKit/dbus `-devel` packages, so that `cargo build --workspace` could run on the Fedora host outside the toolbox.
+- Chose: the operator withdrew that arm ("We only run in the sovereign-vulkan toolbox, none of that gets installed here") and restated P G's done-when (queue commit ee87bd595): Cargo.lock names no llama*, ggml*, bindgen or clang-sys package, `cargo tree -i cmake` and `-i cc` name no consumer that builds llama.cpp or ggml, and `cargo build --workspace` in the toolbox exits 0. This supersedes engine-swap-9's chosen arm; its host evidence and the corrected AGENTS.md line stand.
+- Because: the host never gets build packages, so a host build measures the host's package set rather than whether the engine's toolchain left the build. Measured at 001bfd63f, the restated bar holds (appendix).
+
 ## Flags for the operator
 
 - A26: REVIEW-DEMO-rr-1-run will very likely FAIL `ra-room-plug-in-live` again on this host. The bar's window is 60 s, and the CPU 2B took about 1–5 min per answer in this run (room-answer-0..4.json mtimes 19:33→19:49). Passing it takes a faster node or model for the room, or a different bar. Both are design changes for the operator, not tuning.
@@ -14360,5 +14365,31 @@ Findings filed and not acted on, because scope is frozen:
    probably dead, which a G3 docs pass could confirm.
 3. `AGENTS.md:289` said host builds die on `stdbool.h` in llama-cpp-sys-4. That
    line is corrected in the commit that follows this decision.
+
+</details>
+
+## engine-swap-10 · 2026-10-26 — the native-host-build demo is judged in the toolbox
+
+<details><summary>reasoning, evidence, package</summary>
+
+Measured at 001bfd63f (the lane after merging the queue head ee87bd595),
+inside the `sovereign-vulkan` toolbox (`/run/.containerenv` name="sovereign-vulkan"):
+
+- `grep -c '^name = "<p>' Cargo.lock` for llama, ggml, bindgen, clang-sys:
+  0, 0, 0, 0. whisper, sherpa and candle also count 0.
+- `cargo tree --workspace -i cmake -e normal,build --depth 1`: one consumer,
+  `aws-lc-sys` v0.41.0 (rustls → aws-smithy → aws-config → lance-io).
+- `cargo tree --workspace -i cc -e normal,build --depth 1`: cmake,
+  embed-resource, aws-lc-sys, blake3, bzip2-sys, esaxx-rs, lance-linalg,
+  libsqlite3-sys, lz4-sys, onig_sys, openssl-sys, ring, tree-sitter and four
+  grammars, workspace-hack, zstd-sys. None builds llama.cpp or ggml.
+- `cargo build --workspace` (via `scripts/with-cargo-lock.sh`): rc=0, wall
+  208 s, tail `Finished \`dev\` profile [unoptimized] target(s) in 3m 28s`.
+  Log: `target/host-native-logs/toolbox-build.log` (lane tree).
+
+engine-swap-9's findings 1 and 2 still stand and are not changed here:
+esaxx-rs is still a C++ build (through gline-rs → tokenizers' default
+`esaxx_fast`), and the `.cargo/config.toml` `-L native=/usr/local/lib64`
+comment still names the deleted llama-cpp-sys-4.
 
 </details>
