@@ -182,7 +182,13 @@ mod tests {
     #[tokio::test]
     async fn a_request_the_route_cannot_read_is_refused_by_the_route() {
         let p = TestProvider::new();
-        for gone in ["complete", "probe", "stream_fault", "host_lifecycle", "logits"] {
+        for gone in [
+            "complete",
+            "probe",
+            "stream_fault",
+            "host_lifecycle",
+            "logits",
+        ] {
             assert!(
                 serde_json::from_value::<ReplayRequest>(json!({"method": gone, "input": {}}))
                     .is_err(),
@@ -190,7 +196,10 @@ mod tests {
             );
         }
         assert_eq!(
-            run(&p, &call("count_tokens", json!({}))).await.unwrap_err().0,
+            run(&p, &call("count_tokens", json!({})))
+                .await
+                .unwrap_err()
+                .0,
             400
         );
         assert_eq!(
