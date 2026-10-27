@@ -117,25 +117,33 @@ impl std::fmt::Debug for LiveRouter {
     }
 }
 
+/// Where this node's `llama-server` is, unchecked: the `[engine]
+/// server_binary` override, else the shipped binary beside this executable.
+/// `rpc_peer` finds `ggml-rpc-server` beside the same path.
+pub fn server_location(config: &SetupConfig) -> Result<(PathBuf, BinarySource), String> {
+    match &config.engine.server_binary {
+        Some(path) => Ok((path.clone(), BinarySource::Override)),
+        None => Ok((
+            sovereign_inference::gpu_probe::shipped_server_binary()?,
+            BinarySource::Shipped,
+        )),
+    }
+}
+
 /// The binary to run: the override, else `llama-server` beside this
 /// executable. Absent is a refusal that says where it looked.
 pub fn resolve_binary(config: &SetupConfig) -> Result<(PathBuf, BinarySource), String> {
-    if let Some(path) = &config.engine.server_binary {
-        return match path.is_file() {
-            true => Ok((path.clone(), BinarySource::Override)),
-            false => Err(format!(
-                "[engine] server_binary {} is not a file",
-                path.display()
-            )),
-        };
-    }
-    let beside = sovereign_inference::gpu_probe::shipped_server_binary()?;
-    match beside.is_file() {
-        true => Ok((beside, BinarySource::Shipped)),
-        false => Err(format!(
+    let (path, source) = server_location(config)?;
+    match (path.is_file(), &source) {
+        (true, _) => Ok((path, source)),
+        (false, BinarySource::Override) => Err(format!(
+            "[engine] server_binary {} is not a file",
+            path.display()
+        )),
+        (false, BinarySource::Shipped) => Err(format!(
             "kind = \"llama-server\" needs {SERVER_BINARY} beside the daemon ({}), and it is not \
              there.\nhint: install it with the daemon, or set [engine] server_binary for a dev build",
-            beside.display()
+            path.display()
         )),
     }
 }

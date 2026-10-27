@@ -21,7 +21,7 @@ use sovereign_contracts::setup_config::SetupConfig;
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::llama_router::build_pin::{self, BuildPin};
-use crate::llama_router::live::BinarySource;
+use crate::llama_router::live::{self, BinarySource};
 use crate::supervisor::{HealthTarget, Supervisor, SupervisorConfig, SupervisorState};
 
 /// The server a peer runs, installed beside `llama-server` (`PIN.toml`).
@@ -94,13 +94,7 @@ pub fn endpoint_refusal(addr: &SocketAddr) -> Option<EndpointRefusal> {
 /// `ggml-rpc-server` beside the server this node would run: the
 /// `[engine] server_binary` override's directory, else the daemon's.
 fn resolve_binary(config: &SetupConfig) -> Result<(PathBuf, BinarySource), String> {
-    let (server, source) = match &config.engine.server_binary {
-        Some(path) => (path.clone(), BinarySource::Override),
-        None => (
-            sovereign_inference::gpu_probe::shipped_server_binary()?,
-            BinarySource::Shipped,
-        ),
-    };
+    let (server, source) = live::server_location(config)?;
     let binary = server.with_file_name(RPC_SERVER_BINARY);
     match binary.is_file() {
         true => Ok((binary, source)),
