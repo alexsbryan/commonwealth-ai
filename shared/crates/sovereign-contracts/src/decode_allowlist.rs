@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The decode-time allow-lists as languages: which bytes open an entry, how
 //! an allowed id is written, and which bytes may end one. Defined once so the
-//! engine's tries (`sovereign-inference`'s `url_constraint` and
-//! `evidence_id_constraint`) and the grammar a remote host is sent
-//! ([`llguidance_lark`]) enforce the same thing.
+//! grammar a host is sent ([`llguidance_lark`], from `oicp_client`'s
+//! `chat_wire::write_constraints`) and the engine conformance check of the
+//! reply (`sovereign-cli-bench` `engine_conformance::check`) mean one thing.
 //!
 //! Outside an entry any text is allowed, as long as it never contains a
 //! marker. Once a marker appears, the bytes must spell an allowed entry and

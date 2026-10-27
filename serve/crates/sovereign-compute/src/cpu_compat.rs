@@ -51,20 +51,14 @@ const CPU_UNSAFE_ARCH_MARKERS: &[&str] = &["qwen35", "deltanet", "mamba", "rwkv"
 /// The same three-line parse — `"1"`, or `"true"` case-insensitively — was
 /// written out at three sites across two crates: the desktop's `model_compat`
 /// (deciding whether to swap in a CPU-safe model), the desktop's `inference`
-/// builder (deciding whether to run the GPU smoke test), and
-/// `embedded/model_slot` (deciding `n_gpu_layers`). Three copies of one
-/// predicate, and the last of them is the one that actually moves the weights
-/// — so a disagreement would mean the app picked a model for a CPU it then
-/// did not run on.
+/// builder (deciding whether to run the GPU smoke test), and the embedded
+/// engine's `model_slot` (deciding `n_gpu_layers`). All three are gone, the
+/// last with the engine (es-g2), and nothing calls this function today: no
+/// reader moves the weights onto CPU, and the desktop's GPU-crash fallback
+/// that set the flag is gone too.
 ///
 /// An `env::var` at point of use is invisible to go-to-definition, which is
 /// why this phase exists rather than leaving the copies alone.
-///
-/// Note that this flag is also SET at runtime, by the desktop's GPU-crash
-/// fallback (`state/builders/inference.rs`), which uses the environment as an
-/// inter-module channel so a later `model_slot` load sees it. That is a
-/// separate and larger target class — 36 names are written by production code
-/// — and is deliberately not changed here; this closes the read side only.
 pub fn force_cpu_chat() -> bool {
     std::env::var("SOVEREIGN_FORCE_CPU_CHAT")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))

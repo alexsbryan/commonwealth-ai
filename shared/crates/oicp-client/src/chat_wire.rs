@@ -110,9 +110,9 @@ pub(crate) fn write_assistant_prefix(
 /// The one exception is a Lark grammar beside tools: llama-server's own
 /// tool-call grammar takes its place, and the drop is traced.
 ///
-/// Public so the llg-parity corpus (sovereign-inference
-/// `llg_parity_corpus_tests`) records the grammar this writes rather than a
-/// copy of its rules.
+/// Public and re-exported at the crate root. The llg-parity corpus that
+/// recorded the grammar it writes was deleted with the engine (es-g2); no
+/// caller outside this crate remains.
 pub fn write_constraints(
     body: &mut Value,
     request: &CompletionRequest,

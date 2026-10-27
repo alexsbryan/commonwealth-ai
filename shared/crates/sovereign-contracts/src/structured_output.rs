@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The closed-object default for `structured_output` schemas, applied by the
-//! embedded engine before it compiles a schema
-//! (`sovereign_inference::llguidance_constraint::engine_schema_text`) and by
-//! the remote client before it sends one (`oicp_client` `chat_wire`). One
-//! decider, so a schema means one language on either engine
+//! remote client before it sends one (`oicp_client`
+//! `chat_wire::write_structured_output`); the embedded engine that also
+//! applied it was deleted (es-g2). One decider, so a schema means one
+//! language whichever host compiles it
 //! (`decode.json-schema` in bench/lanes/engine-swap/conformance.toml).
 
 use serde_json::Value;

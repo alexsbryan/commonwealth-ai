@@ -138,9 +138,9 @@ pub enum JudgeRouting<'a> {
 ///
 /// `temperature: 0.0` is set for every caller including the two that left it
 /// unset before the collapse, and it cannot move a returned distribution:
-/// `embedded::model_slot::forced_choice_probs` gathers the candidates' RAW
-/// logits at the next-token position and softmaxes over just those, before
-/// the sampler the temperature would configure ever runs.
+/// against llama-server the distribution comes from `oicp_client`'s
+/// `forced_choice_by_logprobs`, which sends `temperature: 0` itself and
+/// renormalises the candidates' mass in one token's top logprobs.
 pub async fn forced_choice_ab(
     inference: &dyn InferenceProvider,
     system_message: &str,

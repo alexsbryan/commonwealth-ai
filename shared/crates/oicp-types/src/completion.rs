@@ -170,8 +170,9 @@ pub struct CompletionRequest {
     /// Wire path: serialized into the OpenAI request body as
     /// `chat_template_kwargs: { enable_thinking: <bool> }` by
     /// `RemoteApiProvider::build_request`; parsed back out by the
-    /// daemon's `inference_adapter::extract_enable_thinking` and
-    /// applied at `embedded::apply_chat_template_oaicompat` time.
+    /// daemon's `inference_adapter::extract_enable_thinking` and sent
+    /// on to llama-server by `chat_wire::write_thinking`, whose Jinja
+    /// chat template reads it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub enable_thinking: Option<bool>,
 
@@ -182,9 +183,10 @@ pub struct CompletionRequest {
     /// profile they want without spoofing the inference-layer signals.
     ///
     /// Wire path: serialized as `"sampling_mode": "instruct"` / `"code"`
-    /// / `"think"` on the request body. Inference layer maps this
-    /// onto `ModelQuirks.instruct_*` / `code_*` / `default_*` blocks
-    /// in `build_sampler`.
+    /// / `"think"` on the request body. No engine picks a `ModelQuirks`
+    /// block by it since the embedded engine was deleted: llama-server
+    /// receives it as `sampling_mode`, and the router reads only whether
+    /// it is set (`is_server_default_shape`, in `slot_penalties`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sampling_mode: Option<SamplingMode>,
 
@@ -237,9 +239,9 @@ pub struct CompletionRequest {
     /// is automatically a fabrication.
     ///
     /// Wire path: extracted from the OpenAI request body's
-    /// `url_allowlist` field in `routes_inference.rs`; consumed by
-    /// `embedded::build_sampler` which constructs the constraint and
-    /// attaches it to `ConstrainedSampler`.
+    /// `url_allowlist` field in `routes_inference.rs`; sent on by
+    /// `chat_wire::write_constraints` as one llguidance `grammar`
+    /// (`decode_allowlist::llguidance_lark`), refused where it cannot ride.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url_allowlist: Option<Vec<String>>,
     /// Evidence-id allowlist for sampler-side citation faithfulness
@@ -259,7 +261,7 @@ pub struct CompletionRequest {
     /// Wire path: extracted from the OpenAI request body's
     /// `evidence_id_allowlist` field in `routes_inference.rs`
     /// (populated by `apply_evidence_id_allowlist_from_tool_results`
-    /// in `frontdoor.rs`); consumed by `embedded::build_sampler`.
+    /// in `frontdoor.rs`); sent on by `chat_wire::write_constraints`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence_id_allowlist: Option<Vec<String>>,
     /// Lark grammar that constrains the model's per-turn output.
@@ -275,10 +277,10 @@ pub struct CompletionRequest {
     /// closes the `parse_failed_envelope` + `loop_trap` failure
     /// classes the agent-bench scanner surfaced on 2026-05-21.
     ///
-    /// Built via `llguidance_constraint::build_tool_alternation_grammar`.
-    /// Consumed by `embedded::build_sampler`, which constructs a
-    /// `LlguidanceConstraint` and attaches it to `ConstrainedSampler`
-    /// in place of the usual `JsonConstraint`.
+    /// Nothing builds that alternation grammar since the embedded
+    /// engine was deleted; a caller's own grammar is forwarded as sent.
+    /// `chat_wire::write_constraints` sends it to llama-server as an
+    /// llguidance `grammar`, dropped (traced) beside tools.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lark_grammar: Option<String>,
 
@@ -402,10 +404,10 @@ pub enum PromptShape {
     },
 }
 
-/// Sampler-profile selector. Mirrored in the inference layer's
-/// internal enum — when `CompletionRequest.sampling_mode` is set,
-/// `build_sampler` reads this value and picks the matching
-/// `ModelQuirks.<mode>_*` block, overriding the auto-picker.
+/// Sampler-profile selector. No engine picks a `ModelQuirks.<mode>_*`
+/// block by it since the embedded engine was deleted: the router reads
+/// only whether it is set (`is_server_default_shape`), and llama-server
+/// receives it as `sampling_mode`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SamplingMode {

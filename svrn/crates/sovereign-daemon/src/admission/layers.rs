@@ -205,14 +205,13 @@ impl<G: Unpin> http_body::Body for GuardedBody<G> {
 /// shedding — the numerator `serving_policy::fair_sched::fair_share_cap`
 /// divides among active principals.
 ///
-/// **Derived, not picked.** The slot queue sheds when the predicted wait
-/// exceeds `DEFAULT_MAX_QUEUE_WAIT_MS = 30_000`
-/// (`sovereign-inference/src/embedded/model_slot.rs:862`) and predicts
-/// `position × avg_turn_ms` against one decode permit. Sixteen is that bound at
-/// a ~1.9 s turn: the depth at which the host is fully committed but not yet
-/// refusing. Sizing it *there* is what keeps this cap from becoming a second
-/// shed rule — at or below this concurrency the slot queue serves everyone, so
-/// the only thing the cap changes is WHOSE turns fill it.
+/// **Derived against the deleted engine.** Its slot queue shed when the
+/// predicted wait (`position × avg_turn_ms` against one decode permit)
+/// exceeded 30 s; sixteen is that bound at a ~1.9 s turn: the depth at which
+/// the host was fully committed but not yet refusing. That queue went with the
+/// engine (es-g2) and nothing under the llama-server router re-derives the
+/// bound, so sixteen stands unmeasured against it. Sized *there*, the cap was
+/// never a second shed rule — it only changed WHOSE turns filled the queue.
 pub const DEFAULT_CLIENT_FAIR_CONCURRENCY: u32 = 16;
 
 /// Read the fair-share budget from `SOVEREIGN_CLIENT_FAIR_CONCURRENCY`. A

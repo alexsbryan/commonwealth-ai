@@ -151,9 +151,9 @@ pub struct ModelQuirks {
 
 /// The repeat-penalty stage's two knobs for a family's quirks.
 ///
-/// ONE decider (ARCH 8): this is the arithmetic both engines use, the
-/// embedded sampler (`sovereign_inference::embedded::sampler`) and
-/// `llama_router::provider::slot_penalties`.
+/// ONE decider (ARCH 8): this is the arithmetic
+/// `llama_router::provider::slot_penalties` sends; the embedded sampler
+/// that also read it was deleted with its engine (es-g2).
 /// The router used to re-derive it from `ModelFamily::default_quirks()`
 /// on its own, which is how the two engines came to sample the same
 /// 2810-token prompt differently (2026-10-25).

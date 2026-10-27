@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The forced-choice wire shape: the one body constructor, its parser, and
 //! the sentinel the detector ([`crate::completion::CompletionRequest::forced_choice_candidates`])
-//! reads. A caller asks a closed question; the engine answers with its
-//! next-token distribution over the labels in one forward pass, no
-//! generation (`embedded::model_slot::forced_choice_probs`).
+//! reads. A caller asks a closed question; the answer is the next-token
+//! distribution over the labels, no generation. From llama-server it is read
+//! off one token's top logprobs (`oicp_client`'s `forced_choice_by_logprobs`).
 //!
 //! Every forced-choice body in the tree is built by [`schema`], and every
 //! caller issues it through a census (`cargo xtask judge-funnel-gate`).
@@ -18,9 +18,10 @@ pub const SENTINEL: &str = "x_forced_choice";
 
 /// The key a wave body declares: several forced choices answered off ONE
 /// decoded prompt. Each branch appends its own text to the request's prompt
-/// and is a forced-choice body of its own ([`schema`]); the engine answers
-/// every branch as the single request `prompt + suffix` would be answered,
-/// and no branch sees another (`embedded::model_slot`, `decide_wave`).
+/// and is a forced-choice body of its own ([`schema`]); a host answers every
+/// branch as the single request `prompt + suffix` would be answered, and no
+/// branch sees another. Nothing answers a wave since the embedded engine was
+/// deleted: neither `oicp_client` nor the router has a wave path.
 /// Advertised as `x:forced_choice_wave`.
 pub const WAVE: &str = "x_forced_choice_wave";
 

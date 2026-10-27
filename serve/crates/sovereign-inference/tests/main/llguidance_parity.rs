@@ -11,8 +11,7 @@
 //! Approach: drive a `Matcher` against `ApproximateTokEnv::
 //! single_byte_env()` so every printable ASCII byte is its own token
 //! id. Feed bytes one at a time, asserting which next-byte choices
-//! the mask permits or rejects. Mirrors the proven pattern in
-//! `llguidance_constraint::tests`.
+//! the mask permits or rejects.
 //!
 //! Perf benches (§4 #6, #7) live in `examples/bench_*.rs` because
 //! they require a real `LlamaModel` / GGUF on disk; placeholder
@@ -408,13 +407,12 @@ fn parity_from_schema_value_applies_walker_then_compiles() {
     assert!(allows(&mut m, b'}'), "close-brace must be allowed");
 }
 
-// ─── env gate parser (matches embedded::full_llguidance_enabled_from_env)
+// ─── env gate parser (SOVEREIGN_FULL_LLGUIDANCE; read nowhere today)
 
-/// Local mirror of `full_llguidance_enabled_from_env` from
-/// `embedded.rs`. The fn is `pub(crate)` over there (private outside
-/// the module). Test the contract here so the env-gate parsing
-/// behaviour is pinned by a public test that documents intent for
-/// future maintainers.
+/// Local mirror of `full_llguidance_enabled_from_env`, which was
+/// deleted with the embedded engine (es-g2); nothing reads
+/// `SOVEREIGN_FULL_LLGUIDANCE` today, so these tests pin only this
+/// local parser.
 ///
 /// Contract: ONLY `"1"` or case-insensitive `"true"` enables the
 /// gate. Empty string, missing var, "0", "false", "yes", "no",
@@ -477,11 +475,14 @@ fn env_gate_off_with_falsy_and_garbage_values() {
 
 // ─── The silent-fallback triggers (2026-08-19) ─────────────────────────
 //
-// `build_sampler` used to swallow a compile failure and decode
-// free-form behind a WARN, so a schema in ANY of the shapes below
-// produced a 200 whose text obeyed no constraint at all — the §18.3
-// failure where the label, the shape and the finish reason are all
-// correct and no client can tell. It now refuses the request.
+// The deleted engine's sampler builder used to swallow a compile
+// failure and decode free-form behind a WARN, so a schema in ANY of
+// the shapes below produced a 200 whose text obeyed no constraint at
+// all — the §18.3 failure where the label, the shape and the finish
+// reason are all correct and no client can tell. It later refused the
+// request; that refusal went with the engine (es-g2), and a schema now
+// goes to llama-server as `response_format`
+// (`chat_wire::write_structured_output`).
 //
 // These tests pin the TRIGGER: they name the inputs that reach the
 // refusal, and each pairs with a twin that must still compile, so a
@@ -517,8 +518,8 @@ fn unimplemented_keyword_does_not_compile() {
             "uniqueItems": true
         })),
         "`uniqueItems` is not implemented by llguidance — if this now \
-         compiles, the refusal path in build_sampler is unreachable for \
-         it and this test is the only thing that would have said so"
+         compiles, llguidance accepts it and this test is the only \
+         thing that would have said so"
     );
     // Twin: the same schema minus the unimplemented keyword must
     // compile, or the assertion above proves nothing.

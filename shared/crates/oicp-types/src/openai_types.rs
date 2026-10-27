@@ -95,9 +95,9 @@ pub struct ChatCompletionRequest {
     /// the prefix lands after that marker.
     ///
     /// Threaded into `sovereign_core::types::CompletionRequest`
-    /// via `inference_adapter::build_completion_request`; consumed
-    /// in `embedded::build_chat_prompt` after the chat template
-    /// renders.
+    /// via `inference_adapter::build_completion_request`; sent to
+    /// llama-server by `chat_wire::write_assistant_prefix` as a trailing
+    /// assistant message, which it prefills after the template renders.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assistant_prefix: Option<String>,
     /// Commonwealth extension: structural cmd-prefix constraint (R2).
@@ -119,7 +119,7 @@ pub struct ChatCompletionRequest {
     /// impossible: prose tokens pass through, URL-shaped tokens that
     /// don't match the trie get clamped to `-INFINITY`. Wire path:
     /// extracted here, threaded onto `CompletionRequest.url_allowlist`
-    /// by `build_completion_request`, consumed by `embedded::build_sampler`.
+    /// by `build_completion_request`, sent on by `chat_wire::write_constraints`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url_allowlist: Option<Vec<String>>,
     /// Commonwealth extension (Tier 2 of tool-framework expansion):
@@ -129,8 +129,8 @@ pub struct ChatCompletionRequest {
     /// into an id not in the list are clamped to `-INFINITY`. Wire
     /// path: extracted here, threaded onto
     /// `CompletionRequest.evidence_id_allowlist` by
-    /// `build_completion_request`, consumed by
-    /// `embedded::build_sampler`. Populated upstream by
+    /// `build_completion_request`, sent on by
+    /// `chat_wire::write_constraints`. Populated upstream by
     /// `apply_evidence_id_allowlist_from_tool_results` (frontdoor).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence_id_allowlist: Option<Vec<String>>,
@@ -139,13 +139,13 @@ pub struct ChatCompletionRequest {
     /// expressive than `response_format` (regex tokens, recursion,
     /// custom productions, alternations like `"BREAK" | "CONTINUE"`)
     /// — the escape hatch for non-JSON-Schema constraints. When
-    /// present, takes precedence over `response_format` (both engines
-    /// mask the same logit chain; layering would deadlock — see
-    /// `embedded::build_sampler` comment at line ~7964). Wire path:
+    /// present beside `response_format`, the pair is refused, never
+    /// layered (`chat_wire::write_constraints`: llama-server lets a
+    /// grammar override `response_format`). Wire path:
     /// HTTP body field `lark_grammar` (raw string) → here →
     /// `inference_adapter::build_completion_request` →
-    /// `CompletionRequest.lark_grammar` → `embedded::build_sampler`
-    /// instantiates `LlguidanceConstraint::new(lark, model)`.
+    /// `CompletionRequest.lark_grammar` → `chat_wire::write_constraints`
+    /// sends it to llama-server as an llguidance `grammar`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lark_grammar: Option<String>,
     /// Commonwealth extension: caller-directed stable-prefix length in

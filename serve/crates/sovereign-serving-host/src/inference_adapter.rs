@@ -10,10 +10,11 @@
 //! side has to know about the other.
 //!
 //! Scope for v2: non-streaming tool-call round-trip against the Slow
-//! slot. `request.tools` is injected into the model's chat template
-//! by `sovereign-inference::embedded::format_prompt`; the raw model
-//! output is parsed by `parse_tool_calls_with_errors` and the
-//! resulting structured `tool_calls` populated on the response.
+//! slot. `request.tools` is rendered into the model's chat template
+//! by llama-server, which `RemoteApiProvider::build_request` sends
+//! them to as `tools`; the raw model output is parsed by
+//! `parse_tool_calls_with_errors` and the resulting structured
+//! `tool_calls` populated on the response.
 //! Streaming with tools is deferred (non-streaming is forced when
 //! `tools.is_some()`).
 use std::pin::Pin;
@@ -408,7 +409,8 @@ impl SovereignInferenceAdapter {
 
         // Tool-use: carry tool schemas + tool_choice through so the
         // inference backend can inject them into the chat template
-        // (`sovereign-inference::embedded::format_prompt`). When tools
+        // (llama-server renders them; `RemoteApiProvider::build_request`
+        // sends them as `tools`). When tools
         // are present we also bias the slot picker toward Slow — the
         // policy guard (`guard_tools_on_fast`) rejects Fast+tools
         // later in the pipeline, so biasing here avoids racing into a
@@ -417,9 +419,9 @@ impl SovereignInferenceAdapter {
         req.tool_choice = request.tool_choice.clone();
         // OpenAI `response_format: {"type":"json_schema", json_schema:
         // {"name":..., "schema":..., "strict":...}}` → core
-        // `structured_output: <schema>`. The sampler builder
-        // (`build_sampler` in sovereign-inference::embedded) consumes
-        // this as the JSON Schema for `LlamaSampler::llguidance`. We
+        // `structured_output: <schema>`. oicp-client's
+        // `chat_wire::write_structured_output` closes it and sends it
+        // to llama-server as a `response_format` json_schema. We
         // also accept `{"type":"json_object"}` (any-JSON) by mapping
         // to the trivial `{"type":"object"}` schema.
         if let Some(rf) = request.response_format.as_ref() {
@@ -428,13 +430,12 @@ impl SovereignInferenceAdapter {
         // Commonwealth extension: forward `lark_grammar` directly.
         // Unlike `response_format` (which we extract a JSON Schema
         // from), `lark_grammar` is the raw Lark source string —
-        // pass it through as-is. The sampler builder
-        // (`embedded::build_sampler`) compiles it via llguidance.
-        // When both `lark_grammar` and `structured_output` are set,
-        // `lark_grammar` wins (`embedded.rs:7964` mutual-exclusion).
-        // This is intentional: the in-process daemon path already
-        // honoured `lark_grammar` precedence; wiring it through
-        // HTTP preserves the semantics.
+        // pass it through as-is. oicp-client's
+        // `chat_wire::write_constraints` sends it to llama-server as
+        // one llguidance `grammar`. When both `lark_grammar` and
+        // `structured_output` are set, it refuses the pair rather than
+        // layer them; beside tools it drops the grammar (traced) for
+        // llama-server's own tool-call grammar.
         if let Some(grammar) = request.lark_grammar.as_ref() {
             req.lark_grammar = Some(grammar.clone());
         }

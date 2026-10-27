@@ -37,12 +37,10 @@ pub use crate::oicp::{
 /// by a daemon sampler profile: an OpenAI chat conversation with no explicit
 /// `sampling_mode`.
 ///
-/// ONE decider (ARCH 8). Both engines ask this question, because both must
-/// answer it the same way or they sample one request differently: the
-/// embedded sampler (`sampler::build_sampler`) hands such a request to
+/// ONE decider (ARCH 8). `llama_router::provider::slot_penalties` asks it
+/// and leaves such a request alone, so llama-server samples it from
 /// llama.cpp's defaults, the GGUF's recommendations and then the client's
-/// values, and `llama_router::provider::slot_penalties` must leave it
-/// alone for the server to do the same. Written once because the router's
+/// values, as the deleted embedded sampler did. Written once because the router's
 /// copy of it drifted into the whole `ModelQuirks` tuple on 2026-10-25.
 pub fn is_server_default_shape(shape: Option<&PromptShape>, mode: Option<SamplingMode>) -> bool {
     matches!(shape, Some(PromptShape::Conversation { .. })) && mode.is_none()
